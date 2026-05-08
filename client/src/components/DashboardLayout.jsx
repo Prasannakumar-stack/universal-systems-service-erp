@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   Bell,
@@ -16,6 +16,7 @@ import {
   LogOut,
   MapPin,
   Menu,
+  MoreHorizontal,
   PackageCheck,
   Phone,
   ReceiptText,
@@ -29,69 +30,79 @@ import {
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { company } from '../utils/constants.js';
+import { adminWorkspaceRoles, canAccessRoles, normalizeRole, roleLabel } from '../utils/roles.js';
+
+const fullAccessRoles = ['admin', 'owner'];
+const operationsRoles = [...fullAccessRoles, 'service_manager', 'front_desk'];
+const customerRoles = [...operationsRoles, 'accounts_staff'];
+const amcRoles = [...fullAccessRoles, 'service_manager'];
+const inventoryRoles = [...fullAccessRoles, 'service_manager', 'inventory_staff'];
+const billingRoles = [...fullAccessRoles, 'service_manager', 'accounts_staff'];
+const reportRoles = [...fullAccessRoles, 'service_manager', 'accounts_staff', 'inventory_staff', 'viewer', 'auditor'];
+const auditRoles = [...fullAccessRoles, 'viewer', 'auditor'];
 
 const adminGroups = [
   {
     title: '',
-    links: [{ to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard }]
+    links: [{ to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: adminWorkspaceRoles }]
   },
   {
     title: 'Operations',
     links: [
-      { to: '/admin/bookings', label: 'Requests / Bookings', icon: BookOpenCheck },
-      { to: '/admin/work-orders', label: 'Repair & Service Jobs', icon: Wrench },
-      { to: '/admin/work-orders?view=dispatch', label: 'Dispatch Board', icon: ClipboardList },
-      { to: '/admin/work-orders?view=technicians', label: 'Technician Tasks', icon: UserRound }
+      { to: '/admin/bookings', label: 'Requests / Bookings', icon: BookOpenCheck, roles: operationsRoles },
+      { to: '/admin/work-orders', label: 'Repair & Service Jobs', icon: Wrench, roles: [...operationsRoles, 'accounts_staff'] },
+      { to: '/admin/work-orders?view=dispatch', label: 'Dispatch Board', icon: ClipboardList, roles: [...fullAccessRoles, 'service_manager'] },
+      { to: '/admin/work-orders?view=technicians', label: 'Technician Tasks', icon: UserRound, roles: [...fullAccessRoles, 'service_manager'] }
     ]
   },
   {
     title: 'Customers',
     links: [
-      { to: '/admin/customers', label: 'Customers', icon: Users },
-      { to: '/admin/customers', label: 'Customer 360', icon: ShieldCheck },
-      { to: '/admin/customers', label: 'Devices / Assets', icon: PackageCheck },
-      { to: '/admin/customers', label: 'Service History', icon: History }
+      { to: '/admin/customers', label: 'Customers', icon: Users, roles: customerRoles },
+      { to: '/admin/customers', label: 'Customer 360', icon: ShieldCheck, roles: customerRoles },
+      { to: '/admin/customers', label: 'Devices / Assets', icon: PackageCheck, roles: customerRoles },
+      { to: '/admin/customers', label: 'Service History', icon: History, roles: customerRoles }
     ]
   },
   {
     title: 'AMC & Contracts',
     links: [
-      { to: '/admin/amc-contracts', label: 'AMC Contracts', icon: FileCheck2 },
-      { to: '/admin/amc-schedule', label: 'AMC Schedule', icon: CalendarClock },
-      { to: '/admin/amc-renewals', label: 'Renewals', icon: AlertTriangle },
-      { to: '/admin/warranties', label: 'Warranties', icon: ShieldCheck }
+      { to: '/admin/amc-contracts', label: 'AMC Contracts', icon: FileCheck2, roles: amcRoles },
+      { to: '/admin/amc-schedule', label: 'AMC Schedule', icon: CalendarClock, roles: amcRoles },
+      { to: '/admin/amc-renewals', label: 'Renewals', icon: AlertTriangle, roles: amcRoles },
+      { to: '/admin/warranties', label: 'Warranties', icon: ShieldCheck, roles: amcRoles }
     ]
   },
   {
     title: 'Inventory',
     links: [
-      { to: '/admin/parts', label: 'Products / Parts', icon: Boxes },
-      { to: '/admin/parts', label: 'Stock Management', icon: PackageCheck },
-      { to: '/admin/stock-movements', label: 'Stock Movements', icon: History }
+      { to: '/admin/parts', label: 'Products / Parts', icon: Boxes, roles: inventoryRoles },
+      { to: '/admin/parts', label: 'Stock Management', icon: PackageCheck, roles: inventoryRoles },
+      { to: '/admin/stock-movements', label: 'Stock Movements', icon: History, roles: inventoryRoles }
     ]
   },
   {
     title: 'Sales & Billing',
     links: [
-      { to: '/admin/documents?type=quotation', label: 'Quotations', icon: FileCheck2 },
-      { to: '/admin/invoices', label: 'Invoices', icon: ReceiptText },
-      { to: '/admin/payments', label: 'Payments', icon: CreditCard },
-      { to: '/admin/documents', label: 'Documents / PDFs', icon: FileText }
+      { to: '/admin/documents?type=quotation', label: 'Quotations', icon: FileCheck2, roles: billingRoles },
+      { to: '/admin/invoices', label: 'Invoices', icon: ReceiptText, roles: billingRoles },
+      { to: '/admin/payments', label: 'Payments', icon: CreditCard, roles: billingRoles },
+      { to: '/admin/documents', label: 'Documents / PDFs', icon: FileText, roles: billingRoles }
     ]
   },
   {
     title: 'Reports',
     links: [
-      { to: '/admin/dashboard', label: 'Business Reports', icon: Activity },
-      { to: '/admin/work-orders', label: 'Technician Reports', icon: UserRound },
-      { to: '/admin/parts', label: 'Inventory Reports', icon: Boxes },
-      { to: '/admin/payments', label: 'Payment Reports', icon: CreditCard }
+      { to: '/admin/reports', label: 'Business Reports', icon: Activity, roles: reportRoles },
+      { to: '/admin/reports/technicians', label: 'Technician Reports', icon: UserRound, roles: [...fullAccessRoles, 'service_manager', 'viewer', 'auditor'] },
+      { to: '/admin/reports/inventory', label: 'Inventory Reports', icon: Boxes, roles: [...inventoryRoles, 'viewer', 'auditor'] },
+      { to: '/admin/reports/finance', label: 'Payment Reports', icon: CreditCard, roles: [...billingRoles, 'viewer', 'auditor'] }
     ]
   },
   {
     title: 'System',
     links: [
-      { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity }
+      { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity, roles: auditRoles }
     ]
   }
 ];
@@ -101,6 +112,61 @@ const technicianLinks = [
   { to: '/tech/work-orders', label: 'My Jobs', icon: BookOpenCheck },
   { to: '/technician/profile', label: 'My Profile', icon: UserRound }
 ];
+
+const adminRouteAccess = [
+  { prefix: '/admin/dashboard', roles: adminWorkspaceRoles },
+  { prefix: '/admin/bookings', roles: operationsRoles },
+  { prefix: '/admin/work-orders', roles: [...operationsRoles, 'accounts_staff'] },
+  { prefix: '/admin/customers', roles: customerRoles },
+  { prefix: '/admin/amc', roles: amcRoles },
+  { prefix: '/admin/warranties', roles: amcRoles },
+  { prefix: '/admin/parts', roles: inventoryRoles },
+  { prefix: '/admin/stock', roles: inventoryRoles },
+  { prefix: '/admin/documents', roles: billingRoles },
+  { prefix: '/admin/quotations', roles: billingRoles },
+  { prefix: '/admin/invoices', roles: billingRoles },
+  { prefix: '/admin/payments', roles: billingRoles },
+  { prefix: '/admin/reports/finance', roles: [...billingRoles, 'viewer', 'auditor'] },
+  { prefix: '/admin/reports/inventory', roles: [...inventoryRoles, 'viewer', 'auditor'] },
+  { prefix: '/admin/reports/technicians', roles: [...fullAccessRoles, 'service_manager', 'viewer', 'auditor'] },
+  { prefix: '/admin/reports', roles: reportRoles },
+  { prefix: '/admin/audit-logs', roles: auditRoles }
+];
+
+function canSeeLink(link, role) {
+  return !link.roles || canAccessRoles(role, link.roles);
+}
+
+function visibleAdminGroups(role) {
+  return adminGroups
+    .map((group) => ({ ...group, links: group.links.filter((link) => canSeeLink(link, role)) }))
+    .filter((group) => group.links.length);
+}
+
+function canOpenAdminPath(pathname, role) {
+  const match = adminRouteAccess.find((item) => pathname.startsWith(item.prefix));
+  return match ? canAccessRoles(role, match.roles) : canAccessRoles(role, fullAccessRoles);
+}
+
+function canUseGlobalSearch(role) {
+  return canAccessRoles(role, [...fullAccessRoles, 'service_manager']);
+}
+
+function notificationTarget(item, role) {
+  const normalizedRole = normalizeRole(role);
+  const id = item?.sourceId || '';
+  const text = `${item?.type || ''} ${item?.title || ''} ${item?.message || ''}`.toLowerCase();
+  if (text.includes('low stock') || text.includes('stock')) return '/admin/parts';
+  if (text.includes('payment')) return '/admin/payments';
+  if (text.includes('invoice')) return '/admin/invoices';
+  if (text.includes('amc') || text.includes('renewal')) return '/admin/amc-renewals';
+  if (text.includes('booking')) return '/admin/bookings';
+  if (text.includes('work order') || text.includes('job') || item?.type === 'WORK_ORDER') {
+    if (id) return normalizedRole === 'technician' ? `/tech/work-orders/${id}` : `/admin/work-orders/${id}`;
+    return normalizedRole === 'technician' ? '/tech/work-orders' : '/admin/work-orders';
+  }
+  return normalizedRole === 'technician' ? '/tech/dashboard' : '/admin/dashboard';
+}
 
 function SidebarItem({ link, close }) {
   const Icon = link.icon;
@@ -131,6 +197,7 @@ function SidebarItem({ link, close }) {
 function AdminSidebar({ close }) {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
+  const groups = visibleAdminGroups(user?.role);
 
   function handleLogout() {
     logout();
@@ -157,7 +224,7 @@ function AdminSidebar({ close }) {
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
-        {adminGroups.map((group) => (
+        {groups.map((group) => (
           <div key={group.title || 'dashboard'}>
             {group.title ? <p className="px-3 pb-2 text-[11px] font-black uppercase text-slate-500">{group.title}</p> : null}
             <div className="space-y-1">
@@ -174,7 +241,7 @@ function AdminSidebar({ close }) {
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">{user?.name || 'Admin User'}</p>
-            <p className="truncate text-xs muted">Administrator</p>
+            <p className="truncate text-xs muted">{roleLabel(user?.role || 'admin')}</p>
           </div>
         </div>
         <button className="btn btn-secondary w-full justify-start" onClick={handleLogout}>
@@ -251,7 +318,7 @@ function GlobalSearch({ role }) {
 
   useEffect(() => {
     const value = query.trim();
-    if (value.length < 2 || role !== 'admin') {
+    if (value.length < 2 || !canUseGlobalSearch(role)) {
       setResults([]);
       setLoading(false);
       return undefined;
@@ -345,13 +412,13 @@ function priorityForNotification(item) {
 
 function NotificationCenter({ role }) {
   const { request } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
   async function loadNotifications() {
-    if (role !== 'admin') return;
     setLoading(true);
     try {
       const data = await request('/notifications');
@@ -377,6 +444,20 @@ function NotificationCenter({ role }) {
     loadNotifications();
   }
 
+  async function markRead(item) {
+    if (!item.read) {
+      await request(`/notifications/${item.id}/read`, { method: 'PATCH' }).catch(() => null);
+      setNotifications((current) => current.map((row) => (row.id === item.id ? { ...row, read: true } : row)));
+      setUnreadCount((count) => Math.max(0, count - 1));
+    }
+  }
+
+  async function openNotification(item) {
+    await markRead(item);
+    setOpen(false);
+    navigate(notificationTarget(item, role));
+  }
+
   return (
     <div className="relative">
       <button className="icon-button enterprise-top-icon relative h-11 w-11" onClick={() => setOpen((value) => !value)} aria-label="Open notifications">
@@ -398,19 +479,28 @@ function NotificationCenter({ role }) {
             ) : notifications.length ? notifications.map((item) => {
               const priority = priorityForNotification(item);
               return (
-                <div key={item.id} className={`mb-3 rounded-card border p-3 ${item.read ? 'border-white/10 bg-white/[0.035]' : 'border-sky-300/25 bg-sky-400/10'}`}>
+                <button key={item.id} type="button" className={`mb-3 block w-full rounded-card border p-3 text-left transition hover:border-sky-300/45 hover:bg-sky-400/10 ${item.read ? 'border-white/10 bg-white/[0.035]' : 'border-sky-300/25 bg-sky-400/10'}`} onClick={() => openNotification(item)}>
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-bold">{item.title}</p>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${priority === 'Critical' ? 'bg-rose-500/20 text-rose-100' : priority === 'High' ? 'bg-amber-400/20 text-amber-100' : 'bg-sky-400/15 text-sky-100'}`}>{priority}</span>
                   </div>
                   <p className="mt-1 text-sm muted">{item.message}</p>
-                </div>
+                  <div className="mt-3 flex items-center justify-between gap-3 text-xs">
+                    <span className="muted">{item.read ? 'Read' : 'Unread'}</span>
+                    {!item.read ? (
+                      <span className="font-black text-sky-100" onClick={(event) => {
+                        event.stopPropagation();
+                        markRead(item);
+                      }}>Mark as read</span>
+                    ) : null}
+                  </div>
+                </button>
               );
             }) : (
               <div className="grid min-h-32 place-items-center text-center">
                 <div>
                   <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-[var(--brand)]" />
-                  <p className="font-bold">No notifications</p>
+                  <p className="font-bold">No notifications yet</p>
                   <p className="mt-1 text-sm muted">New operational alerts will appear here.</p>
                 </div>
               </div>
@@ -424,26 +514,59 @@ function NotificationCenter({ role }) {
 
 function AdminTopBar({ role, openSidebar }) {
   const { user } = useAuth();
+  const [quickOpen, setQuickOpen] = useState(false);
+  const userRole = user?.role || role;
+  const quickActions = [
+    { to: '/admin/bookings', label: 'Booking', icon: BookOpenCheck, roles: operationsRoles, primary: true },
+    { to: '/admin/work-orders', label: 'Service Job', icon: Wrench, roles: [...operationsRoles, 'accounts_staff'] },
+    { to: '/admin/payments', label: 'Payment', icon: CreditCard, roles: billingRoles }
+  ].filter((item) => canSeeLink(item, userRole));
 
   return (
     <header className="enterprise-topbar">
       <div className="flex min-h-16 flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-6">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <button className="icon-button enterprise-top-icon h-11 w-11 xl:hidden" onClick={openSidebar} aria-label="Open admin menu">
             <Menu className="h-5 w-5" />
           </button>
-          <GlobalSearch role={role} />
+          <GlobalSearch role={userRole} />
         </div>
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <NavLink className="btn btn-primary glow-action" to="/admin/bookings"><BookOpenCheck className="h-4 w-4" />Booking</NavLink>
-          <NavLink className="btn btn-secondary" to="/admin/work-orders"><Wrench className="h-4 w-4" />Service Job</NavLink>
-          <NavLink className="btn btn-secondary" to="/admin/payments"><CreditCard className="h-4 w-4" />Payment</NavLink>
-          <NotificationCenter role={role} />
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+          <div className="hidden items-center gap-2 md:flex">
+            {quickActions.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink key={item.to} className={`btn ${item.primary ? 'btn-primary glow-action' : 'btn-secondary'}`} to={item.to}>
+                  <Icon className="h-4 w-4" />{item.label}
+                </NavLink>
+              );
+            })}
+          </div>
+          {quickActions.length ? (
+            <div className="relative md:hidden">
+              <button className="icon-button enterprise-top-icon h-11 w-11" type="button" onClick={() => setQuickOpen((value) => !value)} aria-label="Open quick actions">
+                <MoreHorizontal className="h-5 w-5" />
+              </button>
+              {quickOpen ? (
+                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 min-w-48 rounded-card border border-[var(--line)] bg-[#071426] p-2 shadow-2xl">
+                  {quickActions.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <NavLink key={item.to} className="flex items-center gap-2 rounded-card px-3 py-2 text-sm font-bold text-slate-200 hover:bg-sky-400/10" to={item.to} onClick={() => setQuickOpen(false)}>
+                        <Icon className="h-4 w-4" />{item.label}
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <NotificationCenter role={userRole} />
           <div className="hidden items-center gap-3 rounded-card border border-white/10 bg-white/[0.045] px-3 py-2.5 sm:flex">
             <div className="grid h-8 w-8 place-items-center rounded-card bg-sky-400/15 text-xs font-black text-sky-100">{user?.name?.slice(0, 1) || 'A'}</div>
             <div className="min-w-0">
               <p className="max-w-36 truncate text-sm font-bold">{user?.name || 'Admin User'}</p>
-              <p className="text-xs muted">Universal Systems</p>
+              <p className="text-xs muted">{roleLabel(userRole)}</p>
             </div>
           </div>
           <a href="/" className="btn btn-secondary sm:shrink-0">
@@ -456,10 +579,28 @@ function AdminTopBar({ role, openSidebar }) {
   );
 }
 
+function UnauthorizedPanel({ role }) {
+  return (
+    <div className="surface grid min-h-[60vh] place-items-center p-6 text-center">
+      <div className="max-w-md">
+        <ShieldCheck className="mx-auto mb-4 h-10 w-10 text-[var(--brand)]" />
+        <p className="text-xs font-black uppercase text-[var(--brand)]">Read-only protection</p>
+        <h1 className="mt-2 text-2xl font-black">This module is restricted.</h1>
+        <p className="mt-3 text-sm leading-6 muted">
+          Your current role is {roleLabel(role)}. Use an allowed module from the sidebar or contact an administrator for access.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardLayout({ role }) {
+  const { user } = useAuth();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
 
   if (role === 'admin') {
+    const allowed = canOpenAdminPath(location.pathname, user?.role || role);
     return (
       <div className="min-h-screen bg-[var(--bg)]">
         <div className="fixed inset-y-0 left-0 z-40 hidden w-[292px] xl:block">
@@ -477,7 +618,7 @@ export default function DashboardLayout({ role }) {
           </div>
         ) : null}
         <main className="enterprise-main p-4 md:p-6">
-          <Outlet />
+          {allowed ? <Outlet /> : <UnauthorizedPanel role={user?.role || role} />}
         </main>
       </div>
     );
@@ -497,10 +638,13 @@ export default function DashboardLayout({ role }) {
             <p className="text-sm font-bold">{role === 'admin' ? 'Admin Panel' : 'Technician Panel'}</p>
             <p className="text-xs muted">Universal Systems service workspace</p>
           </div>
-          <a href="/" className="btn btn-secondary hidden sm:inline-flex">
-            <Wrench className="h-4 w-4" />
-            Website
-          </a>
+          <div className="flex items-center gap-2">
+            <NotificationCenter role={role} />
+            <a href="/" className="btn btn-secondary hidden sm:inline-flex">
+              <Wrench className="h-4 w-4" />
+              Website
+            </a>
+          </div>
         </div>
       </header>
       {open ? (

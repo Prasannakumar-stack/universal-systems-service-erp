@@ -52,14 +52,26 @@ function useResource(load, deps = []) {
 
 function LoadingBlock() {
   return (
-    <div className="surface grid min-h-48 place-items-center">
-      <Loader2 className="h-6 w-6 animate-spin text-[var(--brand)]" />
+    <div className="grid gap-4">
+      <div className="surface animate-pulse p-5">
+        <div className="h-4 w-36 rounded bg-white/10" />
+        <div className="mt-4 h-8 w-64 max-w-full rounded bg-white/10" />
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        {[1, 2, 3].map((item) => (
+          <div key={item} className="surface animate-pulse p-5">
+            <div className="h-10 w-10 rounded-card bg-white/10" />
+            <div className="mt-4 h-7 w-20 rounded bg-white/10" />
+            <div className="mt-3 h-3 w-28 rounded bg-white/10" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function ErrorBlock({ message }) {
-  return <EmptyState title="Unable to load" message={message} />;
+  return <EmptyState title="Unable to load this view" message={message ? 'Please retry or check your access permission.' : 'Please retry or check your access permission.'} />;
 }
 
 function AdminOverviewPanel() {

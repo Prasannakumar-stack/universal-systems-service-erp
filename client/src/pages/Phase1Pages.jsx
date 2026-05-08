@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Bell, Boxes, CalendarClock, CheckCircle2, ClipboardList, CreditCard, Download, FileText, Loader2, PackagePlus, PhoneCall as PhoneCallIcon, Plus, ReceiptText, Save, Send, Trash2, Users, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Bell, BookOpenCheck, Boxes, CalendarClock, CheckCircle2, ClipboardList, CreditCard, Download, FileText, Loader2, PackagePlus, PhoneCall as PhoneCallIcon, Plus, ReceiptText, Save, Send, Trash2, Users, Wrench, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ConfirmModal, EmptyState, PageHeader, SearchBox, StatCard } from '../components/Ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -50,14 +50,26 @@ function useResource(load, deps = []) {
 
 function LoadingBlock() {
   return (
-    <div className="surface grid min-h-48 place-items-center">
-      <Loader2 className="h-6 w-6 animate-spin text-[var(--brand)]" />
+    <div className="grid gap-4">
+      <div className="surface animate-pulse p-5">
+        <div className="h-4 w-36 rounded bg-white/10" />
+        <div className="mt-4 h-8 w-64 max-w-full rounded bg-white/10" />
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        {[1, 2, 3].map((item) => (
+          <div key={item} className="surface animate-pulse p-5">
+            <div className="h-10 w-10 rounded-card bg-white/10" />
+            <div className="mt-4 h-7 w-20 rounded bg-white/10" />
+            <div className="mt-3 h-3 w-28 rounded bg-white/10" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function ErrorBlock({ message }) {
-  return <EmptyState title="Unable to load" message={message} />;
+  return <EmptyState title="Unable to load this view" message={message ? 'Please retry or check your access permission.' : 'Please retry or check your access permission.'} />;
 }
 
 function StatusBadge({ status }) {
@@ -157,6 +169,19 @@ const workOrderTabs = [
   { id: 'notes', label: 'Notes' }
 ];
 
+const technicianWorkOrderTabs = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'workUpdate', label: 'Checklist / Work Update' },
+  { id: 'parts', label: 'Parts' },
+  { id: 'partRequests', label: 'Part Requests' },
+  { id: 'notes', label: 'Notes' },
+  { id: 'photos', label: 'Photos' },
+  { id: 'documents', label: 'Documents' }
+];
+
+const technicianAllowedStatuses = ['In Progress', 'Awaiting Parts', 'Completed', 'Returned'];
+const technicianJobFilters = ['Today', 'All Assigned', 'Pending', 'In Progress', 'Awaiting Parts', 'Completed'];
+
 const customerTabs = [
   { id: 'overview', label: 'Overview' },
   { id: 'devices', label: 'Devices / Assets' },
@@ -205,6 +230,49 @@ function customerWhatsAppHref(customer) {
   const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
   const message = `Hello ${customer?.name || 'Customer'},\nThis is Universal Systems regarding your service request.`;
   return `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`;
+}
+
+function customerFromOrder(order) {
+  return order?.customerId || {};
+}
+
+function customerPhone(order) {
+  return customerFromOrder(order)?.phone || '';
+}
+
+function callHref(phone) {
+  const cleanPhone = String(phone || '').replace(/[^\d+]/g, '');
+  return cleanPhone ? `tel:${cleanPhone}` : '#';
+}
+
+function technicianWhatsAppHref(order) {
+  const customer = customerFromOrder(order);
+  const phone = String(customer?.phone || '').replace(/\D/g, '');
+  const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
+  const message = `Hello ${customer?.name || 'Customer'}, this is Universal Systems technician regarding your service job.`;
+  return phone ? `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}` : '#';
+}
+
+function jobPriority(order) {
+  if (order?.priority) return order.priority;
+  if (order?.status === 'Awaiting Parts') return 'High';
+  if (isTechnicianOverdueJob(order)) return 'High';
+  return 'Normal';
+}
+
+function jobScheduleLabel(order) {
+  const value = order?.scheduledAt || order?.scheduledDate || order?.appointmentDate || order?.createdAt;
+  return value ? formatDate(value) : 'Not scheduled';
+}
+
+function isTechnicianTodayJob(order) {
+  return isSameDay(order?.scheduledAt || order?.scheduledDate || order?.appointmentDate || order?.createdAt || order?.updatedAt);
+}
+
+function isTechnicianOverdueJob(order) {
+  if (!order || ['Completed', 'Delivered', 'Returned'].includes(order.status)) return false;
+  const reference = new Date(order.scheduledAt || order.scheduledDate || order.createdAt || order.updatedAt || Date.now());
+  return Date.now() - reference.getTime() > 24 * 60 * 60 * 1000;
 }
 
 function deviceCategory(device = '') {
@@ -341,7 +409,10 @@ function TechnicianWorkloadBars({ technicians = [] }) {
 
   return (
     <div className="surface p-5">
-      <h2 className="text-xl font-black">Technician Workload</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-black">Technician Workload</h2>
+        <Link className="btn btn-secondary py-2" to="/admin/reports/technicians">Report</Link>
+      </div>
       <div className="mt-4 grid gap-4">
         {technicians.length ? technicians.map((tech) => {
           const percent = Math.min(100, Math.round((Number(tech.activeJobs || 0) / maxJobs) * 100));
@@ -414,6 +485,107 @@ function amcWhatsappHref(contract) {
   return `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`;
 }
 
+const reportSections = [
+  { id: 'main', label: 'Overview', to: '/admin/reports' },
+  { id: 'operations', label: 'Operations', to: '/admin/reports/operations' },
+  { id: 'technicians', label: 'Technicians', to: '/admin/reports/technicians' },
+  { id: 'finance', label: 'Finance', to: '/admin/reports/finance' },
+  { id: 'inventory', label: 'Inventory', to: '/admin/reports/inventory' },
+  { id: 'amc', label: 'AMC', to: '/admin/reports/amc' },
+  { id: 'customers', label: 'Customers', to: '/admin/reports/customers' }
+];
+
+const reportRangeOptions = ['Today', 'Last 7 Days', 'This Month', 'Last Month', 'Custom Range'];
+
+function startOfDay(value) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function endOfDay(value) {
+  const date = new Date(value);
+  date.setHours(23, 59, 59, 999);
+  return date;
+}
+
+function reportRangeBounds(range, customFrom = '', customTo = '') {
+  const now = new Date();
+  if (range === 'Today') return { from: startOfDay(now), to: endOfDay(now) };
+  if (range === 'Last 7 Days') {
+    const from = startOfDay(now);
+    from.setDate(from.getDate() - 6);
+    return { from, to: endOfDay(now) };
+  }
+  if (range === 'This Month') return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: endOfDay(now) };
+  if (range === 'Last Month') return { from: new Date(now.getFullYear(), now.getMonth() - 1, 1), to: endOfDay(new Date(now.getFullYear(), now.getMonth(), 0)) };
+  return {
+    from: customFrom ? startOfDay(customFrom) : null,
+    to: customTo ? endOfDay(customTo) : null
+  };
+}
+
+function dateInRange(value, bounds) {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return false;
+  if (bounds.from && time < bounds.from.getTime()) return false;
+  if (bounds.to && time > bounds.to.getTime()) return false;
+  return true;
+}
+
+function filterByRange(items = [], bounds, field = 'createdAt') {
+  return items.filter((item) => dateInRange(item?.[field], bounds));
+}
+
+function completionHours(order) {
+  if (!order?.completedAt || !order?.createdAt) return null;
+  const hours = (new Date(order.completedAt).getTime() - new Date(order.createdAt).getTime()) / (60 * 60 * 1000);
+  return Number.isFinite(hours) && hours >= 0 ? hours : null;
+}
+
+function averageHours(orders = []) {
+  const values = orders.map(completionHours).filter((value) => value !== null);
+  if (!values.length) return '—';
+  const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return avg >= 24 ? `${(avg / 24).toFixed(1)} days` : `${avg.toFixed(1)} hrs`;
+}
+
+function serviceTypeBucket(order) {
+  const text = `${order?.serviceType || ''} ${order?.device || ''} ${order?.issue || ''}`.toLowerCase();
+  if (text.includes('printer') || text.includes('toner')) return 'Printer Service';
+  if (text.includes('cctv') || text.includes('camera')) return 'CCTV Service';
+  if (text.includes('network') || text.includes('amc')) return 'Networking / AMC';
+  if (text.includes('solar') || text.includes('ups') || text.includes('battery') || text.includes('inverter')) return 'Solar / UPS / Inverter';
+  if (text.includes('software') || text.includes('installation')) return 'Software / Installation';
+  if (text.includes('laptop') || text.includes('desktop') || text.includes('pc')) return 'PC / Laptop Service';
+  return order?.serviceType || 'Other';
+}
+
+function percentage(value, total) {
+  if (!total) return '0%';
+  return `${Math.round((Number(value || 0) / Number(total || 1)) * 100)}%`;
+}
+
+function monthKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unknown';
+  return date.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+}
+
+function downloadCsv(filename, headers, rows) {
+  const content = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 function WorkflowTracker({ status }) {
   const steps = ['Received', 'Diagnosing', 'Repairing', 'Ready', 'Delivered'];
   const indexByStatus = {
@@ -479,6 +651,638 @@ function RemindersPanel({ reminders = [] }) {
         )) : <p className="text-sm muted">No reminders.</p>}
       </div>
     </div>
+  );
+}
+
+function TechnicianLoadingCards() {
+  return (
+    <div className="grid gap-4">
+      {[1, 2, 3].map((item) => (
+        <div key={item} className="surface animate-pulse p-5">
+          <div className="h-4 w-32 rounded bg-white/10" />
+          <div className="mt-4 h-7 w-48 rounded bg-white/10" />
+          <div className="mt-4 grid gap-2">
+            <div className="h-3 w-full rounded bg-white/10" />
+            <div className="h-3 w-3/4 rounded bg-white/10" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TechnicianJobCard({ job, base = '/tech/work-orders', onStatusChange = null, compact = false }) {
+  const customer = customerFromOrder(job);
+  const phone = customerPhone(job);
+  const priority = jobPriority(job);
+  return (
+    <div className="surface lift-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-lg font-black">{customer.name || 'Customer'}</p>
+          <p className="mt-1 text-sm font-semibold text-sky-100">{job.serviceType || job.service || 'Service Job'}</p>
+          <p className="mt-1 text-sm muted">{job.device || 'Device not captured'}</p>
+        </div>
+        <StatusBadge status={job.status} />
+      </div>
+      <div className="mt-3 grid gap-2 text-sm">
+        <p className="line-clamp-2"><span className="font-bold">Issue:</span> {job.issue || 'No issue captured'}</p>
+        {customer.address ? <p className="line-clamp-2 muted"><span className="font-bold text-slate-200">Address:</span> {customer.address}</p> : null}
+        <div className="flex flex-wrap gap-2">
+          <span className={`rounded-full px-2.5 py-1 text-xs font-black ${priority === 'High' ? 'bg-amber-400/15 text-amber-100' : 'bg-sky-400/15 text-sky-100'}`}>{priority} Priority</span>
+          <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold text-slate-200">{jobScheduleLabel(job)}</span>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <Link className="btn btn-primary" to={`${base}/${recordId(job)}`}>Open Job</Link>
+        <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
+        <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(job)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+      </div>
+      {!compact && onStatusChange ? (
+        <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">
+          {technicianAllowedStatuses.filter((status) => status !== job.status).slice(0, 4).map((status) => (
+            <button key={status} type="button" className="btn btn-secondary" onClick={() => onStatusChange(recordId(job), status)}>
+              Set {status}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TechnicianJobsView({ jobs, search, setSearch, filter, setFilter, quickStatus }) {
+  const visibleJobs = useMemo(() => {
+    const rows = jobs.filter((job) => {
+      if (filter === 'Today') return isTechnicianTodayJob(job);
+      if (filter === 'All Assigned') return true;
+      return job.status === filter;
+    });
+    return rows.sort((a, b) => {
+      const activeRank = (item) => ['Pending', 'In Progress', 'Awaiting Parts'].includes(item.status) ? 0 : 1;
+      return activeRank(a) - activeRank(b) || new Date(a.scheduledAt || a.createdAt || 0) - new Date(b.scheduledAt || b.createdAt || 0);
+    });
+  }, [jobs, filter]);
+
+  return (
+    <>
+      <PageHeader title="My Repair & Service Jobs" eyebrow="Technician">
+        Mobile-first view of assigned service jobs, status updates, parts, notes, and photos.
+      </PageHeader>
+      <div className="surface mb-5 p-4">
+        <SearchBox value={search} onChange={setSearch} placeholder="Search customer, phone, service, device, issue" />
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          {technicianJobFilters.map((item) => (
+            <button key={item} type="button" className={`tab-button ${filter === item ? 'tab-button-active' : ''}`} onClick={() => setFilter(item)}>
+              {item}
+            </button>
+          ))}
+        </div>
+      </div>
+      {!visibleJobs.length ? (
+        <EmptyState title={filter === 'Today' ? 'No jobs assigned today.' : 'No jobs found'} message={filter === 'Today' ? "You're all clear." : 'Assigned jobs matching this filter will appear here.'} />
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {visibleJobs.map((job) => <TechnicianJobCard key={recordId(job)} job={job} onStatusChange={quickStatus} />)}
+        </div>
+      )}
+    </>
+  );
+}
+
+function ReportBar({ label, value, total, displayValue = null }) {
+  const width = total ? Math.min(100, Math.round((Number(value || 0) / Number(total || 1)) * 100)) : 0;
+  return (
+    <div className="rounded-card bg-[var(--surface-2)] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-bold">{label}</span>
+        <span className="text-sm muted">{displayValue ?? value}</span>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-emerald-300" style={{ width: `${width}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function ReportsNavigation({ active }) {
+  return (
+    <div className="surface mb-5 p-3">
+      <div className="tabs-list">
+        {reportSections.map((item) => (
+          <Link key={item.id} className={`tab-button ${active === item.id ? 'tab-button-active' : ''}`} to={item.to}>
+            {item.label}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReportsRangeBar({ range, setRange, customFrom, setCustomFrom, customTo, setCustomTo, onExport }) {
+  return (
+    <div className="surface mb-5 grid gap-3 p-4 lg:grid-cols-[220px_170px_170px_auto_auto]">
+      <select className="input" value={range} onChange={(event) => setRange(event.target.value)}>
+        {reportRangeOptions.map((item) => <option key={item}>{item}</option>)}
+      </select>
+      {range === 'Custom Range' ? (
+        <>
+          <input className="input" type="date" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} />
+          <input className="input" type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} />
+        </>
+      ) : <><div className="hidden lg:block" /><div className="hidden lg:block" /></>}
+      <button type="button" className="btn btn-secondary" onClick={onExport}><Download className="h-4 w-4" />Export CSV</button>
+      <button type="button" className="btn btn-secondary" onClick={() => window.print()}><FileText className="h-4 w-4" />Print</button>
+    </div>
+  );
+}
+
+export function ReportsAnalyticsPage({ section = 'main' }) {
+  const { request } = useAuth();
+  const [range, setRange] = useState('This Month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const loadReports = useCallback(async () => {
+    const [bookings, workOrders, invoices, payments, inventory, movements, customers, amcContracts, amcSchedule, users] = await Promise.all([
+      request('/bookings').catch(() => ({ bookings: [] })),
+      request('/work-orders').catch(() => ({ workOrders: [] })),
+      request('/invoices').catch(() => ({ invoices: [] })),
+      request('/payments').catch(() => ({ payments: [] })),
+      request('/inventory').catch(() => ({ parts: [] })),
+      request('/stock-movements').catch(() => ({ movements: [] })),
+      request('/customers').catch(() => ({ customers: [] })),
+      request('/amc/contracts').catch(() => ({ contracts: [], summary: {} })),
+      request('/amc/schedule').catch(() => ({ schedule: [] })),
+      request('/users').catch(() => ({ users: [] }))
+    ]);
+    return {
+      bookings: bookings.bookings || [],
+      workOrders: workOrders.workOrders || [],
+      invoices: invoices.invoices || [],
+      payments: payments.payments || [],
+      parts: inventory.parts || [],
+      movements: movements.movements || [],
+      customers: customers.customers || [],
+      amcContracts: amcContracts.contracts || [],
+      amcSummary: amcContracts.summary || {},
+      amcSchedule: amcSchedule.schedule || [],
+      users: users.users || []
+    };
+  }, [request]);
+  const { data, loading, error, reload } = useResource(loadReports, [loadReports]);
+
+  const bounds = useMemo(() => reportRangeBounds(range, customFrom, customTo), [range, customFrom, customTo]);
+
+  const report = useMemo(() => {
+    const raw = data || {};
+    const bookings = filterByRange(raw.bookings || [], bounds);
+    const workOrders = filterByRange(raw.workOrders || [], bounds);
+    const invoices = filterByRange(raw.invoices || [], bounds);
+    const payments = filterByRange(raw.payments || [], bounds);
+    const movements = filterByRange(raw.movements || [], bounds);
+    const customers = filterByRange(raw.customers || [], bounds);
+    const amcContracts = (raw.amcContracts || []).filter((contract) => dateInRange(contract.createdAt || contract.startDate || contract.endDate, bounds));
+    const amcSchedule = (raw.amcSchedule || []).filter((visit) => dateInRange(visit.scheduledDate || visit.createdAt, bounds));
+    const allWorkOrders = raw.workOrders || [];
+    const allInvoices = raw.invoices || [];
+    const allPayments = raw.payments || [];
+    const allCustomers = raw.customers || [];
+    const allContracts = raw.amcContracts || [];
+    const allSchedule = raw.amcSchedule || [];
+    const parts = raw.parts || [];
+
+    const completedJobs = workOrders.filter((job) => ['Completed', 'Delivered'].includes(job.status));
+    const activeJobs = allWorkOrders.filter((job) => ['Pending', 'In Progress', 'Awaiting Parts'].includes(job.status));
+    const lowStockItems = parts.filter((part) => inventoryStockStatus(part) === 'low');
+    const outOfStockItems = parts.filter((part) => inventoryStockStatus(part) === 'out');
+    const paidAmount = payments.reduce((sum, payment) => sum + Number(payment.paidAmount || payment.amount || 0), 0);
+    const totalInvoiceValue = invoices.reduce((sum, invoice) => sum + Number(invoice.total || invoice.totalAmount || 0), 0);
+    const pendingBalance = invoices.reduce((sum, invoice) => sum + invoiceDueAmount(invoice), 0);
+    const activeAmc = allContracts.filter((contract) => contract.status === 'Active').length;
+    const amcRenewalsDue = allContracts.filter((contract) => contract.renewalStatus === 'Renewal Due').length;
+
+    const serviceTypeRows = Object.entries(workOrders.reduce((map, job) => {
+      const key = serviceTypeBucket(job);
+      map[key] = (map[key] || 0) + 1;
+      return map;
+    }, {})).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+
+    const technicianRows = (raw.users || []).filter((user) => user.role === 'technician').map((tech) => {
+      const jobs = allWorkOrders.filter((job) => recordId(job.technicianId) === recordId(tech));
+      const completed = jobs.filter((job) => ['Completed', 'Delivered'].includes(job.status));
+      const inProgress = jobs.filter((job) => job.status === 'In Progress');
+      const awaitingParts = jobs.filter((job) => job.status === 'Awaiting Parts');
+      const pending = jobs.filter((job) => job.status === 'Pending');
+      const partsValue = jobs.reduce((sum, job) => sum + (job.partsUsed || []).reduce((partSum, part) => partSum + Number(part.total || 0), 0), 0);
+      const notesCount = jobs.reduce((sum, job) => sum + (job.notes || []).length, 0);
+      const returned = jobs.filter((job) => job.status === 'Returned').length;
+      return {
+        technician: tech,
+        assigned: jobs.length,
+        completed: completed.length,
+        inProgress: inProgress.length,
+        awaitingParts: awaitingParts.length,
+        pending: pending.length,
+        completionRate: percentage(completed.length, jobs.length),
+        averageCompletion: averageHours(completed),
+        partsValue,
+        notesCount,
+        returned,
+        lastActivity: latestDate(jobs, ['updatedAt', 'completedAt', 'createdAt'])
+      };
+    });
+
+    const revenueByMonth = Object.values(allPayments.reduce((map, payment) => {
+      const key = monthKey(payment.createdAt);
+      if (!map[key]) map[key] = { month: key, revenue: 0 };
+      map[key].revenue += Number(payment.paidAmount || payment.amount || 0);
+      return map;
+    }, {})).slice(-12);
+
+    const paymentMethodRows = Object.entries(payments.reduce((map, payment) => {
+      const method = payment.method || 'Other';
+      map[method] = (map[method] || 0) + Number(payment.paidAmount || payment.amount || 0);
+      return map;
+    }, {})).map(([method, total]) => ({ method, total })).sort((a, b) => b.total - a.total);
+
+    const pendingByCustomer = Object.values(invoices.reduce((map, invoice) => {
+      const id = recordId(invoice.customerId) || invoice.customerId?.phone || invoice.customerId?.name || 'unknown';
+      if (!map[id]) map[id] = { customer: invoice.customerId?.name || 'Customer', phone: invoice.customerId?.phone || '', balance: 0 };
+      map[id].balance += invoiceDueAmount(invoice);
+      return map;
+    }, {})).filter((row) => row.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 12);
+
+    const usedByPart = movements.filter((movement) => movement.type === 'USED').reduce((map, movement) => {
+      const id = recordId(movement.partId);
+      map[id] = (map[id] || 0) + Math.abs(Number(movement.quantity || 0));
+      return map;
+    }, {});
+
+    const inventoryRows = parts.map((part) => ({
+      ...part,
+      usedQuantity: usedByPart[recordId(part)] || 0,
+      stockValue: Number(part.onHand || 0) * Number(part.costPrice || part.sellingPrice || 0),
+      stockStatus: inventoryStockStatus(part)
+    })).sort((a, b) => b.usedQuantity - a.usedQuantity || String(a.partName || '').localeCompare(String(b.partName || '')));
+
+    const customerRows = allCustomers.map((customer) => {
+      const customerJobs = allWorkOrders.filter((job) => recordId(job.customerId) === recordId(customer));
+      const customerInvoices = allInvoices.filter((invoice) => recordId(invoice.customerId) === recordId(customer));
+      const totalSpent = customerInvoices.reduce((sum, invoice) => sum + Number(invoice.paidAmount || invoice.paid || 0), 0);
+      const pending = customerInvoices.reduce((sum, invoice) => sum + invoiceDueAmount(invoice), 0);
+      const activeAmcContracts = allContracts.filter((contract) => recordId(contract.customerId) === recordId(customer) && contract.status === 'Active').length;
+      return {
+        customer,
+        totalJobs: customerJobs.length,
+        totalSpent,
+        pendingBalance: pending,
+        activeAmc: activeAmcContracts,
+        lastServiceDate: latestDate(customerJobs, ['completedAt', 'updatedAt', 'createdAt'])
+      };
+    }).sort((a, b) => b.totalSpent - a.totalSpent || b.totalJobs - a.totalJobs);
+
+    return {
+      raw,
+      bookings,
+      workOrders,
+      invoices,
+      payments,
+      movements,
+      amcContracts,
+      amcSchedule,
+      parts,
+      summary: {
+        totalRevenue: paidAmount,
+        pendingPayments: pendingBalance,
+        completedJobs: completedJobs.length,
+        activeRepairJobs: activeJobs.length,
+        lowStockItems: lowStockItems.length,
+        activeAmcContracts: activeAmc,
+        amcRenewalsDue,
+        totalCustomers: allCustomers.length
+      },
+      operations: {
+        totalBookings: bookings.length,
+        totalJobs: workOrders.length,
+        pending: workOrders.filter((job) => job.status === 'Pending').length,
+        inProgress: workOrders.filter((job) => job.status === 'In Progress').length,
+        awaitingParts: workOrders.filter((job) => job.status === 'Awaiting Parts').length,
+        completed: workOrders.filter((job) => job.status === 'Completed').length,
+        delivered: workOrders.filter((job) => job.status === 'Delivered').length,
+        returned: workOrders.filter((job) => job.status === 'Returned').length,
+        averageCompletion: averageHours(workOrders),
+        serviceTypeRows
+      },
+      technicians: technicianRows,
+      finance: {
+        totalInvoiceValue,
+        totalCollected: paidAmount,
+        pendingBalance,
+        partialPayments: invoices.filter((invoice) => invoice.status === 'Partial').length,
+        paidInvoices: invoices.filter((invoice) => invoice.status === 'Paid').length,
+        pendingInvoices: invoices.filter((invoice) => invoice.status === 'Pending').length,
+        todayCollection: allPayments.filter((payment) => isToday(payment.createdAt)).reduce((sum, payment) => sum + Number(payment.paidAmount || payment.amount || 0), 0),
+        monthlyRevenue: allPayments.filter((payment) => {
+          const date = new Date(payment.createdAt);
+          const now = new Date();
+          return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+        }).reduce((sum, payment) => sum + Number(payment.paidAmount || payment.amount || 0), 0),
+        revenueByMonth,
+        paymentMethodRows,
+        pendingByCustomer
+      },
+      inventory: {
+        rows: inventoryRows,
+        totalParts: parts.length,
+        stockValue: inventoryRows.reduce((sum, row) => sum + row.stockValue, 0),
+        lowStock: lowStockItems.length,
+        outOfStock: outOfStockItems.length,
+        usedQuantity: movements.filter((movement) => movement.type === 'USED').reduce((sum, movement) => sum + Math.abs(Number(movement.quantity || 0)), 0),
+        added: movements.filter((movement) => movement.type === 'ADD').reduce((sum, movement) => sum + Number(movement.quantity || 0), 0),
+        returned: movements.filter((movement) => movement.type === 'RETURN').reduce((sum, movement) => sum + Number(movement.quantity || 0), 0),
+        adjusted: movements.filter((movement) => movement.type === 'ADJUST').reduce((sum, movement) => sum + Number(movement.quantity || 0), 0),
+        deadStock: inventoryRows.filter((row) => !row.usedQuantity).length
+      },
+      amc: {
+        contracts: allContracts,
+        active: allContracts.filter((contract) => contract.status === 'Active').length,
+        expiringSoon: allContracts.filter((contract) => contract.renewalStatus === 'Renewal Due').length,
+        expired: allContracts.filter((contract) => contract.renewalStatus === 'Expired').length,
+        visitsThisMonth: allSchedule.filter((visit) => {
+          const date = new Date(visit.scheduledDate);
+          const now = new Date();
+          return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+        }).length,
+        completedVisits: allSchedule.filter((visit) => visit.status === 'Completed').length,
+        overdueVisits: allSchedule.filter((visit) => visit.status === 'Overdue').length,
+        contractValue: allContracts.reduce((sum, contract) => sum + Number(contract.contractValue || 0), 0),
+        renewalDueAmount: allContracts.filter((contract) => ['Renewal Due', 'Expired'].includes(contract.renewalStatus)).reduce((sum, contract) => sum + Number(contract.contractValue || 0), 0)
+      },
+      customers: {
+        rows: customerRows,
+        newThisMonth: allCustomers.filter((customer) => {
+          const date = new Date(customer.createdAt);
+          const now = new Date();
+          return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+        }).length,
+        repeatCustomers: customerRows.filter((row) => row.totalJobs > 1).length,
+        withPendingBalance: customerRows.filter((row) => row.pendingBalance > 0).length,
+        withActiveAmc: customerRows.filter((row) => row.activeAmc > 0).length
+      }
+    };
+  }, [data, bounds]);
+
+  function exportCurrentSection() {
+    if (!report) return;
+    if (section === 'operations' || section === 'main') {
+      downloadCsv('operations-report.csv', ['Metric', 'Value'], [
+        ['Total bookings', report.operations.totalBookings],
+        ['Total jobs', report.operations.totalJobs],
+        ['Pending', report.operations.pending],
+        ['In Progress', report.operations.inProgress],
+        ['Awaiting Parts', report.operations.awaitingParts],
+        ['Completed', report.operations.completed],
+        ['Delivered', report.operations.delivered],
+        ['Returned', report.operations.returned],
+        ['Average completion', report.operations.averageCompletion]
+      ]);
+      return;
+    }
+    if (section === 'technicians') {
+      downloadCsv('technician-report.csv', ['Technician', 'Assigned', 'Completed', 'In Progress', 'Awaiting Parts', 'Completion Rate', 'Last Activity'], report.technicians.map((row) => [row.technician.name, row.assigned, row.completed, row.inProgress, row.awaitingParts, row.completionRate, row.lastActivity]));
+      return;
+    }
+    if (section === 'finance') {
+      downloadCsv('finance-report.csv', ['Customer', 'Pending Balance'], report.finance.pendingByCustomer.map((row) => [row.customer, row.balance]));
+      return;
+    }
+    if (section === 'inventory') {
+      downloadCsv('inventory-report.csv', ['Part', 'Category', 'On Hand', 'Reserved', 'Available', 'Used Quantity', 'Stock Value', 'Status'], report.inventory.rows.map((row) => [row.partName, row.category, row.onHand, row.reserved, row.available, row.usedQuantity, row.stockValue, row.stockStatus]));
+      return;
+    }
+    if (section === 'amc') {
+      downloadCsv('amc-report.csv', ['Contract', 'Customer', 'Type', 'Start Date', 'End Date', 'Status', 'Renewal Status', 'Value'], report.amc.contracts.map((contract) => [contract.contractId, contract.customerName, contract.contractType, contract.startDate, contract.endDate, contract.status, contract.renewalStatus, contract.contractValue]));
+      return;
+    }
+    downloadCsv('customer-report.csv', ['Customer', 'Phone', 'Total Jobs', 'Total Spent', 'Pending Balance', 'Active AMC', 'Last Service Date'], report.customers.rows.map((row) => [row.customer.name, row.customer.phone, row.totalJobs, row.totalSpent, row.pendingBalance, row.activeAmc, row.lastServiceDate]));
+  }
+
+  if (loading) return <LoadingBlock />;
+  if (error) return <ErrorBlock message={error} />;
+
+  const activeSection = reportSections.some((item) => item.id === section) ? section : 'main';
+
+  return (
+    <>
+      <PageHeader title="Reports & Analytics" eyebrow="Business Intelligence">
+        Track service performance, revenue, stock, technicians, payments, and AMC renewals.
+      </PageHeader>
+      <ReportsNavigation active={activeSection} />
+      <ReportsRangeBar range={range} setRange={setRange} customFrom={customFrom} setCustomFrom={setCustomFrom} customTo={customTo} setCustomTo={setCustomTo} onExport={exportCurrentSection} />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SmartMetricCard icon={CreditCard} label="Total Revenue" value={currency(report.summary.totalRevenue)} tone="green" to="/admin/reports/finance" />
+        <SmartMetricCard icon={AlertTriangle} label="Pending Payments" value={currency(report.summary.pendingPayments)} tone="yellow" to="/admin/reports/finance" />
+        <SmartMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.summary.completedJobs} tone="green" to="/admin/reports/operations" />
+        <SmartMetricCard icon={Wrench} label="Active Repair Jobs" value={report.summary.activeRepairJobs} tone="blue" to="/admin/work-orders" />
+        <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={report.summary.lowStockItems} tone="red" to="/admin/reports/inventory" />
+        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={report.summary.activeAmcContracts} tone="green" to="/admin/reports/amc" />
+        <SmartMetricCard icon={Bell} label="AMC Renewals Due" value={report.summary.amcRenewalsDue} tone="yellow" to="/admin/reports/amc" />
+        <SmartMetricCard icon={Users} label="Total Customers" value={report.summary.totalCustomers} tone="blue" to="/admin/reports/customers" />
+      </div>
+
+      {(activeSection === 'main' || activeSection === 'operations') ? (
+        <div className="mt-6 grid gap-5 xl:grid-cols-[.9fr_1.1fr]">
+          <div className="surface p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-xl font-black">Operations Report</h2>
+              <Link className="btn btn-secondary py-2" to="/admin/work-orders">Open Jobs</Link>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <StatCard icon={BookOpenCheck} label="Total Bookings" value={report.operations.totalBookings} />
+              <StatCard icon={Wrench} label="Total Service Jobs" value={report.operations.totalJobs} />
+              <StatCard icon={CalendarClock} label="Pending Jobs" value={report.operations.pending} tone="yellow" />
+              <StatCard icon={Wrench} label="In Progress Jobs" value={report.operations.inProgress} />
+              <StatCard icon={PackagePlus} label="Awaiting Parts" value={report.operations.awaitingParts} tone="yellow" />
+              <StatCard icon={CheckCircle2} label="Completed Jobs" value={report.operations.completed} tone="green" />
+              <StatCard icon={CheckCircle2} label="Delivered Jobs" value={report.operations.delivered} tone="green" />
+              <StatCard icon={AlertTriangle} label="Returned Jobs" value={report.operations.returned} tone="red" />
+            </div>
+            <p className="mt-4 rounded-card bg-[var(--surface-2)] p-3 text-sm font-bold">Average completion time: {report.operations.averageCompletion}</p>
+          </div>
+          <div className="surface p-5">
+            <h2 className="text-xl font-black">Jobs by Service Type</h2>
+            <div className="mt-4 grid gap-3">
+              {report.operations.serviceTypeRows.length ? report.operations.serviceTypeRows.map((row) => <ReportBar key={row.name} label={row.name} value={row.count} total={report.operations.totalJobs} />) : <EmptyState title="No report data for this period." message="Try changing the date range." />}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {(activeSection === 'main' || activeSection === 'technicians') ? (
+        <div className="surface mt-6 p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-black">Technician Performance Report</h2>
+            <Link className="btn btn-secondary py-2" to="/admin/work-orders?view=technicians">Technician Jobs</Link>
+          </div>
+          {!report.technicians.length ? <EmptyState title="No technician data" message="Technician reports will appear after jobs are assigned." /> : (
+            <Table>
+              <thead><tr><th>Technician</th><th>Assigned</th><th>Completed</th><th>In Progress</th><th>Awaiting Parts</th><th>Completion Rate</th><th>Last Activity</th><th>Action</th></tr></thead>
+              <tbody>
+                {report.technicians.map((row) => (
+                  <tr key={recordId(row.technician)}>
+                    <td className="font-bold">{row.technician.name}<span className="block text-xs muted">{row.notesCount} notes - {currency(row.partsValue)} parts</span></td>
+                    <td>{row.assigned}</td>
+                    <td>{row.completed}</td>
+                    <td>{row.inProgress}</td>
+                    <td>{row.awaitingParts}</td>
+                    <td>{row.completionRate}<span className="block text-xs muted">Avg {row.averageCompletion}</span></td>
+                    <td>{row.lastActivity ? formatDate(row.lastActivity) : '-'}</td>
+                    <td><Link className="btn btn-secondary py-2" to={`/admin/work-orders?technicianId=${recordId(row.technician)}`}>View Jobs</Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </div>
+      ) : null}
+
+      {(activeSection === 'main' || activeSection === 'finance') ? (
+        <div className="mt-6 grid gap-5 xl:grid-cols-[1fr_.9fr]">
+          <div className="surface p-5">
+            <h2 className="text-xl font-black">Finance Report</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <StatCard icon={ReceiptText} label="Total Invoice Value" value={currency(report.finance.totalInvoiceValue)} />
+              <StatCard icon={CreditCard} label="Total Collected" value={currency(report.finance.totalCollected)} tone="green" />
+              <StatCard icon={AlertTriangle} label="Pending Balance" value={currency(report.finance.pendingBalance)} tone="red" />
+              <StatCard icon={ReceiptText} label="Partial Payments" value={report.finance.partialPayments} tone="yellow" />
+              <StatCard icon={CheckCircle2} label="Paid Invoices" value={report.finance.paidInvoices} tone="green" />
+              <StatCard icon={AlertTriangle} label="Pending Invoices" value={report.finance.pendingInvoices} tone="yellow" />
+              <StatCard icon={CreditCard} label="Today's Collection" value={currency(report.finance.todayCollection)} />
+              <StatCard icon={CreditCard} label="Monthly Revenue" value={currency(report.finance.monthlyRevenue)} tone="green" />
+            </div>
+            <div className="mt-5 grid gap-5 lg:grid-cols-2">
+              <DashboardChart title="Revenue by Month">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={report.finance.revenueByMonth}>
+                    <CartesianGrid stroke="rgba(117,196,255,0.12)" vertical={false} />
+                    <XAxis dataKey="month" stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} />
+                    <Tooltip formatter={(value) => currency(value)} contentStyle={{ background: '#071426', border: '1px solid rgba(117,196,255,0.25)', borderRadius: 8 }} />
+                    <Bar dataKey="revenue" fill="#22c55e" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </DashboardChart>
+              <div className="surface p-5">
+                <h3 className="text-lg font-black">Collection by Payment Method</h3>
+                <div className="mt-4 grid gap-3">
+                  {report.finance.paymentMethodRows.length ? report.finance.paymentMethodRows.map((row) => <ReportBar key={row.method} label={row.method} value={row.total} displayValue={currency(row.total)} total={report.finance.totalCollected || 1} />) : <p className="text-sm muted">No payments in this period.</p>}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="surface p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-xl font-black">Pending Balance by Customer</h2>
+              <Link className="btn btn-secondary py-2" to="/admin/payments">Payments</Link>
+            </div>
+            <div className="grid gap-3">
+              {report.finance.pendingByCustomer.length ? report.finance.pendingByCustomer.map((row) => (
+                <div key={`${row.customer}-${row.phone}`} className="rounded-card bg-[var(--surface-2)] p-3">
+                  <p className="font-bold">{row.customer}</p>
+                  <p className="text-sm muted">{row.phone || 'Phone not captured'}</p>
+                  <p className="mt-2 text-lg font-black text-amber-100">{currency(row.balance)}</p>
+                </div>
+              )) : <EmptyState title="No pending balances" message="Payments are clear for this period." />}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {(activeSection === 'main' || activeSection === 'inventory') ? (
+        <div className="surface mt-6 p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-black">Inventory Report</h2>
+            <Link className="btn btn-secondary py-2" to="/admin/parts">Open Inventory</Link>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard icon={Boxes} label="Total Parts / Products" value={report.inventory.totalParts} />
+            <StatCard icon={CreditCard} label="Total Stock Value" value={currency(report.inventory.stockValue)} />
+            <StatCard icon={AlertTriangle} label="Low Stock Items" value={report.inventory.lowStock} tone="yellow" />
+            <StatCard icon={AlertTriangle} label="Out of Stock Items" value={report.inventory.outOfStock} tone="red" />
+            <StatCard icon={Wrench} label="Stock Used by Jobs" value={report.inventory.usedQuantity} />
+            <StatCard icon={PackagePlus} label="Stock Added" value={report.inventory.added} tone="green" />
+            <StatCard icon={PackagePlus} label="Stock Returned" value={report.inventory.returned} tone="green" />
+            <StatCard icon={ReceiptText} label="Dead Stock Items" value={report.inventory.deadStock} tone="yellow" />
+          </div>
+          <div className="mt-5">
+            {!report.inventory.rows.length ? <EmptyState title="No inventory data" message="Inventory reports will appear after parts are added." /> : (
+              <Table>
+                <thead><tr><th>Part</th><th>Category</th><th>On Hand</th><th>Reserved</th><th>Available</th><th>Used Quantity</th><th>Stock Value</th><th>Status</th></tr></thead>
+                <tbody>
+                  {report.inventory.rows.slice(0, 50).map((part) => <tr key={recordId(part)}><td className="font-bold">{part.partName}</td><td>{part.category}</td><td>{part.onHand}</td><td>{part.reserved}</td><td>{part.available}</td><td>{part.usedQuantity}</td><td>{currency(part.stockValue)}</td><td><InventoryStatusBadge part={part} /></td></tr>)}
+                </tbody>
+              </Table>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {(activeSection === 'main' || activeSection === 'amc') ? (
+        <div className="surface mt-6 p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-black">AMC & Contracts Report</h2>
+            <Link className="btn btn-secondary py-2" to="/admin/amc-renewals">Renewals</Link>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard icon={FileText} label="Active AMC Contracts" value={report.amc.active} tone="green" />
+            <StatCard icon={AlertTriangle} label="Expiring Soon" value={report.amc.expiringSoon} tone="yellow" />
+            <StatCard icon={AlertTriangle} label="Expired Contracts" value={report.amc.expired} tone="red" />
+            <StatCard icon={CalendarClock} label="AMC Visits This Month" value={report.amc.visitsThisMonth} />
+            <StatCard icon={CheckCircle2} label="Completed AMC Visits" value={report.amc.completedVisits} tone="green" />
+            <StatCard icon={AlertTriangle} label="Overdue AMC Visits" value={report.amc.overdueVisits} tone="red" />
+            <StatCard icon={CreditCard} label="AMC Contract Value" value={currency(report.amc.contractValue)} />
+            <StatCard icon={CreditCard} label="Renewals Due Amount" value={currency(report.amc.renewalDueAmount)} tone="yellow" />
+          </div>
+          <div className="mt-5">
+            {!report.amc.contracts.length ? <EmptyState title="No AMC contracts yet" message="AMC reports will appear after contracts are created." action={<Link className="btn btn-primary" to="/admin/amc-contracts">Create AMC Contract</Link>} /> : (
+              <Table>
+                <thead><tr><th>Contract</th><th>Customer</th><th>Type</th><th>Start Date</th><th>End Date</th><th>Status</th><th>Renewal Status</th><th>Value</th><th>Action</th></tr></thead>
+                <tbody>
+                  {report.amc.contracts.slice(0, 50).map((contract) => <tr key={recordId(contract)}><td className="font-bold">{contract.contractId}</td><td>{contract.customerName}</td><td>{contract.contractType}</td><td>{formatDate(contract.startDate)}</td><td>{formatDate(contract.endDate)}</td><td><AmcStatusBadge status={contract.status} /></td><td><AmcStatusBadge status={contract.renewalStatus} /></td><td>{currency(contract.contractValue)}</td><td><Link className="btn btn-secondary py-2" to="/admin/amc-contracts">Open</Link></td></tr>)}
+                </tbody>
+              </Table>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {(activeSection === 'main' || activeSection === 'customers') ? (
+        <div className="surface mt-6 p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-black">Customer Report</h2>
+            <Link className="btn btn-secondary py-2" to="/admin/customers">Customers</Link>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard icon={Users} label="Total Customers" value={report.customers.rows.length} />
+            <StatCard icon={Users} label="New Customers This Month" value={report.customers.newThisMonth} />
+            <StatCard icon={CheckCircle2} label="Repeat Customers" value={report.customers.repeatCustomers} tone="green" />
+            <StatCard icon={AlertTriangle} label="Customers With Balance" value={report.customers.withPendingBalance} tone="yellow" />
+            <StatCard icon={FileText} label="Customers With Active AMC" value={report.customers.withActiveAmc} tone="green" />
+          </div>
+          <div className="mt-5">
+            {!report.customers.rows.length ? <EmptyState title="No customer report data" message="Reports will appear after jobs, invoices, or payments are created." /> : (
+              <Table>
+                <thead><tr><th>Customer</th><th>Phone</th><th>Total Jobs</th><th>Total Spent</th><th>Pending Balance</th><th>Active AMC</th><th>Last Service Date</th><th>Action</th></tr></thead>
+                <tbody>
+                  {report.customers.rows.slice(0, 50).map((row) => <tr key={recordId(row.customer)}><td className="font-bold">{row.customer.name}</td><td>{row.customer.phone}</td><td>{row.totalJobs}</td><td>{currency(row.totalSpent)}</td><td>{currency(row.pendingBalance)}</td><td>{row.activeAmc ? <AmcStatusBadge status="Active" /> : '-'}</td><td>{row.lastServiceDate ? formatDate(row.lastServiceDate) : '-'}</td><td><Link className="btn btn-secondary py-2" to={`/admin/customers/${recordId(row.customer)}`}>View Customer 360</Link></td></tr>)}
+                </tbody>
+              </Table>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -559,13 +1363,13 @@ export function AdminDashboard() {
         <SmartMetricCard icon={ClipboardList} label="Pending Service Jobs" value={data.stats.pendingJobs} tone="yellow" to="/admin/work-orders" />
         <SmartMetricCard icon={Wrench} label="Jobs In Progress" value={data.stats.inProgressJobs} tone="blue" to="/admin/work-orders" />
         <SmartMetricCard icon={CheckCircle2} label="Completed Today" value={completedToday} tone="green" to="/admin/work-orders" />
-        <SmartMetricCard icon={CreditCard} label="Pending Payments" value={pendingPaymentInvoices.length || data.stats.pendingPayments} tone="yellow" to="/admin/invoices" />
-        <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={(data.lowStockAlerts?.length || 0) + Number(data.stats.lowStockCritical || 0)} tone="red" to="/admin/parts" />
-        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={data.stats.activeAmcContracts || 0} tone="green" to="/admin/amc-contracts" />
-        <SmartMetricCard icon={Bell} label="AMC Renewals Due" value={amcRenewalsDue} tone="yellow" to="/admin/amc-renewals" />
-        <SmartMetricCard icon={CalendarClock} label="AMC Visits This Week" value={data.stats.amcVisitsThisWeek || 0} tone="blue" to="/admin/amc-schedule" />
-        <SmartMetricCard icon={AlertTriangle} label="Expired Contracts" value={data.stats.expiredAmcContracts || 0} tone="red" to="/admin/amc-renewals" />
-        <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={currency(monthlyRevenue)} tone="green" to="/admin/payments" />
+        <SmartMetricCard icon={CreditCard} label="Pending Payments" value={pendingPaymentInvoices.length || data.stats.pendingPayments} tone="yellow" to="/admin/reports/finance" />
+        <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={(data.lowStockAlerts?.length || 0) + Number(data.stats.lowStockCritical || 0)} tone="red" to="/admin/reports/inventory" />
+        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={data.stats.activeAmcContracts || 0} tone="green" to="/admin/reports/amc" />
+        <SmartMetricCard icon={Bell} label="AMC Renewals Due" value={amcRenewalsDue} tone="yellow" to="/admin/reports/amc" />
+        <SmartMetricCard icon={CalendarClock} label="AMC Visits This Week" value={data.stats.amcVisitsThisWeek || 0} tone="blue" to="/admin/reports/amc" />
+        <SmartMetricCard icon={AlertTriangle} label="Expired Contracts" value={data.stats.expiredAmcContracts || 0} tone="red" to="/admin/reports/amc" />
+        <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={currency(monthlyRevenue)} tone="green" to="/admin/reports/finance" />
       </div>
       <div className="mt-6 grid gap-5 xl:grid-cols-[.9fr_1.1fr]">
         <PriorityAlerts alerts={alerts} />
@@ -1250,15 +2054,16 @@ export function WorkOrdersPage({ role = 'admin' }) {
   const [dateTo, setDateTo] = useState('');
   const [technicianId, setTechnicianId] = useState('');
   const [serviceType, setServiceType] = useState('');
+  const [techFilter, setTechFilter] = useState('Today');
   const [technicians, setTechnicians] = useState([]);
   const query = useMemo(() => {
     const params = new URLSearchParams();
-    if (status) params.set('status', status);
+    if (role === 'admin' && status) params.set('status', status);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
-    if (technicianId) params.set('technicianId', technicianId);
+    if (role === 'admin' && technicianId) params.set('technicianId', technicianId);
     return params.toString() ? `?${params}` : '';
-  }, [status, dateFrom, dateTo, technicianId]);
+  }, [role, status, dateFrom, dateTo, technicianId]);
   const { data, loading, error, reload } = useResource(() => request(`/work-orders${query}`), [request, query]);
   const base = role === 'admin' ? '/admin/work-orders' : '/tech/work-orders';
 
@@ -1300,6 +2105,19 @@ export function WorkOrdersPage({ role = 'admin' }) {
     if (!serviceType) return true;
     return `${order.serviceType || ''} ${order.service || ''} ${order.device || ''} ${order.issue || ''}`.toLowerCase().includes(serviceType.toLowerCase());
   });
+
+  if (role === 'technician') {
+    return (
+      <TechnicianJobsView
+        jobs={workOrders}
+        search={search}
+        setSearch={setSearch}
+        filter={techFilter}
+        setFilter={setTechFilter}
+        quickStatus={quickStatus}
+      />
+    );
+  }
 
   return (
     <>
@@ -1371,6 +2189,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const [labourCharge, setLabourCharge] = useState(0);
   const [pdfBusy, setPdfBusy] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
+  const [photoFiles, setPhotoFiles] = useState([]);
   const { data, loading, error, reload } = useResource(() => request(`/work-orders/${id}`), [request, id]);
   const order = data?.workOrder;
 
@@ -1636,6 +2455,35 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     }
   }
 
+  async function uploadPhotos(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!photoFiles.length) {
+      push('Select at least one photo', 'error');
+      return;
+    }
+
+    const formData = new FormData();
+    photoFiles.forEach((file) => formData.append('images', file));
+
+    try {
+      await preserveScroll(async () => {
+        const response = await fetch(`${apiBase}/work-orders/${id}/images`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.message || 'Photo upload failed');
+        setPhotoFiles([]);
+        push('Photo uploaded');
+        reload({ silent: true });
+      });
+    } catch (err) {
+      push(err.message, 'error');
+    }
+  }
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
@@ -1643,7 +2491,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const savedServiceCharge = Number(order.serviceCharge || 0);
   const currentServiceCharge = Number(serviceCharge || 0);
   const totalAmount = partsTotal + currentServiceCharge;
-  const imageItems = order.images || [];
+  const imageItems = (order.images?.length ? order.images : order.bookingId?.problemImage?.url ? [order.bookingId.problemImage] : []) || [];
   const rawCustomerId = recordId(order.customerId) || recordId(order.bookingId) || order.id || order._id || '';
   const customerId = `US-${String(rawCustomerId).slice(-4).toUpperCase()}`;
   const livePartTotal = Number(part.unitPrice || 0) * Number(part.quantity || 1);
@@ -1651,6 +2499,280 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const selectedPartAvailable = Number(selectedInventoryPart?.available || 0);
   const contentTabs = ['parts', 'partRequests', 'billing', 'notes'];
   const sideTabs = ['documents', 'timeline'];
+  const phone = customerPhone(order);
+
+  if (role === 'technician') {
+    return (
+      <div className="work-order-detail pb-28 sm:pb-0">
+        <PageHeader
+          title="Technician Job"
+          eyebrow={bookingLabel(order)}
+          action={(
+            <div className="flex flex-wrap gap-2">
+              <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
+              <a className={`btn btn-primary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+            </div>
+          )}
+        >
+          {order.customerId?.name || 'Customer'} - {order.device || 'Service job'}
+        </PageHeader>
+
+        <div className="surface mb-4 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Assigned Repair & Service Job</p>
+              <h2 className="mt-1 text-2xl font-black">{bookingLabel(order)}</h2>
+              <p className="mt-1 text-sm muted">{order.issue || 'No issue captured'}</p>
+            </div>
+            <StatusBadge status={order.status} />
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              ['Customer', order.customerId?.name || '-'],
+              ['Phone', phone || '-'],
+              ['Service Type', order.serviceType || order.service || '-'],
+              ['Device', order.device || '-'],
+              ['Priority', jobPriority(order)],
+              ['Scheduled', jobScheduleLabel(order)],
+              ['Technician', order.technicianId?.name || 'Assigned technician'],
+              ['Created', formatDate(order.createdAt)]
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-card bg-[var(--surface-2)] p-3">
+                <p className="label">{label}</p>
+                <p className="mt-1 text-sm font-bold">{value}</p>
+              </div>
+            ))}
+          </div>
+          {order.customerId?.address ? (
+            <div className="mt-3 rounded-card bg-[var(--surface-2)] p-3">
+              <p className="label">Address</p>
+              <p className="mt-1 text-sm font-bold leading-6">{order.customerId.address}</p>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="surface sticky top-20 z-20 mb-4 p-3">
+          <div className="tabs-list">
+            {technicianWorkOrderTabs.map((tab) => (
+              <button key={tab.id} type="button" className={`tab-button ${activeTab === tab.id ? 'tab-button-active' : ''}`} onClick={() => setActiveTab(tab.id)}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {activeTab === 'overview' ? (
+          <div className="grid gap-4 xl:grid-cols-[1fr_.8fr]">
+            <div className="surface p-4">
+              <h2 className="text-xl font-black">Overview</h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {[
+                  ['Work Order ID', bookingLabel(order)],
+                  ['Customer ID', customerId],
+                  ['Customer name', order.customerId?.name || '-'],
+                  ['Phone', phone || '-'],
+                  ['Service', order.serviceType || order.service || '-'],
+                  ['Device', order.device || '-'],
+                  ['Problem / Issue', order.issue || '-'],
+                  ['Booking Source', order.bookingSource || order.bookingId?.bookingSource || '-'],
+                  ['Status', <StatusBadge status={order.status} />],
+                  ['Completed Date', order.completedAt ? formatDate(order.completedAt) : 'Not completed']
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-card bg-[var(--surface-2)] p-3">
+                    <p className="label">{label}</p>
+                    <div className="mt-1 text-sm font-bold leading-5">{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="surface p-4">
+              <h2 className="text-xl font-black">Quick Contact</h2>
+              <div className="mt-4 grid gap-3">
+                <a className={`btn btn-secondary btn-lg ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call Customer</a>
+                <a className={`btn btn-primary btn-lg ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />Open WhatsApp</a>
+                <Link className="btn btn-secondary btn-lg" to="/tech/work-orders">Back to My Jobs</Link>
+              </div>
+            </div>
+            <WorkflowTracker status={order.status} />
+          </div>
+        ) : null}
+
+        {activeTab === 'workUpdate' ? (
+          <div className="grid gap-4 xl:grid-cols-[.8fr_1.2fr]">
+            <div className="surface p-4">
+              <h2 className="text-xl font-black">Status Update</h2>
+              <p className="mt-1 text-sm muted">Use the existing service job status workflow.</p>
+              <div className="mt-4 grid gap-2">
+                {technicianAllowedStatuses.map((status) => (
+                  <button key={status} type="button" className={`btn ${order.status === status ? 'btn-primary' : 'btn-secondary'} justify-start`} onClick={() => saveStatus(status)}>
+                    <CheckCircle2 className="h-4 w-4" />{status}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <form className="surface p-4" onSubmit={addNote}>
+              <h2 className="text-xl font-black">Checklist / Work Update</h2>
+              <p className="mt-1 text-sm muted">Add diagnosis, work done, customer instructions, or follow-up notes.</p>
+              <textarea className="input mt-4 min-h-36" placeholder="Diagnosis / work update / follow-up needed" value={note} onChange={(event) => setNote(event.target.value)} />
+              <button type="submit" className="btn btn-primary mt-3 w-full sm:w-auto">Add Work Update</button>
+            </form>
+          </div>
+        ) : null}
+
+        {activeTab === 'parts' ? (
+          <div className="grid gap-4">
+            <div className="surface p-4">
+              <h2 className="text-xl font-black">Parts Used</h2>
+              <div className="mt-4 grid gap-3">
+                {order.partsUsed?.length ? order.partsUsed.map((item) => (
+                  <div key={item._id || item.createdAt} className="rounded-card bg-[var(--surface-2)] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-black">{item.name}</p>
+                      <span className="status-badge">Qty {item.quantity}</span>
+                    </div>
+                    <p className="mt-1 text-sm muted">Unit: {currency(item.unitPrice)} - Total: {currency(item.total)}</p>
+                  </div>
+                )) : <EmptyState title="No parts added yet." message="Parts used for this service job will appear here." />}
+              </div>
+            </div>
+            <div className="surface p-4">
+              <h2 className="text-xl font-black">Add Part</h2>
+              <form className="mt-4 grid gap-3 md:grid-cols-[1fr_120px_auto_auto]" onSubmit={addPart}>
+                <select className="input" value={part.inventoryPartId || ''} onChange={(event) => handlePartSelect(event.target.value)}>
+                  <option value="">Manual part</option>
+                  {inventoryParts.map((item) => <option key={item.id} value={item.id}>{item.partName} - {item.available} available</option>)}
+                </select>
+                <input className="input" type="number" min="1" value={part.quantity} onChange={(event) => handlePartQuantityChange(event.target.value)} />
+                <div className="rounded-card bg-[var(--surface-2)] px-3 py-2">
+                  <p className="text-xs muted">Line Total</p>
+                  <p className="text-sm font-black">{currency(livePartTotal)}</p>
+                </div>
+                <button type="submit" className="btn btn-primary"><PackagePlus className="h-4 w-4" />Add Part</button>
+              </form>
+              {!part.inventoryPartId ? <input className="input mt-3" placeholder="Manual part name" value={part.partName} onChange={(event) => setPart((current) => ({ ...current, partName: event.target.value }))} /> : null}
+              {selectedInventoryPart ? <p className="mt-3 text-sm muted">Using inventory price: {currency(part.unitPrice)}. Stock will be handled by the backend ledger.</p> : null}
+              {selectedInventoryPart && selectedPartAvailable <= 0 ? <p className="mt-2 text-sm font-semibold text-rose-100">Stock warning: this part is currently out of stock.</p> : null}
+              {selectedInventoryPart && selectedPartAvailable > 0 && Number(part.quantity || 0) > selectedPartAvailable ? <p className="mt-2 text-sm font-semibold text-amber-100">Stock warning: only {selectedPartAvailable} available. Backend stock rules will validate this when saved.</p> : null}
+              <div className="mt-4 rounded-card bg-emerald-400/10 p-3 text-emerald-100">
+                <p className="text-sm font-bold">Parts total: {currency(partsTotal)}</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {activeTab === 'partRequests' ? (
+          <div className="grid gap-4">
+            <div className="surface p-4">
+              <h2 className="text-xl font-black">Part Requests</h2>
+              <div className="mt-4 grid gap-3">
+                {order.partRequests?.length ? order.partRequests.map((item) => (
+                  <div key={item._id || item.createdAt} className="rounded-card bg-[var(--surface-2)] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-black">{item.name} x {item.quantity}</p>
+                      <StatusBadge status={item.status} />
+                    </div>
+                    <p className="mt-1 text-sm muted">{item.note || 'No request note'}</p>
+                    <p className="mt-1 text-xs muted">Requested by {item.userId?.name || item.userId?.username || 'Team'} - {formatDate(item.createdAt)}</p>
+                  </div>
+                )) : <EmptyState title="No part requests yet." message="Request parts when inventory or approval is needed." />}
+              </div>
+            </div>
+            <form className="surface p-4" onSubmit={requestPart}>
+              <h2 className="text-xl font-black">Request Part</h2>
+              <div className="mt-4 grid gap-3 md:grid-cols-[1fr_110px_auto]">
+                <select className="input" value={partRequest.inventoryPartId} onChange={(event) => {
+                  const selected = inventoryParts.find((item) => item.id === event.target.value);
+                  setPartRequest((current) => ({ ...current, inventoryPartId: event.target.value, partName: selected?.partName || '' }));
+                }}>
+                  <option value="">Manual request</option>
+                  {inventoryParts.map((item) => <option key={item.id} value={item.id}>{item.partName} - {item.available} available</option>)}
+                </select>
+                <input className="input" type="number" min="1" value={partRequest.quantity} onChange={(event) => setPartRequest((current) => ({ ...current, quantity: event.target.value }))} />
+                <button type="submit" className="btn btn-primary"><PackagePlus className="h-4 w-4" />Request</button>
+              </div>
+              {!partRequest.inventoryPartId ? <input className="input mt-3" placeholder="Requested part name" value={partRequest.partName} onChange={(event) => setPartRequest((current) => ({ ...current, partName: event.target.value }))} /> : null}
+              <textarea className="input mt-3 min-h-24" placeholder="Reason / note" value={partRequest.note} onChange={(event) => setPartRequest((current) => ({ ...current, note: event.target.value }))} />
+            </form>
+          </div>
+        ) : null}
+
+        {activeTab === 'notes' ? (
+          <div className="grid gap-4">
+            <form className="surface p-4" onSubmit={addNote}>
+              <h2 className="text-xl font-black">Technician Notes</h2>
+              <textarea className="input mt-4 min-h-28" placeholder="Diagnosis, work done, customer instruction, follow-up needed" value={note} onChange={(event) => setNote(event.target.value)} />
+              <button type="submit" className="btn btn-primary mt-3">Add Note</button>
+            </form>
+            <div className="surface p-4">
+              <div className="grid gap-3">
+                {order.notes?.length ? order.notes.map((item) => <div key={item._id || item.createdAt} className="rounded-card bg-[var(--surface-2)] p-3"><p>{item.text}</p><p className="mt-1 text-xs muted">{item.userId?.name || item.userId?.username || 'Team'} - {formatDate(item.createdAt)}</p></div>) : <EmptyState title="No technician notes yet." message="Add diagnosis, customer instruction, or work completion notes." />}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {activeTab === 'photos' ? (
+          <div className="grid gap-4">
+            <div className="surface p-4">
+              <h2 className="text-xl font-black">Photos / Problem Image</h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {imageItems.length ? imageItems.map((image, index) => (
+                  <a key={image.url || image.filename || index} className="rounded-card border border-[var(--line)] bg-[var(--surface-2)] p-4 transition hover:border-sky-300/60" href={uploadedAssetUrl(image.url)} target="_blank" rel="noreferrer">
+                    <FileText className="mb-3 h-5 w-5 text-[var(--brand)]" />
+                    <p className="font-black">{index === 0 ? 'Customer problem image' : `Service photo ${index}`}</p>
+                    <p className="mt-1 text-sm muted">{image.originalName || image.filename || `Image ${index + 1}`}</p>
+                  </a>
+                )) : <EmptyState title="No image uploaded" message="Customer problem images and technician photos will appear here." />}
+              </div>
+            </div>
+            <form className="surface p-4" onSubmit={uploadPhotos}>
+              <h2 className="text-xl font-black">Upload Technician Photos</h2>
+              <p className="mt-1 text-sm muted">Before service, after service, or other job attachments.</p>
+              <input className="input mt-4" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => setPhotoFiles(Array.from(event.target.files || []))} />
+              <button type="submit" className="btn btn-primary mt-3"><PackagePlus className="h-4 w-4" />Upload Photos</button>
+            </form>
+          </div>
+        ) : null}
+
+        {activeTab === 'documents' ? (
+          <div className="surface p-4">
+            <h2 className="text-xl font-black">Documents</h2>
+            <p className="mt-1 text-sm muted">Technicians can view or download allowed PDFs. Billing and payment edits stay in admin.</p>
+            <div className="mt-4 grid gap-3">
+              {workOrderPdfFlows.map((flow) => {
+                const enabled = pdfAllowed(flow, order);
+                const downloading = pdfBusy === `download-${flow.type}`;
+                return (
+                  <div key={flow.type} className={`rounded-card border border-[var(--line)] bg-[var(--surface-2)] p-4 ${enabled ? '' : 'opacity-70'}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-black">{flow.title}</h3>
+                        <p className="mt-1 text-xs font-semibold muted">Status requirement: {flow.statusText}</p>
+                      </div>
+                      <span className={`rounded px-2 py-1 text-xs font-bold ${enabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-100'}`}>{enabled ? 'Ready' : 'Locked'}</span>
+                    </div>
+                    <p className="mt-2 text-sm muted">{enabled ? flow.readyText : flow.lockedText}</p>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                      <button type="button" className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50" disabled={!enabled || Boolean(pdfBusy)} onClick={() => previewWorkflowPdf(flow)}><FileText className="h-4 w-4" />Preview PDF</button>
+                      <button type="button" className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50" disabled={!enabled || Boolean(pdfBusy)} onClick={() => downloadWorkflowPdf(flow)}>{downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}Download PDF</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-sky-300/20 bg-[#061426]/95 p-3 shadow-2xl backdrop-blur sm:hidden">
+          <div className="grid grid-cols-3 gap-2">
+            <a className={`btn btn-secondary px-2 ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
+            <a className={`btn btn-secondary px-2 ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+            <button type="button" className="btn btn-primary px-2" onClick={() => saveStatus(order.status === 'Completed' ? 'Returned' : 'Completed')}><CheckCircle2 className="h-4 w-4" />Done</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="work-order-detail">
@@ -2158,7 +3280,7 @@ export function CustomerProfilePage() {
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-card bg-[var(--surface-2)] p-3"><p className="label">Phone</p><p className="mt-1 text-sm font-bold">{customer.phone || '-'}</p></div>
           <div className="rounded-card bg-[var(--surface-2)] p-3"><p className="label">Address</p><p className="mt-1 text-sm font-bold">{customer.address || 'Not added'}</p></div>
-          <div className="rounded-card bg-[var(--surface-2)] p-3"><p className="label">Customer Type</p><p className="mt-1 text-sm font-bold">{customerTypeLabel(customer) || 'Not set'}</p></div>
+          <div className="rounded-card bg-[var(--surface-2)] p-3"><p className="label">Customer Type</p><p className="mt-1 text-sm font-bold">{customerTypeLabel(customer) || 'Not added yet'}</p></div>
           <div className="rounded-card bg-[var(--surface-2)] p-3"><p className="label">Customer ID</p><p className="mt-1 text-sm font-bold">{customerCode(customer)}</p></div>
         </div>
       </div>
@@ -2171,8 +3293,8 @@ export function CustomerProfilePage() {
           <div><p className="text-sm muted">Total Spent</p><p className="mt-2 text-2xl font-black">{currency(totalSpent)}</p></div>
           <div><p className="text-sm muted">Pending Balance</p><p className="mt-2 text-2xl font-black text-amber-100">{currency(pendingBalance)}</p></div>
           <div><p className="text-sm muted">Last Service Date</p><p className="mt-2 text-lg font-black">{lastServiceDate ? formatDate(lastServiceDate) : 'No service yet'}</p></div>
-          <div><p className="text-sm muted">AMC Status</p><p className="mt-2 text-lg font-black">{customer.amcStatus || 'Not available'}</p></div>
-          <div><p className="text-sm muted">Warranty Items</p><p className="mt-2 text-lg font-black">{customer.warrantyItems?.length || 'Not available'}</p></div>
+          <div><p className="text-sm muted">AMC Status</p><p className="mt-2 text-lg font-black">{customer.amcStatus || 'No active record'}</p></div>
+          <div><p className="text-sm muted">Warranty Items</p><p className="mt-2 text-lg font-black">{customer.warrantyItems?.length ? customer.warrantyItems.length : 'No active record'}</p></div>
         </div>
       </div>
 
@@ -2206,7 +3328,7 @@ export function CustomerProfilePage() {
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-card bg-[var(--surface-2)] p-3"><p className="label">Name</p><p className="font-bold">{customer.name}</p></div>
                 <div className="rounded-card bg-[var(--surface-2)] p-3"><p className="label">Customer ID</p><p className="font-bold">{customerCode(customer)}</p></div>
-                <div className="rounded-card bg-[var(--surface-2)] p-3"><p className="label">Type</p><p className="font-bold">{customerTypeLabel(customer) || 'Not set'}</p></div>
+                <div className="rounded-card bg-[var(--surface-2)] p-3"><p className="label">Type</p><p className="font-bold">{customerTypeLabel(customer) || 'Not added yet'}</p></div>
                 <div className="rounded-card bg-[var(--surface-2)] p-3"><p className="label">Joined</p><p className="font-bold">{formatDate(customer.createdAt)}</p></div>
               </div>
             </div>
@@ -2608,36 +3730,64 @@ export function PaymentsPage() {
 export function TechnicianDashboard() {
   const { request, user } = useAuth();
   const { data, loading, error } = useResource(() => request('/dashboard/technician'), [request]);
-  if (loading) return <LoadingBlock />;
+  if (loading) return <TechnicianLoadingCards />;
   if (error) return <ErrorBlock message={error} />;
+
+  const jobs = data.jobs || [];
+  const todayJobs = jobs.filter(isTechnicianTodayJob);
+  const inProgressJobs = jobs.filter((job) => job.status === 'In Progress');
+  const awaitingPartsJobs = jobs.filter((job) => job.status === 'Awaiting Parts');
+  const completedToday = jobs.filter((job) => job.status === 'Completed' && isSameDay(job.completedAt || job.updatedAt || job.createdAt));
+  const pendingUpdates = jobs.filter((job) => ['Pending', 'In Progress', 'Awaiting Parts'].includes(job.status) && !(job.notes || []).length);
+  const activeJobs = jobs.filter((job) => ['Pending', 'In Progress', 'Awaiting Parts'].includes(job.status));
+  const nextJob = [...activeJobs].sort((a, b) => new Date(a.scheduledAt || a.createdAt || 0) - new Date(b.scheduledAt || b.createdAt || 0))[0];
+  const urgentJobs = jobs.filter(isTechnicianOverdueJob).slice(0, 4);
+  const recentCompleted = jobs.filter((job) => ['Completed', 'Delivered', 'Returned'].includes(job.status)).slice(0, 4);
+
   return (
     <>
-      <PageHeader title={`Welcome, ${user?.name || 'Technician'}`} eyebrow="Technician Dashboard">Your panel only shows service jobs assigned to your account.</PageHeader>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard icon={Wrench} label="Assigned Jobs" value={data.stats.assigned} />
-        <StatCard icon={CalendarClock} label="Active Jobs" value={data.stats.active} tone="yellow" />
-        <StatCard icon={PackagePlus} label="Awaiting Parts" value={data.stats.awaitingParts} tone="yellow" />
+      <PageHeader title="Technician Dashboard" eyebrow={`Welcome, ${user?.name || 'Technician'}`}>
+        Today’s assigned jobs, next job, status updates, parts, notes, and technician notifications.
+      </PageHeader>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <StatCard icon={CalendarClock} label="Today's Jobs" value={todayJobs.length} />
+        <StatCard icon={Wrench} label="In Progress" value={inProgressJobs.length} />
+        <StatCard icon={PackagePlus} label="Awaiting Parts" value={awaitingPartsJobs.length} tone="yellow" />
+        <StatCard icon={CheckCircle2} label="Completed Today" value={completedToday.length} tone="green" />
+        <StatCard icon={AlertTriangle} label="Pending Notes / Updates" value={pendingUpdates.length} tone="yellow" />
       </div>
-      <div className="mt-6 grid gap-5 xl:grid-cols-[1.2fr_.8fr]">
-        <div className="surface p-5">
-          <div className="mb-4 flex items-center justify-between"><h2 className="text-xl font-black">My Jobs</h2><Link className="btn btn-secondary" to="/tech/work-orders">View All</Link></div>
-          {data.jobs?.length ? (
-            <div className="grid gap-3">
-              {data.jobs.slice(0, 6).map((job) => <Link key={job.id} className="flex items-center justify-between rounded-card bg-[var(--surface-2)] p-3" to={`/tech/work-orders/${job.id}`}><span><b>{job.customerId?.name}</b><span className="block text-sm muted">{job.device}</span></span><StatusBadge status={job.status} /></Link>)}
+      <div className="mt-6 grid gap-5 xl:grid-cols-[.9fr_1.1fr]">
+        <div className="grid gap-5">
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-xl font-black">Next Job</h2>
+              <Link className="btn btn-secondary py-2" to="/tech/work-orders">View All</Link>
             </div>
-          ) : <p className="text-sm muted">No assigned jobs.</p>}
+            {nextJob ? <TechnicianJobCard job={nextJob} compact /> : <EmptyState title="No jobs assigned today." message="You're all clear." />}
+          </div>
+          <div className="surface p-5">
+            <h2 className="text-xl font-black">Urgent / Overdue Jobs</h2>
+            <div className="mt-4 grid gap-3">
+              {urgentJobs.length ? urgentJobs.map((job) => (
+                <TechnicianJobCard key={recordId(job)} job={job} compact />
+              )) : <p className="text-sm muted">No urgent jobs right now.</p>}
+            </div>
+          </div>
         </div>
         <div className="grid gap-5">
           <div className="surface p-5">
-            <h2 className="text-xl font-black">Priority Jobs</h2>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-xl font-black">Today’s Assigned Jobs</h2>
+              <span className="status-badge">{todayJobs.length}</span>
+            </div>
             <div className="mt-4 grid gap-3">
-              {(data.jobs || []).filter((job) => job.status === 'Awaiting Parts' || job.status === 'Pending').slice(0, 4).map((job) => (
-                <Link key={job.id} className="flex items-center justify-between rounded-card bg-[var(--surface-2)] p-3" to={`/tech/work-orders/${job.id}`}>
-                  <span><b>{job.device}</b><span className="block text-sm muted">{job.customerId?.name}</span></span>
-                  <StatusBadge status={job.status} />
-                </Link>
-              ))}
-              {!(data.jobs || []).some((job) => job.status === 'Awaiting Parts' || job.status === 'Pending') ? <p className="text-sm muted">No priority jobs.</p> : null}
+              {todayJobs.length ? todayJobs.slice(0, 5).map((job) => <TechnicianJobCard key={recordId(job)} job={job} compact />) : <p className="text-sm muted">No jobs assigned today.</p>}
+            </div>
+          </div>
+          <div className="surface p-5">
+            <h2 className="text-xl font-black">Recent Completed Jobs</h2>
+            <div className="mt-4 grid gap-3">
+              {recentCompleted.length ? recentCompleted.map((job) => <TechnicianJobCard key={recordId(job)} job={job} compact />) : <p className="text-sm muted">No completed jobs yet.</p>}
             </div>
           </div>
           <NotificationsPanel notifications={data.notifications || []} />

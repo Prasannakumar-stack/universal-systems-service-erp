@@ -8,6 +8,7 @@ import Services from './pages/Services.jsx';
 import Contact from './pages/Contact.jsx';
 import BookService from './pages/BookService.jsx';
 import Login from './pages/Login.jsx';
+import { adminWorkspaceRoles } from './utils/roles.js';
 import {
   AdminDashboard,
   AMCContractsPage,
@@ -23,6 +24,7 @@ import {
   InventoryPage,
   InvoicesPage,
   PaymentsPage,
+  ReportsAnalyticsPage,
   StockMovementsPage,
   TechnicianDashboard,
   WorkOrderDetailsPage,
@@ -44,7 +46,7 @@ export default function App() {
       <Route path="/admin/login" element={<Login role="admin" />} />
       <Route path="/technician/login" element={<Login role="technician" />} />
 
-      <Route element={<ProtectedRoute role="admin" />}>
+      <Route element={<ProtectedRoute role="admin" allowedRoles={adminWorkspaceRoles} loginPath="/admin/login" />}>
         <Route path="/admin" element={<DashboardLayout role="admin" />}>
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
@@ -73,15 +75,21 @@ export default function App() {
           <Route path="warranties" element={<Navigate to="/admin/amc-contracts" replace />} />
           <Route path="audit-logs" element={<AuditLogsPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
-          <Route path="reports" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="inventory-reports" element={<Navigate to="/admin/parts" replace />} />
-          <Route path="payment-reports" element={<Navigate to="/admin/payments" replace />} />
+          <Route path="reports" element={<ReportsAnalyticsPage section="main" />} />
+          <Route path="reports/operations" element={<ReportsAnalyticsPage section="operations" />} />
+          <Route path="reports/technicians" element={<ReportsAnalyticsPage section="technicians" />} />
+          <Route path="reports/finance" element={<ReportsAnalyticsPage section="finance" />} />
+          <Route path="reports/inventory" element={<ReportsAnalyticsPage section="inventory" />} />
+          <Route path="reports/amc" element={<ReportsAnalyticsPage section="amc" />} />
+          <Route path="reports/customers" element={<ReportsAnalyticsPage section="customers" />} />
+          <Route path="inventory-reports" element={<Navigate to="/admin/reports/inventory" replace />} />
+          <Route path="payment-reports" element={<Navigate to="/admin/reports/finance" replace />} />
           <Route path="notifications" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="settings" element={<Navigate to="/admin/dashboard" replace />} />
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute role="technician" />}>
+      <Route element={<ProtectedRoute role="technician" allowedRoles={['technician']} loginPath="/technician/login" />}>
         <Route path="/tech" element={<DashboardLayout role="technician" />}>
           <Route index element={<Navigate to="/tech/dashboard" replace />} />
           <Route path="dashboard" element={<TechnicianDashboard />} />

@@ -13,7 +13,7 @@ export function PageHeader({ title, eyebrow, action, children }) {
   );
 }
 
-export function EmptyState({ title = 'No data yet', message = 'Items will appear here once available.', icon: Icon = AlertCircle, action = null }) {
+export function EmptyState({ title = 'No records yet', message = 'Items will appear here once available.', icon: Icon = AlertCircle, action = null }) {
   return (
     <div className="surface empty-state grid place-items-center px-6 py-10 text-center">
       <Icon className="mb-3 h-9 w-9 text-[var(--brand)]" />

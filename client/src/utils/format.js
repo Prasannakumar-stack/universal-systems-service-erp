@@ -3,10 +3,13 @@ export function currency(value) {
 }
 
 export function formatDate(value) {
-  if (!value) return 'Not set';
-  return new Date(value).toLocaleString('en-IN', {
-    dateStyle: 'medium',
-    timeStyle: value.includes(':') ? 'short' : undefined
+  if (!value) return 'Not added yet';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not added yet';
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
   });
 }
 
