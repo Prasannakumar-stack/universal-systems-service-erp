@@ -22,6 +22,15 @@ function cleanBookingSource(value) {
 export async function createBooking(payload, user = null) {
   const serviceType = clean(payload.serviceType || payload.service || '');
   const bookingSource = cleanBookingSource(payload.bookingSource || payload.source || '');
+  const problemImage = payload.problemImage
+    ? {
+        filename: clean(payload.problemImage.filename),
+        originalName: clean(payload.problemImage.originalName),
+        url: clean(payload.problemImage.url),
+        mimetype: clean(payload.problemImage.mimetype),
+        size: Number(payload.problemImage.size || 0)
+      }
+    : null;
   const customer = await upsertCustomer({
     name: payload.customerName || payload.name,
     phone: payload.phone,
@@ -37,6 +46,7 @@ export async function createBooking(payload, user = null) {
     address: customer.address,
     serviceType,
     bookingSource,
+    problemImage,
     device: clean(payload.device || serviceType || payload.product || 'General Service'),
     issue: clean(payload.issue || payload.problemDescription || payload.problem || 'Service request'),
     technicianId: payload.technicianId || payload.assignedTo || null
@@ -64,6 +74,7 @@ export async function createBooking(payload, user = null) {
         phone: booking.phone,
         serviceType: booking.serviceType,
         bookingSource: booking.bookingSource,
+        problemImage: booking.problemImage?.url || '',
         device: booking.device,
         timestamp: booking.createdAt
       }

@@ -19,3 +19,24 @@ export async function login(req, res) {
 export async function me(req, res) {
   res.json({ user: publicUser(req.user) });
 }
+
+export async function updateProfile(req, res) {
+  const user = await User.findById(req.user._id);
+  if (!user) throw appError('User not found', 404);
+
+  const name = clean(req.body.name);
+  if (name) user.name = name;
+
+  if (req.body.phone !== undefined) {
+    user.phone = clean(req.body.phone);
+  }
+
+  const password = clean(req.body.password);
+  if (password) {
+    if (password.length < 6) throw appError('Password must be at least 6 characters');
+    user.passwordHash = await bcrypt.hash(password, 10);
+  }
+
+  await user.save();
+  res.json({ user: publicUser(user), message: 'Profile updated' });
+}

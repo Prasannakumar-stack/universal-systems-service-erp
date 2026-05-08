@@ -10,6 +10,13 @@ const bookingSchema = new mongoose.Schema(
     address: { type: String, trim: true, default: '' },
     serviceType: { type: String, trim: true, default: '' },
     bookingSource: { type: String, trim: true, default: '' },
+    problemImage: {
+      filename: { type: String, trim: true, default: '' },
+      originalName: { type: String, trim: true, default: '' },
+      url: { type: String, trim: true, default: '' },
+      mimetype: { type: String, trim: true, default: '' },
+      size: { type: Number, min: 0, default: 0 }
+    },
     device: { type: String, required: true, trim: true },
     issue: { type: String, required: true, trim: true },
     technicianId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

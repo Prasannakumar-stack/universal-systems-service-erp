@@ -11,7 +11,7 @@ import { applyStockMovement, reservePart } from './stockMovementService.js';
 const populateWorkOrder = [
   { path: 'customerId', select: 'name phone address devices' },
   { path: 'technicianId', select: 'name username role' },
-  { path: 'bookingId', select: 'bookingCode serviceType bookingSource' },
+  { path: 'bookingId', select: 'bookingCode serviceType bookingSource problemImage' },
   { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status' }
 ];
 
@@ -45,6 +45,15 @@ export async function createWorkOrder(payload, user) {
   }
 
   const status = technicianId ? 'In Progress' : 'Pending';
+  const bookingImages = sourceBooking?.problemImage?.url
+    ? [{
+        url: sourceBooking.problemImage.url,
+        filename: sourceBooking.problemImage.filename || 'booking-problem-image',
+        originalName: sourceBooking.problemImage.originalName || '',
+        mimetype: sourceBooking.problemImage.mimetype || '',
+        size: sourceBooking.problemImage.size || 0
+      }]
+    : [];
   const workOrder = await WorkOrder.create({
     bookingId: sourceBooking?._id || null,
     customerId,
@@ -54,6 +63,7 @@ export async function createWorkOrder(payload, user) {
     issue,
     technicianId,
     status,
+    images: bookingImages,
     timeline: [{ status, message: sourceBooking ? 'Booking converted to work order' : 'Work order created', userId: user._id }]
   });
 
@@ -285,7 +295,9 @@ export async function addImages(id, files, user) {
     workOrder.images.push({
       url: `/uploads/${file.filename}`,
       filename: file.filename,
-      originalName: file.originalname
+      originalName: file.originalname,
+      mimetype: file.mimetype || '',
+      size: file.size || 0
     });
   });
   workOrder.timeline.push({ status: workOrder.status, message: `${files.length} image(s) uploaded`, userId: user._id });

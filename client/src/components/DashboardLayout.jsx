@@ -4,7 +4,6 @@ import {
   Bell,
   BookOpenCheck,
   Boxes,
-  Building2,
   CalendarClock,
   ClipboardList,
   CreditCard,
@@ -21,9 +20,7 @@ import {
   Phone,
   ReceiptText,
   Search,
-  Settings,
   ShieldCheck,
-  UserCog,
   UserRound,
   Users,
   Wrench,
@@ -44,8 +41,7 @@ const adminGroups = [
       { to: '/admin/bookings', label: 'Requests / Bookings', icon: BookOpenCheck },
       { to: '/admin/work-orders', label: 'Repair & Service Jobs', icon: Wrench },
       { to: '/admin/work-orders?view=dispatch', label: 'Dispatch Board', icon: ClipboardList },
-      { to: '/admin/work-orders?view=technicians', label: 'Technician Tasks', icon: UserRound },
-      { label: 'Installations & Projects', icon: CalendarClock, disabled: true }
+      { to: '/admin/work-orders?view=technicians', label: 'Technician Tasks', icon: UserRound }
     ]
   },
   {
@@ -71,9 +67,7 @@ const adminGroups = [
     links: [
       { to: '/admin/parts', label: 'Products / Parts', icon: Boxes },
       { to: '/admin/parts', label: 'Stock Management', icon: PackageCheck },
-      { to: '/admin/stock-movements', label: 'Stock Movements', icon: History },
-      { label: 'Purchase Orders', icon: ReceiptText, disabled: true },
-      { label: 'Suppliers', icon: Building2, disabled: true }
+      { to: '/admin/stock-movements', label: 'Stock Movements', icon: History }
     ]
   },
   {
@@ -82,8 +76,7 @@ const adminGroups = [
       { to: '/admin/documents?type=quotation', label: 'Quotations', icon: FileCheck2 },
       { to: '/admin/invoices', label: 'Invoices', icon: ReceiptText },
       { to: '/admin/payments', label: 'Payments', icon: CreditCard },
-      { to: '/admin/documents', label: 'Documents / PDFs', icon: FileText },
-      { label: 'Expenses', icon: CreditCard, disabled: true }
+      { to: '/admin/documents', label: 'Documents / PDFs', icon: FileText }
     ]
   },
   {
@@ -98,10 +91,7 @@ const adminGroups = [
   {
     title: 'System',
     links: [
-      { label: 'Users & Roles', icon: UserCog, disabled: true },
-      { label: 'Notifications', icon: AlertTriangle, disabled: true },
-      { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity },
-      { label: 'Settings', icon: Settings, disabled: true }
+      { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity }
     ]
   }
 ];
@@ -162,7 +152,7 @@ function AdminSidebar({ close }) {
         <div className="mt-4 grid gap-2 rounded-card border border-white/10 bg-white/[0.045] p-3 text-xs text-slate-300">
           <span className="inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-[var(--brand)]" />Mettur Dam</span>
           <span className="inline-flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-[var(--brand)]" />{company.phones.join(' / ')}</span>
-          <span className="inline-flex items-center gap-2"><Building2 className="h-3.5 w-3.5 text-[var(--brand)]" />Sales, service, AMC & billing</span>
+          <span className="inline-flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 text-[var(--brand)]" />Sales, service, AMC & billing</span>
         </div>
       </div>
 

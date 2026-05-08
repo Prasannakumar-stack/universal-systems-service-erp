@@ -14,6 +14,13 @@ const inventoryCategories = ['Laptop Parts', 'Desktop Parts', 'CCTV', 'Networkin
 const quickStockSources = ['Purchase', 'Manual', 'Return', 'Correction'];
 const bookingSources = ['Walk-in', 'Call', 'Website', 'WhatsApp', 'Referral'];
 const deviceTypes = ['Laptop', 'Desktop PC', 'CCTV', 'Printer', 'Toner / Cartridge', 'Network Device', 'Solar / UPS / Battery / Inverter', 'Software / Installation', 'Other'];
+const assetBase = apiBase.replace(/\/api\/?$/, '');
+
+function uploadedAssetUrl(url) {
+  if (!url) return '#';
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${assetBase}${url.startsWith('/') ? url : `/${url}`}`;
+}
 
 function useResource(load, deps = []) {
   const [data, setData] = useState(null);
@@ -1323,7 +1330,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             ['Phone', order.customerId?.phone || '-'],
             ['Problem', order.issue || '-'],
             ['Image', imageItems.length ? imageItems.map((image, index) => (
-              <a key={image.url || image.filename || index} className="block text-sky-100 hover:text-[var(--brand)]" href={`${apiBase}${image.url}`} target="_blank" rel="noreferrer">
+              <a key={image.url || image.filename || index} className="block text-sky-100 hover:text-[var(--brand)]" href={uploadedAssetUrl(image.url)} target="_blank" rel="noreferrer">
                 {image.originalName || image.filename || `Image ${index + 1}`}
               </a>
             )) : 'No image uploaded'],

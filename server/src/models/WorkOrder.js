@@ -56,6 +56,8 @@ const workOrderSchema = new mongoose.Schema(
         url: { type: String, required: true },
         filename: { type: String, required: true },
         originalName: { type: String, default: '' },
+        mimetype: { type: String, default: '' },
+        size: { type: Number, min: 0, default: 0 },
         createdAt: { type: Date, default: Date.now }
       }
     ],
