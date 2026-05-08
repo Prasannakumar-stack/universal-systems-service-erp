@@ -14,6 +14,8 @@ const timelineSchema = new mongoose.Schema(
 const workOrderSchema = new mongoose.Schema(
   {
     bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking', default: null },
+    amcContractId: { type: mongoose.Schema.Types.ObjectId, ref: 'AMCContract', default: null },
+    amcVisitId: { type: mongoose.Schema.Types.ObjectId, default: null },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
     serviceType: { type: String, trim: true, default: '' },
     bookingSource: { type: String, trim: true, default: '' },

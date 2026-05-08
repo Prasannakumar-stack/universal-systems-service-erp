@@ -56,10 +56,10 @@ const adminGroups = [
   {
     title: 'AMC & Contracts',
     links: [
-      { label: 'AMC Contracts', icon: FileCheck2, disabled: true },
-      { label: 'AMC Schedule', icon: CalendarClock, disabled: true },
-      { label: 'Renewals', icon: AlertTriangle, disabled: true },
-      { label: 'Warranties', icon: ShieldCheck, disabled: true }
+      { to: '/admin/amc-contracts', label: 'AMC Contracts', icon: FileCheck2 },
+      { to: '/admin/amc-schedule', label: 'AMC Schedule', icon: CalendarClock },
+      { to: '/admin/amc-renewals', label: 'Renewals', icon: AlertTriangle },
+      { to: '/admin/warranties', label: 'Warranties', icon: ShieldCheck }
     ]
   },
   {

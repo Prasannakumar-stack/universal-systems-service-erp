@@ -7,6 +7,7 @@ import Payment from '../models/Payment.js';
 import Reminder from '../models/Reminder.js';
 import User from '../models/User.js';
 import WorkOrder from '../models/WorkOrder.js';
+import { getAmcSummary } from '../services/amcService.js';
 import { notificationFilterFor } from '../services/notificationService.js';
 import { refreshSmartReminders } from '../services/reminderService.js';
 
@@ -17,7 +18,7 @@ export async function adminStats(_req, res) {
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   await refreshSmartReminders();
 
-  const [todayBookings, createdToday, pendingJobs, unassignedJobs, awaitingPartsJobs, jobsOverdue, highPriorityCalls, inProgressJobs, completedJobs, pendingPayments, paymentsOverdue, payments, lowStockAlerts, lowStockCritical, recentBookings, notifications, reminders, technicians] = await Promise.all([
+  const [todayBookings, createdToday, pendingJobs, unassignedJobs, awaitingPartsJobs, jobsOverdue, highPriorityCalls, inProgressJobs, completedJobs, pendingPayments, paymentsOverdue, payments, lowStockAlerts, lowStockCritical, recentBookings, notifications, reminders, technicians, amcSummary] = await Promise.all([
     Booking.countDocuments({ createdAt: { $gte: today } }),
     WorkOrder.countDocuments({ createdAt: { $gte: today } }),
     WorkOrder.countDocuments({ status: 'Pending' }),
@@ -35,7 +36,8 @@ export async function adminStats(_req, res) {
     Booking.find().populate('customerId technicianId workOrderId').sort({ createdAt: -1 }).limit(8),
     Notification.find(notificationFilterFor(_req.user)).sort({ createdAt: -1 }).limit(8),
     Reminder.find({ isRead: false }).sort({ priority: 1, createdAt: -1 }).limit(8),
-    User.find({ role: 'technician', active: true }).sort({ name: 1 })
+    User.find({ role: 'technician', active: true }).sort({ name: 1 }),
+    getAmcSummary().catch(() => ({ activeContracts: 0, renewalDue: 0, visitsThisWeek: 0, expiredContracts: 0 }))
   ]);
   const technicianWorkload = await Promise.all(technicians.map(async (technician) => ({
     id: technician.id,
@@ -57,7 +59,11 @@ export async function adminStats(_req, res) {
       completedJobs,
       pendingPayments,
       paymentsOverdue,
-      lowStockCritical
+      lowStockCritical,
+      activeAmcContracts: amcSummary.activeContracts,
+      amcRenewalsDue: amcSummary.renewalDue,
+      amcVisitsThisWeek: amcSummary.visitsThisWeek,
+      expiredAmcContracts: amcSummary.expiredContracts
     },
     lowStockAlerts,
     recentBookings,

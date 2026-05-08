@@ -10,6 +10,9 @@ import BookService from './pages/BookService.jsx';
 import Login from './pages/Login.jsx';
 import {
   AdminDashboard,
+  AMCContractsPage,
+  AMCRenewalsPage,
+  AMCSchedulePage,
   AuditLogsPage,
   BookingsPage,
   CustomerProfilePage,
@@ -64,6 +67,10 @@ export default function App() {
           <Route path="parts" element={<InventoryPage />} />
           <Route path="stock-management" element={<Navigate to="/admin/parts" replace />} />
           <Route path="stock-movements" element={<StockMovementsPage />} />
+          <Route path="amc-contracts" element={<AMCContractsPage />} />
+          <Route path="amc-schedule" element={<AMCSchedulePage />} />
+          <Route path="amc-renewals" element={<AMCRenewalsPage />} />
+          <Route path="warranties" element={<Navigate to="/admin/amc-contracts" replace />} />
           <Route path="audit-logs" element={<AuditLogsPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="reports" element={<Navigate to="/admin/dashboard" replace />} />

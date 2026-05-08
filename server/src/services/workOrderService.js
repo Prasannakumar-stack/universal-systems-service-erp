@@ -12,6 +12,7 @@ const populateWorkOrder = [
   { path: 'customerId', select: 'name phone address devices' },
   { path: 'technicianId', select: 'name username role' },
   { path: 'bookingId', select: 'bookingCode serviceType bookingSource problemImage' },
+  { path: 'amcContractId', select: 'contractId contractType coveredService' },
   { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status' }
 ];
 
@@ -56,6 +57,8 @@ export async function createWorkOrder(payload, user) {
     : [];
   const workOrder = await WorkOrder.create({
     bookingId: sourceBooking?._id || null,
+    amcContractId: payload.amcContractId || null,
+    amcVisitId: payload.amcVisitId || null,
     customerId,
     serviceType,
     bookingSource,
@@ -64,7 +67,7 @@ export async function createWorkOrder(payload, user) {
     technicianId,
     status,
     images: bookingImages,
-    timeline: [{ status, message: sourceBooking ? 'Booking converted to work order' : 'Work order created', userId: user._id }]
+    timeline: [{ status, message: sourceBooking ? 'Booking converted to work order' : payload.amcContractId ? 'AMC visit converted to service job' : 'Work order created', userId: user._id }]
   });
 
   if (sourceBooking) {

@@ -10,6 +10,7 @@ import { bookingUpload, handleUploadErrors } from './upload.js';
 import { asyncHandler } from './utils/http.js';
 import { create as createBooking } from './controllers/bookingController.js';
 import { create as createCallRequest } from './controllers/callRequestController.js';
+import amcRoutes from './routes/amcRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import auditLogRoutes from './routes/auditLogRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
@@ -61,6 +62,7 @@ app.post('/api/public/bookings', bookingUpload.single('problemImage'), handleUpl
 app.post('/api/public/contact-requests', asyncHandler(createCallRequest));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/amc', amcRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/call-requests', callRequestRoutes);

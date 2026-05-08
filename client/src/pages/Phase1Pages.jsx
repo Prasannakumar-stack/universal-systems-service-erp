@@ -14,6 +14,8 @@ const inventoryCategories = ['Laptop Parts', 'Desktop Parts', 'CCTV', 'Networkin
 const quickStockSources = ['Purchase', 'Manual', 'Return', 'Correction'];
 const bookingSources = ['Walk-in', 'Call', 'Website', 'WhatsApp', 'Referral'];
 const deviceTypes = ['Laptop', 'Desktop PC', 'CCTV', 'Printer', 'Toner / Cartridge', 'Network Device', 'Solar / UPS / Battery / Inverter', 'Software / Installation', 'Other'];
+const amcContractTypes = ['Basic AMC', 'Comprehensive AMC', 'CCTV AMC', 'Printer AMC', 'Networking AMC', 'Solar / UPS AMC', 'Custom'];
+const amcFrequencies = ['Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
 const assetBase = apiBase.replace(/\/api\/?$/, '');
 
 function uploadedAssetUrl(url) {
@@ -60,6 +62,20 @@ function ErrorBlock({ message }) {
 
 function StatusBadge({ status }) {
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${statusTone(status)}`}>{status}</span>;
+}
+
+function AmcStatusBadge({ status }) {
+  const tone = {
+    Active: 'bg-emerald-400/15 text-emerald-100',
+    Upcoming: 'bg-sky-400/15 text-sky-100',
+    'Due Today': 'bg-amber-400/15 text-amber-100',
+    Overdue: 'bg-rose-500/15 text-rose-100',
+    Completed: 'bg-emerald-400/15 text-emerald-100',
+    'Renewal Due': 'bg-amber-400/15 text-amber-100',
+    Expired: 'bg-rose-500/15 text-rose-100',
+    Cancelled: 'bg-slate-500/15 text-slate-100'
+  }[status] || 'bg-slate-500/15 text-slate-100';
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${tone}`}>{status || '-'}</span>;
 }
 
 function Table({ children }) {
@@ -384,6 +400,20 @@ function isToday(value) {
   return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
 }
 
+function dateInputValue(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+function amcWhatsappHref(contract) {
+  const phone = String(contract?.phone || '').replace(/\D/g, '');
+  const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
+  const message = `Hello ${contract?.customerName || 'Customer'},\nThis is Universal Systems regarding your AMC renewal for ${contract?.contractType || 'your service contract'}.`;
+  return `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`;
+}
+
 function WorkflowTracker({ status }) {
   const steps = ['Received', 'Diagnosing', 'Repairing', 'Ready', 'Delivered'];
   const indexByStatus = {
@@ -483,7 +513,7 @@ export function AdminDashboard() {
   }, [data?.payments]);
   const pendingPaymentInvoices = useMemo(() => (data?.invoices || []).filter((invoice) => ['Pending', 'Partial'].includes(invoice.status) && invoiceDueAmount(invoice) > 0), [data?.invoices]);
   const activeWorkOrders = useMemo(() => (data?.workOrders || []).filter((order) => ['Pending', 'In Progress', 'Awaiting Parts'].includes(order.status)).slice(0, 6), [data?.workOrders]);
-  const amcRenewalsDue = useMemo(() => (data?.reminders || []).filter((item) => `${item.title || ''} ${item.message || ''}`.toLowerCase().includes('amc')).length, [data?.reminders]);
+  const amcRenewalsDue = useMemo(() => Number(data?.stats?.amcRenewalsDue || 0) || (data?.reminders || []).filter((item) => `${item.title || ''} ${item.message || ''}`.toLowerCase().includes('amc')).length, [data?.stats?.amcRenewalsDue, data?.reminders]);
   const alerts = useMemo(() => {
     if (!data) return [];
     return [
@@ -531,7 +561,10 @@ export function AdminDashboard() {
         <SmartMetricCard icon={CheckCircle2} label="Completed Today" value={completedToday} tone="green" to="/admin/work-orders" />
         <SmartMetricCard icon={CreditCard} label="Pending Payments" value={pendingPaymentInvoices.length || data.stats.pendingPayments} tone="yellow" to="/admin/invoices" />
         <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={(data.lowStockAlerts?.length || 0) + Number(data.stats.lowStockCritical || 0)} tone="red" to="/admin/parts" />
-        <SmartMetricCard icon={Bell} label="AMC Renewals Due" value={amcRenewalsDue} tone="yellow" to="/admin/dashboard" />
+        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={data.stats.activeAmcContracts || 0} tone="green" to="/admin/amc-contracts" />
+        <SmartMetricCard icon={Bell} label="AMC Renewals Due" value={amcRenewalsDue} tone="yellow" to="/admin/amc-renewals" />
+        <SmartMetricCard icon={CalendarClock} label="AMC Visits This Week" value={data.stats.amcVisitsThisWeek || 0} tone="blue" to="/admin/amc-schedule" />
+        <SmartMetricCard icon={AlertTriangle} label="Expired Contracts" value={data.stats.expiredAmcContracts || 0} tone="red" to="/admin/amc-renewals" />
         <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={currency(monthlyRevenue)} tone="green" to="/admin/payments" />
       </div>
       <div className="mt-6 grid gap-5 xl:grid-cols-[.9fr_1.1fr]">
@@ -686,6 +719,358 @@ export function AdminDashboard() {
             )) : <p className="text-sm muted">No technicians.</p>}
           </div>
         </div>
+      </div>
+    </>
+  );
+}
+
+function defaultAmcForm() {
+  const start = new Date();
+  const end = new Date();
+  end.setFullYear(end.getFullYear() + 1);
+  return {
+    customerId: '',
+    customerName: '',
+    phone: '',
+    address: '',
+    contractType: 'Basic AMC',
+    coveredDevices: '',
+    serviceFrequency: 'Quarterly',
+    startDate: dateInputValue(start),
+    endDate: dateInputValue(end),
+    contractValue: '',
+    includedVisits: '4',
+    notes: ''
+  };
+}
+
+export function AMCContractsPage() {
+  const { request } = useAuth();
+  const { push } = useToast();
+  const navigate = useNavigate();
+  const [formOpen, setFormOpen] = useState(false);
+  const [form, setForm] = useState(defaultAmcForm);
+  const [customers, setCustomers] = useState([]);
+  const [search, setSearch] = useState('');
+  const { data, loading, error, reload } = useResource(() => request('/amc/contracts'), [request]);
+
+  useEffect(() => {
+    request('/customers').then((result) => setCustomers(result.customers || [])).catch(() => setCustomers([]));
+  }, [request]);
+
+  const contracts = data?.contracts || [];
+  const summary = data?.summary || {};
+  const visibleContracts = contracts.filter((contract) => {
+    const text = `${contract.contractId} ${contract.customerName} ${contract.phone} ${contract.contractType} ${contract.coveredService}`.toLowerCase();
+    return !search || text.includes(search.toLowerCase());
+  });
+
+  function selectCustomer(customerId) {
+    const customer = customers.find((item) => recordId(item) === customerId);
+    setForm((current) => ({
+      ...current,
+      customerId,
+      customerName: customer?.name || current.customerName,
+      phone: customer?.phone || current.phone,
+      address: customer?.address || current.address
+    }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    try {
+      await request('/amc/contracts', { method: 'POST', body: JSON.stringify(form) });
+      push('AMC contract created');
+      setForm(defaultAmcForm());
+      setFormOpen(false);
+      reload();
+    } catch (err) {
+      push(err.message, 'error');
+    }
+  }
+
+  async function createJob(contract) {
+    try {
+      const result = await request(`/amc/contracts/${recordId(contract)}/work-orders`, {
+        method: 'POST',
+        body: JSON.stringify({ issue: `AMC service visit for ${contract.contractType}` })
+      });
+      push('Repair & Service Job created from AMC');
+      navigate(`/admin/work-orders/${recordId(result.workOrder)}`);
+    } catch (err) {
+      push(err.message, 'error');
+    }
+  }
+
+  if (loading) return <LoadingBlock />;
+  if (error) return <ErrorBlock message={error} />;
+
+  return (
+    <>
+      <PageHeader
+        title="AMC Contracts"
+        eyebrow="AMC & Contracts"
+        action={<button className="btn btn-primary" onClick={() => setFormOpen((value) => !value)}><Plus className="h-4 w-4" />New AMC Contract</button>}
+      >
+        Manage service contracts, covered assets, renewal status, visits, and AMC-linked repair jobs.
+      </PageHeader>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={FileText} label="Active AMC Contracts" value={summary.activeContracts || 0} tone="green" />
+        <StatCard icon={AlertTriangle} label="Renewals Due" value={summary.renewalDue || 0} tone="yellow" />
+        <StatCard icon={CalendarClock} label="Visits This Week" value={summary.visitsThisWeek || 0} />
+        <StatCard icon={AlertTriangle} label="Expired Contracts" value={summary.expiredContracts || 0} tone="red" />
+      </div>
+
+      {formOpen ? (
+        <form className="surface mt-6 p-5" onSubmit={submit}>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-xl font-black">Create AMC Contract</h2>
+            <button type="button" className="icon-button" onClick={() => setFormOpen(false)} aria-label="Close AMC form"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <label>
+              <span className="label">Existing customer</span>
+              <select className="input" value={form.customerId} onChange={(event) => selectCustomer(event.target.value)}>
+                <option value="">Manual / new customer</option>
+                {customers.map((customer) => <option key={recordId(customer)} value={recordId(customer)}>{customer.name} - {customer.phone}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="label">Customer</span>
+              <input className="input" value={form.customerName} onChange={(event) => setForm((current) => ({ ...current, customerName: event.target.value }))} required />
+            </label>
+            <label>
+              <span className="label">Phone</span>
+              <input className="input" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} required />
+            </label>
+            <label className="md:col-span-3">
+              <span className="label">Address</span>
+              <input className="input" value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} />
+            </label>
+            <label>
+              <span className="label">Contract Type</span>
+              <select className="input" value={form.contractType} onChange={(event) => setForm((current) => ({ ...current, contractType: event.target.value }))}>
+                {amcContractTypes.map((type) => <option key={type}>{type}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="label">Service Frequency</span>
+              <select className="input" value={form.serviceFrequency} onChange={(event) => setForm((current) => ({ ...current, serviceFrequency: event.target.value }))}>
+                {amcFrequencies.map((frequency) => <option key={frequency}>{frequency}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="label">Included Visits</span>
+              <input className="input" type="number" min="0" value={form.includedVisits} onChange={(event) => setForm((current) => ({ ...current, includedVisits: event.target.value }))} />
+            </label>
+            <label>
+              <span className="label">Start Date</span>
+              <input className="input" type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} required />
+            </label>
+            <label>
+              <span className="label">End Date</span>
+              <input className="input" type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} required />
+            </label>
+            <label>
+              <span className="label">Contract Value</span>
+              <input className="input" type="number" min="0" value={form.contractValue} onChange={(event) => setForm((current) => ({ ...current, contractValue: event.target.value }))} />
+            </label>
+            <label className="md:col-span-3">
+              <span className="label">Covered Devices / Assets</span>
+              <textarea className="input min-h-24" value={form.coveredDevices} onChange={(event) => setForm((current) => ({ ...current, coveredDevices: event.target.value }))} placeholder="Example: office laptops, printer, CCTV DVR, network rack" />
+            </label>
+            <label className="md:col-span-3">
+              <span className="label">Notes</span>
+              <textarea className="input min-h-24" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
+            </label>
+          </div>
+          <div className="mt-5 flex justify-end">
+            <button className="btn btn-primary"><Save className="h-4 w-4" />Save AMC Contract</button>
+          </div>
+        </form>
+      ) : null}
+
+      <div className="surface mt-6 p-5">
+        <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-center">
+          <SearchBox value={search} onChange={setSearch} placeholder="Search contract, customer, phone, service" />
+          <Link className="btn btn-secondary" to="/admin/amc-schedule"><CalendarClock className="h-4 w-4" />Schedule</Link>
+          <Link className="btn btn-secondary" to="/admin/amc-renewals"><AlertTriangle className="h-4 w-4" />Renewals</Link>
+        </div>
+        {!visibleContracts.length ? (
+          <EmptyState title="No AMC contracts yet" message="Create the first AMC contract to track visits and renewal reminders." action={<button className="btn btn-primary" onClick={() => setFormOpen(true)}>Create AMC Contract</button>} />
+        ) : (
+          <Table>
+            <thead><tr><th>Contract ID</th><th>Customer</th><th>Phone</th><th>Contract Type</th><th>Covered Service</th><th>Start</th><th>End</th><th>Renewal</th><th>Value</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              {visibleContracts.map((contract) => (
+                <tr key={recordId(contract)}>
+                  <td className="font-bold">{contract.contractId}</td>
+                  <td>{contract.customerName}</td>
+                  <td>{contract.phone}</td>
+                  <td>{contract.contractType}</td>
+                  <td>{contract.coveredService}</td>
+                  <td>{formatDate(contract.startDate)}</td>
+                  <td>{formatDate(contract.endDate)}</td>
+                  <td><AmcStatusBadge status={contract.renewalStatus} /></td>
+                  <td>{currency(contract.contractValue)}</td>
+                  <td><AmcStatusBadge status={contract.status} /></td>
+                  <td>
+                    <div className="flex flex-wrap gap-2">
+                      <Link className="btn btn-secondary py-2" to="/admin/amc-schedule">Schedule</Link>
+                      <button className="btn btn-primary py-2" onClick={() => createJob(contract)}>Create Job</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </div>
+    </>
+  );
+}
+
+export function AMCSchedulePage() {
+  const { request } = useAuth();
+  const { push } = useToast();
+  const navigate = useNavigate();
+  const [status, setStatus] = useState('');
+  const { data, loading, error, reload } = useResource(() => request('/amc/schedule'), [request]);
+  const schedule = data?.schedule || [];
+  const visibleSchedule = status ? schedule.filter((visit) => visit.status === status) : schedule;
+
+  async function createJob(visit) {
+    try {
+      const result = await request(`/amc/contracts/${visit.contractId}/work-orders`, {
+        method: 'POST',
+        body: JSON.stringify({ visitId: visit.id, issue: `AMC scheduled visit for ${visit.contractType}` })
+      });
+      push('Repair & Service Job created from AMC visit');
+      reload();
+      navigate(`/admin/work-orders/${recordId(result.workOrder)}`);
+    } catch (err) {
+      push(err.message, 'error');
+    }
+  }
+
+  if (loading) return <LoadingBlock />;
+  if (error) return <ErrorBlock message={error} />;
+
+  return (
+    <>
+      <PageHeader
+        title="AMC Schedule"
+        eyebrow="AMC & Contracts"
+        action={<Link className="btn btn-secondary" to="/admin/amc-contracts"><FileText className="h-4 w-4" />Contracts</Link>}
+      >
+        Track upcoming, due today, overdue, and completed AMC service visits.
+      </PageHeader>
+      <div className="surface p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <select className="input max-w-xs" value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="">All statuses</option>
+            {['Upcoming', 'Due Today', 'Overdue', 'Completed'].map((item) => <option key={item}>{item}</option>)}
+          </select>
+          <Link className="btn btn-secondary" to="/admin/amc-renewals"><AlertTriangle className="h-4 w-4" />Renewals</Link>
+        </div>
+        {!visibleSchedule.length ? (
+          <EmptyState title="No AMC visits scheduled" message="Visits will appear after AMC contracts are created." action={<Link className="btn btn-primary" to="/admin/amc-contracts">Create AMC Contract</Link>} />
+        ) : (
+          <Table>
+            <thead><tr><th>Customer</th><th>Contract</th><th>Service Type</th><th>Scheduled Date</th><th>Technician</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              {visibleSchedule.map((visit) => (
+                <tr key={visit.id}>
+                  <td className="font-bold">{visit.customerName}<span className="block text-xs muted">{visit.phone}</span></td>
+                  <td>{visit.contractCode}</td>
+                  <td>{visit.serviceType}</td>
+                  <td>{formatDate(visit.scheduledDate)}</td>
+                  <td>{visit.technicianId?.name || 'Unassigned'}</td>
+                  <td><AmcStatusBadge status={visit.status} /></td>
+                  <td>
+                    {recordId(visit.workOrderId) ? (
+                      <Link className="btn btn-secondary py-2" to={`/admin/work-orders/${recordId(visit.workOrderId)}`}>Open Job</Link>
+                    ) : (
+                      <button className="btn btn-primary py-2" onClick={() => createJob(visit)}><Wrench className="h-4 w-4" />Create Job</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </div>
+    </>
+  );
+}
+
+export function AMCRenewalsPage() {
+  const { request } = useAuth();
+  const { push } = useToast();
+  const navigate = useNavigate();
+  const { data, loading, error, reload } = useResource(() => request('/amc/renewals'), [request]);
+  const renewals = data?.renewals || [];
+  const expiring = renewals.filter((contract) => contract.renewalStatus === 'Renewal Due');
+  const expired = renewals.filter((contract) => contract.renewalStatus === 'Expired');
+
+  async function createJob(contract) {
+    try {
+      const result = await request(`/amc/contracts/${recordId(contract)}/work-orders`, {
+        method: 'POST',
+        body: JSON.stringify({ issue: `AMC renewal service visit for ${contract.contractType}` })
+      });
+      push('Repair & Service Job created from AMC');
+      reload();
+      navigate(`/admin/work-orders/${recordId(result.workOrder)}`);
+    } catch (err) {
+      push(err.message, 'error');
+    }
+  }
+
+  if (loading) return <LoadingBlock />;
+  if (error) return <ErrorBlock message={error} />;
+
+  return (
+    <>
+      <PageHeader
+        title="AMC Renewals"
+        eyebrow="AMC & Contracts"
+        action={<Link className="btn btn-primary" to="/admin/amc-contracts"><Plus className="h-4 w-4" />New Contract</Link>}
+      >
+        Review contracts expiring in 30 days and expired AMC agreements.
+      </PageHeader>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <StatCard icon={AlertTriangle} label="Expiring in 30 Days" value={expiring.length} tone="yellow" />
+        <StatCard icon={AlertTriangle} label="Expired Contracts" value={expired.length} tone="red" />
+      </div>
+      <div className="surface mt-6 p-5">
+        {!renewals.length ? (
+          <EmptyState title="No AMC renewals due" message="Renewal reminders will appear when contracts are near expiry." action={<Link className="btn btn-secondary" to="/admin/amc-contracts">View Contracts</Link>} />
+        ) : (
+          <Table>
+            <thead><tr><th>Contract</th><th>Customer</th><th>Phone</th><th>Contract Type</th><th>End Date</th><th>Renewal Status</th><th>Value</th><th>Action</th></tr></thead>
+            <tbody>
+              {renewals.map((contract) => (
+                <tr key={recordId(contract)}>
+                  <td className="font-bold">{contract.contractId}</td>
+                  <td>{contract.customerName}</td>
+                  <td>{contract.phone}</td>
+                  <td>{contract.contractType}</td>
+                  <td>{formatDate(contract.endDate)}</td>
+                  <td><AmcStatusBadge status={contract.renewalStatus} /></td>
+                  <td>{currency(contract.contractValue)}</td>
+                  <td>
+                    <div className="flex flex-wrap gap-2">
+                      <a className="btn btn-secondary py-2" href={amcWhatsappHref(contract)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+                      <button className="btn btn-primary py-2" onClick={() => createJob(contract)}>Create Job</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
       </div>
     </>
   );
