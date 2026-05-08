@@ -144,7 +144,7 @@ const workOrderPdfFlows = [
     title: 'WORK PDF / INVOICE',
     statusText: 'Completed',
     readyText: 'Available after the job is completed.',
-    lockedText: 'Available after job is completed.',
+    lockedText: 'Complete the job before downloading invoice PDF.',
     allowedStatuses: ['Completed'],
     filename: 'invoice.pdf'
   },
@@ -195,6 +195,11 @@ const customerTabs = [
 function pdfAllowed(flow, order) {
   if (!order) return false;
   return flow.allowedStatuses.includes(order.status);
+}
+
+function pdfLockedReason(flow, order) {
+  if (flow.type === 'work' && order?.status !== 'Completed') return 'Complete the job before downloading invoice PDF';
+  return flow.lockedText;
 }
 
 function getPdfLabel(pdfType) {
@@ -2255,6 +2260,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       push('Please select a part', 'error');
       return;
     }
+    if (selectedPartOutOfStock) {
+      push('Out of stock — choose another part for demo', 'error');
+      return;
+    }
 
     try {
       await preserveScroll(async () => {
@@ -2497,6 +2506,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const livePartTotal = Number(part.unitPrice || 0) * Number(part.quantity || 1);
   const selectedInventoryPart = inventoryParts.find((item) => item.id === part.inventoryPartId);
   const selectedPartAvailable = Number(selectedInventoryPart?.available || 0);
+  const selectedPartOutOfStock = Boolean(selectedInventoryPart && selectedPartAvailable <= 0);
   const contentTabs = ['parts', 'partRequests', 'billing', 'notes'];
   const sideTabs = ['documents', 'timeline'];
   const phone = customerPhone(order);
@@ -2647,11 +2657,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                   <p className="text-xs muted">Line Total</p>
                   <p className="text-sm font-black">{currency(livePartTotal)}</p>
                 </div>
-                <button type="submit" className="btn btn-primary"><PackagePlus className="h-4 w-4" />Add Part</button>
+                <button type="submit" className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={selectedPartOutOfStock}><PackagePlus className="h-4 w-4" />Add Part</button>
               </form>
               {!part.inventoryPartId ? <input className="input mt-3" placeholder="Manual part name" value={part.partName} onChange={(event) => setPart((current) => ({ ...current, partName: event.target.value }))} /> : null}
               {selectedInventoryPart ? <p className="mt-3 text-sm muted">Using inventory price: {currency(part.unitPrice)}. Stock will be handled by the backend ledger.</p> : null}
-              {selectedInventoryPart && selectedPartAvailable <= 0 ? <p className="mt-2 text-sm font-semibold text-rose-100">Stock warning: this part is currently out of stock.</p> : null}
+              {selectedPartOutOfStock ? <p className="mt-2 text-sm font-semibold text-rose-100">Out of stock — choose another part for demo</p> : null}
               {selectedInventoryPart && selectedPartAvailable > 0 && Number(part.quantity || 0) > selectedPartAvailable ? <p className="mt-2 text-sm font-semibold text-amber-100">Stock warning: only {selectedPartAvailable} available. Backend stock rules will validate this when saved.</p> : null}
               <div className="mt-4 rounded-card bg-emerald-400/10 p-3 text-emerald-100">
                 <p className="text-sm font-bold">Parts total: {currency(partsTotal)}</p>
@@ -2751,7 +2761,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                       </div>
                       <span className={`rounded px-2 py-1 text-xs font-bold ${enabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-100'}`}>{enabled ? 'Ready' : 'Locked'}</span>
                     </div>
-                    <p className="mt-2 text-sm muted">{enabled ? flow.readyText : flow.lockedText}</p>
+                    <p className="mt-2 text-sm muted">{enabled ? flow.readyText : pdfLockedReason(flow, order)}</p>
                     <div className="mt-4 grid gap-2 sm:grid-cols-2">
                       <button type="button" className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50" disabled={!enabled || Boolean(pdfBusy)} onClick={() => previewWorkflowPdf(flow)}><FileText className="h-4 w-4" />Preview PDF</button>
                       <button type="button" className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50" disabled={!enabled || Boolean(pdfBusy)} onClick={() => downloadWorkflowPdf(flow)}>{downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}Download PDF</button>
@@ -2900,10 +2910,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                           <p className="text-xs muted">Line Total</p>
                           <p className="text-sm font-black">{currency(livePartTotal)}</p>
                         </div>
-                        <button type="button" className="btn btn-primary" onClick={addPart}><PackagePlus className="h-4 w-4" />+ Add Part</button>
+                        <button type="button" className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={selectedPartOutOfStock} onClick={addPart}><PackagePlus className="h-4 w-4" />+ Add Part</button>
                       </form>
                       {!part.inventoryPartId ? <input className="input mt-3" placeholder="Manual part name" value={part.partName} onChange={(event) => setPart((current) => ({ ...current, partName: event.target.value }))} /> : null}
-                      {selectedInventoryPart && selectedPartAvailable <= 0 ? <p className="mt-3 text-sm font-semibold text-rose-100">Stock warning: this part is currently out of stock.</p> : null}
+                      {selectedPartOutOfStock ? <p className="mt-3 text-sm font-semibold text-rose-100">Out of stock — choose another part for demo</p> : null}
                       {selectedInventoryPart && selectedPartAvailable > 0 && Number(part.quantity || 0) > selectedPartAvailable ? <p className="mt-3 text-sm font-semibold text-amber-100">Stock warning: only {selectedPartAvailable} available. Backend stock rules will validate this when saved.</p> : null}
                     </td>
                   </tr>
@@ -3036,7 +3046,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     <span className={`mt-3 inline-flex rounded px-2 py-1 text-xs font-bold ${enabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-100'}`}>
                       {enabled ? 'Ready' : 'Locked'}
                     </span>
-                    <p className="mt-2 text-sm muted">{enabled ? flow.readyText : flow.lockedText}</p>
+                    <p className="mt-2 text-sm muted">{enabled ? flow.readyText : pdfLockedReason(flow, order)}</p>
                     <div className="mt-4 grid gap-2 sm:grid-cols-3">
                       <button type="button" className="btn btn-secondary px-3 disabled:cursor-not-allowed disabled:opacity-50" disabled={!enabled || Boolean(pdfBusy)} onClick={() => previewWorkflowPdf(flow)}><FileText className="h-4 w-4" />Preview PDF</button>
                       <button type="button" className="btn btn-secondary px-3 disabled:cursor-not-allowed disabled:opacity-50" disabled={!enabled || Boolean(pdfBusy)} onClick={() => downloadWorkflowPdf(flow)}>{downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}Download PDF</button>
@@ -4374,6 +4384,7 @@ export function InvoicesPage() {
                     <Link className="btn btn-primary py-2" to={`/admin/payments?invoiceId=${invoice.id || invoice._id}`}>Go to Payments</Link>
                     <button type="button" className="btn btn-secondary py-2" onClick={() => sendInvoiceWhatsApp(invoice)}><Send className="h-4 w-4" />WhatsApp</button>
                   </div>
+                  {invoice.workOrderId?.status !== 'Completed' ? <p className="mt-2 text-xs font-semibold text-amber-100">Complete the job before downloading invoice PDF</p> : null}
                 </td>
               </tr>
             ))}
