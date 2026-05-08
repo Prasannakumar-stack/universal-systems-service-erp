@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+.env
+server/storage/app.sqlite
+server/storage/uploads/*
+server/storage/pdfs/*
+server/storage/backups/*
+!server/storage/uploads/.gitkeep
+!server/storage/pdfs/.gitkeep
+!server/storage/backups/.gitkeep
