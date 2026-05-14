@@ -9,8 +9,8 @@ import Contact from './pages/Contact.jsx';
 import BookService from './pages/BookService.jsx';
 import Login from './pages/Login.jsx';
 import { adminWorkspaceRoles } from './utils/roles.js';
+import { AdminDashboard } from './features/dashboard/AdminDashboard.jsx';
 import {
-  AdminDashboard,
   AMCContractsPage,
   AMCRenewalsPage,
   AMCSchedulePage,
