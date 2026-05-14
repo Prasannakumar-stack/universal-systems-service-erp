@@ -25,8 +25,10 @@ import {
   InvoicesPage,
   PaymentsPage,
   ReportsAnalyticsPage,
+  SystemSettingsPage,
   StockMovementsPage,
   TechnicianDashboard,
+  TechnicianPanelPage,
   WorkOrderDetailsPage,
   WorkOrdersPage
 } from './pages/Phase1Pages.jsx';
@@ -50,6 +52,7 @@ export default function App() {
         <Route path="/admin" element={<DashboardLayout role="admin" />}>
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="technician-panel" element={<TechnicianPanelPage />} />
           <Route path="bookings" element={<BookingsPage />} />
           <Route path="work-orders" element={<WorkOrdersPage role="admin" />} />
           <Route path="work-orders/:id" element={<WorkOrderDetailsPage role="admin" />} />
@@ -76,16 +79,17 @@ export default function App() {
           <Route path="audit-logs" element={<AuditLogsPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="reports" element={<ReportsAnalyticsPage section="main" />} />
-          <Route path="reports/operations" element={<ReportsAnalyticsPage section="operations" />} />
+          <Route path="reports/operations" element={<Navigate to="/admin/reports" replace />} />
           <Route path="reports/technicians" element={<ReportsAnalyticsPage section="technicians" />} />
           <Route path="reports/finance" element={<ReportsAnalyticsPage section="finance" />} />
+          <Route path="reports/payments" element={<ReportsAnalyticsPage section="payments" />} />
           <Route path="reports/inventory" element={<ReportsAnalyticsPage section="inventory" />} />
-          <Route path="reports/amc" element={<ReportsAnalyticsPage section="amc" />} />
-          <Route path="reports/customers" element={<ReportsAnalyticsPage section="customers" />} />
+          <Route path="reports/amc" element={<Navigate to="/admin/reports" replace />} />
+          <Route path="reports/customers" element={<Navigate to="/admin/reports" replace />} />
           <Route path="inventory-reports" element={<Navigate to="/admin/reports/inventory" replace />} />
           <Route path="payment-reports" element={<Navigate to="/admin/reports/finance" replace />} />
           <Route path="notifications" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="settings" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="settings" element={<SystemSettingsPage />} />
         </Route>
       </Route>
 

@@ -6119,6 +6119,30 @@ body[data-page="dashboard"] .status-pill.status-waiting-for-parts {
   box-shadow: 0 0 20px rgba(251, 191, 36, 0.13);
 }
 
+body[data-page="dashboard"] .source-badge.source-badge-call {
+  color: #99f6e4 !important;
+  border-color: rgba(45, 212, 191, 0.32);
+  background: rgba(20, 184, 166, 0.16) !important;
+}
+
+body[data-page="dashboard"] .source-badge.source-badge-shop {
+  color: #bfdbfe !important;
+  border-color: rgba(96, 165, 250, 0.34);
+  background: rgba(37, 99, 235, 0.18) !important;
+}
+
+body[data-page="dashboard"] .source-badge.source-badge-website {
+  color: #c7d2fe !important;
+  border-color: rgba(129, 140, 248, 0.36);
+  background: rgba(99, 102, 241, 0.18) !important;
+}
+
+body[data-page="dashboard"] .source-badge.source-badge-unknown {
+  color: #cbd5e1 !important;
+  border-color: rgba(148, 163, 184, 0.28);
+  background: rgba(100, 116, 139, 0.18) !important;
+}
+
 body[data-page="dashboard"] .status-pill.status-in-progress,
 body[data-page="dashboard"] .status-pill.status-in-stock,
 body[data-page="dashboard"] .status-pill.status-available,
@@ -7630,4 +7654,122 @@ body[data-page="dashboard"] canvas.chart-hovering {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+/* Admin native select readability: dark premium native dropdowns. */
+body.admin-page select,
+body[data-page="dashboard"] select,
+body[data-page="booking"] select,
+body.admin-page .filter-select,
+body[data-page="dashboard"] .filter-select,
+body.admin-page .booking-filter select,
+body[data-page="dashboard"] .booking-filter select,
+body.admin-page .admin-select,
+body[data-page="dashboard"] .admin-select,
+body.admin-page .status-select,
+body[data-page="dashboard"] .status-select,
+body.admin-page .technician-select,
+body[data-page="dashboard"] .technician-select,
+body.admin-page .form-select,
+body[data-page="dashboard"] .form-select {
+  background-color: #10233d !important;
+  color: #ffffff !important;
+  border-color: rgba(96, 165, 250, 0.35) !important;
+  color-scheme: dark;
+}
+
+body.admin-page select:focus,
+body[data-page="dashboard"] select:focus,
+body[data-page="booking"] select:focus,
+body.admin-page .filter-select:focus,
+body[data-page="dashboard"] .filter-select:focus,
+body.admin-page .booking-filter select:focus,
+body[data-page="dashboard"] .booking-filter select:focus,
+body.admin-page .admin-select:focus,
+body[data-page="dashboard"] .admin-select:focus,
+body.admin-page .status-select:focus,
+body[data-page="dashboard"] .status-select:focus,
+body.admin-page .technician-select:focus,
+body[data-page="dashboard"] .technician-select:focus,
+body.admin-page .form-select:focus,
+body[data-page="dashboard"] .form-select:focus {
+  outline: none !important;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18) !important;
+}
+
+body.admin-page select option,
+body[data-page="dashboard"] select option,
+body[data-page="booking"] select option,
+body.admin-page .filter-select option,
+body[data-page="dashboard"] .filter-select option,
+body.admin-page .booking-filter select option,
+body[data-page="dashboard"] .booking-filter select option,
+body.admin-page .admin-select option,
+body[data-page="dashboard"] .admin-select option,
+body.admin-page .status-select option,
+body[data-page="dashboard"] .status-select option,
+body.admin-page .technician-select option,
+body[data-page="dashboard"] .technician-select option,
+body.admin-page .form-select option,
+body[data-page="dashboard"] .form-select option {
+  background-color: #10233d !important;
+  color: #ffffff !important;
+}
+
+body.admin-page select option:checked,
+body[data-page="dashboard"] select option:checked,
+body[data-page="booking"] select option:checked,
+body.admin-page .filter-select option:checked,
+body[data-page="dashboard"] .filter-select option:checked,
+body.admin-page .booking-filter select option:checked,
+body[data-page="dashboard"] .booking-filter select option:checked,
+body.admin-page .admin-select option:checked,
+body[data-page="dashboard"] .admin-select option:checked,
+body.admin-page .status-select option:checked,
+body[data-page="dashboard"] .status-select option:checked,
+body.admin-page .technician-select option:checked,
+body[data-page="dashboard"] .technician-select option:checked,
+body.admin-page .form-select option:checked,
+body[data-page="dashboard"] .form-select option:checked {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+body.admin-page select option:hover,
+body[data-page="dashboard"] select option:hover,
+body[data-page="booking"] select option:hover,
+body.admin-page .filter-select option:hover,
+body[data-page="dashboard"] .filter-select option:hover,
+body.admin-page .booking-filter select option:hover,
+body[data-page="dashboard"] .booking-filter select option:hover,
+body.admin-page .admin-select option:hover,
+body[data-page="dashboard"] .admin-select option:hover,
+body.admin-page .status-select option:hover,
+body[data-page="dashboard"] .status-select option:hover,
+body.admin-page .technician-select option:hover,
+body[data-page="dashboard"] .technician-select option:hover,
+body.admin-page .form-select option:hover,
+body[data-page="dashboard"] .form-select option:hover {
+  background-color: #1d4ed8 !important;
+  color: #ffffff !important;
+}
+
+body.admin-page select option:disabled,
+body[data-page="dashboard"] select option:disabled,
+body[data-page="booking"] select option:disabled,
+body.admin-page .filter-select option:disabled,
+body[data-page="dashboard"] .filter-select option:disabled,
+body.admin-page .booking-filter select option:disabled,
+body[data-page="dashboard"] .booking-filter select option:disabled,
+body.admin-page .admin-select option:disabled,
+body[data-page="dashboard"] .admin-select option:disabled,
+body.admin-page .status-select option:disabled,
+body[data-page="dashboard"] .status-select option:disabled,
+body.admin-page .technician-select option:disabled,
+body[data-page="dashboard"] .technician-select option:disabled,
+body.admin-page .form-select option:disabled,
+body[data-page="dashboard"] .form-select option:disabled {
+  background-color: #10233d !important;
+  color: #64748b !important;
 }

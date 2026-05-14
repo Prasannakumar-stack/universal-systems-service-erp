@@ -9,6 +9,7 @@ const initial = {
   phone: '',
   address: '',
   serviceType: serviceTypes[0] || 'PC / Laptop Service',
+  bookingSource: 'Website',
   problemDescription: '',
   preferredDateTime: ''
 };

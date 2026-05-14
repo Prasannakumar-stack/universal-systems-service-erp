@@ -4,12 +4,8 @@ import {
   Bell,
   BookOpenCheck,
   Boxes,
-  CalendarClock,
-  ClipboardList,
   CreditCard,
   FileCheck2,
-  History,
-  FileText,
   Activity,
   LayoutDashboard,
   Loader2,
@@ -17,10 +13,10 @@ import {
   MapPin,
   Menu,
   MoreHorizontal,
-  PackageCheck,
   Phone,
   ReceiptText,
   Search,
+  Settings,
   ShieldCheck,
   UserRound,
   Users,
@@ -39,7 +35,7 @@ const amcRoles = [...fullAccessRoles, 'service_manager'];
 const inventoryRoles = [...fullAccessRoles, 'service_manager', 'inventory_staff'];
 const billingRoles = [...fullAccessRoles, 'service_manager', 'accounts_staff'];
 const reportRoles = [...fullAccessRoles, 'service_manager', 'accounts_staff', 'inventory_staff', 'viewer', 'auditor'];
-const auditRoles = [...fullAccessRoles, 'viewer', 'auditor'];
+const auditRoles = fullAccessRoles;
 
 const adminGroups = [
   {
@@ -49,60 +45,47 @@ const adminGroups = [
   {
     title: 'Operations',
     links: [
-      { to: '/admin/bookings', label: 'Requests / Bookings', icon: BookOpenCheck, roles: operationsRoles },
-      { to: '/admin/work-orders', label: 'Repair & Service Jobs', icon: Wrench, roles: [...operationsRoles, 'accounts_staff'] },
-      { to: '/admin/work-orders?view=dispatch', label: 'Dispatch Board', icon: ClipboardList, roles: [...fullAccessRoles, 'service_manager'] },
-      { to: '/admin/work-orders?view=technicians', label: 'Technician Tasks', icon: UserRound, roles: [...fullAccessRoles, 'service_manager'] }
+      { to: '/admin/bookings', label: 'Bookings', icon: BookOpenCheck, roles: operationsRoles, badgeKey: 'bookings' },
+      { to: '/admin/work-orders', label: 'Work Orders', icon: Wrench, roles: [...operationsRoles, 'accounts_staff'], badgeKey: 'workOrders' }
     ]
   },
   {
     title: 'Customers',
     links: [
-      { to: '/admin/customers', label: 'Customers', icon: Users, roles: customerRoles },
-      { to: '/admin/customers', label: 'Customer 360', icon: ShieldCheck, roles: customerRoles },
-      { to: '/admin/customers', label: 'Devices / Assets', icon: PackageCheck, roles: customerRoles },
-      { to: '/admin/customers', label: 'Service History', icon: History, roles: customerRoles }
-    ]
-  },
-  {
-    title: 'AMC & Contracts',
-    links: [
-      { to: '/admin/amc-contracts', label: 'AMC Contracts', icon: FileCheck2, roles: amcRoles },
-      { to: '/admin/amc-schedule', label: 'AMC Schedule', icon: CalendarClock, roles: amcRoles },
-      { to: '/admin/amc-renewals', label: 'Renewals', icon: AlertTriangle, roles: amcRoles },
-      { to: '/admin/warranties', label: 'Warranties', icon: ShieldCheck, roles: amcRoles }
+      { to: '/admin/customers', label: 'Customers', icon: Users, roles: customerRoles }
     ]
   },
   {
     title: 'Inventory',
     links: [
-      { to: '/admin/parts', label: 'Products / Parts', icon: Boxes, roles: inventoryRoles },
-      { to: '/admin/parts', label: 'Stock Management', icon: PackageCheck, roles: inventoryRoles },
-      { to: '/admin/stock-movements', label: 'Stock Movements', icon: History, roles: inventoryRoles }
+      { to: '/admin/parts', label: 'Products / Parts', icon: Boxes, roles: inventoryRoles, badgeKey: 'lowStock' }
     ]
   },
   {
     title: 'Sales & Billing',
     links: [
-      { to: '/admin/documents?type=quotation', label: 'Quotations', icon: FileCheck2, roles: billingRoles },
       { to: '/admin/invoices', label: 'Invoices', icon: ReceiptText, roles: billingRoles },
-      { to: '/admin/payments', label: 'Payments', icon: CreditCard, roles: billingRoles },
-      { to: '/admin/documents', label: 'Documents / PDFs', icon: FileText, roles: billingRoles }
+      { to: '/admin/payments', label: 'Payments', icon: CreditCard, roles: billingRoles, badgeKey: 'pendingPayments' }
+    ]
+  },
+  {
+    title: 'AMC & Warranty',
+    links: [
+      { to: '/admin/amc-contracts', label: 'AMC Contracts', icon: FileCheck2, roles: amcRoles, badgeKey: 'amcRenewals' }
     ]
   },
   {
     title: 'Reports',
     links: [
-      { to: '/admin/reports', label: 'Business Reports', icon: Activity, roles: reportRoles },
-      { to: '/admin/reports/technicians', label: 'Technician Reports', icon: UserRound, roles: [...fullAccessRoles, 'service_manager', 'viewer', 'auditor'] },
-      { to: '/admin/reports/inventory', label: 'Inventory Reports', icon: Boxes, roles: [...inventoryRoles, 'viewer', 'auditor'] },
-      { to: '/admin/reports/finance', label: 'Payment Reports', icon: CreditCard, roles: [...billingRoles, 'viewer', 'auditor'] }
+      { to: '/admin/reports', label: 'Reports', icon: Activity, roles: reportRoles }
     ]
   },
   {
     title: 'System',
     links: [
-      { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity, roles: auditRoles }
+      { to: '/admin/technician-panel', label: 'Staff / Technicians', icon: UserRound, roles: [...fullAccessRoles, 'service_manager'] },
+      { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity, roles: auditRoles },
+      { to: '/admin/settings', label: 'Settings', icon: Settings, roles: fullAccessRoles }
     ]
   }
 ];
@@ -115,6 +98,8 @@ const technicianLinks = [
 
 const adminRouteAccess = [
   { prefix: '/admin/dashboard', roles: adminWorkspaceRoles },
+  { prefix: '/admin/technician-panel', roles: [...fullAccessRoles, 'service_manager'] },
+  { prefix: '/admin/technician-tasks', roles: [...fullAccessRoles, 'service_manager'] },
   { prefix: '/admin/bookings', roles: operationsRoles },
   { prefix: '/admin/work-orders', roles: [...operationsRoles, 'accounts_staff'] },
   { prefix: '/admin/customers', roles: customerRoles },
@@ -130,7 +115,8 @@ const adminRouteAccess = [
   { prefix: '/admin/reports/inventory', roles: [...inventoryRoles, 'viewer', 'auditor'] },
   { prefix: '/admin/reports/technicians', roles: [...fullAccessRoles, 'service_manager', 'viewer', 'auditor'] },
   { prefix: '/admin/reports', roles: reportRoles },
-  { prefix: '/admin/audit-logs', roles: auditRoles }
+  { prefix: '/admin/audit-logs', roles: auditRoles },
+  { prefix: '/admin/settings', roles: fullAccessRoles }
 ];
 
 function canSeeLink(link, role) {
@@ -152,6 +138,28 @@ function canUseGlobalSearch(role) {
   return canAccessRoles(role, [...fullAccessRoles, 'service_manager']);
 }
 
+function sidebarBadgeClass(tone) {
+  const classes = {
+    blue: 'enterprise-sidebar-badge-blue',
+    orange: 'enterprise-sidebar-badge-orange',
+    red: 'enterprise-sidebar-badge-red',
+    green: 'enterprise-sidebar-badge-green'
+  };
+  return classes[tone] || classes.blue;
+}
+
+function buildSidebarBadges(dashboardData) {
+  const stats = dashboardData?.stats || {};
+  const lowStockCount = dashboardData?.lowStockAlerts?.length || 0;
+  return {
+    bookings: { value: stats.todayBookings, tone: 'blue' },
+    workOrders: { value: stats.pendingJobs, tone: 'blue' },
+    lowStock: { value: lowStockCount, tone: stats.lowStockCritical > 0 ? 'red' : 'orange' },
+    pendingPayments: { value: stats.pendingPayments, tone: 'green' },
+    amcRenewals: { value: stats.amcRenewalsDue, tone: stats.expiredAmcContracts > 0 ? 'red' : 'orange' }
+  };
+}
+
 function notificationTarget(item, role) {
   const normalizedRole = normalizeRole(role);
   const id = item?.sourceId || '';
@@ -168,13 +176,24 @@ function notificationTarget(item, role) {
   return normalizedRole === 'technician' ? '/tech/dashboard' : '/admin/dashboard';
 }
 
-function SidebarItem({ link, close }) {
+function SidebarBadge({ badge }) {
+  const value = Number(badge?.value || 0);
+  if (!value) return null;
+  return (
+    <span className={`enterprise-sidebar-badge ${sidebarBadgeClass(badge.tone)}`}>
+      {value > 99 ? '99+' : value}
+    </span>
+  );
+}
+
+function SidebarItem({ link, close, badge }) {
   const Icon = link.icon;
+  const location = useLocation();
 
   if (link.disabled) {
     return (
       <div className="enterprise-sidebar-item enterprise-sidebar-item-disabled" aria-disabled="true">
-        <Icon className="h-4 w-4 shrink-0" />
+        <Icon className="h-[18px] w-[18px] shrink-0" />
         <span className="min-w-0 truncate">{link.label}</span>
         <span className="ml-auto rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-black uppercase text-slate-400">Soon</span>
       </div>
@@ -186,18 +205,43 @@ function SidebarItem({ link, close }) {
       to={link.to}
       end={link.to === '/admin/dashboard'}
       onClick={close}
-      className={({ isActive }) => `enterprise-sidebar-item ${isActive ? 'enterprise-sidebar-item-active' : ''}`}
+      className={({ isActive }) => `enterprise-sidebar-item ${isSidebarLinkActive(link.to, location, isActive) ? 'enterprise-sidebar-item-active' : ''}`}
     >
-      <Icon className="h-4 w-4 shrink-0" />
+      <Icon className="h-[18px] w-[18px] shrink-0" />
       <span className="min-w-0 truncate">{link.label}</span>
+      <SidebarBadge badge={badge} />
     </NavLink>
   );
 }
 
+function isSidebarLinkActive(to, location, isActive) {
+  const [path, search = ''] = to.split('?');
+  if (search) return location.pathname === path && location.search === `?${search}`;
+  if (to === '/admin/dashboard') return location.pathname === path;
+  if (to === '/admin/documents') return location.pathname.startsWith(path) && !new URLSearchParams(location.search).has('type');
+  return isActive;
+}
+
 function AdminSidebar({ close }) {
-  const { logout, user } = useAuth();
+  const { logout, request, user } = useAuth();
   const navigate = useNavigate();
+  const [dashboardData, setDashboardData] = useState(null);
   const groups = visibleAdminGroups(user?.role);
+  const badges = buildSidebarBadges(dashboardData);
+
+  useEffect(() => {
+    let mounted = true;
+    request('/dashboard/admin')
+      .then((data) => {
+        if (mounted) setDashboardData(data);
+      })
+      .catch(() => {
+        if (mounted) setDashboardData(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [request]);
 
   function handleLogout() {
     logout();
@@ -223,19 +267,23 @@ function AdminSidebar({ close }) {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+      <nav className="enterprise-sidebar-nav flex-1 overflow-y-auto px-3 py-4">
         {groups.map((group) => (
-          <div key={group.title || 'dashboard'}>
-            {group.title ? <p className="px-3 pb-2 text-[11px] font-black uppercase text-slate-500">{group.title}</p> : null}
+          <div className="enterprise-sidebar-group" key={group.title || 'dashboard'}>
+            {group.title ? (
+              <div className="enterprise-sidebar-heading">
+                <span>{group.title}</span>
+              </div>
+            ) : null}
             <div className="space-y-1">
-              {group.links.map((link) => <SidebarItem key={`${group.title}-${link.label}`} link={link} close={close} />)}
+              {group.links.map((link) => <SidebarItem key={`${group.title}-${link.label}`} link={link} close={close} badge={badges[link.badgeKey]} />)}
             </div>
           </div>
         ))}
       </nav>
 
-      <div className="border-t border-white/10 p-3">
-        <div className="mb-3 flex items-center gap-3 rounded-card bg-white/[0.045] p-3">
+      <div className="enterprise-sidebar-footer border-t border-white/10 p-3">
+        <div className="mb-3 flex items-center gap-3 rounded-card border border-white/10 bg-white/[0.045] p-3">
           <div className="grid h-9 w-9 place-items-center rounded-card bg-sky-400/15 text-sm font-black text-sky-100">
             {user?.name?.slice(0, 1) || 'A'}
           </div>
@@ -579,15 +627,15 @@ function AdminTopBar({ role, openSidebar }) {
   );
 }
 
-function UnauthorizedPanel({ role }) {
+function UnauthorizedPanel({ role, auditOnly = false }) {
   return (
     <div className="surface grid min-h-[60vh] place-items-center p-6 text-center">
       <div className="max-w-md">
         <ShieldCheck className="mx-auto mb-4 h-10 w-10 text-[var(--brand)]" />
-        <p className="text-xs font-black uppercase text-[var(--brand)]">Read-only protection</p>
-        <h1 className="mt-2 text-2xl font-black">This module is restricted.</h1>
+        <p className="text-xs font-black uppercase text-[var(--brand)]">Access denied</p>
+        <h1 className="mt-2 text-2xl font-black">{auditOnly ? 'Audit logs are admin only.' : 'This module is restricted.'}</h1>
         <p className="mt-3 text-sm leading-6 muted">
-          Your current role is {roleLabel(role)}. Use an allowed module from the sidebar or contact an administrator for access.
+          {auditOnly ? 'Access denied. Audit logs are available only for admin users.' : `Your current role is ${roleLabel(role)}. Use an allowed module from the sidebar or contact an administrator for access.`}
         </p>
       </div>
     </div>
@@ -601,6 +649,7 @@ export default function DashboardLayout({ role }) {
 
   if (role === 'admin') {
     const allowed = canOpenAdminPath(location.pathname, user?.role || role);
+    const auditOnly = location.pathname.startsWith('/admin/audit-logs');
     return (
       <div className="min-h-screen bg-[var(--bg)]">
         <div className="fixed inset-y-0 left-0 z-40 hidden w-[292px] xl:block">
@@ -618,7 +667,7 @@ export default function DashboardLayout({ role }) {
           </div>
         ) : null}
         <main className="enterprise-main p-4 md:p-6">
-          {allowed ? <Outlet /> : <UnauthorizedPanel role={user?.role || role} />}
+          {allowed ? <Outlet /> : <UnauthorizedPanel role={user?.role || role} auditOnly={auditOnly} />}
         </main>
       </div>
     );

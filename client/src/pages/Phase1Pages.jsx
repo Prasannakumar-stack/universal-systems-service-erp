@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Bell, BookOpenCheck, Boxes, CalendarClock, CheckCircle2, ClipboardList, CreditCard, Download, FileText, Loader2, PackagePlus, PhoneCall as PhoneCallIcon, Plus, ReceiptText, Save, Send, Trash2, Users, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Bell, BookOpenCheck, Boxes, CalendarClock, CheckCircle2, ClipboardList, CreditCard, Download, Edit3, FileText, KeyRound, Loader2, PackagePlus, PhoneCall as PhoneCallIcon, Plus, ReceiptText, Save, Send, ShieldCheck, Trash2, UserRound, Users, Wrench, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ConfirmModal, EmptyState, PageHeader, SearchBox, StatCard } from '../components/Ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -12,7 +12,7 @@ const workStatuses = ['Pending', 'In Progress', 'Awaiting Parts', 'Completed'];
 const workOrderDetailStatuses = ['Pending', 'In Progress', 'Awaiting Parts', 'Completed', 'Delivered', 'Returned'];
 const inventoryCategories = ['Laptop Parts', 'Desktop Parts', 'CCTV', 'Networking', 'Printer', 'Power Components', 'Memory', 'Storage', 'Accessories', 'Software / Service', 'Other'];
 const quickStockSources = ['Purchase', 'Manual', 'Return', 'Correction'];
-const bookingSources = ['Walk-in', 'Call', 'Website', 'WhatsApp', 'Referral'];
+const bookingSources = ['Call', 'Walk-in Shop', 'Website'];
 const deviceTypes = ['Laptop', 'Desktop PC', 'CCTV', 'Printer', 'Toner / Cartridge', 'Network Device', 'Solar / UPS / Battery / Inverter', 'Software / Installation', 'Other'];
 const amcContractTypes = ['Basic AMC', 'Comprehensive AMC', 'CCTV AMC', 'Printer AMC', 'Networking AMC', 'Solar / UPS AMC', 'Custom'];
 const amcFrequencies = ['Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
@@ -74,6 +74,27 @@ function ErrorBlock({ message }) {
 
 function StatusBadge({ status }) {
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${statusTone(status)}`}>{status}</span>;
+}
+
+function bookingSourceValue(record) {
+  const raw = String(record?.source || record?.bookingSource || record?.channel || record?.intakeSource || record?.leadSource || record?.bookingId?.bookingSource || record?.bookingId?.source || '').trim().toLowerCase();
+  if (!raw) return 'Walk-in';
+  if (raw.includes('call')) return 'Call';
+  if (raw.includes('website') || raw.includes('web') || raw.includes('online')) return 'Website';
+  if (raw.includes('walk') || raw.includes('shop') || raw.includes('manual')) return 'Walk-in Shop';
+  return raw.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function BookingSourceBadge({ source }) {
+  const label = bookingSourceValue({ bookingSource: source });
+  const tone = {
+    Call: 'booking-source-badge-call',
+    'Walk-in Shop': 'booking-source-badge-shop',
+    'Walk-in': 'booking-source-badge-shop',
+    Website: 'booking-source-badge-website',
+    Unknown: 'booking-source-badge-unknown'
+  }[label] || 'booking-source-badge-unknown';
+  return <span className={`booking-source-badge ${tone}`}>{label}</span>;
 }
 
 function AmcStatusBadge({ status }) {
@@ -334,14 +355,14 @@ function buildSevenDaySeries(bookings = [], payments = []) {
   return days;
 }
 
-function SmartMetricCard({ icon: Icon, label, value, tone, to }) {
+function SmartMetricCard({ icon: Icon, label, value, tone, to, helper, glow = false }) {
   const numericValue = Number(value || 0);
   const displayValue = typeof value === 'string' ? value : numericValue;
   const toneClass = {
-    red: 'border-rose-400/35 bg-rose-500/10 text-rose-200',
-    yellow: 'border-amber-300/35 bg-amber-400/10 text-amber-100',
-    blue: 'border-sky-300/35 bg-sky-400/10 text-sky-100',
-    green: 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100'
+    red: 'dashboard-kpi-red',
+    yellow: 'dashboard-kpi-yellow',
+    blue: 'dashboard-kpi-blue',
+    green: 'dashboard-kpi-green'
   }[tone] || 'border-sky-300/35 bg-sky-400/10 text-sky-100';
   const iconClass = {
     red: 'text-rose-300',
@@ -351,14 +372,16 @@ function SmartMetricCard({ icon: Icon, label, value, tone, to }) {
   }[tone] || 'text-sky-200';
 
   return (
-    <Link to={to} className={`surface lift-card block border ${toneClass} p-5`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-bold muted">{label}</p>
-          <p className="mt-3 text-3xl font-black">{displayValue}</p>
-          {typeof value !== 'string' && numericValue === 0 ? <p className="mt-2 text-sm font-semibold text-emerald-200">All good</p> : null}
+    <Link to={to} className={`dashboard-kpi-card lift-card ${toneClass} ${glow && numericValue > 0 ? 'dashboard-kpi-alert' : ''}`}>
+      <div className="flex h-full items-start justify-between gap-4">
+        <div className="dashboard-kpi-copy min-w-0">
+          <p className="dashboard-kpi-title text-xs font-black uppercase text-slate-300">{label}</p>
+          <p className="dashboard-kpi-value mt-3 text-3xl font-black text-white">{displayValue}</p>
+          <p className={`dashboard-kpi-helper mt-2 text-sm font-semibold ${numericValue === 0 && typeof value !== 'string' ? 'text-emerald-200' : 'muted'}`}>
+            {helper || (typeof value !== 'string' && numericValue === 0 ? 'All good' : 'Open details')}
+          </p>
         </div>
-        <span className="grid h-11 w-11 place-items-center rounded-card bg-white/10">
+        <span className="dashboard-kpi-icon">
           <Icon className={`h-5 w-5 ${iconClass}`} />
         </span>
       </div>
@@ -368,36 +391,71 @@ function SmartMetricCard({ icon: Icon, label, value, tone, to }) {
 
 function PriorityAlerts({ alerts = [] }) {
   const toneClass = {
-    critical: 'border-rose-400/30 bg-rose-500/10 text-rose-100',
-    warning: 'border-amber-300/30 bg-amber-400/10 text-amber-100',
-    info: 'border-sky-300/30 bg-sky-400/10 text-sky-100'
+    critical: 'dashboard-alert-critical',
+    warning: 'dashboard-alert-warning',
+    info: 'dashboard-alert-info'
   };
 
   return (
-    <div className="surface p-5">
+    <div className="dashboard-panel dashboard-priority-panel p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-black">Priority Alerts</h2>
-          <p className="mt-1 text-sm muted">Critical work, stock, payments, and new intake in one view.</p>
+          <p className="mt-1 text-sm muted">Critical stock, overdue work, and payment risk in one clear queue.</p>
         </div>
-        <AlertTriangle className="h-5 w-5 text-[var(--warning)]" />
+        <span className="dashboard-panel-icon"><AlertTriangle className="h-5 w-5 text-[var(--warning)]" /></span>
       </div>
-      <div className="grid gap-3">
+      <div className="dashboard-alert-grid">
         {alerts.length ? alerts.map((alert) => (
-          <Link key={`${alert.level}-${alert.title}`} to={alert.to} className={`alert-link rounded-card border p-3 ${toneClass[alert.level]}`}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase">{alert.level}</p>
-                <p className="mt-1 font-bold">{alert.title}</p>
+          <Link key={`${alert.level}-${alert.title}`} to={alert.to} className={`dashboard-alert-row alert-link ${toneClass[alert.level]}`}>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="dashboard-severity-badge">{alert.level}</span>
+                <span className="font-black">{alert.title}</span>
               </div>
-              <span className="status-badge bg-white/10 text-white">{alert.count}</span>
+              <p className="mt-1 text-sm opacity-80">{alert.message}</p>
             </div>
-            <p className="mt-1 text-sm opacity-80">{alert.message}</p>
+            <span className="dashboard-count-badge">{alert.count}</span>
+            <span className="dashboard-action-pill">{alert.action || 'View'}</span>
           </Link>
-        )) : <EmptyState title="No pending jobs" message="Inventory, jobs, and payments are clear." />}
+        )) : <EmptyState title="No priority alerts" message="Inventory, jobs, and payments are clear." />}
       </div>
     </div>
   );
+}
+
+function DashboardPanel({ title, icon: Icon, action, children, className = '' }) {
+  return (
+    <section className={`dashboard-panel p-5 ${className}`}>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-xl font-black">{title}</h2>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {action}
+          {Icon ? <span className="dashboard-panel-icon"><Icon className="h-5 w-5 text-[var(--brand)]" /></span> : null}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function DashboardEmpty({ title, message }) {
+  return (
+    <div className="dashboard-empty-state">
+      <AlertTriangle className="mx-auto mb-2 h-4 w-4 text-[var(--brand)]" />
+      <p className="font-black">{title}</p>
+      <p className="mt-1 text-sm muted">{message}</p>
+    </div>
+  );
+}
+
+function DueStatusBadge({ invoice }) {
+  const createdAt = invoice?.createdAt ? new Date(invoice.createdAt) : null;
+  const isOverdue = createdAt && Number.isFinite(createdAt.getTime()) && Date.now() - createdAt.getTime() > 7 * 24 * 60 * 60 * 1000;
+  if (isOverdue) return <span className="inline-flex rounded-full bg-rose-500/15 px-2.5 py-1 text-xs font-bold text-rose-100">Overdue</span>;
+  return <StatusBadge status={invoice?.status || 'Pending'} />;
 }
 
 function DashboardChart({ title, children }) {
@@ -413,7 +471,7 @@ function TechnicianWorkloadBars({ technicians = [] }) {
   const maxJobs = Math.max(1, ...technicians.map((tech) => Number(tech.activeJobs || 0)));
 
   return (
-    <div className="surface p-5">
+    <div className="dashboard-panel p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl font-black">Technician Workload</h2>
         <Link className="btn btn-secondary py-2" to="/admin/reports/technicians">Report</Link>
@@ -422,9 +480,9 @@ function TechnicianWorkloadBars({ technicians = [] }) {
         {technicians.length ? technicians.map((tech) => {
           const percent = Math.min(100, Math.round((Number(tech.activeJobs || 0) / maxJobs) * 100));
           return (
-            <div key={tech.id} className="rounded-card bg-[var(--surface-2)] p-3">
+            <div key={tech.id} className="dashboard-workload-row">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="font-bold">{tech.name}</span>
+                <span className="truncate font-bold">{tech.name}</span>
                 <span className="text-xs muted">{tech.activeJobs} active</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-white/10">
@@ -432,9 +490,44 @@ function TechnicianWorkloadBars({ technicians = [] }) {
               </div>
             </div>
           );
-        }) : <p className="text-sm muted">No technician workload yet.</p>}
+        }) : <DashboardEmpty title="No technician workload" message="Assigned jobs will show here." />}
       </div>
     </div>
+  );
+}
+
+function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0 }) {
+  const totalRevenue = chartData.reduce((sum, item) => sum + Number(item.revenue || 0), 0);
+  const bestDay = chartData.reduce((best, item) => Number(item.revenue || 0) > Number(best.revenue || 0) ? item : best, chartData[0] || { label: '-', revenue: 0 });
+
+  return (
+    <DashboardPanel title="Revenue Overview" icon={ReceiptText} action={<Link className="dashboard-card-action" to="/admin/reports/finance">Report</Link>} className="dashboard-revenue-card">
+      <div className="dashboard-chart-shell">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData}>
+            <CartesianGrid stroke="rgba(117,196,255,0.1)" vertical={false} />
+            <XAxis dataKey="label" stroke="#aebfd7" fontSize={11} tickLine={false} axisLine={false} />
+            <YAxis hide />
+            <Tooltip formatter={(value) => currency(value)} contentStyle={{ background: '#071426', border: '1px solid rgba(117,196,255,0.25)', borderRadius: 10, color: '#fff' }} />
+            <Bar dataKey="revenue" fill="#75c4ff" radius={[8, 8, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="dashboard-card-footer">
+        <div>
+          <p className="text-xs muted">This month</p>
+          <p className="font-black text-emerald-100">{currency(monthlyRevenue)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs muted">Best day</p>
+          <p className="font-black text-sky-100">{bestDay.label} - {currency(bestDay.revenue || 0)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs muted">7-day total</p>
+          <p className="font-black text-white">{currency(totalRevenue)}</p>
+        </div>
+      </div>
+    </DashboardPanel>
   );
 }
 
@@ -452,8 +545,8 @@ function MovementTypeBadge({ type, quantity = 0 }) {
     : {
       ADD: 'bg-emerald-400/15 text-emerald-100',
       USED: 'bg-sky-400/15 text-sky-100',
-      RETURN: 'bg-purple-400/15 text-purple-100',
-      ADJUST: 'bg-orange-400/15 text-orange-100'
+      RETURN: 'bg-cyan-400/15 text-cyan-100',
+      ADJUST: 'bg-amber-400/15 text-amber-100'
     }[type] || 'bg-rose-500/15 text-rose-100';
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${tone}`}>{type}</span>;
 }
@@ -491,14 +584,16 @@ function amcWhatsappHref(contract) {
 }
 
 const reportSections = [
-  { id: 'main', label: 'Overview', to: '/admin/reports' },
-  { id: 'operations', label: 'Operations', to: '/admin/reports/operations' },
-  { id: 'technicians', label: 'Technicians', to: '/admin/reports/technicians' },
-  { id: 'finance', label: 'Finance', to: '/admin/reports/finance' },
+  { id: 'main', label: 'Business', to: '/admin/reports' },
+  { id: 'technicians', label: 'Technician', to: '/admin/reports/technicians' },
   { id: 'inventory', label: 'Inventory', to: '/admin/reports/inventory' },
-  { id: 'amc', label: 'AMC', to: '/admin/reports/amc' },
-  { id: 'customers', label: 'Customers', to: '/admin/reports/customers' }
+  { id: 'finance', label: 'Payments', to: '/admin/reports/finance' }
 ];
+
+function normalizeReportSection(section = 'main') {
+  if (section === 'payments') return 'finance';
+  return reportSections.some((item) => item.id === section) ? section : 'main';
+}
 
 const reportRangeOptions = ['Today', 'Last 7 Days', 'This Month', 'Last Month', 'Custom Range'];
 
@@ -659,6 +754,38 @@ function RemindersPanel({ reminders = [] }) {
   );
 }
 
+function ActivityFeedPanel({ notifications = [], reminders = [] }) {
+  const items = [
+    ...notifications.map((item) => ({ ...item, feedType: 'Notification', feedDate: item.createdAt })),
+    ...reminders.map((item) => ({ ...item, feedType: 'Reminder', feedDate: item.createdAt }))
+  ].sort((a, b) => new Date(b.feedDate || 0) - new Date(a.feedDate || 0)).slice(0, 8);
+
+  return (
+    <DashboardPanel title="Activity Feed" icon={Bell} action={<Link className="dashboard-card-action" to="/admin/dashboard">Live</Link>} className="dashboard-activity-card">
+      <div className="dashboard-timeline-list">
+        {items.length ? items.map((item) => (
+          <div key={`${item.feedType}-${item.id || item._id || item.title}`} className="dashboard-timeline-item">
+            <span className="dashboard-timeline-dot"><Bell className="h-3.5 w-3.5" /></span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="status-badge">{item.feedType}</span>
+                  {item.priority ? <span className="dashboard-soft-badge">{item.priority}</span> : null}
+                </div>
+                <p className="mt-2 truncate font-black">{item.title}</p>
+                <p className="dashboard-feed-message mt-1 text-sm muted">{item.message}</p>
+              </div>
+              <p className="shrink-0 text-xs muted">{formatDate(item.feedDate)}</p>
+            </div>
+            </div>
+          </div>
+        )) : <DashboardEmpty title="No activity yet" message="Notifications and reminders will appear here." />}
+      </div>
+    </DashboardPanel>
+  );
+}
+
 function TechnicianLoadingCards() {
   return (
     <div className="grid gap-4">
@@ -786,7 +913,7 @@ function ReportsNavigation({ active }) {
 
 function ReportsRangeBar({ range, setRange, customFrom, setCustomFrom, customTo, setCustomTo, onExport }) {
   return (
-    <div className="surface mb-5 grid gap-3 p-4 lg:grid-cols-[220px_170px_170px_auto_auto]">
+    <div className="surface reports-range-bar mb-5 grid gap-3 p-4 lg:grid-cols-[220px_170px_170px_auto_auto]">
       <select className="input" value={range} onChange={(event) => setRange(event.target.value)}>
         {reportRangeOptions.map((item) => <option key={item}>{item}</option>)}
       </select>
@@ -834,7 +961,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       users: users.users || []
     };
   }, [request]);
-  const { data, loading, error, reload } = useResource(loadReports, [loadReports]);
+  const { data, loading, error } = useResource(loadReports, [loadReports]);
 
   const bounds = useMemo(() => reportRangeBounds(range, customFrom, customTo), [range, customFrom, customTo]);
 
@@ -1037,70 +1164,84 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
     };
   }, [data, bounds]);
 
+  const activeSection = normalizeReportSection(section);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0 });
+  }, [activeSection]);
+
   function exportCurrentSection() {
     if (!report) return;
-    if (section === 'operations' || section === 'main') {
-      downloadCsv('operations-report.csv', ['Metric', 'Value'], [
+    if (activeSection === 'main') {
+      downloadCsv('business-report.csv', ['Metric', 'Value'], [
+        ['Total revenue', report.summary.totalRevenue],
+        ['Pending payments', report.summary.pendingPayments],
+        ['Completed jobs', report.summary.completedJobs],
+        ['Active repair jobs', report.summary.activeRepairJobs],
+        ['Low stock items', report.summary.lowStockItems],
+        ['Active AMC contracts', report.summary.activeAmcContracts],
+        ['AMC renewals due', report.summary.amcRenewalsDue],
+        ['Total customers', report.summary.totalCustomers],
         ['Total bookings', report.operations.totalBookings],
-        ['Total jobs', report.operations.totalJobs],
-        ['Pending', report.operations.pending],
-        ['In Progress', report.operations.inProgress],
-        ['Awaiting Parts', report.operations.awaitingParts],
-        ['Completed', report.operations.completed],
-        ['Delivered', report.operations.delivered],
-        ['Returned', report.operations.returned],
-        ['Average completion', report.operations.averageCompletion]
+        ['Total service jobs', report.operations.totalJobs],
+        ['Average completion', report.operations.averageCompletion],
+        ...report.operations.serviceTypeRows.map((row) => [`Jobs - ${row.name}`, row.count])
       ]);
       return;
     }
-    if (section === 'technicians') {
+    if (activeSection === 'technicians') {
       downloadCsv('technician-report.csv', ['Technician', 'Assigned', 'Completed', 'In Progress', 'Awaiting Parts', 'Completion Rate', 'Last Activity'], report.technicians.map((row) => [row.technician.name, row.assigned, row.completed, row.inProgress, row.awaitingParts, row.completionRate, row.lastActivity]));
       return;
     }
-    if (section === 'finance') {
-      downloadCsv('finance-report.csv', ['Customer', 'Pending Balance'], report.finance.pendingByCustomer.map((row) => [row.customer, row.balance]));
+    if (activeSection === 'finance') {
+      downloadCsv('finance-report.csv', ['Metric', 'Value'], [
+        ['Total invoice value', report.finance.totalInvoiceValue],
+        ['Total collected', report.finance.totalCollected],
+        ['Pending balance', report.finance.pendingBalance],
+        ['Partial payments', report.finance.partialPayments],
+        ['Paid invoices', report.finance.paidInvoices],
+        ['Pending invoices', report.finance.pendingInvoices],
+        ["Today's collection", report.finance.todayCollection],
+        ['Monthly revenue', report.finance.monthlyRevenue],
+        ...report.finance.paymentMethodRows.map((row) => [`Collection - ${row.method}`, row.total]),
+        ...report.finance.pendingByCustomer.map((row) => [`Pending - ${row.customer}`, row.balance])
+      ]);
       return;
     }
-    if (section === 'inventory') {
+    if (activeSection === 'inventory') {
       downloadCsv('inventory-report.csv', ['Part', 'Category', 'On Hand', 'Reserved', 'Available', 'Used Quantity', 'Stock Value', 'Status'], report.inventory.rows.map((row) => [row.partName, row.category, row.onHand, row.reserved, row.available, row.usedQuantity, row.stockValue, row.stockStatus]));
-      return;
     }
-    if (section === 'amc') {
-      downloadCsv('amc-report.csv', ['Contract', 'Customer', 'Type', 'Start Date', 'End Date', 'Status', 'Renewal Status', 'Value'], report.amc.contracts.map((contract) => [contract.contractId, contract.customerName, contract.contractType, contract.startDate, contract.endDate, contract.status, contract.renewalStatus, contract.contractValue]));
-      return;
-    }
-    downloadCsv('customer-report.csv', ['Customer', 'Phone', 'Total Jobs', 'Total Spent', 'Pending Balance', 'Active AMC', 'Last Service Date'], report.customers.rows.map((row) => [row.customer.name, row.customer.phone, row.totalJobs, row.totalSpent, row.pendingBalance, row.activeAmc, row.lastServiceDate]));
   }
 
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
-  const activeSection = reportSections.some((item) => item.id === section) ? section : 'main';
-
   return (
-    <>
+    <div className="reports-page">
       <PageHeader title="Reports & Analytics" eyebrow="Business Intelligence">
         Track service performance, revenue, stock, technicians, payments, and AMC renewals.
       </PageHeader>
       <ReportsNavigation active={activeSection} />
       <ReportsRangeBar range={range} setRange={setRange} customFrom={customFrom} setCustomFrom={setCustomFrom} customTo={customTo} setCustomTo={setCustomTo} onExport={exportCurrentSection} />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SmartMetricCard icon={CreditCard} label="Total Revenue" value={currency(report.summary.totalRevenue)} tone="green" to="/admin/reports/finance" />
-        <SmartMetricCard icon={AlertTriangle} label="Pending Payments" value={currency(report.summary.pendingPayments)} tone="yellow" to="/admin/reports/finance" />
-        <SmartMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.summary.completedJobs} tone="green" to="/admin/reports/operations" />
-        <SmartMetricCard icon={Wrench} label="Active Repair Jobs" value={report.summary.activeRepairJobs} tone="blue" to="/admin/work-orders" />
-        <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={report.summary.lowStockItems} tone="red" to="/admin/reports/inventory" />
-        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={report.summary.activeAmcContracts} tone="green" to="/admin/reports/amc" />
-        <SmartMetricCard icon={Bell} label="AMC Renewals Due" value={report.summary.amcRenewalsDue} tone="yellow" to="/admin/reports/amc" />
-        <SmartMetricCard icon={Users} label="Total Customers" value={report.summary.totalCustomers} tone="blue" to="/admin/reports/customers" />
-      </div>
+      {activeSection === 'main' ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <SmartMetricCard icon={CreditCard} label="Total Revenue" value={currency(report.summary.totalRevenue)} tone="green" to="/admin/reports/finance" />
+          <SmartMetricCard icon={AlertTriangle} label="Pending Payments" value={currency(report.summary.pendingPayments)} tone="yellow" to="/admin/reports/finance" />
+          <SmartMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.summary.completedJobs} tone="green" to="/admin/work-orders?status=Completed" />
+          <SmartMetricCard icon={Wrench} label="Active Repair Jobs" value={report.summary.activeRepairJobs} tone="blue" to="/admin/work-orders" />
+          <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={report.summary.lowStockItems} tone="red" to="/admin/reports/inventory" />
+          <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={report.summary.activeAmcContracts} tone="green" to="/admin/amc-contracts" />
+          <SmartMetricCard icon={Bell} label="AMC Renewals Due" value={report.summary.amcRenewalsDue} tone="yellow" to="/admin/amc-renewals" />
+          <SmartMetricCard icon={Users} label="Total Customers" value={report.summary.totalCustomers} tone="blue" to="/admin/customers" />
+        </div>
+      ) : null}
 
-      {(activeSection === 'main' || activeSection === 'operations') ? (
+      {activeSection === 'main' ? (
         <div className="mt-6 grid gap-5 xl:grid-cols-[.9fr_1.1fr]">
           <div className="surface p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-xl font-black">Operations Report</h2>
+              <h2 className="text-xl font-black">Operations Summary</h2>
               <Link className="btn btn-secondary py-2" to="/admin/work-orders">Open Jobs</Link>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1124,7 +1265,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         </div>
       ) : null}
 
-      {(activeSection === 'main' || activeSection === 'technicians') ? (
+      {activeSection === 'technicians' ? (
         <div className="surface mt-6 p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-black">Technician Performance Report</h2>
@@ -1152,7 +1293,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         </div>
       ) : null}
 
-      {(activeSection === 'main' || activeSection === 'finance') ? (
+      {activeSection === 'finance' ? (
         <div className="mt-6 grid gap-5 xl:grid-cols-[1fr_.9fr]">
           <div className="surface p-5">
             <h2 className="text-xl font-black">Finance Report</h2>
@@ -1204,7 +1345,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         </div>
       ) : null}
 
-      {(activeSection === 'main' || activeSection === 'inventory') ? (
+      {activeSection === 'inventory' ? (
         <div className="surface mt-6 p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-black">Inventory Report</h2>
@@ -1232,62 +1373,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
           </div>
         </div>
       ) : null}
-
-      {(activeSection === 'main' || activeSection === 'amc') ? (
-        <div className="surface mt-6 p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-black">AMC & Contracts Report</h2>
-            <Link className="btn btn-secondary py-2" to="/admin/amc-renewals">Renewals</Link>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard icon={FileText} label="Active AMC Contracts" value={report.amc.active} tone="green" />
-            <StatCard icon={AlertTriangle} label="Expiring Soon" value={report.amc.expiringSoon} tone="yellow" />
-            <StatCard icon={AlertTriangle} label="Expired Contracts" value={report.amc.expired} tone="red" />
-            <StatCard icon={CalendarClock} label="AMC Visits This Month" value={report.amc.visitsThisMonth} />
-            <StatCard icon={CheckCircle2} label="Completed AMC Visits" value={report.amc.completedVisits} tone="green" />
-            <StatCard icon={AlertTriangle} label="Overdue AMC Visits" value={report.amc.overdueVisits} tone="red" />
-            <StatCard icon={CreditCard} label="AMC Contract Value" value={currency(report.amc.contractValue)} />
-            <StatCard icon={CreditCard} label="Renewals Due Amount" value={currency(report.amc.renewalDueAmount)} tone="yellow" />
-          </div>
-          <div className="mt-5">
-            {!report.amc.contracts.length ? <EmptyState title="No AMC contracts yet" message="AMC reports will appear after contracts are created." action={<Link className="btn btn-primary" to="/admin/amc-contracts">Create AMC Contract</Link>} /> : (
-              <Table>
-                <thead><tr><th>Contract</th><th>Customer</th><th>Type</th><th>Start Date</th><th>End Date</th><th>Status</th><th>Renewal Status</th><th>Value</th><th>Action</th></tr></thead>
-                <tbody>
-                  {report.amc.contracts.slice(0, 50).map((contract) => <tr key={recordId(contract)}><td className="font-bold">{contract.contractId}</td><td>{contract.customerName}</td><td>{contract.contractType}</td><td>{formatDate(contract.startDate)}</td><td>{formatDate(contract.endDate)}</td><td><AmcStatusBadge status={contract.status} /></td><td><AmcStatusBadge status={contract.renewalStatus} /></td><td>{currency(contract.contractValue)}</td><td><Link className="btn btn-secondary py-2" to="/admin/amc-contracts">Open</Link></td></tr>)}
-                </tbody>
-              </Table>
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {(activeSection === 'main' || activeSection === 'customers') ? (
-        <div className="surface mt-6 p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-black">Customer Report</h2>
-            <Link className="btn btn-secondary py-2" to="/admin/customers">Customers</Link>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard icon={Users} label="Total Customers" value={report.customers.rows.length} />
-            <StatCard icon={Users} label="New Customers This Month" value={report.customers.newThisMonth} />
-            <StatCard icon={CheckCircle2} label="Repeat Customers" value={report.customers.repeatCustomers} tone="green" />
-            <StatCard icon={AlertTriangle} label="Customers With Balance" value={report.customers.withPendingBalance} tone="yellow" />
-            <StatCard icon={FileText} label="Customers With Active AMC" value={report.customers.withActiveAmc} tone="green" />
-          </div>
-          <div className="mt-5">
-            {!report.customers.rows.length ? <EmptyState title="No customer report data" message="Reports will appear after jobs, invoices, or payments are created." /> : (
-              <Table>
-                <thead><tr><th>Customer</th><th>Phone</th><th>Total Jobs</th><th>Total Spent</th><th>Pending Balance</th><th>Active AMC</th><th>Last Service Date</th><th>Action</th></tr></thead>
-                <tbody>
-                  {report.customers.rows.slice(0, 50).map((row) => <tr key={recordId(row.customer)}><td className="font-bold">{row.customer.name}</td><td>{row.customer.phone}</td><td>{row.totalJobs}</td><td>{currency(row.totalSpent)}</td><td>{currency(row.pendingBalance)}</td><td>{row.activeAmc ? <AmcStatusBadge status="Active" /> : '-'}</td><td>{row.lastServiceDate ? formatDate(row.lastServiceDate) : '-'}</td><td><Link className="btn btn-secondary py-2" to={`/admin/customers/${recordId(row.customer)}`}>View Customer 360</Link></td></tr>)}
-                </tbody>
-              </Table>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </>
+    </div>
   );
 }
 
@@ -1326,12 +1412,11 @@ export function AdminDashboard() {
   const alerts = useMemo(() => {
     if (!data) return [];
     return [
-      Number(data.stats?.lowStockCritical || 0) > 0 ? { level: 'critical', title: 'Out of stock items', count: data.stats.lowStockCritical, message: 'Stock is at zero and needs immediate refill.', to: '/admin/parts' } : null,
-      Number(data.stats?.jobsOverdue || 0) > 0 ? { level: 'critical', title: 'Overdue jobs', count: data.stats.jobsOverdue, message: 'Jobs have not moved in more than 24 hours.', to: '/admin/work-orders' } : null,
-      Number(data.lowStockAlerts?.length || 0) > 0 ? { level: 'warning', title: 'Low stock', count: data.lowStockAlerts.length, message: 'Parts are close to their low stock limit.', to: '/admin/parts' } : null,
-      Number(data.stats?.pendingPayments || 0) > 0 ? { level: 'warning', title: 'Pending payments', count: data.stats.pendingPayments, message: 'Invoices still have balance due.', to: '/admin/invoices' } : null,
-      Number(data.stats?.todayBookings || 0) > 0 ? { level: 'info', title: 'New bookings', count: data.stats.todayBookings, message: 'Fresh service bookings received today.', to: '/admin/bookings' } : null
-    ].filter(Boolean);
+      { level: 'critical', title: 'Out of stock items', count: Number(data.stats?.lowStockCritical || 0), message: 'Stock is at zero and needs immediate refill.', to: '/admin/parts', action: 'View Stock' },
+      { level: 'critical', title: 'Overdue jobs', count: Number(data.stats?.jobsOverdue || 0), message: 'Jobs have not moved in more than 24 hours.', to: '/admin/work-orders', action: 'View Jobs' },
+      { level: 'warning', title: 'Low stock', count: Number(data.lowStockAlerts?.length || 0), message: 'Parts are close to their low stock limit.', to: '/admin/parts', action: 'View Stock' },
+      { level: 'warning', title: 'Pending payments', count: Number(data.stats?.pendingPayments || 0), message: 'Invoices still have balance due.', to: '/admin/payments', action: 'View Payments' }
+    ];
   }, [data]);
 
   useEffect(() => {
@@ -1347,7 +1432,7 @@ export function AdminDashboard() {
   if (error) return <ErrorBlock message={error} />;
 
   return (
-    <>
+    <div className="admin-dashboard-page">
       <PageHeader
         title="Admin Dashboard"
         eyebrow="Smart Service Command"
@@ -1355,6 +1440,7 @@ export function AdminDashboard() {
           <div className="quick-actions flex flex-wrap justify-start gap-2 md:justify-end">
             <Link className="btn btn-primary glow-action" to="/admin/bookings"><Plus className="h-4 w-4" />Booking</Link>
             <Link className="btn btn-secondary" to="/admin/work-orders"><Plus className="h-4 w-4" />Service Job</Link>
+            <Link className="btn btn-secondary" to="/admin/technician-panel"><UserRound className="h-4 w-4" />Technician Panel</Link>
             <Link className="btn btn-secondary" to="/admin/stock-movements"><PackagePlus className="h-4 w-4" />Add Stock</Link>
             <Link className="btn btn-secondary" to="/admin/payments"><CreditCard className="h-4 w-4" />Record Payment</Link>
           </div>
@@ -1363,129 +1449,85 @@ export function AdminDashboard() {
         Action-ready view of overdue work, billing, stock health, bookings, and technician load.
         {lastUpdated ? <span className="mt-1 block text-xs">Last updated: {lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span> : null}
       </PageHeader>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SmartMetricCard icon={CalendarClock} label="Today's Bookings" value={data.stats.todayBookings} tone="blue" to="/admin/bookings" />
-        <SmartMetricCard icon={ClipboardList} label="Pending Service Jobs" value={data.stats.pendingJobs} tone="yellow" to="/admin/work-orders" />
-        <SmartMetricCard icon={Wrench} label="Jobs In Progress" value={data.stats.inProgressJobs} tone="blue" to="/admin/work-orders" />
-        <SmartMetricCard icon={CheckCircle2} label="Completed Today" value={completedToday} tone="green" to="/admin/work-orders" />
-        <SmartMetricCard icon={CreditCard} label="Pending Payments" value={pendingPaymentInvoices.length || data.stats.pendingPayments} tone="yellow" to="/admin/reports/finance" />
-        <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={(data.lowStockAlerts?.length || 0) + Number(data.stats.lowStockCritical || 0)} tone="red" to="/admin/reports/inventory" />
-        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={data.stats.activeAmcContracts || 0} tone="green" to="/admin/reports/amc" />
-        <SmartMetricCard icon={Bell} label="AMC Renewals Due" value={amcRenewalsDue} tone="yellow" to="/admin/reports/amc" />
-        <SmartMetricCard icon={CalendarClock} label="AMC Visits This Week" value={data.stats.amcVisitsThisWeek || 0} tone="blue" to="/admin/reports/amc" />
-        <SmartMetricCard icon={AlertTriangle} label="Expired Contracts" value={data.stats.expiredAmcContracts || 0} tone="red" to="/admin/reports/amc" />
-        <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={currency(monthlyRevenue)} tone="green" to="/admin/reports/finance" />
+      <div className="dashboard-kpi-grid">
+        <SmartMetricCard icon={CalendarClock} label="Today's Bookings" value={data.stats.todayBookings} helper="New intake today" tone="blue" to="/admin/bookings" />
+        <SmartMetricCard icon={ClipboardList} label="Pending Service Jobs" value={data.stats.pendingJobs} helper={`${data.stats.unassignedJobs || 0} unassigned`} tone="yellow" to="/admin/work-orders" />
+        <SmartMetricCard icon={Wrench} label="Jobs In Progress" value={data.stats.inProgressJobs} helper={`${data.stats.awaitingPartsJobs || 0} awaiting parts`} tone="blue" to="/admin/work-orders" />
+        <SmartMetricCard icon={CheckCircle2} label="Completed Today" value={completedToday} helper={`${data.stats.completedJobs || 0} completed total`} tone="green" to="/admin/work-orders" />
+        <SmartMetricCard icon={CreditCard} label="Pending Payments" value={pendingPaymentInvoices.length || data.stats.pendingPayments} helper={`${data.stats.paymentsOverdue || 0} overdue`} tone="yellow" glow to="/admin/payments" />
+        <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={(data.lowStockAlerts?.length || 0) + Number(data.stats.lowStockCritical || 0)} helper={`${data.stats.lowStockCritical || 0} out of stock`} tone="red" glow to="/admin/parts" />
+        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={data.stats.activeAmcContracts || 0} helper={`${amcRenewalsDue} renewals due, ${data.stats.amcVisitsThisWeek || 0} visits this week`} tone="green" to="/admin/amc-contracts" />
+        <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={currency(monthlyRevenue)} helper="Collected this month" tone="green" to="/admin/reports/finance" />
       </div>
-      <div className="mt-6 grid gap-5 xl:grid-cols-[.9fr_1.1fr]">
+      <div className="dashboard-priority-block">
         <PriorityAlerts alerts={alerts} />
-        <div className="grid gap-5 lg:grid-cols-2">
-          <DashboardChart title="Bookings Last 7 Days">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid stroke="rgba(117,196,255,0.12)" vertical={false} />
-                <XAxis dataKey="label" stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis allowDecimals={false} stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={{ background: '#071426', border: '1px solid rgba(117,196,255,0.25)', borderRadius: 8 }} />
-                <Line type="monotone" dataKey="bookings" stroke="#75c4ff" strokeWidth={3} dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </DashboardChart>
-          <DashboardChart title="Revenue Last 7 Days">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid stroke="rgba(117,196,255,0.12)" vertical={false} />
-                <XAxis dataKey="label" stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `Rs.${value}`} />
-                <Tooltip formatter={(value) => currency(value)} contentStyle={{ background: '#071426', border: '1px solid rgba(117,196,255,0.25)', borderRadius: 8 }} />
-                <Bar dataKey="revenue" fill="#22c55e" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </DashboardChart>
-        </div>
       </div>
-      <div className="mt-6 grid gap-5 xl:grid-cols-3">
-        <div className="surface lift-card p-5">
-          <h2 className="text-xl font-black">Recent Bookings</h2>
-          <div className="mt-4 grid gap-3">
-            {data.recentBookings?.length ? data.recentBookings.map((booking) => (
-              <div key={booking.id} className="flex items-center justify-between gap-3 rounded-card bg-[var(--surface-2)] p-3">
-                <div className="min-w-0">
-                  {booking.customerId ? (
-                    <Link className="truncate font-bold text-sky-100 hover:text-[var(--brand)]" to={`/admin/customers/${recordId(booking.customerId)}`}>{booking.customerName}</Link>
-                  ) : <p className="truncate font-bold">{booking.customerName}</p>}
-                  <p className="truncate text-sm muted">{booking.bookingCode} - {booking.device}</p>
+      <div className="dashboard-main-grid">
+        <DashboardPanel title="Recent Bookings" icon={CalendarClock} action={<Link className="dashboard-card-action" to="/admin/bookings">View All</Link>} className="dashboard-list-card">
+          <div className="grid gap-3">
+            {data.recentBookings?.length ? data.recentBookings.slice(0, 6).map((booking) => {
+              const source = booking.source || booking.bookingSource || booking.channel || 'Walk-in';
+              return (
+                <div key={booking.id} className="dashboard-row-card">
+                  <div className="min-w-0">
+                    {booking.customerId ? (
+                      <Link className="truncate font-black text-sky-100 hover:text-[var(--brand)]" to={`/admin/customers/${recordId(booking.customerId)}`}>{booking.customerName}</Link>
+                    ) : <p className="truncate font-black">{booking.customerName}</p>}
+                    <p className="mt-1 truncate text-sm muted">{booking.bookingCode || booking.id} - {booking.serviceType || booking.device}</p>
+                    <p className="mt-0.5 truncate text-xs muted">{booking.device} - {formatDate(booking.createdAt || booking.updatedAt)}</p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <BookingSourceBadge source={source} />
+                    {booking.status ? <StatusBadge status={booking.status} /> : null}
+                  </div>
                 </div>
-                <StatusBadge status={booking.status} />
-              </div>
-            )) : <p className="text-sm muted">No new bookings today.</p>}
+              );
+            }) : <DashboardEmpty title="No new bookings" message="Fresh bookings will appear here as they arrive." />}
           </div>
-        </div>
-        <div className="surface lift-card p-5">
-          <h2 className="text-xl font-black">Repair & Service Queue</h2>
-          <div className="mt-4 grid gap-3">
+        </DashboardPanel>
+        <DashboardPanel title="Repair & Service Queue" icon={Wrench} action={<Link className="dashboard-card-action" to="/admin/work-orders">View All</Link>} className="dashboard-list-card">
+          <div className="grid gap-3">
             {activeWorkOrders.length ? activeWorkOrders.map((order) => (
-              <Link key={order.id} to={`/admin/work-orders/${order.id}`} className="alert-link flex items-center justify-between gap-3 rounded-card bg-[var(--surface-2)] p-3">
+              <Link key={order.id} to={`/admin/work-orders/${order.id}`} className="dashboard-row-card alert-link">
                 <div className="min-w-0">
-                  <p className="truncate font-bold">{order.customerId?.name || 'Customer'}</p>
-                  <p className="truncate text-sm muted">{order.device} - {order.technicianId?.name || 'Unassigned'}</p>
+                  <p className="truncate font-black">{order.customerId?.name || order.customerName || 'Customer'}</p>
+                  <p className="mt-1 truncate text-sm muted">{order.serviceType || 'Service'} - {order.device}</p>
+                  <p className="mt-0.5 truncate text-xs muted">{order.technicianId?.name || 'Unassigned'}</p>
                 </div>
-                <StatusBadge status={order.status} />
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <StatusBadge status={order.status} />
+                  {order.priority ? <span className="dashboard-soft-badge">{order.priority}</span> : null}
+                </div>
               </Link>
-            )) : <p className="text-sm muted">No active service jobs.</p>}
+            )) : <DashboardEmpty title="No active service jobs" message="The repair queue is clear." />}
           </div>
-        </div>
-        <div className="surface lift-card p-5">
-          <h2 className="text-xl font-black">Pending Payments</h2>
-          <div className="mt-4 grid gap-3">
+        </DashboardPanel>
+        <DashboardPanel title="Pending Payments" icon={CreditCard} action={<Link className="dashboard-card-action" to="/admin/payments">View All</Link>} className="dashboard-list-card">
+          <div className="grid gap-3">
             {pendingPaymentInvoices.length ? pendingPaymentInvoices.slice(0, 6).map((invoice) => (
-              <Link key={invoice.id} to={`/admin/payments?invoiceId=${invoice.id || invoice._id}`} className="alert-link flex items-center justify-between gap-3 rounded-card bg-[var(--surface-2)] p-3">
+              <Link key={invoice.id || invoice._id} to={`/admin/payments?invoiceId=${invoice.id || invoice._id}`} className="dashboard-row-card alert-link">
                 <div className="min-w-0">
-                  <p className="truncate font-bold">{invoice.invoiceNumber}</p>
-                  <p className="truncate text-sm muted">{invoice.customerId?.name || 'Customer'}</p>
+                  <p className="truncate font-black">{invoice.invoiceNumber}</p>
+                  <p className="mt-1 truncate text-sm muted">{invoice.customerId?.name || invoice.customerName || 'Customer'}</p>
                 </div>
-                <span className="font-black text-amber-100">{currency(invoiceDueAmount(invoice))}</span>
-              </Link>
-            )) : <p className="text-sm muted">No pending payments.</p>}
-          </div>
-        </div>
-        <div className="surface lift-card p-5">
-          <h2 className="text-xl font-black">Low Stock Alerts</h2>
-          <div className="mt-4 grid gap-3">
-            {data.lowStockAlerts?.length ? data.lowStockAlerts.map((part) => (
-              <Link key={part.id} to="/admin/parts" className="alert-link flex items-center justify-between rounded-card bg-[var(--surface-2)] p-3">
-                <div>
-                  <p className="font-bold">{part.partName}</p>
-                  <p className="text-sm muted">{part.category}</p>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <span className="text-lg font-black text-amber-100">{currency(invoiceDueAmount(invoice))}</span>
+                  <StatusBadge status={invoice.status || 'Pending'} />
                 </div>
-                <span className="status-badge">{part.available} available</span>
               </Link>
-            )) : <p className="text-sm muted">Inventory healthy</p>}
+            )) : <DashboardEmpty title="No pending payments" message="All balances are currently clear." />}
           </div>
-        </div>
-        <NotificationsPanel notifications={data.notifications || []} />
-        <RemindersPanel reminders={data.reminders || []} />
+        </DashboardPanel>
         <TechnicianWorkloadBars technicians={data.technicianWorkload || []} />
+        <ActivityFeedPanel notifications={data.notifications || []} reminders={data.reminders || []} />
+        <RevenueOverviewCard chartData={chartData} monthlyRevenue={monthlyRevenue} />
       </div>
-    </>
+    </div>
   );
 
-  return (
-    <>
-      <PageHeader title="Admin Dashboard" eyebrow="Phase 2 Core">
-        Today bookings, job load, payments, stock alerts, and notifications.
-      </PageHeader>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <StatCard icon={AlertTriangle} label="Jobs Overdue" value={data.stats.jobsOverdue} tone="yellow" />
-        <StatCard icon={CalendarClock} label="Today Bookings" value={data.stats.todayBookings} />
-        <StatCard icon={PhoneCallIcon} label="High Priority Calls" value={data.stats.highPriorityCalls} tone="yellow" />
-        <StatCard icon={Users} label="Unassigned Jobs" value={data.stats.unassignedJobs} tone="yellow" />
-        <StatCard icon={PackagePlus} label="Jobs Awaiting Parts" value={data.stats.awaitingPartsJobs} tone="yellow" />
-        <StatCard icon={Wrench} label="Jobs In Progress" value={data.stats.inProgressJobs} />
-        <StatCard icon={CreditCard} label="Pending Payments" value={data.stats.pendingPayments} tone="yellow" />
-        <StatCard icon={CreditCard} label="Payments Overdue" value={data.stats.paymentsOverdue} tone="yellow" />
-        <StatCard icon={AlertTriangle} label="Low Stock Alerts" value={data.lowStockAlerts?.length || 0} tone="yellow" />
-        <StatCard icon={AlertTriangle} label="Low Stock Critical" value={data.stats.lowStockCritical} tone="yellow" />
-      </div>
+}
+
+/*
       <div className="mt-6 grid gap-5 xl:grid-cols-3">
         <div className="surface p-5">
           <h2 className="text-xl font-black">Recent Bookings</h2>
@@ -1528,6 +1570,36 @@ export function AdminDashboard() {
             )) : <p className="text-sm muted">No technicians.</p>}
           </div>
         </div>
+      </div>
+    </>
+  );
+*/
+
+export function TechnicianPanelPage() {
+  const panelLinks = [
+    { to: '/admin/technician-tasks', label: 'Technician Tasks', icon: UserRound, text: 'Open the existing technician task view.' },
+    { to: '/admin/work-orders', label: 'Assigned Work Orders', icon: BookOpenCheck, text: 'Review assigned service and repair jobs.' },
+    { to: '/admin/work-orders?status=Completed', label: 'Completed Jobs', icon: CheckCircle2, text: 'Check jobs that have reached completion.' }
+  ];
+
+  return (
+    <>
+      <PageHeader title="Technician Panel" eyebrow="Operations">
+        Technician-related navigation is grouped here while the main Admin sidebar stays focused.
+      </PageHeader>
+      <div className="grid gap-4 md:grid-cols-3">
+        {panelLinks.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link key={item.label} to={item.to} className="surface lift-card block p-5">
+              <span className="grid h-11 w-11 place-items-center rounded-card bg-sky-400/15 text-sky-100">
+                <Icon className="h-5 w-5" />
+              </span>
+              <h2 className="mt-4 text-xl font-black">{item.label}</h2>
+              <p className="mt-2 text-sm leading-6 muted">{item.text}</p>
+            </Link>
+          );
+        })}
       </div>
     </>
   );
@@ -1624,6 +1696,15 @@ export function AMCContractsPage() {
         Manage service contracts, covered assets, renewal status, visits, and AMC-linked repair jobs.
       </PageHeader>
 
+      <div className="surface mb-5 p-3">
+        <div className="tabs-list">
+          <Link className="tab-button tab-button-active" to="/admin/amc-contracts">Contracts</Link>
+          <Link className="tab-button" to="/admin/amc-schedule">Schedule</Link>
+          <Link className="tab-button" to="/admin/amc-renewals">Renewals</Link>
+          <Link className="tab-button" to="/admin/warranties">Warranties</Link>
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={FileText} label="Active AMC Contracts" value={summary.activeContracts || 0} tone="green" />
         <StatCard icon={AlertTriangle} label="Renewals Due" value={summary.renewalDue || 0} tone="yellow" />
@@ -1710,22 +1791,24 @@ export function AMCContractsPage() {
           <EmptyState title="No AMC contracts yet" message="Create the first AMC contract to track visits and renewal reminders." action={<button className="btn btn-primary" onClick={() => setFormOpen(true)}>Create AMC Contract</button>} />
         ) : (
           <Table>
-            <thead><tr><th>Contract ID</th><th>Customer</th><th>Phone</th><th>Contract Type</th><th>Covered Service</th><th>Start</th><th>End</th><th>Renewal</th><th>Value</th><th>Status</th><th>Action</th></tr></thead>
+            <thead><tr><th>Contract ID</th><th>Customer</th><th>Plan / Coverage</th><th>Period</th><th>Value</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
               {visibleContracts.map((contract) => (
                 <tr key={recordId(contract)}>
                   <td className="font-bold">{contract.contractId}</td>
-                  <td>{contract.customerName}</td>
-                  <td>{contract.phone}</td>
-                  <td>{contract.contractType}</td>
-                  <td>{contract.coveredService}</td>
-                  <td>{formatDate(contract.startDate)}</td>
-                  <td>{formatDate(contract.endDate)}</td>
-                  <td><AmcStatusBadge status={contract.renewalStatus} /></td>
+                  <td>
+                    <span className="block font-semibold text-slate-100">{contract.customerName || '-'}</span>
+                    <span className="mt-1 block text-xs muted">Phone: {contract.phone || '-'}</span>
+                  </td>
+                  <td>
+                    <span className="block font-semibold text-slate-100">{contract.contractType || '-'}</span>
+                    <span className="mt-1 block text-xs muted">{contract.coveredService || '-'}</span>
+                  </td>
+                  <td className="whitespace-nowrap">{formatDate(contract.startDate)} to {formatDate(contract.endDate)}</td>
                   <td>{currency(contract.contractValue)}</td>
                   <td><AmcStatusBadge status={contract.status} /></td>
                   <td>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 sm:flex-nowrap">
                       <Link className="btn btn-secondary py-2" to="/admin/amc-schedule">Schedule</Link>
                       <button className="btn btn-primary py-2" onClick={() => createJob(contract)}>Create Job</button>
                     </div>
@@ -1775,6 +1858,14 @@ export function AMCSchedulePage() {
       >
         Track upcoming, due today, overdue, and completed AMC service visits.
       </PageHeader>
+      <div className="surface mb-5 p-3">
+        <div className="tabs-list">
+          <Link className="tab-button" to="/admin/amc-contracts">Contracts</Link>
+          <Link className="tab-button tab-button-active" to="/admin/amc-schedule">Schedule</Link>
+          <Link className="tab-button" to="/admin/amc-renewals">Renewals</Link>
+          <Link className="tab-button" to="/admin/warranties">Warranties</Link>
+        </div>
+      </div>
       <div className="surface p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <select className="input max-w-xs" value={status} onChange={(event) => setStatus(event.target.value)}>
@@ -1849,6 +1940,14 @@ export function AMCRenewalsPage() {
       >
         Review contracts expiring in 30 days and expired AMC agreements.
       </PageHeader>
+      <div className="surface mb-5 p-3">
+        <div className="tabs-list">
+          <Link className="tab-button" to="/admin/amc-contracts">Contracts</Link>
+          <Link className="tab-button" to="/admin/amc-schedule">Schedule</Link>
+          <Link className="tab-button tab-button-active" to="/admin/amc-renewals">Renewals</Link>
+          <Link className="tab-button" to="/admin/warranties">Warranties</Link>
+        </div>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <StatCard icon={AlertTriangle} label="Expiring in 30 Days" value={expiring.length} tone="yellow" />
         <StatCard icon={AlertTriangle} label="Expired Contracts" value={expired.length} tone="red" />
@@ -1893,6 +1992,7 @@ export function BookingsPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [serviceType, setServiceType] = useState('');
+  const [source, setSource] = useState('');
   const { data, loading, error, reload } = useResource(() => request('/bookings'), [request]);
 
   useEffect(() => {
@@ -1925,7 +2025,8 @@ export function BookingsPage() {
     ].filter(Boolean).join(' ').toLowerCase().includes(term);
     const matchesStatus = !status || booking.status === status;
     const matchesService = !serviceType || `${booking.device || ''} ${booking.issue || ''}`.toLowerCase().includes(serviceType.toLowerCase());
-    return matchesSearch && matchesStatus && matchesService;
+    const matchesSource = !source || bookingSourceValue(booking) === source;
+    return matchesSearch && matchesStatus && matchesService && matchesSource;
   });
 
   return (
@@ -1933,7 +2034,7 @@ export function BookingsPage() {
       <PageHeader title="Bookings" eyebrow="Admin" action={<button type="button" className="btn btn-primary" onClick={() => setFormOpen(true)}><Plus className="h-4 w-4" />Create Booking</button>}>
         Booking intake is kept separate from repair and service jobs. Convert a booking when service work begins.
       </PageHeader>
-      <div className="surface mb-5 grid gap-3 p-4 lg:grid-cols-[1fr_180px_220px]">
+      <div className="surface mb-5 grid gap-3 p-4 lg:grid-cols-[1fr_180px_220px_180px]">
         <SearchBox value={search} onChange={setSearch} placeholder="Search booking, customer, phone, device, issue" />
         <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">All statuses</option>
@@ -1944,25 +2045,51 @@ export function BookingsPage() {
           <option value="">All service types</option>
           {serviceTypes.map((item) => <option key={item}>{item}</option>)}
         </select>
+        <select className="input" value={source} onChange={(event) => setSource(event.target.value)}>
+          <option value="">All sources</option>
+          {bookingSources.map((item) => <option key={item}>{item}</option>)}
+        </select>
       </div>
       {!bookings.length ? <EmptyState title="No bookings found" message="Try changing the search or filters, or create the first booking." action={<button type="button" className="btn btn-primary" onClick={() => setFormOpen(true)}><Plus className="h-4 w-4" />Create Booking</button>} /> : (
-        <Table>
+        <div className="table-wrap bookings-table-wrap bg-[var(--surface)]">
+          <table className="data-table bookings-table">
+            <colgroup>
+              <col className="booking-col-booking" />
+              <col className="booking-col-customer" />
+              <col className="booking-col-source booking-source-column" />
+              <col className="booking-col-device" />
+              <col className="booking-col-issue" />
+              <col className="booking-col-action" />
+            </colgroup>
           <thead>
-            <tr><th>Booking</th><th>Customer</th><th>Device / Service</th><th>Issue</th><th>Status</th><th>Convert / Open</th></tr>
+            <tr><th>Booking</th><th>Customer</th><th className="booking-source-column">Source</th><th>Device / Service</th><th>Issue</th><th>Convert / Open</th></tr>
           </thead>
           <tbody className="divide-y divide-[var(--line)]">
             {bookings.map((booking) => (
               <tr key={booking.id}>
-                <td className="font-bold">{booking.bookingCode}<span className="block text-xs font-normal muted">{formatDate(booking.createdAt)}</span></td>
-                <td>{booking.customerName}<span className="block text-xs muted">{booking.phone}</span></td>
-                <td>{booking.device || 'General Service'}</td>
-                <td className="max-w-xs truncate">{booking.issue}</td>
-                <td><StatusBadge status={booking.status} /></td>
+                <td>
+                  <span className="block font-bold text-slate-100">{booking.bookingCode}</span>
+                  <span className="mt-1 block text-xs font-normal muted">{formatDate(booking.createdAt)}</span>
+                </td>
+                <td>
+                  <span className="block font-semibold text-slate-100">{booking.customerName || 'Customer'}</span>
+                  <span className="mt-1 block text-xs muted">Phone: {booking.phone || '-'}</span>
+                  <span className="booking-source-inline mt-2"><BookingSourceBadge source={bookingSourceValue(booking)} /></span>
+                </td>
+                <td className="booking-source-column">
+                  <BookingSourceBadge source={bookingSourceValue(booking)} />
+                </td>
+                <td>
+                  <span className="booking-line-clamp font-semibold text-slate-100">{booking.device || booking.serviceType || 'General Service'}</span>
+                  {booking.serviceType && booking.serviceType !== booking.device ? <span className="mt-1 block truncate text-xs muted">{booking.serviceType}</span> : null}
+                </td>
+                <td><span className="booking-line-clamp">{booking.issue || 'No issue captured'}</span></td>
                 <td><ConvertBooking booking={booking} technicians={technicians} onConvert={convert} /></td>
               </tr>
             ))}
           </tbody>
-        </Table>
+          </table>
+        </div>
       )}
       {formOpen ? <BookingModal onClose={() => setFormOpen(false)} onSaved={reload} /> : null}
     </>
@@ -1972,15 +2099,23 @@ export function BookingsPage() {
 function ConvertBooking({ booking, technicians, onConvert }) {
   const [technicianId, setTechnicianId] = useState(booking.technicianId?.id || '');
   if (booking.status === 'Converted') {
-    return booking.workOrderId ? <Link className="btn btn-secondary py-2" to={`/admin/work-orders/${booking.workOrderId.id || booking.workOrderId}`}>Open Service Job</Link> : 'Converted';
+    return (
+      <div className="booking-action-cell">
+        {booking.workOrderId ? (
+          <Link className="btn btn-secondary booking-action-button" to={`/admin/work-orders/${booking.workOrderId.id || booking.workOrderId}`}>Open Service Job</Link>
+        ) : (
+          <span className="status-badge booking-action-button justify-center">Converted</span>
+        )}
+      </div>
+    );
   }
   return (
-    <div className="flex min-w-64 gap-2">
-      <select className="input py-2" value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}>
+    <div className="booking-convert-controls">
+      <select className="input booking-technician-select" value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}>
         <option value="">Unassigned</option>
         {technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}
       </select>
-      <button type="button" className="btn btn-primary py-2" onClick={() => onConvert(booking.id, technicianId)}>Convert</button>
+      <button type="button" className="btn btn-primary booking-action-button" onClick={() => onConvert(booking.id, technicianId)}>Convert</button>
     </div>
   );
 }
@@ -1988,7 +2123,7 @@ function ConvertBooking({ booking, technicians, onConvert }) {
 function BookingModal({ onClose, onSaved }) {
   const { request } = useAuth();
   const { push } = useToast();
-  const [form, setForm] = useState({ customerName: '', phone: '', address: '', serviceType: serviceTypes[0] || 'PC / Laptop Service', device: 'Laptop', bookingSource: 'Walk-in', issue: '' });
+  const [form, setForm] = useState({ customerName: '', phone: '', address: '', serviceType: serviceTypes[0] || 'PC / Laptop Service', device: 'Laptop', bookingSource: 'Walk-in Shop', issue: '' });
   const [saving, setSaving] = useState(false);
   const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -2053,12 +2188,15 @@ function BookingModal({ onClose, onSaved }) {
 export function WorkOrdersPage({ role = 'admin' }) {
   const { request } = useAuth();
   const { push } = useToast();
+  const location = useLocation();
+  const statusParam = useMemo(() => new URLSearchParams(location.search).get('status') || '', [location.search]);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(statusParam);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [technicianId, setTechnicianId] = useState('');
   const [serviceType, setServiceType] = useState('');
+  const [source, setSource] = useState('');
   const [techFilter, setTechFilter] = useState('Today');
   const [technicians, setTechnicians] = useState([]);
   const query = useMemo(() => {
@@ -2071,6 +2209,10 @@ export function WorkOrdersPage({ role = 'admin' }) {
   }, [role, status, dateFrom, dateTo, technicianId]);
   const { data, loading, error, reload } = useResource(() => request(`/work-orders${query}`), [request, query]);
   const base = role === 'admin' ? '/admin/work-orders' : '/tech/work-orders';
+
+  useEffect(() => {
+    if (role === 'admin') setStatus(statusParam);
+  }, [role, statusParam]);
 
   useEffect(() => {
     if (role === 'admin') request('/users').then((result) => setTechnicians(result.users.filter((user) => user.role === 'technician' && user.active))).catch(() => {});
@@ -2107,6 +2249,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
     const searchText = search.trim().toLowerCase();
     const searchable = `${order.customerId?.name || ''} ${order.customerId?.phone || ''} ${order.serviceType || ''} ${order.service || ''} ${order.device || ''} ${order.issue || ''}`.toLowerCase();
     if (searchText && !searchable.includes(searchText)) return false;
+    if (source && bookingSourceValue(order) !== source) return false;
     if (!serviceType) return true;
     return `${order.serviceType || ''} ${order.service || ''} ${order.device || ''} ${order.issue || ''}`.toLowerCase().includes(serviceType.toLowerCase());
   });
@@ -2129,7 +2272,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
       <PageHeader title={role === 'admin' ? 'Repair & Service Jobs' : 'My Repair & Service Jobs'} eyebrow={role === 'admin' ? 'Operations' : 'Technician'}>
         Track active service jobs, repairs, installations, parts, billing, and completion.
       </PageHeader>
-      <div className="surface mb-5 grid gap-3 p-4 xl:grid-cols-[1fr_170px_170px_160px_160px_190px]">
+      <div className="surface mb-5 grid gap-3 p-4 xl:grid-cols-[1fr_160px_170px_160px_150px_150px_180px]">
         <SearchBox value={search} onChange={setSearch} placeholder="Search customer, phone, device, service, issue" />
         <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">All statuses</option>
@@ -2138,6 +2281,10 @@ export function WorkOrdersPage({ role = 'admin' }) {
         <select className="input" value={serviceType} onChange={(event) => setServiceType(event.target.value)}>
           <option value="">All service types</option>
           {serviceTypes.map((item) => <option key={item}>{item}</option>)}
+        </select>
+        <select className="input" value={source} onChange={(event) => setSource(event.target.value)}>
+          <option value="">All sources</option>
+          {bookingSources.map((item) => <option key={item}>{item}</option>)}
         </select>
         <input className="input" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
@@ -2150,11 +2297,12 @@ export function WorkOrdersPage({ role = 'admin' }) {
       </div>
       {!workOrders.length ? <EmptyState title="No repair/service jobs found" message="No jobs match the current search or filters." /> : (
         <Table>
-          <thead><tr><th>Customer</th><th>Service / Device</th><th>Technician</th><th>Status</th><th>Invoice / Payment</th><th>Created</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Customer</th><th className="booking-source-column">Source</th><th>Service / Device</th><th>Technician</th><th>Status</th><th>Invoice / Payment</th><th>Created</th><th>Actions</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
             {workOrders.map((order) => (
               <tr key={order.id}>
-                <td className="font-bold">{role === 'admin' && order.customerId ? <Link className="text-sky-100 hover:text-[var(--brand)]" to={`/admin/customers/${recordId(order.customerId)}`}>{order.customerId?.name}</Link> : order.customerId?.name}<span className="block text-xs muted">{order.customerId?.phone}</span></td>
+                <td className="font-bold">{role === 'admin' && order.customerId ? <Link className="text-sky-100 hover:text-[var(--brand)]" to={`/admin/customers/${recordId(order.customerId)}`}>{order.customerId?.name}</Link> : order.customerId?.name}<span className="block text-xs muted">{order.customerId?.phone}</span><span className="booking-source-inline mt-2"><BookingSourceBadge source={bookingSourceValue(order)} /></span></td>
+                <td className="booking-source-column"><BookingSourceBadge source={bookingSourceValue(order)} /></td>
                 <td><span className="font-semibold">{order.serviceType || order.service || 'Service Job'}</span><span className="block text-xs muted">{order.device || '-'}</span><span className="block max-w-xs truncate text-xs muted">{order.issue}</span></td>
                 <td>{order.technicianId?.name || 'Unassigned'}</td>
                 <td><StatusBadge status={order.status} /></td>
@@ -2584,7 +2732,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                   ['Service', order.serviceType || order.service || '-'],
                   ['Device', order.device || '-'],
                   ['Problem / Issue', order.issue || '-'],
-                  ['Booking Source', order.bookingSource || order.bookingId?.bookingSource || '-'],
+                  ['Booking Source', bookingSourceValue(order)],
                   ['Status', <StatusBadge status={order.status} />],
                   ['Completed Date', order.completedAt ? formatDate(order.completedAt) : 'Not completed']
                 ].map(([label, value]) => (
@@ -2856,7 +3004,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             ['Status', <StatusBadge status={order.status} />],
             ['Created Date', formatDate(order.createdAt)],
             ['Completed Date', order.completedAt ? formatDate(order.completedAt) : 'Not completed'],
-            ['Booking Source', order.bookingSource || order.bookingId?.bookingSource || order.bookingId?.source || 'Not captured']
+            ['Booking Source', bookingSourceValue(order)]
           ].map(([label, value]) => (
             <div key={label} className="rounded-card bg-[var(--surface-2)] p-3">
               <p className="label">{label}</p>
@@ -3646,14 +3794,19 @@ export function PaymentsPage() {
     map.set(id, [...(map.get(id) || []), payment]);
     return map;
   }, new Map());
-  function paymentMethodSummary(invoice) {
-    const payments = paymentSummaryByInvoice.get(invoice?.id || invoice?._id) || [];
+  function paymentMethodDisplay(payment) {
+    const invoice = payment?.invoiceId;
+    const invoiceId = invoice?.id || invoice?._id || invoice;
+    const payments = paymentSummaryByInvoice.get(invoiceId) || (payment ? [payment] : []);
     if (!payments.length) return '-';
     const byMethod = payments.reduce((summary, payment) => {
-      summary[payment.method] = Number(summary[payment.method] || 0) + Number(payment.paidAmount || 0);
+      const method = payment.method || 'Other';
+      summary[method] = Number(summary[method] || 0) + Number(payment.paidAmount || 0);
       return summary;
     }, {});
-    return Object.entries(byMethod).map(([method, amount]) => `${method} ${currency(amount)}`).join(' + ');
+    const entries = Object.entries(byMethod);
+    if (entries.length <= 1) return payment?.method || entries[0]?.[0] || '-';
+    return entries.map(([method, amount]) => `${method} ${currency(amount)}`).join(' + ');
   }
   const paymentTotals = {
     totalCollected: (data.payments || []).reduce((sum, payment) => sum + Number(payment.paidAmount || 0), 0),
@@ -3729,7 +3882,7 @@ export function PaymentsPage() {
         <Table>
           <thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th>Amount Paid</th><th>Method</th><th>Balance After</th><th>Status</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
-            {data.payments.map((payment) => <tr key={payment.id}><td>{formatDate(payment.createdAt)}</td><td className="font-bold"><Link className="text-sky-100 hover:text-[var(--brand)]" to="/admin/invoices">{payment.invoiceId?.invoiceNumber}</Link></td><td>{payment.customerId?.name}</td><td className="font-bold text-emerald-100">{currency(payment.paidAmount)}</td><td>{paymentMethodSummary(payment.invoiceId)}</td><td className={Number(payment.balance || 0) > 0 ? 'font-bold text-amber-100' : 'text-emerald-100'}>{currency(payment.balance)}</td><td><StatusBadge status={payment.status} /></td></tr>)}
+            {data.payments.map((payment) => <tr key={payment.id}><td>{formatDate(payment.createdAt)}</td><td className="font-bold"><Link className="text-sky-100 hover:text-[var(--brand)]" to="/admin/invoices">{payment.invoiceId?.invoiceNumber}</Link></td><td>{payment.customerId?.name}</td><td className="font-bold text-emerald-100">{currency(payment.paidAmount)}</td><td>{paymentMethodDisplay(payment)}</td><td className={Number(payment.balance || 0) > 0 ? 'font-bold text-amber-100' : 'text-emerald-100'}>{currency(payment.balance)}</td><td><StatusBadge status={payment.status} /></td></tr>)}
           </tbody>
         </Table>
       )}
@@ -3919,6 +4072,12 @@ export function InventoryPage() {
       >
         Track parts, products, stock availability, reserved quantity, low stock, and stock value.
       </PageHeader>
+      <div className="surface mb-5 p-3">
+        <div className="tabs-list">
+          <Link className="tab-button tab-button-active" to="/admin/parts">Products / Parts</Link>
+          <Link className="tab-button" to="/admin/stock-movements">Stock Movements</Link>
+        </div>
+      </div>
       <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <StatCard icon={PackagePlus} label="Total Parts" value={totals.totalParts} />
         <StatCard icon={Boxes} label="Total Units" value={totals.totalUnits} />
@@ -3948,36 +4107,58 @@ export function InventoryPage() {
       {!filteredParts.length ? <EmptyState title="No inventory items found" message="Try changing the search or filters." /> : (
         <>
         <p className="mb-3 text-xs font-semibold muted">Available = On Hand - Reserved. Reserved means stock assigned to active service jobs but not yet billed.</p>
-        <Table>
-          <thead><tr><th>Part / Product Name</th><th>Category</th><th>Selling Price</th><th>Cost Price</th><th>On Hand</th><th>Reserved</th><th>Available</th><th>Low Stock Limit</th><th>Stock Value</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody className="divide-y divide-[var(--line)]">
-            {filteredParts.map((part) => {
-              const stockValue = Number(part.onHand || 0) * Number(part.costPrice || part.sellingPrice || 0);
-              return (
-                <tr key={part.id}>
-                  <td className="font-bold">{part.partName}<span className="block text-xs font-normal muted">{part.brand || part.sku || 'Product / part'}</span></td>
-                  <td>{part.category || 'General'}</td>
-                  <td>{currency(part.sellingPrice)}</td>
-                  <td>{currency(part.costPrice)}</td>
-                  <td>{part.onHand}</td>
-                  <td><span className="inline-flex rounded-full bg-sky-400/15 px-2.5 py-1 text-xs font-bold text-sky-100">{part.reserved || 0}</span></td>
-                  <td className="font-black">{part.available}</td>
-                  <td>{part.lowStockLimit}</td>
-                  <td className="font-bold">{currency(stockValue)}</td>
-                  <td><InventoryStatusBadge part={part} /></td>
-                  <td>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className="btn btn-secondary py-2" onClick={() => setEditor(part)}>Edit</button>
-                      <button type="button" className="btn btn-primary py-2" onClick={() => setQuickStockPart(part)}><PackagePlus className="h-4 w-4" />Add Stock</button>
-                      <Link className="btn btn-secondary py-2" to={`/admin/stock-movements?partId=${part.id}`}>View Movements</Link>
-                      <button type="button" className="icon-button h-10 w-10 text-rose-100" onClick={() => setDeletePart(part)} aria-label={`Delete ${part.partName}`}><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </Table>
+        <div className="table-wrap inventory-products-table-wrap bg-[var(--surface)]">
+          <table className="data-table inventory-products-table">
+            <colgroup>
+              <col className="inventory-col-part" />
+              <col className="inventory-col-category" />
+              <col className="inventory-col-stock" />
+              <col className="inventory-col-pricing" />
+              <col className="inventory-col-low" />
+              <col className="inventory-col-status" />
+              <col className="inventory-col-actions" />
+            </colgroup>
+            <thead><tr><th>Part / Product</th><th>Category</th><th>Stock</th><th>Pricing</th><th>Low Stock Limit</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody className="divide-y divide-[var(--line)]">
+              {filteredParts.map((part) => {
+                const stockValue = Number(part.onHand || 0) * Number(part.costPrice || part.sellingPrice || 0);
+                return (
+                  <tr key={part.id}>
+                    <td className="font-bold">
+                      {part.partName}
+                      <span className="block text-xs font-normal muted">{part.brand || part.sku || 'Product / part'}</span>
+                    </td>
+                    <td>{part.category || 'General'}</td>
+                    <td>
+                      <div className="inventory-cell-stack">
+                        <span>On hand: {part.onHand || 0}</span>
+                        <span>Reserved: {part.reserved || 0}</span>
+                        <span className="font-black text-sky-100">Available: {part.available || 0}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="inventory-cell-stack">
+                        <span>Selling: {currency(part.sellingPrice)}</span>
+                        <span>Cost: {currency(part.costPrice)}</span>
+                        <span className="font-black text-sky-100">Value: {currency(stockValue)}</span>
+                      </div>
+                    </td>
+                    <td className="text-center font-bold">{part.lowStockLimit}</td>
+                    <td><InventoryStatusBadge part={part} /></td>
+                    <td>
+                      <div className="inventory-actions">
+                        <button type="button" className="btn btn-secondary inventory-action-button" onClick={() => setEditor(part)}>Edit</button>
+                        <button type="button" className="btn btn-primary inventory-action-button" onClick={() => setQuickStockPart(part)}><PackagePlus className="h-4 w-4" />Add Stock</button>
+                        <Link className="btn btn-secondary inventory-action-button inventory-action-wide" to={`/admin/stock-movements?partId=${part.id}`}>View Movements</Link>
+                        <button type="button" className="icon-button inventory-delete-button text-rose-100" onClick={() => setDeletePart(part)} aria-label={`Delete ${part.partName}`}><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         </>
       )}
       {editor ? <InventoryPartModal part={editor} onClose={() => setEditor(null)} onSave={savePart} /> : null}
@@ -4191,6 +4372,12 @@ export function StockMovementsPage() {
       >
         Every stock add, use, return, transfer, and adjustment is tracked here.
       </PageHeader>
+      <div className="surface mb-5 p-3">
+        <div className="tabs-list">
+          <Link className="tab-button" to="/admin/parts">Products / Parts</Link>
+          <Link className="tab-button tab-button-active" to="/admin/stock-movements">Stock Movements</Link>
+        </div>
+      </div>
       <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard icon={PackagePlus} label="Added Today" value={movementTotals.addedToday} tone="green" />
         <StatCard icon={Wrench} label="Used Today" value={movementTotals.usedToday} />
@@ -4243,12 +4430,46 @@ export function StockMovementsPage() {
       </form>
       <p className="mb-3 text-xs font-semibold muted">Stock movements are recorded through the existing stock movement API and mirrored into audit logs.</p>
       {!filteredMovements.length ? <EmptyState title="No stock movement recorded yet" message="Stock movements will appear when parts are added, used, returned, or adjusted." /> : (
-        <Table>
-          <thead><tr><th>Date</th><th>Part</th><th>Movement Type</th><th>Quantity</th><th>Balance After</th><th>Source</th><th>Work Order / Invoice Link</th><th>Note</th><th>User</th></tr></thead>
+        <div className="table-wrap stock-movements-table-wrap bg-[var(--surface)]">
+          <table className="data-table stock-movements-table">
+            <colgroup>
+              <col className="stock-movement-col-date" />
+              <col className="stock-movement-col-part" />
+              <col className="stock-movement-col-movement" />
+              <col className="stock-movement-col-source" />
+              <col className="stock-movement-col-note" />
+              <col className="stock-movement-col-user" />
+            </colgroup>
+          <thead><tr><th>Date</th><th>Part</th><th>Movement</th><th>Source / Link</th><th>Note</th><th>User</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
-            {filteredMovements.map((movement) => <tr key={movement.id}><td>{formatDate(movement.createdAt)}</td><td className="font-bold">{movement.partId?.partName}</td><td><MovementTypeBadge type={movement.type} quantity={movement.quantity} /></td><td>{movement.quantity}</td><td>{movement.balanceAfter ?? '-'}</td><td>{movement.source}</td><td>{movement.sourceId ? <Link className="text-sky-100 hover:text-[var(--brand)]" to={`/admin/work-orders/${movement.sourceId}`}>Open Source</Link> : '-'}</td><td>{movement.note || '-'}</td><td>{movement.userId?.name || movement.userId?.username || '-'}</td></tr>)}
+            {filteredMovements.map((movement) => {
+              const sourceId = recordId(movement.sourceId) || movement.sourceId;
+              const sourceLabel = sourceId ? `WO-${String(sourceId).slice(-6).toUpperCase()}` : '-';
+              return (
+                <tr key={movement.id}>
+                  <td>{formatDate(movement.createdAt)}</td>
+                  <td className="font-bold">{movement.partId?.partName || '-'}</td>
+                  <td>
+                    <div className="stock-movement-stack">
+                      <MovementTypeBadge type={movement.type} quantity={movement.quantity} />
+                      <span>Qty: {movement.quantity}</span>
+                      <span className="font-bold text-sky-100">Balance: {movement.balanceAfter ?? '-'}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="stock-movement-stack">
+                      <span className="font-semibold text-slate-100">{movement.source || '-'}</span>
+                      {sourceId ? <Link className="text-sky-100 hover:text-[var(--brand)]" to={`/admin/work-orders/${sourceId}`}>{sourceLabel}</Link> : <span className="muted">-</span>}
+                    </div>
+                  </td>
+                  <td><span className="stock-movement-note" title={movement.note || '-'}>{movement.note || '-'}</span></td>
+                  <td>{movement.userId?.name || movement.userId?.username || '-'}</td>
+                </tr>
+              );
+            })}
           </tbody>
-        </Table>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -4753,6 +4974,7 @@ export function AuditLogsPage() {
   const [userSearch, setUserSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [selectedLog, setSelectedLog] = useState(null);
   const query = useMemo(() => {
     const params = new URLSearchParams();
     if (moduleName) params.set('module', moduleName);
@@ -4760,9 +4982,20 @@ export function AuditLogsPage() {
     return params.toString() ? `?${params}` : '';
   }, [moduleName, actionName]);
   const { data, loading, error } = useResource(() => request(`/audit-logs${query}`), [request, query]);
+
+  useEffect(() => {
+    if (!selectedLog) return undefined;
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') setSelectedLog(null);
+    }
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [selectedLog]);
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
+  const jsonText = (value, emptyText) => (value == null ? emptyText : JSON.stringify(value, null, 2));
   const logs = (data.logs || []).filter((log) => {
     const userText = `${log.userId?.name || ''} ${log.userId?.username || ''}`.toLowerCase();
     const matchesUser = !userSearch.trim() || userText.includes(userSearch.trim().toLowerCase());
@@ -4774,8 +5007,8 @@ export function AuditLogsPage() {
 
   return (
     <>
-      <PageHeader title="Audit Logs" eyebrow="Admin Only">
-        Important status, assignment, stock, payment, and document changes are tracked here.
+      <PageHeader title="Audit Logs" eyebrow="ADMIN ONLY">
+        Company internal activity history. Tracks important status, stock, payment, invoice, and document changes.
       </PageHeader>
       <div className="surface mb-5 grid gap-3 p-4 xl:grid-cols-[220px_220px_1fr_160px_160px]">
         <select className="input" value={moduleName} onChange={(event) => setModuleName(event.target.value)}>
@@ -4801,26 +5034,468 @@ export function AuditLogsPage() {
                 <td className="font-bold">{log.action}</td>
                 <td>{log.module}</td>
                 <td>
-                  <details className="rounded-card bg-[var(--surface-2)] p-3">
-                    <summary className="cursor-pointer text-sm font-bold text-sky-100">View JSON changes</summary>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                      <div>
-                        <p className="label">Before</p>
-                        <pre className="max-h-60 overflow-auto rounded-card bg-black/20 p-3 text-xs">{log.before ? JSON.stringify(log.before, null, 2) : '-'}</pre>
-                      </div>
-                      <div>
-                        <p className="label">After</p>
-                        <pre className="max-h-60 overflow-auto rounded-card bg-black/20 p-3 text-xs">{log.after ? JSON.stringify(log.after, null, 2) : '-'}</pre>
-                      </div>
-                    </div>
-                  </details>
+                  <button type="button" className="btn btn-secondary py-2" onClick={() => setSelectedLog(log)}>
+                    View JSON changes
+                  </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </Table>
       )}
+      {selectedLog ? (
+        <div className="fixed inset-0 z-[90] grid place-items-center bg-black/65 p-4" onClick={() => setSelectedLog(null)}>
+          <div className="surface max-h-[90vh] w-full max-w-5xl overflow-hidden p-0 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="audit-log-changes-title" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] p-5">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">ADMIN ONLY</p>
+                <h2 id="audit-log-changes-title" className="mt-1 text-xl font-black">Audit Log Changes</h2>
+              </div>
+              <button type="button" className="icon-button h-9 w-9" onClick={() => setSelectedLog(null)} aria-label="Close audit log changes">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="max-h-[calc(90vh-5rem)] overflow-y-auto p-5">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  ['Date', formatDate(selectedLog.createdAt)],
+                  ['User', selectedLog.userId?.name || selectedLog.userId?.username || '-'],
+                  ['Action', selectedLog.action || '-'],
+                  ['Module', selectedLog.module || '-']
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-card bg-[var(--surface-2)] p-3">
+                    <p className="label">{label}</p>
+                    <p className="mt-1 break-words text-sm font-bold">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                <div>
+                  <p className="label mb-2">Before</p>
+                  <pre className="max-h-[56vh] overflow-auto rounded-card border border-white/10 bg-black/35 p-4 font-mono text-xs leading-5 text-slate-100">{jsonText(selectedLog.before, 'No previous value')}</pre>
+                </div>
+                <div>
+                  <p className="label mb-2">After</p>
+                  <pre className="max-h-[56vh] overflow-auto rounded-card border border-white/10 bg-black/35 p-4 font-mono text-xs leading-5 text-slate-100">{jsonText(selectedLog.after, 'No updated value')}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
 
+const emptyTechnicianForm = {
+  name: '',
+  phone: '',
+  username: '',
+  password: '',
+  confirmPassword: '',
+  technicianTitle: 'Technician',
+  status: 'Active'
+};
+
+function SettingsInfoCard({ title, icon: Icon, children }) {
+  return (
+    <div className="surface p-5">
+      <div className="flex items-start gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-card bg-sky-400/15 text-[var(--brand)]">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl font-black">{title}</h2>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TeamAccessSection() {
+  const { request } = useAuth();
+  const { push } = useToast();
+  const [addOpen, setAddOpen] = useState(false);
+  const [editUser, setEditUser] = useState(null);
+  const [resetUser, setResetUser] = useState(null);
+  const { data, loading, error, reload } = useResource(() => request('/users'), [request]);
+
+  const technicians = useMemo(
+    () => (data?.users || [])
+      .filter((user) => user.role === 'technician')
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [data?.users]
+  );
+  const activeCount = technicians.filter((tech) => tech.active).length;
+  const disabledCount = technicians.length - activeCount;
+
+  async function toggleStatus(technician) {
+    try {
+      await request(`/users/${technician.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: !technician.active })
+      });
+      push(technician.active ? 'Technician account disabled' : 'Technician account enabled');
+      reload({ silent: true });
+    } catch (err) {
+      push(err.message, 'error');
+    }
+  }
+
+  async function createTechnician(form) {
+    if (form.password !== form.confirmPassword) throw new Error('Passwords do not match');
+    await request('/users', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: form.name,
+        phone: form.phone,
+        username: form.username,
+        password: form.password,
+        role: 'technician',
+        technicianTitle: form.technicianTitle,
+        active: form.status === 'Active'
+      })
+    });
+    push('Technician created');
+    setAddOpen(false);
+    reload({ silent: true });
+  }
+
+  async function updateTechnician(form) {
+    await request(`/users/${editUser.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: form.name,
+        phone: form.phone,
+        username: form.username,
+        technicianTitle: form.technicianTitle,
+        active: form.status === 'Active'
+      })
+    });
+    push('Technician updated');
+    setEditUser(null);
+    reload({ silent: true });
+  }
+
+  async function resetPassword(password, confirmPassword) {
+    if (password !== confirmPassword) throw new Error('Passwords do not match');
+    await request(`/users/${resetUser.id}/password`, {
+      method: 'PATCH',
+      body: JSON.stringify({ password })
+    });
+    push('Temporary password updated. Share it securely with the technician.');
+    setResetUser(null);
+    reload({ silent: true });
+  }
+
+  return (
+    <div className="surface p-5 lg:col-span-2">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-card bg-sky-400/15 text-[var(--brand)]">
+            <Users className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-black">Team & Access</h2>
+              <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[10px] font-black uppercase text-amber-100">Admin only</span>
+            </div>
+            <p className="mt-2 max-w-2xl text-sm leading-6 muted">Manage technician login access, temporary passwords, and account status.</p>
+          </div>
+        </div>
+        <button type="button" className="btn btn-primary shrink-0" onClick={() => setAddOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Add Technician
+        </button>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        {[
+          ['Total Technicians', technicians.length],
+          ['Active Technicians', activeCount],
+          ['Disabled Accounts', disabledCount]
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-card border border-white/10 bg-white/[0.045] p-3">
+            <p className="text-xs font-black uppercase text-[var(--brand)]">{label}</p>
+            <p className="mt-1 text-2xl font-black">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm muted">
+        Passwords are encrypted and cannot be viewed after saving.
+      </div>
+
+      <div className="mt-5">
+        {loading ? (
+          <div className="rounded-card border border-[var(--line)] bg-[var(--surface-2)] p-4 text-sm muted">Loading technician accounts...</div>
+        ) : error ? (
+          <div className="rounded-card border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">Unable to load technician accounts.</div>
+        ) : technicians.length ? (
+          <div className="table-wrap bg-[var(--surface)]">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Technician</th>
+                  <th>Username / Phone</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Last Updated</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--line)]">
+                {technicians.map((tech) => (
+                  <tr key={tech.id}>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-card bg-sky-400/15 text-sm font-black text-sky-100">
+                          {tech.name?.slice(0, 1) || 'T'}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold">{tech.name}</p>
+                          <p className="text-xs muted">Employee login account</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <p className="font-bold">{tech.username}</p>
+                      <p className="text-xs muted">{tech.phone || 'No phone added'}</p>
+                    </td>
+                    <td>{tech.technicianTitle || 'Technician'}</td>
+                    <td>
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${tech.active ? 'bg-emerald-400/15 text-emerald-100' : 'bg-slate-500/20 text-slate-200'}`}>
+                        {tech.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td>{tech.updatedAt ? formatDate(tech.updatedAt) : '-'}</td>
+                    <td>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className="btn btn-secondary" onClick={() => setResetUser(tech)}>
+                          <KeyRound className="h-4 w-4" />
+                          Reset Password
+                        </button>
+                        <button type="button" className="btn btn-secondary" onClick={() => toggleStatus(tech)}>
+                          {tech.active ? 'Disable' : 'Enable'}
+                        </button>
+                        <button type="button" className="btn btn-secondary" onClick={() => setEditUser(tech)}>
+                          <Edit3 className="h-4 w-4" />
+                          Edit
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            title="No technician accounts"
+            message="Create technician credentials here so service staff can sign in to the technician panel."
+            action={
+              <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Add Technician
+              </button>
+            }
+          />
+        )}
+      </div>
+
+      {addOpen ? <TechnicianAccountModal title="Add Technician" submitLabel="Create Technician" onClose={() => setAddOpen(false)} onSubmit={createTechnician} /> : null}
+      {editUser ? <TechnicianAccountModal title="Edit Technician" submitLabel="Save Changes" technician={editUser} editMode onClose={() => setEditUser(null)} onSubmit={updateTechnician} /> : null}
+      {resetUser ? <ResetPasswordModal technician={resetUser} onClose={() => setResetUser(null)} onSubmit={resetPassword} /> : null}
+    </div>
+  );
+}
+
+function TechnicianAccountModal({ title, submitLabel, technician = null, editMode = false, onClose, onSubmit }) {
+  const { push } = useToast();
+  const [form, setForm] = useState(() => technician ? {
+    name: technician.name || '',
+    phone: technician.phone || '',
+    username: technician.username || '',
+    password: '',
+    confirmPassword: '',
+    technicianTitle: technician.technicianTitle || 'Technician',
+    status: technician.active ? 'Active' : 'Inactive'
+  } : emptyTechnicianForm);
+  const [saving, setSaving] = useState(false);
+
+  function update(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onSubmit(form);
+    } catch (err) {
+      push(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4">
+      <form className="surface max-h-[92vh] w-full max-w-2xl overflow-y-auto p-5" onSubmit={submit}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-black">{title}</h2>
+            <p className="mt-1 text-sm muted">Technician credentials are encrypted before storage.</p>
+          </div>
+          <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close technician modal">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <label>
+            <span className="label">Technician Name</span>
+            <input className="input" value={form.name} onChange={(event) => update('name', event.target.value)} required />
+          </label>
+          <label>
+            <span className="label">Phone</span>
+            <input className="input" value={form.phone} onChange={(event) => update('phone', event.target.value)} />
+          </label>
+          <label>
+            <span className="label">Username</span>
+            <input className="input" value={form.username} onChange={(event) => update('username', event.target.value)} required />
+          </label>
+          <label>
+            <span className="label">Role</span>
+            <select className="input" value={form.technicianTitle} onChange={(event) => update('technicianTitle', event.target.value)}>
+              <option>Technician</option>
+              <option>Senior Technician</option>
+            </select>
+          </label>
+          {!editMode ? (
+            <>
+              <label>
+                <span className="label">Temporary Password</span>
+                <input className="input" type="password" value={form.password} onChange={(event) => update('password', event.target.value)} minLength={6} required />
+              </label>
+              <label>
+                <span className="label">Confirm Password</span>
+                <input className="input" type="password" value={form.confirmPassword} onChange={(event) => update('confirmPassword', event.target.value)} minLength={6} required />
+              </label>
+            </>
+          ) : null}
+          <label>
+            <span className="label">Status</span>
+            <select className="input" value={form.status} onChange={(event) => update('status', event.target.value)}>
+              <option>Active</option>
+              <option>Inactive</option>
+            </select>
+          </label>
+        </div>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" disabled={saving}>
+            <Save className="h-4 w-4" />
+            {saving ? 'Saving...' : submitLabel}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ResetPasswordModal({ technician, onClose, onSubmit }) {
+  const { push } = useToast();
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onSubmit(password, confirmPassword);
+    } catch (err) {
+      push(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4">
+      <form className="surface w-full max-w-md p-5" onSubmit={submit}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-black">Reset Password</h2>
+            <p className="mt-1 text-sm muted">{technician.name} will use this temporary password for technician login.</p>
+          </div>
+          <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close password reset modal">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-4">
+          <label>
+            <span className="label">New Temporary Password</span>
+            <input className="input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required />
+          </label>
+          <label>
+            <span className="label">Confirm Password</span>
+            <input className="input" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={6} required />
+          </label>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" disabled={saving}>
+            <KeyRound className="h-4 w-4" />
+            {saving ? 'Saving...' : 'Update Password'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export function SystemSettingsPage() {
+  return (
+    <>
+      <PageHeader title="Settings" eyebrow="System">
+        Review workspace identity, access, and operational defaults.
+      </PageHeader>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <SettingsInfoCard title="Workspace Profile" icon={ShieldCheck}>
+          <div className="mt-4 grid gap-3">
+            {[
+              ['Company', company.name],
+              ['Location', company.address],
+              ['Phone', company.phones.join(' / ')],
+              ['Email', company.email]
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-card bg-[var(--surface-2)] p-3">
+                <p className="text-xs font-black uppercase text-[var(--brand)]">{label}</p>
+                <p className="mt-1 font-bold">{value}</p>
+              </div>
+            ))}
+          </div>
+        </SettingsInfoCard>
+        <SettingsInfoCard title="System Access" icon={KeyRound}>
+          <div className="mt-4 grid gap-3">
+            <div className="rounded-card bg-[var(--surface-2)] p-3">
+              <p className="text-xs font-black uppercase text-[var(--brand)]">Admin Sidebar</p>
+              <p className="mt-1 font-bold">Dashboard, operations, customers, inventory, billing, AMC, reports, audit logs, and settings.</p>
+            </div>
+            <div className="rounded-card bg-[var(--surface-2)] p-3">
+              <p className="text-xs font-black uppercase text-[var(--brand)]">Audit Trail</p>
+              <p className="mt-1 font-bold">Operational changes remain available from System / Audit Logs.</p>
+            </div>
+          </div>
+        </SettingsInfoCard>
+        <TeamAccessSection />
+      </div>
+    </>
+  );
+}

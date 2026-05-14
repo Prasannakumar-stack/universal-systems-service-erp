@@ -870,6 +870,12 @@
                 <option value="Delivered">Delivered</option>
                 <option value="Returned">Returned</option>
               </select>
+              <select id="workOrderSourceFilter" aria-label="Filter work orders by source">
+                <option value="">All sources</option>
+                <option value="Call">Call</option>
+                <option value="Walk-in Shop">Walk-in Shop</option>
+                <option value="Website">Website</option>
+              </select>
             </div>
           </div>
 
@@ -888,12 +894,13 @@
                     <tr>
                       <th>Job</th>
                       <th>Customer</th>
+                      <th>Source</th>
                       <th>Status</th>
                       <th>Tech</th>
                     </tr>
                   </thead>
                   <tbody id="workOrderTableBody">
-                    <tr><td colspan="4" class="table-empty-cell">Loading work orders</td></tr>
+                    <tr><td colspan="5" class="table-empty-cell">Loading work orders</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1204,6 +1211,15 @@
               </select>
             </label>
             <label>
+              <span>Source</span>
+              <select id="sourceFilter">
+                <option value="">All sources</option>
+                <option value="Call">Call</option>
+                <option value="Walk-in Shop">Walk-in Shop</option>
+                <option value="Website">Website</option>
+              </select>
+            </label>
+            <label>
               <span>From Date</span>
               <input type="date" id="startDateFilter" />
             </label>
@@ -1224,6 +1240,7 @@
                   <th>Booking ID</th>
                   <th>Customer Name</th>
                   <th>Phone</th>
+                  <th>Source</th>
                   <th>Service</th>
                   <th>Problem</th>
                   <th>Technician</th>

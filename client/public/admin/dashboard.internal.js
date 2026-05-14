@@ -125,6 +125,21 @@
         : [];
   }
 
+  function bookingSourceLabel(item) {
+    const raw = String(item?.bookingSource || item?.source || item?.intakeSource || item?.leadSource || item?.channel || item?.bookingId?.bookingSource || item?.bookingId?.source || "").trim().toLowerCase();
+    if (!raw) return "Unknown";
+    if (raw.includes("call")) return "Call";
+    if (raw.includes("website") || raw.includes("web") || raw.includes("online")) return "Website";
+    if (raw.includes("walk") || raw.includes("shop") || raw.includes("manual")) return "Walk-in Shop";
+    return "Unknown";
+  }
+
+  function bookingSourceBadge(item) {
+    const label = bookingSourceLabel(item);
+    const className = label === "Call" ? "source-badge-call" : label === "Walk-in Shop" ? "source-badge-shop" : label === "Website" ? "source-badge-website" : "source-badge-unknown";
+    return `<span class="source-badge ${className}">${escapeHtml(label)}</span>`;
+  }
+
   function normalizeBooking(booking) {
     const parts = getBookingPartsSource(booking);
     const partsUsed = parts;
@@ -133,6 +148,7 @@
       customerName: booking?.customerName || booking?.name || "",
       service: booking?.service || booking?.serviceName || booking?.serviceType || booking?.product || "",
       problem: booking?.problem || booking?.problemDescription || "",
+      bookingSource: bookingSourceLabel(booking),
       technician: booking?.technician || "",
       notes: booking?.notes || "",
       serviceCost: parseAmount(booking?.service_charge != null ? booking.service_charge : booking?.serviceCharge != null ? booking.serviceCharge : booking?.serviceCost),
@@ -196,6 +212,7 @@
       device: item?.device || item?.product || item?.service || "-",
       issue: item?.issue || item?.problem || item?.problemDescription || "-",
       technicianName: item?.technicianName || technician.name || item?.technician || "Unassigned",
+      bookingSource: bookingSourceLabel(item),
       status,
       completedAt: item?.completedAt || item?.completionDate || "",
       createdAt: item?.createdAt || item?.bookingDate || "",
@@ -698,6 +715,7 @@
       search: document.getElementById("searchInput")?.value.trim() || "",
       status: document.getElementById("statusFilter")?.value || "",
       serviceType: document.getElementById("serviceFilter")?.value || "",
+      source: document.getElementById("sourceFilter")?.value || "",
       startDate: document.getElementById("startDateFilter")?.value || "",
       endDate: document.getElementById("endDateFilter")?.value || ""
     };
@@ -1289,14 +1307,17 @@
     }
     const tbody = document.getElementById("bookingTableBody");
     const empty = document.getElementById("bookingsEmptyState");
-    empty.classList.toggle("hidden", items.length > 0);
-    tbody.innerHTML = items.map((booking) => {
+    const sourceFilter = document.getElementById("sourceFilter")?.value || "";
+    const filteredItems = sourceFilter ? items.filter((booking) => bookingSourceLabel(booking) === sourceFilter) : items;
+    empty.classList.toggle("hidden", filteredItems.length > 0);
+    tbody.innerHTML = filteredItems.map((booking) => {
       const displayTotal = Number(booking.totalCost || 0);
       return `
       <tr class="booking-row">
         <td>${escapeHtml(booking.customerId || booking.id || "-")}</td>
         <td>${escapeHtml(booking.customerName || "-")}</td>
         <td><a class="phone-link" href="tel:${escapeHtml(booking.phone || "")}">${escapeHtml(booking.phone || "-")}</a></td>
+        <td>${bookingSourceBadge(booking)}</td>
         <td>${escapeHtml(booking.service || "-")}</td>
         <td>${escapeHtml(booking.problem || "-")}</td>
         <td>${escapeHtml(booking.technician || "-")}</td>
@@ -1637,10 +1658,12 @@
   function renderWorkOrders() {
     const search = document.getElementById("workOrderSearchInput")?.value.trim().toLowerCase() || "";
     const statusFilter = document.getElementById("workOrderStatusFilter")?.value || "";
+    const sourceFilter = document.getElementById("workOrderSourceFilter")?.value || "";
     const filtered = workOrders.filter((workOrder) => {
       const matchesStatus = !statusFilter || workOrder.status === statusFilter;
+      const matchesSource = !sourceFilter || bookingSourceLabel(workOrder) === sourceFilter;
       const haystack = [workOrder.displayId, workOrder.customerName, workOrder.phone, workOrder.device, workOrder.issue, workOrder.technicianName, workOrder.status].join(" ").toLowerCase();
-      return matchesStatus && (!search || haystack.includes(search));
+      return matchesStatus && matchesSource && (!search || haystack.includes(search));
     });
     const count = document.getElementById("workOrderCount");
     if (count) count.textContent = String(filtered.length);
@@ -1652,10 +1675,11 @@
         <tr class="work-order-list-row ${workOrder._id === selectedWorkOrderId ? "active" : ""}" data-work-order-id="${escapeHtml(workOrder._id)}">
           <td><strong>${escapeHtml(workOrder.displayId)}</strong><div>${escapeHtml(workOrder.device)}</div></td>
           <td>${escapeHtml(workOrder.customerName)}</td>
+          <td>${bookingSourceBadge(workOrder)}</td>
           <td><span class="status-pill ${workOrderStatusClass(workOrder.status)}">${escapeHtml(workOrder.status)}</span></td>
           <td>${escapeHtml(workOrder.technicianName)}</td>
         </tr>
-      `).join("") || '<tr><td colspan="4" class="table-empty-cell">No work orders found</td></tr>';
+      `).join("") || '<tr><td colspan="5" class="table-empty-cell">No work orders found</td></tr>';
     }
     renderWorkOrderDetail(workOrders.find((item) => item._id === selectedWorkOrderId) || null);
   }
@@ -4122,6 +4146,7 @@
 
     document.getElementById("workOrderSearchInput")?.addEventListener("input", renderWorkOrders);
     document.getElementById("workOrderStatusFilter")?.addEventListener("change", renderWorkOrders);
+    document.getElementById("workOrderSourceFilter")?.addEventListener("change", renderWorkOrders);
     document.getElementById("workOrderTableBody")?.addEventListener("click", (event) => {
       const row = event.target.closest("[data-work-order-id]");
       if (!row) return;
@@ -4631,7 +4656,7 @@
       if (request) openCallModal(request);
     });
 
-    ["searchInput", "statusFilter", "serviceFilter", "startDateFilter", "endDateFilter"].forEach((id) => {
+    ["searchInput", "statusFilter", "serviceFilter", "sourceFilter", "startDateFilter", "endDateFilter"].forEach((id) => {
       const element = document.getElementById(id);
       element?.addEventListener(id === "searchInput" ? "input" : "change", () => {
         window.clearTimeout(element._timer);
@@ -4643,6 +4668,7 @@
       document.getElementById("searchInput").value = "";
       document.getElementById("statusFilter").value = "";
       document.getElementById("serviceFilter").value = "";
+      document.getElementById("sourceFilter").value = "";
       document.getElementById("startDateFilter").value = "";
       document.getElementById("endDateFilter").value = "";
       await loadBookings();
