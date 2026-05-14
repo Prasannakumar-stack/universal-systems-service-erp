@@ -10,28 +10,24 @@ import BookService from './pages/BookService.jsx';
 import Login from './pages/Login.jsx';
 import { adminWorkspaceRoles } from './utils/roles.js';
 import { AdminDashboard } from './features/dashboard/AdminDashboard.jsx';
-import {
-  AMCContractsPage,
-  AMCRenewalsPage,
-  AMCSchedulePage,
-  AuditLogsPage,
-  BookingsPage,
-  CustomerProfilePage,
-  CustomersPage,
-  CreateDocumentPage,
-  DocumentPreviewPage,
-  DocumentsPage,
-  InventoryPage,
-  InvoicesPage,
-  PaymentsPage,
-  ReportsAnalyticsPage,
-  SystemSettingsPage,
-  StockMovementsPage,
-  TechnicianDashboard,
-  TechnicianPanelPage,
-  WorkOrderDetailsPage,
-  WorkOrdersPage
-} from './pages/Phase1Pages.jsx';
+import { BookingsPage } from './features/bookings/BookingsPage.jsx';
+import { CustomerProfilePage } from './features/customers/CustomerProfilePage.jsx';
+import { CustomersPage } from './features/customers/CustomersPage.jsx';
+import { InventoryPage } from './features/inventory/InventoryPage.jsx';
+import { StockMovementsPage } from './features/inventory/StockMovementsPage.jsx';
+import { CreateDocumentPage, DocumentPreviewPage, DocumentsPage } from './features/invoices/DocumentsPage.jsx';
+import { InvoicesPage } from './features/invoices/InvoicesPage.jsx';
+import { PaymentsPage } from './features/payments/PaymentsPage.jsx';
+import { AuditLogsPage } from './features/notifications/AuditLogsPage.jsx';
+import { ReportsAnalyticsPage } from './features/reports/ReportsPage.jsx';
+import { SystemSettingsPage } from './features/settings/SettingsPage.jsx';
+import { TechnicianDashboard } from './features/technicians/TechnicianDashboard.jsx';
+import { TechnicianPanelPage } from './features/technicians/TechnicianPanelPage.jsx';
+import { AMCContractsPage } from './features/workOrders/AMCContractsPage.jsx';
+import { AMCRenewalsPage } from './features/workOrders/AMCRenewalsPage.jsx';
+import { AMCSchedulePage } from './features/workOrders/AMCSchedulePage.jsx';
+import { WorkOrderDetailsPage } from './features/workOrders/WorkOrderDetailsPage.jsx';
+import { WorkOrdersPage } from './features/workOrders/WorkOrdersPage.jsx';
 import { TechnicianProfilePage } from './pages/WorkspacePages.jsx';
 
 export default function App() {
