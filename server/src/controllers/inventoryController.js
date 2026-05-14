@@ -1,14 +1,65 @@
 import InventoryPart from '../models/InventoryPart.js';
 import { appError, clean, numberValue, required } from '../utils/http.js';
+import { addDateRange, paginatedPayload, paginationMeta, parsePagination, searchRegex, withIds } from '../utils/pagination.js';
 import { applyStockMovement, syncPartAvailability } from '../services/stockMovementService.js';
 
-export async function list(_req, res) {
-  const parts = await InventoryPart.find().sort({ partName: 1 });
-  await Promise.all(parts.map(async (part) => {
-    syncPartAvailability(part);
-    if (part.isModified()) await part.save();
-  }));
-  res.json({ parts });
+export async function list(req, res) {
+  try {
+    const filter = {};
+    const { page, limit, skip } = parsePagination(req.query);
+    const regex = searchRegex(req.query.search);
+    if (regex) filter.$or = [{ partName: regex }, { category: regex }, { sku: regex }, { supplier: regex }, { brand: regex }];
+    if (clean(req.query.category)) filter.category = clean(req.query.category);
+    if (clean(req.query.stockStatus)) {
+      if (req.query.stockStatus === 'out' || req.query.stockStatus === 'outOfStock') filter.available = { $lte: 0 };
+      if (req.query.stockStatus === 'low' || req.query.stockStatus === 'lowStock') filter.$expr = { $and: [{ $gt: ['$available', 0] }, { $lte: ['$available', '$lowStockLimit'] }] };
+      if (req.query.stockStatus === 'in' || req.query.stockStatus === 'inStock') filter.$expr = { $gt: ['$available', '$lowStockLimit'] };
+    }
+    addDateRange(filter, req.query);
+
+    const sortBy = clean(req.query.sortBy);
+    const sort = sortBy === 'stock'
+      ? { available: 1, partName: 1 }
+      : sortBy === 'value'
+        ? { onHand: -1, partName: 1 }
+        : { partName: 1 };
+
+    const [total, rows, summaryRows, categories] = await Promise.all([
+      InventoryPart.countDocuments(filter),
+      InventoryPart.find(filter).sort(sort).skip(skip).limit(limit).lean(),
+      InventoryPart.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalParts: { $sum: 1 },
+            totalUnits: { $sum: { $ifNull: ['$onHand', 0] } },
+            reserved: { $sum: { $ifNull: ['$reserved', 0] } },
+            stockValue: { $sum: { $multiply: [{ $ifNull: ['$onHand', 0] }, { $ifNull: ['$costPrice', '$sellingPrice'] }] } },
+            lowStock: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $gt: ['$available', 0] }, { $lte: ['$available', '$lowStockLimit'] }] },
+                  1,
+                  0
+                ]
+              }
+            },
+            outOfStock: { $sum: { $cond: [{ $lte: ['$available', 0] }, 1, 0] } }
+          }
+        }
+      ]),
+      InventoryPart.distinct('category')
+    ]);
+    const summary = summaryRows[0] || { totalParts: 0, totalUnits: 0, reserved: 0, stockValue: 0, lowStock: 0, outOfStock: 0 };
+    const parts = withIds(rows);
+    res.json(paginatedPayload('parts', parts, paginationMeta(page, limit, total), {
+      summary,
+      categories: categories.filter(Boolean).sort()
+    }));
+  } catch (error) {
+    console.error('Inventory list failed', error);
+    res.status(500).json({ success: false, message: 'Unable to load inventory right now' });
+  }
 }
 
 export async function create(req, res) {

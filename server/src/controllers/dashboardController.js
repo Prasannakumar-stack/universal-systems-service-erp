@@ -8,8 +8,19 @@ import Reminder from '../models/Reminder.js';
 import User from '../models/User.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { getAmcSummary } from '../services/amcService.js';
+import { getAdminDashboardMetrics } from '../services/dashboardService.js';
 import { notificationFilterFor } from '../services/notificationService.js';
 import { refreshSmartReminders } from '../services/reminderService.js';
+
+export async function adminMetrics(req, res) {
+  try {
+    const dashboard = await getAdminDashboardMetrics(req.user);
+    res.json(dashboard);
+  } catch (error) {
+    console.error('Dashboard metrics failed', error);
+    res.status(500).json({ success: false, message: 'Unable to load dashboard metrics right now' });
+  }
+}
 
 export async function adminStats(_req, res) {
   const today = new Date();

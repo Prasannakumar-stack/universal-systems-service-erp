@@ -175,6 +175,51 @@ export function Table({ children }) {
   );
 }
 
+export function useDebouncedValue(value, delay = 350) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
+export function paginationFrom(payload, fallbackCount = 0, fallbackLimit = 20) {
+  const pagination = payload?.pagination || {};
+  const limit = Number(pagination.limit || fallbackLimit || 20);
+  const total = Number(pagination.total ?? fallbackCount ?? 0);
+  const page = Number(pagination.page || 1);
+  const totalPages = Number(pagination.totalPages || Math.max(1, Math.ceil(total / Math.max(1, limit))));
+  return {
+    page,
+    limit,
+    total,
+    totalPages,
+    hasNextPage: pagination.hasNextPage ?? page < totalPages,
+    hasPrevPage: pagination.hasPrevPage ?? page > 1
+  };
+}
+
+export function PaginationControls({ pagination, onPageChange }) {
+  const meta = paginationFrom({ pagination });
+  if (meta.totalPages <= 1) return null;
+  return (
+    <div className="mt-4 flex flex-col gap-3 rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <p className="font-semibold muted">
+        Page {meta.page} of {meta.totalPages} ({meta.total} records)
+      </p>
+      <div className="flex gap-2">
+        <button type="button" className="btn btn-secondary py-2" disabled={!meta.hasPrevPage} onClick={() => onPageChange(Math.max(1, meta.page - 1))}>
+          Previous
+        </button>
+        <button type="button" className="btn btn-secondary py-2" disabled={!meta.hasNextPage} onClick={() => onPageChange(meta.page + 1)}>
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export async function preserveScroll(callback) {
   const x = window.scrollX;
   const y = window.scrollY;

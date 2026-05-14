@@ -11,6 +11,11 @@ import WorkOrder from '../models/WorkOrder.js';
 
 const DEMO = 'PHASE4-DEMO';
 
+if (process.env.NODE_ENV === 'production') {
+  console.error('Phase 4 demo seed is disabled in production.');
+  process.exit(1);
+}
+
 function log(label, created) {
   console.log(`${created ? 'created' : 'exists '} ${label}`);
 }

@@ -319,59 +319,114 @@ function ActivityFeedPanel({ notifications = [], reminders = [] }) {
   );
 }
 
+const emptyDashboardData = {
+  success: true,
+  metrics: {
+    todaysBookings: 0,
+    pendingServiceJobs: 0,
+    jobsInProgress: 0,
+    completedToday: 0,
+    pendingPayments: 0,
+    lowStockItems: 0,
+    activeAmcContracts: 0,
+    monthlyRevenue: 0
+  },
+  alerts: {
+    outOfStockItems: 0,
+    overdueJobs: 0,
+    lowStockItems: 0,
+    pendingPayments: 0
+  },
+  stats: {
+    todayBookings: 0,
+    pendingJobs: 0,
+    unassignedJobs: 0,
+    awaitingPartsJobs: 0,
+    inProgressJobs: 0,
+    completedJobs: 0,
+    paymentsOverdue: 0,
+    lowStockCritical: 0,
+    activeAmcContracts: 0,
+    amcRenewalsDue: 0,
+    amcVisitsThisWeek: 0,
+    pendingPayments: 0
+  },
+  recentBookings: [],
+  repairQueue: [],
+  pendingPaymentsList: [],
+  technicianWorkload: [],
+  notifications: [],
+  reminders: [],
+  revenueOverview: []
+};
+
+function normalizeDashboardMetrics(payload = {}) {
+  const activityFeed = payload.activityFeed || [];
+  const notifications = activityFeed.filter((item) => item.feedType === 'Notification');
+  const reminders = activityFeed.filter((item) => item.feedType === 'Reminder');
+  const metrics = { ...emptyDashboardData.metrics, ...(payload.metrics || {}) };
+  const alerts = { ...emptyDashboardData.alerts, ...(payload.alerts || {}) };
+  const stats = {
+    ...emptyDashboardData.stats,
+    ...(payload.stats || {}),
+    todayBookings: metrics.todaysBookings,
+    pendingJobs: metrics.pendingServiceJobs,
+    inProgressJobs: metrics.jobsInProgress,
+    pendingPayments: metrics.pendingPayments,
+    lowStockCritical: alerts.outOfStockItems,
+    activeAmcContracts: metrics.activeAmcContracts
+  };
+
+  return {
+    ...emptyDashboardData,
+    ...payload,
+    metrics,
+    alerts,
+    stats,
+    recentBookings: payload.recentBookings || [],
+    repairQueue: payload.repairQueue || [],
+    pendingPaymentsList: payload.pendingPaymentsList || [],
+    technicianWorkload: payload.technicianWorkload || [],
+    notifications,
+    reminders,
+    revenueOverview: payload.revenueOverview || []
+  };
+}
+
 export function AdminDashboard() {
   const { request } = useAuth();
   const [lastUpdated, setLastUpdated] = useState(null);
   const loadDashboard = useCallback(async () => {
-    const [dashboard, bookings, payments, workOrders, invoices] = await Promise.all([
-      request('/dashboard/admin'),
-      request('/bookings').catch(() => ({ bookings: [] })),
-      request('/payments').catch(() => ({ payments: [] })),
-      request('/work-orders').catch(() => ({ workOrders: [] })),
-      request('/invoices').catch(() => ({ invoices: [] }))
-    ]);
-    return {
-      ...dashboard,
-      bookings: bookings.bookings || [],
-      payments: payments.payments || [],
-      workOrders: workOrders.workOrders || [],
-      invoices: invoices.invoices || []
-    };
+    return normalizeDashboardMetrics(await request('/dashboard/metrics'));
   }, [request]);
   const { data, loading, error, reload } = useResource(loadDashboard, [loadDashboard]);
-  const chartData = useMemo(() => buildSevenDaySeries(data?.bookings || [], data?.payments || []), [data?.bookings, data?.payments]);
-  const completedToday = useMemo(() => (data?.workOrders || []).filter((order) => order.status === 'Completed' && isSameDay(order.updatedAt || order.completedAt || order.createdAt)).length, [data?.workOrders]);
-  const monthlyRevenue = useMemo(() => {
-    const now = new Date();
-    return (data?.payments || []).filter((payment) => {
-      const date = new Date(payment.createdAt);
-      return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
-    }).reduce((sum, payment) => sum + Number(payment.paidAmount || payment.amount || 0), 0);
-  }, [data?.payments]);
-  const pendingPaymentInvoices = useMemo(() => (data?.invoices || []).filter((invoice) => ['Pending', 'Partial'].includes(invoice.status) && invoiceDueAmount(invoice) > 0), [data?.invoices]);
-  const activeWorkOrders = useMemo(() => (data?.workOrders || []).filter((order) => ['Pending', 'In Progress', 'Awaiting Parts'].includes(order.status)).slice(0, 6), [data?.workOrders]);
-  const amcRenewalsDue = useMemo(() => Number(data?.stats?.amcRenewalsDue || 0) || (data?.reminders || []).filter((item) => `${item.title || ''} ${item.message || ''}`.toLowerCase().includes('amc')).length, [data?.stats?.amcRenewalsDue, data?.reminders]);
+  const dashboardData = data || emptyDashboardData;
+  const chartData = dashboardData.revenueOverview || [];
+  const completedToday = Number(dashboardData.metrics?.completedToday || 0);
+  const monthlyRevenue = Number(dashboardData.metrics?.monthlyRevenue || 0);
+  const pendingPaymentInvoices = dashboardData.pendingPaymentsList || [];
+  const activeWorkOrders = dashboardData.repairQueue || [];
+  const amcRenewalsDue = Number(dashboardData.stats?.amcRenewalsDue || 0) || (dashboardData.reminders || []).filter((item) => `${item.title || ''} ${item.message || ''}`.toLowerCase().includes('amc')).length;
   const alerts = useMemo(() => {
-    if (!data) return [];
+    if (!dashboardData) return [];
     return [
-      { level: 'critical', title: 'Out of stock items', count: Number(data.stats?.lowStockCritical || 0), message: 'Stock is at zero and needs immediate refill.', to: '/admin/parts', action: 'View Stock' },
-      { level: 'critical', title: 'Overdue jobs', count: Number(data.stats?.jobsOverdue || 0), message: 'Jobs have not moved in more than 24 hours.', to: '/admin/work-orders', action: 'View Jobs' },
-      { level: 'warning', title: 'Low stock', count: Number(data.lowStockAlerts?.length || 0), message: 'Parts are close to their low stock limit.', to: '/admin/parts', action: 'View Stock' },
-      { level: 'warning', title: 'Pending payments', count: Number(data.stats?.pendingPayments || 0), message: 'Invoices still have balance due.', to: '/admin/payments', action: 'View Payments' }
+      { level: 'critical', title: 'Out of stock items', count: Number(dashboardData.alerts?.outOfStockItems || 0), message: 'Stock is at zero and needs immediate refill.', to: '/admin/parts', action: 'View Stock' },
+      { level: 'critical', title: 'Overdue jobs', count: Number(dashboardData.alerts?.overdueJobs || 0), message: 'Jobs have not moved in more than 24 hours.', to: '/admin/work-orders', action: 'View Jobs' },
+      { level: 'warning', title: 'Low stock', count: Number(dashboardData.alerts?.lowStockItems || 0), message: 'Parts are close to their low stock limit.', to: '/admin/parts', action: 'View Stock' },
+      { level: 'warning', title: 'Pending payments', count: Number(dashboardData.alerts?.pendingPayments || 0), message: 'Invoices still have balance due.', to: '/admin/payments', action: 'View Payments' }
     ];
-  }, [data]);
+  }, [dashboardData]);
 
   useEffect(() => {
     if (data) setLastUpdated(new Date());
   }, [data]);
 
   useEffect(() => {
-    const timer = setInterval(() => reload({ silent: true }), 18000);
+    const timer = setInterval(() => reload({ silent: true }), 90000);
     return () => clearInterval(timer);
   }, [reload]);
 
   if (loading) return <LoadingBlock />;
-  if (error) return <ErrorBlock message={error} />;
 
   return (
     <div className="admin-dashboard-page">
@@ -391,14 +446,19 @@ export function AdminDashboard() {
         Action-ready view of overdue work, billing, stock health, bookings, and technician load.
         {lastUpdated ? <span className="mt-1 block text-xs">Last updated: {lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span> : null}
       </PageHeader>
+      {error ? (
+        <div className="surface mb-5 border border-amber-300/25 bg-amber-400/10 p-3 text-sm font-semibold text-amber-100">
+          Dashboard metrics are temporarily unavailable. Showing the current dashboard shell while the next refresh retries.
+        </div>
+      ) : null}
       <div className="dashboard-kpi-grid">
-        <SmartMetricCard icon={CalendarClock} label="Today's Bookings" value={data.stats.todayBookings} helper="New intake today" tone="blue" to="/admin/bookings" />
-        <SmartMetricCard icon={ClipboardList} label="Pending Service Jobs" value={data.stats.pendingJobs} helper={`${data.stats.unassignedJobs || 0} unassigned`} tone="yellow" to="/admin/work-orders" />
-        <SmartMetricCard icon={Wrench} label="Jobs In Progress" value={data.stats.inProgressJobs} helper={`${data.stats.awaitingPartsJobs || 0} awaiting parts`} tone="blue" to="/admin/work-orders" />
-        <SmartMetricCard icon={CheckCircle2} label="Completed Today" value={completedToday} helper={`${data.stats.completedJobs || 0} completed total`} tone="green" to="/admin/work-orders" />
-        <SmartMetricCard icon={CreditCard} label="Pending Payments" value={pendingPaymentInvoices.length || data.stats.pendingPayments} helper={`${data.stats.paymentsOverdue || 0} overdue`} tone="yellow" glow to="/admin/payments" />
-        <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={(data.lowStockAlerts?.length || 0) + Number(data.stats.lowStockCritical || 0)} helper={`${data.stats.lowStockCritical || 0} out of stock`} tone="red" glow to="/admin/parts" />
-        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={data.stats.activeAmcContracts || 0} helper={`${amcRenewalsDue} renewals due, ${data.stats.amcVisitsThisWeek || 0} visits this week`} tone="green" to="/admin/amc-contracts" />
+        <SmartMetricCard icon={CalendarClock} label="Today's Bookings" value={dashboardData.stats.todayBookings} helper="New intake today" tone="blue" to="/admin/bookings" />
+        <SmartMetricCard icon={ClipboardList} label="Pending Service Jobs" value={dashboardData.stats.pendingJobs} helper={`${dashboardData.stats.unassignedJobs || 0} unassigned`} tone="yellow" to="/admin/work-orders" />
+        <SmartMetricCard icon={Wrench} label="Jobs In Progress" value={dashboardData.stats.inProgressJobs} helper={`${dashboardData.stats.awaitingPartsJobs || 0} awaiting parts`} tone="blue" to="/admin/work-orders" />
+        <SmartMetricCard icon={CheckCircle2} label="Completed Today" value={completedToday} helper={`${dashboardData.stats.completedJobs || 0} completed total`} tone="green" to="/admin/work-orders" />
+        <SmartMetricCard icon={CreditCard} label="Pending Payments" value={dashboardData.stats.pendingPayments || dashboardData.metrics.pendingPayments || 0} helper={`${dashboardData.stats.paymentsOverdue || 0} overdue`} tone="yellow" glow to="/admin/payments" />
+        <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={dashboardData.metrics.lowStockItems || 0} helper={`${dashboardData.alerts.outOfStockItems || 0} out of stock`} tone="red" glow to="/admin/parts" />
+        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={dashboardData.stats.activeAmcContracts || 0} helper={`${amcRenewalsDue} renewals due, ${dashboardData.stats.amcVisitsThisWeek || 0} visits this week`} tone="green" to="/admin/amc-contracts" />
         <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={currency(monthlyRevenue)} helper="Collected this month" tone="green" to="/admin/reports/finance" />
       </div>
       <div className="dashboard-priority-block">
@@ -407,7 +467,7 @@ export function AdminDashboard() {
       <div className="dashboard-main-grid">
         <DashboardPanel title="Recent Bookings" icon={CalendarClock} action={<Link className="dashboard-card-action" to="/admin/bookings">View All</Link>} className="dashboard-list-card">
           <div className="grid gap-3">
-            {data.recentBookings?.length ? data.recentBookings.slice(0, 6).map((booking) => {
+            {dashboardData.recentBookings?.length ? dashboardData.recentBookings.slice(0, 6).map((booking) => {
               const source = booking.source || booking.bookingSource || booking.channel || 'Walk-in';
               return (
                 <div key={booking.id} className="dashboard-row-card">
@@ -460,8 +520,8 @@ export function AdminDashboard() {
             )) : <DashboardEmpty title="No pending payments" message="All balances are currently clear." />}
           </div>
         </DashboardPanel>
-        <TechnicianWorkloadBars technicians={data.technicianWorkload || []} />
-        <ActivityFeedPanel notifications={data.notifications || []} reminders={data.reminders || []} />
+        <TechnicianWorkloadBars technicians={dashboardData.technicianWorkload || []} />
+        <ActivityFeedPanel notifications={dashboardData.notifications || []} reminders={dashboardData.reminders || []} />
         <RevenueOverviewCard chartData={chartData} monthlyRevenue={monthlyRevenue} />
       </div>
     </div>

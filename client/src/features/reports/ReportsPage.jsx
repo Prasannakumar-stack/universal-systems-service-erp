@@ -147,16 +147,16 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
   const [customTo, setCustomTo] = useState('');
   const loadReports = useCallback(async () => {
     const [bookings, workOrders, invoices, payments, inventory, movements, customers, amcContracts, amcSchedule, users] = await Promise.all([
-      request('/bookings').catch(() => ({ bookings: [] })),
-      request('/work-orders').catch(() => ({ workOrders: [] })),
-      request('/invoices').catch(() => ({ invoices: [] })),
-      request('/payments').catch(() => ({ payments: [] })),
-      request('/inventory').catch(() => ({ parts: [] })),
-      request('/stock-movements').catch(() => ({ movements: [] })),
-      request('/customers').catch(() => ({ customers: [] })),
+      request('/bookings?limit=100').catch(() => ({ bookings: [] })),
+      request('/work-orders?limit=100').catch(() => ({ workOrders: [] })),
+      request('/invoices?limit=100').catch(() => ({ invoices: [] })),
+      request('/payments?limit=100').catch(() => ({ payments: [] })),
+      request('/inventory?limit=100').catch(() => ({ parts: [] })),
+      request('/stock-movements?limit=100').catch(() => ({ movements: [] })),
+      request('/customers?limit=100').catch(() => ({ customers: [] })),
       request('/amc/contracts').catch(() => ({ contracts: [], summary: {} })),
       request('/amc/schedule').catch(() => ({ schedule: [] })),
-      request('/users').catch(() => ({ users: [] }))
+      request('/users?limit=100').catch(() => ({ users: [] }))
     ]);
     return {
       bookings: bookings.bookings || [],

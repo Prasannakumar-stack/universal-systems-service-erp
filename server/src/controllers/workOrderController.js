@@ -23,8 +23,13 @@ export async function create(req, res) {
 }
 
 export async function list(req, res) {
-  const workOrders = await listWorkOrders(req.query, req.user);
-  res.json({ workOrders });
+  try {
+    const { workOrders, pagination } = await listWorkOrders(req.query, req.user);
+    res.json({ success: true, data: workOrders, workOrders, pagination });
+  } catch (error) {
+    console.error('Work order list failed', error);
+    res.status(500).json({ success: false, message: 'Unable to load work orders right now' });
+  }
 }
 
 export async function getById(req, res) {

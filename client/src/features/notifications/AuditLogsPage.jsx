@@ -79,6 +79,8 @@ import {
   pdfAllowed,
   pdfLockedReason,
   percentage,
+  PaginationControls,
+  paginationFrom,
   PhoneCallIcon,
   Plus,
   preserveScroll,
@@ -118,6 +120,7 @@ import {
   uploadedAssetUrl,
   useAuth,
   useCallback,
+  useDebouncedValue,
   useEffect,
   useLocation,
   useMemo,
@@ -148,13 +151,23 @@ export function AuditLogsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedLog, setSelectedLog] = useState(null);
+  const [page, setPage] = useState(1);
+  const limit = 20;
+  const debouncedSearch = useDebouncedValue(userSearch);
   const query = useMemo(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (moduleName) params.set('module', moduleName);
     if (actionName) params.set('action', actionName);
-    return params.toString() ? `?${params}` : '';
-  }, [moduleName, actionName]);
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
+    return `?${params}`;
+  }, [actionName, dateFrom, dateTo, debouncedSearch, limit, moduleName, page]);
   const { data, loading, error } = useResource(() => request(`/audit-logs${query}`), [request, query]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [moduleName, actionName, userSearch, dateFrom, dateTo]);
 
   useEffect(() => {
     if (!selectedLog) return undefined;
@@ -169,7 +182,7 @@ export function AuditLogsPage() {
   if (error) return <ErrorBlock message={error} />;
 
   const jsonText = (value, emptyText) => (value == null ? emptyText : JSON.stringify(value, null, 2));
-  const logs = (data.logs || []).filter((log) => {
+  const logs = (data.logs || data.data || []).filter((log) => {
     const userText = `${log.userId?.name || ''} ${log.userId?.username || ''}`.toLowerCase();
     const matchesUser = !userSearch.trim() || userText.includes(userSearch.trim().toLowerCase());
     const created = new Date(log.createdAt);
@@ -177,6 +190,7 @@ export function AuditLogsPage() {
     const matchesTo = !dateTo || created <= new Date(`${dateTo}T23:59:59`);
     return matchesUser && matchesFrom && matchesTo;
   });
+  const pagination = paginationFrom(data, logs.length, limit);
 
   return (
     <>
@@ -197,6 +211,7 @@ export function AuditLogsPage() {
         <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
       </div>
       {!logs.length ? <EmptyState title="No audit logs" message="No audit records match the current filters." /> : (
+        <>
         <Table>
           <thead><tr><th>Date</th><th>User</th><th>Action</th><th>Module</th><th>Before / After</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
@@ -215,6 +230,8 @@ export function AuditLogsPage() {
             ))}
           </tbody>
         </Table>
+        <PaginationControls pagination={pagination} onPageChange={setPage} />
+        </>
       )}
       {selectedLog ? (
         <div className="fixed inset-0 z-[90] grid place-items-center bg-black/65 p-4" onClick={() => setSelectedLog(null)}>

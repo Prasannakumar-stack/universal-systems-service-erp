@@ -79,6 +79,8 @@ import {
   pdfAllowed,
   pdfLockedReason,
   percentage,
+  PaginationControls,
+  paginationFrom,
   PhoneCallIcon,
   Plus,
   preserveScroll,
@@ -118,6 +120,7 @@ import {
   uploadedAssetUrl,
   useAuth,
   useCallback,
+  useDebouncedValue,
   useEffect,
   useLocation,
   useMemo,
@@ -143,17 +146,32 @@ import {
 export function InventoryPage() {
   const { request } = useAuth();
   const { push } = useToast();
-  const { data, loading, error, reload } = useResource(() => request('/inventory'), [request]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [stockStatus, setStockStatus] = useState('');
   const [sortBy, setSortBy] = useState('name');
+  const [page, setPage] = useState(1);
   const [editor, setEditor] = useState(null);
   const [quickStockPart, setQuickStockPart] = useState(null);
   const [deletePart, setDeletePart] = useState(null);
+  const limit = 10;
+  const debouncedSearch = useDebouncedValue(search);
+  const query = useMemo(() => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+    if (category) params.set('category', category);
+    if (stockStatus) params.set('stockStatus', stockStatus);
+    if (sortBy) params.set('sortBy', sortBy);
+    return `?${params}`;
+  }, [category, debouncedSearch, limit, page, sortBy, stockStatus]);
+  const { data, loading, error, reload } = useResource(() => request(`/inventory${query}`), [request, query]);
 
-  const parts = data?.parts || [];
-  const categories = useMemo(() => Array.from(new Set(parts.map((part) => part.category || 'General'))).sort(), [parts]);
+  useEffect(() => {
+    setPage(1);
+  }, [search, category, stockStatus, sortBy]);
+
+  const parts = data?.parts || data?.data || [];
+  const categories = useMemo(() => (data?.categories?.length ? data.categories : Array.from(new Set(parts.map((part) => part.category || 'General'))).sort()), [data?.categories, parts]);
   const filteredParts = useMemo(() => {
     const term = search.trim().toLowerCase();
     const rows = parts.filter((part) => {
@@ -168,14 +186,14 @@ export function InventoryPage() {
       return String(a.partName || '').localeCompare(String(b.partName || ''));
     });
   }, [parts, search, category, stockStatus, sortBy]);
-  const totals = useMemo(() => ({
+  const totals = useMemo(() => data?.summary || ({
     totalParts: parts.length,
     lowStock: parts.filter((part) => inventoryStockStatus(part) === 'low').length,
     outOfStock: parts.filter((part) => inventoryStockStatus(part) === 'out').length,
     stockValue: parts.reduce((sum, part) => sum + Number(part.onHand || 0) * Number(part.costPrice || part.sellingPrice || 0), 0),
     totalUnits: parts.reduce((sum, part) => sum + Number(part.onHand || 0), 0),
     reserved: parts.reduce((sum, part) => sum + Number(part.reserved || 0), 0)
-  }), [parts]);
+  }), [data?.summary, parts]);
 
   async function savePart(partForm) {
     try {
@@ -243,6 +261,7 @@ export function InventoryPage() {
 
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
+  const pagination = paginationFrom(data, filteredParts.length, limit);
   return (
     <div className="inventory-page">
       <PageHeader
@@ -339,6 +358,7 @@ export function InventoryPage() {
             </tbody>
           </table>
         </div>
+        <PaginationControls pagination={pagination} onPageChange={setPage} />
         </>
       )}
       {editor ? <InventoryPartModal part={editor} onClose={() => setEditor(null)} onSave={savePart} /> : null}

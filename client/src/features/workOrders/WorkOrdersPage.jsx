@@ -79,6 +79,8 @@ import {
   pdfAllowed,
   pdfLockedReason,
   percentage,
+  PaginationControls,
+  paginationFrom,
   PhoneCallIcon,
   Plus,
   preserveScroll,
@@ -118,6 +120,7 @@ import {
   uploadedAssetUrl,
   useAuth,
   useCallback,
+  useDebouncedValue,
   useEffect,
   useLocation,
   useMemo,
@@ -154,14 +157,20 @@ export function WorkOrdersPage({ role = 'admin' }) {
   const [source, setSource] = useState('');
   const [techFilter, setTechFilter] = useState('Today');
   const [technicians, setTechnicians] = useState([]);
+  const [page, setPage] = useState(1);
+  const limit = 10;
+  const debouncedSearch = useDebouncedValue(search);
   const query = useMemo(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
     if (role === 'admin' && status) params.set('status', status);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
     if (role === 'admin' && technicianId) params.set('technicianId', technicianId);
+    if (serviceType) params.set('serviceType', serviceType);
+    if (source) params.set('source', source);
     return params.toString() ? `?${params}` : '';
-  }, [role, status, dateFrom, dateTo, technicianId]);
+  }, [dateFrom, dateTo, debouncedSearch, limit, page, role, serviceType, source, status, technicianId]);
   const { data, loading, error, reload } = useResource(() => request(`/work-orders${query}`), [request, query]);
   const base = role === 'admin' ? '/admin/work-orders' : '/tech/work-orders';
 
@@ -170,8 +179,12 @@ export function WorkOrdersPage({ role = 'admin' }) {
   }, [role, statusParam]);
 
   useEffect(() => {
-    if (role === 'admin') request('/users').then((result) => setTechnicians(result.users.filter((user) => user.role === 'technician' && user.active))).catch(() => {});
+    if (role === 'admin') request('/users?role=technician&active=true&limit=100').then((result) => setTechnicians(result.users.filter((user) => user.role === 'technician' && user.active))).catch(() => {});
   }, [request, role]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, status, dateFrom, dateTo, technicianId, serviceType, source]);
 
   async function autoAssign(id) {
     try {
@@ -200,25 +213,22 @@ export function WorkOrdersPage({ role = 'admin' }) {
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
-  const workOrders = (data.workOrders || []).filter((order) => {
-    const searchText = search.trim().toLowerCase();
-    const searchable = `${order.customerId?.name || ''} ${order.customerId?.phone || ''} ${order.serviceType || ''} ${order.service || ''} ${order.device || ''} ${order.issue || ''}`.toLowerCase();
-    if (searchText && !searchable.includes(searchText)) return false;
-    if (source && bookingSourceValue(order) !== source) return false;
-    if (!serviceType) return true;
-    return `${order.serviceType || ''} ${order.service || ''} ${order.device || ''} ${order.issue || ''}`.toLowerCase().includes(serviceType.toLowerCase());
-  });
+  const workOrders = data?.workOrders || data?.data || [];
+  const pagination = paginationFrom(data, workOrders.length, limit);
 
   if (role === 'technician') {
     return (
-      <TechnicianJobsView
-        jobs={workOrders}
-        search={search}
-        setSearch={setSearch}
-        filter={techFilter}
-        setFilter={setTechFilter}
-        quickStatus={quickStatus}
-      />
+      <>
+        <TechnicianJobsView
+          jobs={workOrders}
+          search={search}
+          setSearch={setSearch}
+          filter={techFilter}
+          setFilter={setTechFilter}
+          quickStatus={quickStatus}
+        />
+        <PaginationControls pagination={pagination} onPageChange={setPage} />
+      </>
     );
   }
 
@@ -251,6 +261,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
         ) : null}
       </div>
       {!workOrders.length ? <EmptyState title="No repair/service jobs found" message="No jobs match the current search or filters." /> : (
+        <>
         <Table>
           <thead><tr><th>Customer</th><th className="booking-source-column">Source</th><th>Service / Device</th><th>Technician</th><th>Status</th><th>Invoice / Payment</th><th>Created</th><th>Actions</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
@@ -279,6 +290,8 @@ export function WorkOrdersPage({ role = 'admin' }) {
             ))}
           </tbody>
         </Table>
+        <PaginationControls pagination={pagination} onPageChange={setPage} />
+        </>
       )}
     </>
   );

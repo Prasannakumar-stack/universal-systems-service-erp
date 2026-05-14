@@ -13,6 +13,11 @@ import Notification from '../models/Notification.js';
 
 const DEMO = 'PHASE2-DEMO';
 
+if (process.env.NODE_ENV === 'production') {
+  console.error('Phase 2 demo seed is disabled in production.');
+  process.exit(1);
+}
+
 async function upsertUser({ username, password, name, role }) {
   const existing = await User.findOne({ username });
   if (existing) {

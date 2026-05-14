@@ -171,7 +171,7 @@ export function AMCContractsPage() {
   const { data, loading, error, reload } = useResource(() => request('/amc/contracts'), [request]);
 
   useEffect(() => {
-    request('/customers').then((result) => setCustomers(result.customers || [])).catch(() => setCustomers([]));
+    request('/customers?limit=100').then((result) => setCustomers(result.customers || [])).catch(() => setCustomers([]));
   }, [request]);
 
   const contracts = data?.contracts || [];

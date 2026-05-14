@@ -79,6 +79,8 @@ import {
   pdfAllowed,
   pdfLockedReason,
   percentage,
+  PaginationControls,
+  paginationFrom,
   PhoneCallIcon,
   Plus,
   preserveScroll,
@@ -118,6 +120,7 @@ import {
   uploadedAssetUrl,
   useAuth,
   useCallback,
+  useDebouncedValue,
   useEffect,
   useLocation,
   useMemo,
@@ -146,24 +149,29 @@ export function CustomersPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [customerType, setCustomerType] = useState('');
+  const [page, setPage] = useState(1);
+  const limit = 10;
+  const debouncedSearch = useDebouncedValue(search);
   const query = useMemo(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
     return params.toString() ? `?${params}` : '';
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, debouncedSearch, limit, page]);
   const { data, loading, error } = useResource(async () => {
-    const [customers, workOrders, invoices] = await Promise.all([
-      request(`/customers${query}`),
-      request('/work-orders'),
-      request('/invoices')
-    ]);
+    const customers = await request(`/customers${query}`);
     return {
-      customers: customers.customers || [],
-      workOrders: workOrders.workOrders || [],
-      invoices: invoices.invoices || []
+      customers: customers.customers || customers.data || [],
+      workOrders: customers.workOrders || [],
+      invoices: customers.invoices || [],
+      pagination: customers.pagination
     };
   }, [request, query]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, dateFrom, dateTo, customerType]);
 
   const customers = data?.customers || [];
   const workOrders = data?.workOrders || [];
@@ -197,6 +205,7 @@ export function CustomersPage() {
     const haystack = [
       customer.name,
       customer.phone,
+      customer.email,
       customer.address,
       customer.devices?.join(' '),
       customerTypeLabel(customer),
@@ -208,6 +217,7 @@ export function CustomersPage() {
 
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
+  const pagination = paginationFrom(data, visibleCustomers.length, limit);
 
   return (
     <>
@@ -222,6 +232,7 @@ export function CustomersPage() {
         <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
       </div>
       {!visibleCustomers.length ? <EmptyState title="No customers found" message="Customer records matching your filters will appear here." action={<Link className="btn btn-primary" to="/admin/bookings">Create Booking</Link>} /> : (
+        <>
         <Table>
           <thead><tr><th>Customer Name</th><th>Phone</th><th>Devices / Services</th><th>Active Jobs</th><th>Pending Balance</th><th>Total Spent</th><th>Created Date</th><th>Action</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
@@ -249,6 +260,8 @@ export function CustomersPage() {
             })}
           </tbody>
         </Table>
+        <PaginationControls pagination={pagination} onPageChange={setPage} />
+        </>
       )}
     </>
   );

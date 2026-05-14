@@ -79,6 +79,8 @@ import {
   pdfAllowed,
   pdfLockedReason,
   percentage,
+  PaginationControls,
+  paginationFrom,
   PhoneCallIcon,
   Plus,
   preserveScroll,
@@ -118,6 +120,7 @@ import {
   uploadedAssetUrl,
   useAuth,
   useCallback,
+  useDebouncedValue,
   useEffect,
   useLocation,
   useMemo,
@@ -147,20 +150,37 @@ export function PaymentsPage() {
   const invoiceIdParam = useMemo(() => new URLSearchParams(location.search).get('invoiceId') || '', [location.search]);
   const invoiceIdParamHandled = useRef('');
   const [form, setForm] = useState({ invoiceId: invoiceIdParam, paidAmount: '', method: 'Cash', transactionId: '' });
+  const [search, setSearch] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
+  const [methodFilter, setMethodFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [page, setPage] = useState(1);
+  const limit = 10;
+  const debouncedSearch = useDebouncedValue(search);
   const paymentQuery = useMemo(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
     if (paymentStatus) params.set('status', paymentStatus);
+    if (methodFilter) params.set('method', methodFilter);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
-    return params.toString() ? `?${params}` : '';
-  }, [paymentStatus, dateFrom, dateTo]);
+    return `?${params}`;
+  }, [dateFrom, dateTo, debouncedSearch, limit, methodFilter, page, paymentStatus]);
   const { data, loading, error, reload } = useResource(async () => {
-    const [payments, invoices] = await Promise.all([request(`/payments${paymentQuery}`), request('/invoices')]);
-    return { ...payments, invoices: invoices.invoices };
-  }, [request, paymentQuery]);
+    const [payments, invoices, selectedInvoice] = await Promise.all([
+      request(`/payments${paymentQuery}`),
+      request('/invoices?paymentStatus=unpaid&limit=100'),
+      invoiceIdParam ? request(`/invoices?invoiceId=${encodeURIComponent(invoiceIdParam)}&limit=1`).catch(() => ({ invoices: [] })) : Promise.resolve({ invoices: [] })
+    ]);
+    const invoiceRows = [...(invoices.invoices || []), ...(selectedInvoice.invoices || [])];
+    const invoiceMap = new Map(invoiceRows.map((invoice) => [recordId(invoice), invoice]));
+    return { ...payments, invoices: Array.from(invoiceMap.values()) };
+  }, [invoiceIdParam, paymentQuery, request]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, paymentStatus, methodFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     if (!invoiceIdParam) {
@@ -253,7 +273,7 @@ export function PaymentsPage() {
     if (entries.length <= 1) return payment?.method || entries[0]?.[0] || '-';
     return entries.map(([method, amount]) => `${method} ${currency(amount)}`).join(' + ');
   }
-  const paymentTotals = {
+  const paymentTotals = data.summary || {
     totalCollected: (data.payments || []).reduce((sum, payment) => sum + Number(payment.paidAmount || 0), 0),
     pendingBalance: (data.invoices || []).reduce((sum, invoice) => sum + invoiceDueAmount(invoice), 0),
     paidInvoices: (data.invoices || []).filter((invoice) => invoice.status === 'Paid').length,
@@ -271,10 +291,15 @@ export function PaymentsPage() {
         <StatCard icon={ReceiptText} label="Partial Invoices" value={paymentTotals.partialInvoices} tone="yellow" />
         <StatCard icon={CalendarClock} label="Today's Collection" value={currency(paymentTotals.todayCollection)} />
       </div>
-      <div className="surface mb-5 grid gap-3 p-4 md:grid-cols-[180px_160px_160px]">
+      <div className="surface mb-5 grid gap-3 p-4 xl:grid-cols-[1fr_160px_140px_160px_160px]">
+        <SearchBox value={search} onChange={setSearch} placeholder="Search payment, invoice, customer, method" />
         <select className="input" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
           <option value="">All statuses</option>
           {['Paid', 'Partial', 'Pending'].map((item) => <option key={item}>{item}</option>)}
+        </select>
+        <select className="input" value={methodFilter} onChange={(event) => setMethodFilter(event.target.value)}>
+          <option value="">All methods</option>
+          {(data.methods || ['Cash', 'UPI']).map((item) => <option key={item}>{item}</option>)}
         </select>
         <input className="input" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
@@ -324,12 +349,15 @@ export function PaymentsPage() {
         </div>
       </form>
       {!data.payments?.length ? <EmptyState title="No payments recorded yet" message="Payments will appear after invoice payment is recorded." /> : (
+        <>
         <Table>
           <thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th>Amount Paid</th><th>Method</th><th>Balance After</th><th>Status</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
             {data.payments.map((payment) => <tr key={payment.id}><td>{formatDate(payment.createdAt)}</td><td className="font-bold"><Link className="text-sky-100 hover:text-[var(--brand)]" to="/admin/invoices">{payment.invoiceId?.invoiceNumber}</Link></td><td>{payment.customerId?.name}</td><td className="font-bold text-emerald-100">{currency(payment.paidAmount)}</td><td>{paymentMethodDisplay(payment)}</td><td className={Number(payment.balance || 0) > 0 ? 'font-bold text-amber-100' : 'text-emerald-100'}>{currency(payment.balance)}</td><td><StatusBadge status={payment.status} /></td></tr>)}
           </tbody>
         </Table>
+        <PaginationControls pagination={paginationFrom(data, data.payments?.length || 0, limit)} onPageChange={setPage} />
+        </>
       )}
     </div>
   );

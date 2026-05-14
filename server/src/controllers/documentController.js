@@ -8,8 +8,13 @@ export async function create(req, res) {
 }
 
 export async function list(_req, res) {
-  const documents = await listDocuments(_req.query);
-  res.json({ documents });
+  try {
+    const { documents, pagination } = await listDocuments(_req.query);
+    res.json({ success: true, data: documents, documents, pagination });
+  } catch (error) {
+    console.error('Document list failed', error);
+    res.status(500).json({ success: false, message: 'Unable to load documents right now' });
+  }
 }
 
 export async function getById(req, res) {

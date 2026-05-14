@@ -167,12 +167,12 @@ function SettingsInfoCard({ title, icon: Icon, children }) {
 }
 
 function TeamAccessSection() {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const { push } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [resetUser, setResetUser] = useState(null);
-  const { data, loading, error, reload } = useResource(() => request('/users'), [request]);
+  const { data, loading, error, reload } = useResource(() => request('/users?role=technician&limit=100'), [request]);
 
   const technicians = useMemo(
     () => (data?.users || [])
@@ -185,9 +185,9 @@ function TeamAccessSection() {
 
   async function toggleStatus(technician) {
     try {
-      await request(`/users/${technician.id}`, {
+      await request(`/users/${technician.id}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ active: !technician.active })
+        body: JSON.stringify({ isActive: !technician.active })
       });
       push(technician.active ? 'Technician account disabled' : 'Technician account enabled');
       reload({ silent: true });
@@ -206,8 +206,7 @@ function TeamAccessSection() {
         username: form.username,
         password: form.password,
         role: 'technician',
-        technicianTitle: form.technicianTitle,
-        active: form.status === 'Active'
+        isActive: form.status === 'Active'
       })
     });
     push('Technician created');
@@ -222,8 +221,8 @@ function TeamAccessSection() {
         name: form.name,
         phone: form.phone,
         username: form.username,
-        technicianTitle: form.technicianTitle,
-        active: form.status === 'Active'
+        role: 'technician',
+        isActive: form.status === 'Active'
       })
     });
     push('Technician updated');
@@ -233,7 +232,7 @@ function TeamAccessSection() {
 
   async function resetPassword(password, confirmPassword) {
     if (password !== confirmPassword) throw new Error('Passwords do not match');
-    await request(`/users/${resetUser.id}/password`, {
+    await request(`/users/${resetUser.id}/reset-password`, {
       method: 'PATCH',
       body: JSON.stringify({ password })
     });
@@ -294,7 +293,7 @@ function TeamAccessSection() {
                   <th>Username / Phone</th>
                   <th>Role</th>
                   <th>Status</th>
-                  <th>Last Updated</th>
+                  <th>Created / Updated</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -316,22 +315,24 @@ function TeamAccessSection() {
                       <p className="font-bold">{tech.username}</p>
                       <p className="text-xs muted">{tech.phone || 'No phone added'}</p>
                     </td>
-                    <td>{tech.technicianTitle || 'Technician'}</td>
+                    <td>{tech.role === 'admin' ? 'Admin' : 'Technician'}</td>
                     <td>
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${tech.active ? 'bg-emerald-400/15 text-emerald-100' : 'bg-slate-500/20 text-slate-200'}`}>
                         {tech.active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td>{tech.updatedAt ? formatDate(tech.updatedAt) : '-'}</td>
+                    <td>{tech.createdAt || tech.updatedAt ? formatDate(tech.createdAt || tech.updatedAt) : '-'}<span className="block text-xs muted">{tech.updatedAt ? `Updated ${formatDate(tech.updatedAt)}` : ''}</span></td>
                     <td>
                       <div className="flex flex-wrap gap-2">
                         <button type="button" className="btn btn-secondary" onClick={() => setResetUser(tech)}>
                           <KeyRound className="h-4 w-4" />
                           Reset Password
                         </button>
-                        <button type="button" className="btn btn-secondary" onClick={() => toggleStatus(tech)}>
-                          {tech.active ? 'Disable' : 'Enable'}
-                        </button>
+                        {tech.id !== user?.id ? (
+                          <button type="button" className="btn btn-secondary" onClick={() => toggleStatus(tech)}>
+                            {tech.active ? 'Disable' : 'Enable'}
+                          </button>
+                        ) : null}
                         <button type="button" className="btn btn-secondary" onClick={() => setEditUser(tech)}>
                           <Edit3 className="h-4 w-4" />
                           Edit
@@ -345,8 +346,8 @@ function TeamAccessSection() {
           </div>
         ) : (
           <EmptyState
-            title="No technician accounts"
-            message="Create technician credentials here so service staff can sign in to the technician panel."
+            title="No team members found"
+            message="Add your first admin or technician."
             action={
               <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>
                 <Plus className="h-4 w-4" />
@@ -419,11 +420,11 @@ function TechnicianAccountModal({ title, submitLabel, technician = null, editMod
             <input className="input" value={form.username} onChange={(event) => update('username', event.target.value)} required />
           </label>
           <label>
-            <span className="label">Role</span>
-            <select className="input" value={form.technicianTitle} onChange={(event) => update('technicianTitle', event.target.value)}>
+            <span className="label">System Role</span>
+            <select className="input" value="Technician" disabled>
               <option>Technician</option>
-              <option>Senior Technician</option>
             </select>
+            <span className="mt-1 block text-xs muted">Only Admin and Technician roles are enabled.</span>
           </label>
           {!editMode ? (
             <>

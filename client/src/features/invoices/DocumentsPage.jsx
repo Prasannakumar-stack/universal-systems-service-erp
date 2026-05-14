@@ -79,6 +79,8 @@ import {
   pdfAllowed,
   pdfLockedReason,
   percentage,
+  PaginationControls,
+  paginationFrom,
   PhoneCallIcon,
   Plus,
   preserveScroll,
@@ -118,6 +120,7 @@ import {
   uploadedAssetUrl,
   useAuth,
   useCallback,
+  useDebouncedValue,
   useEffect,
   useLocation,
   useMemo,
@@ -163,22 +166,30 @@ export function DocumentsPage() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [page, setPage] = useState(1);
+  const limit = 10;
+  const debouncedSearch = useDebouncedValue(customerSearch);
   const query = useMemo(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (type) params.set('type', type);
     if (status) params.set('status', status);
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
-    return params.toString() ? `?${params}` : '';
-  }, [type, status, dateFrom, dateTo]);
+    return `?${params}`;
+  }, [dateFrom, dateTo, debouncedSearch, limit, page, status, type]);
   const { data, loading, error } = useResource(() => request(`/documents${query}`), [request, query]);
+  useEffect(() => {
+    setPage(1);
+  }, [type, status, customerSearch, dateFrom, dateTo]);
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
-  const documents = (data.documents || []).filter((document) => {
+  const documents = (data.documents || data.data || []).filter((document) => {
     const term = customerSearch.trim().toLowerCase();
     if (!term) return true;
     return `${document.customerId?.name || ''} ${document.customerId?.phone || ''} ${document.workOrderId?.device || ''} ${document.workOrderId?.issue || ''}`.toLowerCase().includes(term);
   });
+  const pagination = paginationFrom(data, documents.length, limit);
 
   async function downloadDocumentPdf(document) {
     try {
@@ -235,6 +246,7 @@ export function DocumentsPage() {
         <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
       </div>
       {!documents.length ? <EmptyState title="No documents generated yet" message="Create quotation or invoice from a work order." action={<Link className="btn btn-primary" to="/admin/documents/new">Create Document</Link>} /> : (
+        <>
         <Table>
           <thead><tr><th>Date</th><th>Type</th><th>Customer</th><th>Service Job</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
@@ -257,6 +269,8 @@ export function DocumentsPage() {
             ))}
           </tbody>
         </Table>
+        <PaginationControls pagination={pagination} onPageChange={setPage} />
+        </>
       )}
     </>
   );
@@ -267,7 +281,7 @@ export function CreateDocumentPage() {
   const { push } = useToast();
   const navigate = useNavigate();
   const [form, setForm] = useState({ type: 'invoice', workOrderId: '' });
-  const { data, loading, error } = useResource(() => request('/work-orders'), [request]);
+  const { data, loading, error } = useResource(() => request('/work-orders?limit=100'), [request]);
 
   async function submit(event) {
     event.preventDefault();

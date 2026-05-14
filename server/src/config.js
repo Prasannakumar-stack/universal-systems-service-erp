@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,9 +14,26 @@ export const DB_PATH = path.join(STORAGE_DIR, 'app.sqlite');
 export const LOGO_FULL_PATH = path.join(ROOT_DIR, 'logo-full.png');
 export const LOGO_ICON_PATH = path.join(ROOT_DIR, 'logo-icon.png');
 
-export const JWT_SECRET = process.env.JWT_SECRET || 'universal-systems-local-secret';
+export const NODE_ENV = process.env.NODE_ENV || 'development';
+export const IS_PRODUCTION = NODE_ENV === 'production';
+
+if (IS_PRODUCTION && !process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET is required in production');
+}
+
+const developmentJwtSecret = crypto.randomBytes(32).toString('hex');
+if (!IS_PRODUCTION && !process.env.JWT_SECRET) {
+  console.warn('JWT_SECRET is not set. Using a temporary development-only JWT key for this server process.');
+}
+
+export const JWT_SECRET = process.env.JWT_SECRET || developmentJwtSecret;
 export const PORT = Number(process.env.PORT || 5050);
-export const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+export const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || (IS_PRODUCTION ? '' : 'http://localhost:5173');
+export const ALLOWED_ORIGINS = [
+  ...(process.env.ALLOWED_ORIGINS || '').split(','),
+  process.env.CLIENT_ORIGIN,
+  process.env.ADMIN_ORIGIN
+].map((origin) => origin?.trim()).filter(Boolean);
 export const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/service_management_phase1';
 export const MONGO_TIMEOUT_MS = Number(process.env.MONGO_TIMEOUT_MS || 5000);
 

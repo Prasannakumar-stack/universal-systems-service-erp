@@ -2,11 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import PDFDocument from 'pdfkit';
+import Customer from '../models/Customer.js';
 import Document from '../models/Document.js';
 import Invoice from '../models/Invoice.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { COMPANY, PDF_DIR } from '../config.js';
 import { appError, clean, numberValue } from '../utils/http.js';
+import { addDateRange, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 import { logAudit } from './auditService.js';
 
 const populateDocument = [
@@ -85,15 +87,36 @@ export async function createDocument(payload, user = null) {
 
 export async function listDocuments(query = {}) {
   const filter = {};
+  const clauses = [];
+  const { page, limit, skip } = parsePagination(query);
   if (clean(query.type)) filter.type = clean(query.type);
   if (clean(query.status)) filter.status = clean(query.status);
-  if (clean(query.customerId)) filter.customerId = clean(query.customerId);
-  if (clean(query.dateFrom) || clean(query.dateTo)) {
-    filter.createdAt = {};
-    if (clean(query.dateFrom)) filter.createdAt.$gte = new Date(query.dateFrom);
-    if (clean(query.dateTo)) filter.createdAt.$lte = new Date(query.dateTo);
+  if (validObjectId(query.customerId)) filter.customerId = validObjectId(query.customerId);
+  addDateRange(filter, query);
+
+  const regex = searchRegex(query.search);
+  if (regex) {
+    const [customers, workOrders] = await Promise.all([
+      Customer.find({ $or: [{ name: regex }, { phone: regex }, { email: regex }] }).select('_id').limit(1000).lean(),
+      WorkOrder.find({ $or: [{ device: regex }, { issue: regex }, { serviceType: regex }] }).select('_id').limit(1000).lean()
+    ]);
+    clauses.push({
+      $or: [
+        { type: regex },
+        { status: regex },
+        { customerId: { $in: customers.map((item) => item._id) } },
+        { workOrderId: { $in: workOrders.map((item) => item._id) } }
+      ]
+    });
   }
-  return Document.find(filter).populate(populateDocument).sort({ createdAt: -1 });
+  if (clauses.length) filter.$and = clauses;
+
+  const [total, rows] = await Promise.all([
+    Document.countDocuments(filter),
+    Document.find(filter).populate(populateDocument).sort({ createdAt: -1 }).skip(skip).limit(limit).lean()
+  ]);
+  const documents = rows.map((document) => withNestedIds(document, ['customerId', 'workOrderId', 'invoiceId']));
+  return { documents, pagination: paginationMeta(page, limit, total) };
 }
 
 export async function getDocument(id) {

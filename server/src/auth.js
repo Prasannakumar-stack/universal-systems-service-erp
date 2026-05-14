@@ -10,12 +10,17 @@ export function publicUser(user) {
   if (!user) return null;
   return {
     id: user.id,
+    _id: String(user._id || user.id || ''),
     username: user.username,
     name: user.name,
     role: user.role,
     phone: user.phone || '',
     email: user.email || '',
-    active: Boolean(user.active)
+    active: Boolean(user.active),
+    isActive: Boolean(user.active),
+    status: user.active ? 'Active' : 'Inactive',
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
   };
 }
 

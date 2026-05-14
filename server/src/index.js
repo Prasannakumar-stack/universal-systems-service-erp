@@ -4,7 +4,7 @@ import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
-import { CLIENT_ORIGIN, COMPANY, PORT, ROOT_DIR, UPLOAD_DIR } from './config.js';
+import { ALLOWED_ORIGINS, CLIENT_ORIGIN, COMPANY, IS_PRODUCTION, PORT, ROOT_DIR, UPLOAD_DIR } from './config.js';
 import { connectDb } from './db.js';
 import { bookingUpload, handleUploadErrors } from './upload.js';
 import { asyncHandler } from './utils/http.js';
@@ -29,10 +29,22 @@ import userRoutes from './routes/userRoutes.js';
 import workOrderRoutes from './routes/workOrderRoutes.js';
 
 const app = express();
+app.disable('x-powered-by');
+
+const developmentOrigins = new Set([
+  CLIENT_ORIGIN,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000'
+].filter(Boolean));
+const productionOrigins = new Set(ALLOWED_ORIGINS);
 
 function isAllowedOrigin(origin) {
-  if (!origin || origin === 'null') return true;
-  if (origin === CLIENT_ORIGIN) return true;
+  if (!origin) return true;
+  if (origin === 'null') return !IS_PRODUCTION;
+  if (IS_PRODUCTION) return productionOrigins.has(origin);
+  if (developmentOrigins.has(origin)) return true;
   try {
     const { hostname } = new URL(origin);
     return hostname === 'localhost' || hostname === '127.0.0.1';
@@ -45,12 +57,22 @@ app.use(
   cors({
     origin(origin, callback) {
       if (isAllowedOrigin(origin)) return callback(null, true);
-      return callback(new Error(`Origin not allowed by CORS: ${origin}`));
+      const error = new Error('CORS origin not allowed');
+      error.status = 403;
+      return callback(error);
     },
     credentials: true
   })
 );
-app.use(express.json({ limit: '12mb' }));
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (IS_PRODUCTION) res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  next();
+});
+app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
 app.use('/uploads', express.static(UPLOAD_DIR));
 
@@ -93,8 +115,11 @@ app.use((req, res) => {
 });
 
 app.use((error, _req, res, _next) => {
-  if (!error.status || error.status >= 500) console.error(error);
-  res.status(error.status || 500).json({ message: error.message || 'Something went wrong' });
+  const status = error.status || 500;
+  if (status >= 500) console.error(error);
+  else console.warn(error.message);
+  const message = status >= 500 && IS_PRODUCTION ? 'Internal Server Error' : error.message || 'Something went wrong';
+  res.status(status).json({ message });
 });
 
 try {

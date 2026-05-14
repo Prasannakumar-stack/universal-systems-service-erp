@@ -79,6 +79,8 @@ import {
   pdfAllowed,
   pdfLockedReason,
   percentage,
+  PaginationControls,
+  paginationFrom,
   PhoneCallIcon,
   Plus,
   preserveScroll,
@@ -118,6 +120,7 @@ import {
   uploadedAssetUrl,
   useAuth,
   useCallback,
+  useDebouncedValue,
   useEffect,
   useLocation,
   useMemo,
@@ -149,17 +152,21 @@ export function StockMovementsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const limit = 10;
+  const debouncedSearch = useDebouncedValue(search);
   const movementQuery = useMemo(() => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
     if (movementType) params.set('type', movementType);
     if (partId) params.set('partId', partId);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
-    return params.toString() ? `?${params}` : '';
-  }, [movementType, partId, dateFrom, dateTo]);
+    return `?${params}`;
+  }, [dateFrom, dateTo, debouncedSearch, limit, movementType, page, partId]);
   const { data, loading, error, reload } = useResource(async () => {
-    const [movements, inventory] = await Promise.all([request(`/stock-movements${movementQuery}`), request('/inventory')]);
-    return { ...movements, parts: inventory.parts || [] };
+    const [movements, inventory] = await Promise.all([request(`/stock-movements${movementQuery}`), request('/inventory?limit=100')]);
+    return { ...movements, parts: inventory.parts || [], inventorySummary: inventory.summary };
   }, [request, movementQuery]);
   const { push } = useToast();
   const [form, setForm] = useState({ partId: '', type: 'ADD', quantity: 1, source: 'Manual', note: '' });
@@ -167,6 +174,10 @@ export function StockMovementsPage() {
   useEffect(() => {
     setPartId(partIdParam);
   }, [partIdParam]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, movementType, partId, dateFrom, dateTo]);
 
   async function submit(event) {
     event.preventDefault();
@@ -191,7 +202,7 @@ export function StockMovementsPage() {
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
-  const movements = data.movements || [];
+  const movements = data.movements || data.data || [];
   const filteredMovements = movements.filter((movement) => {
     const term = search.trim().toLowerCase();
     if (!term) return true;
@@ -203,14 +214,16 @@ export function StockMovementsPage() {
       movement.userId?.username
     ].filter(Boolean).join(' ').toLowerCase().includes(term);
   });
-  const lowStockAlerts = (data.parts || []).filter((part) => inventoryStockStatus(part) !== 'in').length;
+  const lowStockAlerts = Number(data.inventorySummary?.lowStock || 0) + Number(data.inventorySummary?.outOfStock || 0) || (data.parts || []).filter((part) => inventoryStockStatus(part) !== 'in').length;
   const movementTotals = {
     addedToday: movements.filter((movement) => movement.type === 'ADD' && isToday(movement.createdAt)).reduce((sum, movement) => sum + Number(movement.quantity || 0), 0),
     usedToday: movements.filter((movement) => movement.type === 'USED' && isToday(movement.createdAt)).reduce((sum, movement) => sum + Number(movement.quantity || 0), 0),
     returnedToday: movements.filter((movement) => movement.type === 'RETURN' && isToday(movement.createdAt)).reduce((sum, movement) => sum + Number(movement.quantity || 0), 0),
     adjustments: movements.filter((movement) => movement.type === 'ADJUST').length,
-    lowStockAlerts
+    lowStockAlerts,
+    ...(data.summary || {})
   };
+  const pagination = paginationFrom(data, filteredMovements.length, limit);
 
   function exportCsv() {
     const rows = [
@@ -304,6 +317,7 @@ export function StockMovementsPage() {
       </form>
       <p className="mb-3 text-xs font-semibold muted">Stock movements are recorded through the existing stock movement API and mirrored into audit logs.</p>
       {!filteredMovements.length ? <EmptyState title="No stock movement recorded yet" message="Stock movements will appear when parts are added, used, returned, or adjusted." /> : (
+        <>
         <div className="table-wrap stock-movements-table-wrap bg-[var(--surface)]">
           <table className="data-table stock-movements-table">
             <colgroup>
@@ -344,6 +358,8 @@ export function StockMovementsPage() {
           </tbody>
           </table>
         </div>
+        <PaginationControls pagination={pagination} onPageChange={setPage} />
+        </>
       )}
     </div>
   );

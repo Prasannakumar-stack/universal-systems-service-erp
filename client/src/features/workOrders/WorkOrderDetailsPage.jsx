@@ -164,7 +164,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }, [order?.id, order?.serviceCharge]);
 
   useEffect(() => {
-    request('/inventory').then((result) => setInventoryParts(result.parts || [])).catch(() => {});
+    request('/inventory?limit=100').then((result) => setInventoryParts(result.parts || [])).catch(() => {});
   }, [request]);
 
   async function saveStatus(nextStatus) {

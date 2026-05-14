@@ -79,6 +79,8 @@ import {
   pdfAllowed,
   pdfLockedReason,
   percentage,
+  PaginationControls,
+  paginationFrom,
   PhoneCallIcon,
   Plus,
   preserveScroll,
@@ -118,6 +120,7 @@ import {
   uploadedAssetUrl,
   useAuth,
   useCallback,
+  useDebouncedValue,
   useEffect,
   useLocation,
   useMemo,
@@ -149,11 +152,26 @@ export function BookingsPage() {
   const [status, setStatus] = useState('');
   const [serviceType, setServiceType] = useState('');
   const [source, setSource] = useState('');
-  const { data, loading, error, reload } = useResource(() => request('/bookings'), [request]);
+  const [page, setPage] = useState(1);
+  const limit = 10;
+  const debouncedSearch = useDebouncedValue(search);
+  const query = useMemo(() => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+    if (status) params.set('status', status);
+    if (serviceType) params.set('serviceType', serviceType);
+    if (source) params.set('source', source);
+    return `?${params}`;
+  }, [debouncedSearch, limit, page, serviceType, source, status]);
+  const { data, loading, error, reload } = useResource(() => request(`/bookings${query}`), [request, query]);
 
   useEffect(() => {
-    request('/users').then((result) => setTechnicians(result.users.filter((user) => user.role === 'technician' && user.active))).catch(() => {});
+    request('/users?role=technician&active=true&limit=100').then((result) => setTechnicians(result.users.filter((user) => user.role === 'technician' && user.active))).catch(() => {});
   }, [request]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, status, serviceType, source]);
 
   async function convert(bookingId, technicianId) {
     try {
@@ -170,20 +188,8 @@ export function BookingsPage() {
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
-  const bookings = (data.bookings || []).filter((booking) => {
-    const term = search.trim().toLowerCase();
-    const matchesSearch = !term || [
-      booking.bookingCode,
-      booking.customerName,
-      booking.phone,
-      booking.device,
-      booking.issue
-    ].filter(Boolean).join(' ').toLowerCase().includes(term);
-    const matchesStatus = !status || booking.status === status;
-    const matchesService = !serviceType || `${booking.device || ''} ${booking.issue || ''}`.toLowerCase().includes(serviceType.toLowerCase());
-    const matchesSource = !source || bookingSourceValue(booking) === source;
-    return matchesSearch && matchesStatus && matchesService && matchesSource;
-  });
+  const bookings = data?.bookings || data?.data || [];
+  const pagination = paginationFrom(data, bookings.length, limit);
 
   return (
     <>
@@ -207,6 +213,7 @@ export function BookingsPage() {
         </select>
       </div>
       {!bookings.length ? <EmptyState title="No bookings found" message="Try changing the search or filters, or create the first booking." action={<button type="button" className="btn btn-primary" onClick={() => setFormOpen(true)}><Plus className="h-4 w-4" />Create Booking</button>} /> : (
+        <>
         <div className="table-wrap bookings-table-wrap bg-[var(--surface)]">
           <table className="data-table bookings-table">
             <colgroup>
@@ -246,6 +253,8 @@ export function BookingsPage() {
           </tbody>
           </table>
         </div>
+        <PaginationControls pagination={pagination} onPageChange={setPage} />
+        </>
       )}
       {formOpen ? <BookingModal onClose={() => setFormOpen(false)} onSaved={reload} /> : null}
     </>

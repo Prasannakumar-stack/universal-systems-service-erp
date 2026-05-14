@@ -79,6 +79,8 @@ import {
   pdfAllowed,
   pdfLockedReason,
   percentage,
+  PaginationControls,
+  paginationFrom,
   PhoneCallIcon,
   Plus,
   preserveScroll,
@@ -118,6 +120,7 @@ import {
   uploadedAssetUrl,
   useAuth,
   useCallback,
+  useDebouncedValue,
   useEffect,
   useLocation,
   useMemo,
@@ -148,35 +151,26 @@ export function InvoicesPage() {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const { data, loading, error } = useResource(async () => {
-    const [invoices, payments] = await Promise.all([request('/invoices'), request('/payments')]);
-    return { invoices: invoices.invoices || [], payments: payments.payments || [] };
-  }, [request]);
-  const paymentsByInvoice = useMemo(() => (data?.payments || []).reduce((map, payment) => {
-    const invoiceId = recordId(payment.invoiceId);
-    if (!invoiceId) return map;
-    map.set(invoiceId, [...(map.get(invoiceId) || []), payment]);
-    return map;
-  }, new Map()), [data?.payments]);
-  const invoices = (data?.invoices || []).filter((invoice) => {
-    const term = search.trim().toLowerCase();
-    const matchesSearch = !term || [
-      invoice.invoiceNumber,
-      invoice.customerId?.name,
-      invoice.customerId?.phone,
-      invoice.workOrderId?.device,
-      invoice.workOrderId?.issue,
-      bookingLabel(invoice.workOrderId)
-    ].filter(Boolean).join(' ').toLowerCase().includes(term);
-    const matchesStatus = !status || invoice.status === status;
-    const created = invoice.createdAt ? new Date(invoice.createdAt).getTime() : 0;
-    const matchesDateFrom = !dateFrom || created >= new Date(dateFrom).getTime();
-    const matchesDateTo = !dateTo || created <= new Date(dateTo).getTime() + 86400000;
-    const invoicePayments = paymentsByInvoice.get(recordId(invoice)) || [];
-    const matchesMethod = !paymentMethod || invoicePayments.some((payment) => payment.method === paymentMethod);
-    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo && matchesMethod;
-  });
-  const totals = {
+  const [page, setPage] = useState(1);
+  const limit = 10;
+  const debouncedSearch = useDebouncedValue(search);
+  const query = useMemo(() => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+    if (status) params.set('status', status);
+    if (paymentMethod) params.set('method', paymentMethod);
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
+    return `?${params}`;
+  }, [dateFrom, dateTo, debouncedSearch, limit, page, paymentMethod, status]);
+  const { data, loading, error } = useResource(() => request(`/invoices${query}`), [request, query]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, status, paymentMethod, dateFrom, dateTo]);
+
+  const invoices = data?.invoices || data?.data || [];
+  const totals = data?.summary || {
     totalInvoices: invoices.length,
     pending: invoices.filter((invoice) => invoice.status === 'Pending').length,
     partial: invoices.filter((invoice) => invoice.status === 'Partial').length,
@@ -184,7 +178,7 @@ export function InvoicesPage() {
     totalValue: invoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0),
     balance: invoices.reduce((sum, invoice) => sum + invoiceDueAmount(invoice), 0)
   };
-  const availableMethods = [...new Set((data?.payments || []).map((payment) => payment.method).filter(Boolean))];
+  const availableMethods = data?.paymentMethods || [];
 
   async function downloadWorkPdf(invoice, preview = false) {
     const workOrderId = recordId(invoice.workOrderId);
@@ -224,6 +218,7 @@ export function InvoicesPage() {
 
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
+  const pagination = paginationFrom(data, invoices.length, limit);
 
   return (
     <>
@@ -250,6 +245,7 @@ export function InvoicesPage() {
         <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
       </div>
       {!invoices.length ? <EmptyState title="No invoices generated yet" message="Invoices will appear after a repair/service job is billed." /> : (
+        <>
         <Table>
           <thead><tr><th>Invoice Number</th><th>Customer</th><th>Work Order / Job</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th>Created Date</th><th>Action</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
@@ -276,6 +272,8 @@ export function InvoicesPage() {
             ))}
           </tbody>
         </Table>
+        <PaginationControls pagination={pagination} onPageChange={setPage} />
+        </>
       )}
     </>
   );

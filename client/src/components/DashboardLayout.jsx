@@ -150,11 +150,12 @@ function sidebarBadgeClass(tone) {
 
 function buildSidebarBadges(dashboardData) {
   const stats = dashboardData?.stats || {};
-  const lowStockCount = dashboardData?.lowStockAlerts?.length || 0;
+  const alerts = dashboardData?.alerts || {};
+  const lowStockCount = Number(dashboardData?.metrics?.lowStockItems || alerts.lowStockItems || 0);
   return {
     bookings: { value: stats.todayBookings, tone: 'blue' },
     workOrders: { value: stats.pendingJobs, tone: 'blue' },
-    lowStock: { value: lowStockCount, tone: stats.lowStockCritical > 0 ? 'red' : 'orange' },
+    lowStock: { value: lowStockCount, tone: Number(alerts.outOfStockItems || stats.lowStockCritical || 0) > 0 ? 'red' : 'orange' },
     pendingPayments: { value: stats.pendingPayments, tone: 'green' },
     amcRenewals: { value: stats.amcRenewalsDue, tone: stats.expiredAmcContracts > 0 ? 'red' : 'orange' }
   };
@@ -231,7 +232,7 @@ function AdminSidebar({ close }) {
 
   useEffect(() => {
     let mounted = true;
-    request('/dashboard/admin')
+    request('/dashboard/metrics')
       .then((data) => {
         if (mounted) setDashboardData(data);
       })
@@ -377,10 +378,10 @@ function GlobalSearch({ role }) {
       const includes = (text) => String(text || '').toLowerCase().includes(needle);
       try {
         const [customers, bookings, invoices, inventory] = await Promise.all([
-          request(`/customers?search=${encodeURIComponent(value)}`).catch(() => ({ customers: [] })),
-          request('/bookings').catch(() => ({ bookings: [] })),
-          request('/invoices').catch(() => ({ invoices: [] })),
-          request('/inventory').catch(() => ({ parts: [] }))
+          request(`/customers?search=${encodeURIComponent(value)}&limit=5`).catch(() => ({ customers: [] })),
+          request(`/bookings?search=${encodeURIComponent(value)}&limit=5`).catch(() => ({ bookings: [] })),
+          request(`/invoices?search=${encodeURIComponent(value)}&limit=5`).catch(() => ({ invoices: [] })),
+          request(`/inventory?search=${encodeURIComponent(value)}&limit=5`).catch(() => ({ parts: [] }))
         ]);
         const customerResults = (customers.customers || []).map((customer) => ({
           type: 'Customer',

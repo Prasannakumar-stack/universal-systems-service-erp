@@ -4,6 +4,7 @@ import InventoryPart from '../models/InventoryPart.js';
 import User from '../models/User.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { appError, clean, numberValue } from '../utils/http.js';
+import { addDateRange, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 import { logAudit } from './auditService.js';
 import { createNotification } from './notificationService.js';
 import { applyStockMovement, reservePart } from './stockMovementService.js';
@@ -92,29 +93,48 @@ export async function createWorkOrder(payload, user) {
 
 export async function listWorkOrders(query, user) {
   const filter = {};
+  const clauses = [];
+  const { page, limit, skip } = parsePagination(query);
   if (user.role === 'technician') filter.technicianId = user._id;
   if (clean(query.status)) filter.status = clean(query.status);
-  if (clean(query.technicianId)) filter.technicianId = clean(query.technicianId);
-  if (clean(query.customerId)) filter.customerId = clean(query.customerId);
-  if (clean(query.dateFrom) || clean(query.dateTo)) {
-    filter.createdAt = {};
-    if (clean(query.dateFrom)) filter.createdAt.$gte = new Date(query.dateFrom);
-    if (clean(query.dateTo)) filter.createdAt.$lte = new Date(query.dateTo);
+  if (clean(query.priority)) filter.priority = clean(query.priority);
+  if (clean(query.serviceType)) filter.serviceType = searchRegex(query.serviceType);
+  if (clean(query.source)) {
+    const source = searchRegex(query.source);
+    clauses.push({ $or: [{ bookingSource: source }, { source }, { channel: source }] });
   }
+  if (user.role !== 'technician' && validObjectId(query.technicianId)) filter.technicianId = validObjectId(query.technicianId);
+  if (validObjectId(query.customerId)) filter.customerId = validObjectId(query.customerId);
+  addDateRange(filter, query);
 
   const search = clean(query.search);
-  if (search) {
-    const customers = await Customer.find({
-      $or: [{ name: new RegExp(search, 'i') }, { phone: new RegExp(search, 'i') }]
-    }).select('_id');
-    filter.$or = [
-      { device: new RegExp(search, 'i') },
-      { issue: new RegExp(search, 'i') },
-      { customerId: { $in: customers.map((item) => item._id) } }
+  const regex = searchRegex(search);
+  if (regex) {
+    const [customers, technicians] = await Promise.all([
+      Customer.find({ $or: [{ name: regex }, { phone: regex }] }).select('_id').limit(1000).lean(),
+      User.find({ $or: [{ name: regex }, { username: regex }], role: 'technician' }).select('_id').limit(1000).lean()
+    ]);
+    const searchFields = [
+      { device: regex },
+      { issue: regex },
+      { serviceType: regex },
+      { status: regex },
+      { bookingSource: regex },
+      { customerId: { $in: customers.map((item) => item._id) } },
+      { technicianId: { $in: technicians.map((item) => item._id) } }
     ];
+    const objectId = validObjectId(search);
+    if (objectId) searchFields.push({ _id: objectId });
+    clauses.push({ $or: searchFields });
   }
+  if (clauses.length) filter.$and = clauses;
 
-  return WorkOrder.find(filter).populate(populateWorkOrder).sort({ createdAt: -1 });
+  const [total, rows] = await Promise.all([
+    WorkOrder.countDocuments(filter),
+    WorkOrder.find(filter).populate(populateWorkOrder).sort({ createdAt: -1 }).skip(skip).limit(limit).lean()
+  ]);
+  const workOrders = rows.map((order) => withNestedIds(order, ['customerId', 'technicianId', 'bookingId', 'amcContractId', 'invoiceId']));
+  return { workOrders, pagination: paginationMeta(page, limit, total) };
 }
 
 export async function getWorkOrder(id, user) {
