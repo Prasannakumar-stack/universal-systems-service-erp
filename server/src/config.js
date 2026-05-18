@@ -36,6 +36,9 @@ export const ALLOWED_ORIGINS = [
 ].map((origin) => origin?.trim()).filter(Boolean);
 export const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/service_management_phase1';
 export const MONGO_TIMEOUT_MS = Number(process.env.MONGO_TIMEOUT_MS || 5000);
+export const WHATSAPP_PDF_API_URL = process.env.WHATSAPP_PDF_API_URL || '';
+export const WHATSAPP_PDF_API_TOKEN = process.env.WHATSAPP_PDF_API_TOKEN || '';
+export const WHATSAPP_PDF_PUBLIC_BASE_URL = process.env.WHATSAPP_PDF_PUBLIC_BASE_URL || '';
 
 export const COMPANY = {
   name: 'Universal Systems',

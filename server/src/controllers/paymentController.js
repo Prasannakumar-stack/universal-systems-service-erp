@@ -1,4 +1,5 @@
 import Customer from '../models/Customer.js';
+import AMCContract from '../models/AMCContract.js';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import { recordPayment } from '../services/paymentService.js';
@@ -24,10 +25,18 @@ export async function list(req, res) {
 
     const regex = searchRegex(req.query.search);
     if (regex) {
-      const [customers, invoices] = await Promise.all([
+      const [customers, amcContracts] = await Promise.all([
         Customer.find({ $or: [{ name: regex }, { phone: regex }, { email: regex }] }).select('_id').limit(1000).lean(),
-        Invoice.find({ invoiceNumber: regex }).select('_id').limit(1000).lean()
+        AMCContract.find({ $or: [{ contractId: regex }, { customerName: regex }, { phone: regex }, { contractType: regex }, { coverageType: regex }, { coveredService: regex }, { coveredDevices: regex }] }).select('_id').limit(1000).lean()
       ]);
+      const invoices = await Invoice.find({
+        $or: [
+          { invoiceNumber: regex },
+          { title: regex },
+          { notes: regex },
+          { amcContractId: { $in: amcContracts.map((item) => item._id) } }
+        ]
+      }).select('_id').limit(1000).lean();
       const searchFields = [
         { method: regex },
         { status: regex },
@@ -49,7 +58,8 @@ export async function list(req, res) {
       Payment.countDocuments(filter),
       Payment.find(filter)
         .select('invoiceId customerId amount paidAmount balance status method transactionId createdAt updatedAt')
-        .populate('invoiceId customerId')
+        .populate({ path: 'invoiceId', populate: [{ path: 'workOrderId' }, { path: 'amcContractId' }] })
+        .populate('customerId')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)

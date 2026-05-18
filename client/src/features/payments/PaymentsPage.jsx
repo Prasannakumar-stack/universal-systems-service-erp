@@ -50,7 +50,13 @@ import {
   filterByRange,
   findInvoice,
   formatDate,
+  getCustomerDisplayId,
+  getInvoiceDisplayId,
+  getPaymentDisplayId,
+  getWorkOrderDisplayId,
   getPdfLabel,
+  matchesDisplaySearch,
+  paymentSearchText,
   inventoryCategories,
   InventoryStatusBadge,
   inventoryStockStatus,
@@ -241,7 +247,7 @@ export function PaymentsPage() {
           body: JSON.stringify({ invoiceId: form.invoiceId, amount: form.paidAmount, method: form.method, transactionId: form.transactionId })
         });
         setForm((current) => ({ ...current, paidAmount: '', transactionId: '' }));
-        push('Payment recorded');
+        push('Payment recorded successfully');
         reload({ silent: true });
       });
     } catch (err) {
@@ -252,7 +258,15 @@ export function PaymentsPage() {
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
+  const searchTerm = search.trim();
+  const visiblePayments = searchTerm
+    ? (data.payments || []).filter((payment) => matchesDisplaySearch(searchTerm, paymentSearchText(payment)))
+    : (data.payments || []);
+
   const selectedInvoice = findInvoice(data.invoices, form.invoiceId);
+  const selectedBalanceDue = invoiceDueAmount(selectedInvoice);
+  const canRecordPayment = Boolean(form.invoiceId && Number(form.paidAmount) > 0);
+  const hasActiveFilters = Boolean(search.trim() || paymentStatus || methodFilter || dateFrom || dateTo);
   const paymentSummaryByInvoice = (data.payments || []).reduce((map, payment) => {
     const id = payment.invoiceId?.id || payment.invoiceId?._id || payment.invoiceId;
     if (!id) return map;
@@ -280,19 +294,61 @@ export function PaymentsPage() {
     partialInvoices: (data.invoices || []).filter((invoice) => invoice.status === 'Partial').length,
     todayCollection: (data.payments || []).filter((payment) => isToday(payment.createdAt)).reduce((sum, payment) => sum + Number(payment.paidAmount || 0), 0)
   };
+  const paymentKpis = [
+    { icon: CreditCard, label: 'Total Collected', value: currency(paymentTotals.totalCollected), helper: 'Received amount', tone: 'green' },
+    { icon: AlertTriangle, label: 'Pending Balance', value: currency(paymentTotals.pendingBalance), helper: 'Still outstanding', tone: 'amber', glow: Number(paymentTotals.pendingBalance || 0) > 0 },
+    { icon: CheckCircle2, label: 'Paid Invoices', value: paymentTotals.paidInvoices, helper: 'Fully settled', tone: 'green' },
+    { icon: ReceiptText, label: 'Partial Invoices', value: paymentTotals.partialInvoices, helper: 'Needs follow-up', tone: 'amber' },
+    { icon: CalendarClock, label: "Today's Collection", value: currency(paymentTotals.todayCollection), helper: 'Collected today', tone: 'blue' }
+  ];
+
+  function resetFilters() {
+    setSearch('');
+    setPaymentStatus('');
+    setMethodFilter('');
+    setDateFrom('');
+    setDateTo('');
+  }
+
+  function invoiceSourceLabel(invoice) {
+    if (recordId(invoice?.workOrderId)) return getWorkOrderDisplayId(invoice.workOrderId);
+    if (recordId(invoice?.amcContractId)) return invoice.amcContractId?.contractId || 'AMC Contract';
+    return '-';
+  }
+
+  function invoiceSourceCell(invoice) {
+    if (recordId(invoice?.workOrderId)) {
+      return <Link className="billing-link" to={`/admin/work-orders/${recordId(invoice.workOrderId)}`}>{getWorkOrderDisplayId(invoice.workOrderId)}</Link>;
+    }
+    if (recordId(invoice?.amcContractId)) {
+      return (
+        <Link className="billing-link" to="/admin/amc-contracts">
+          {invoice.amcContractId?.contractId || 'AMC Contract'}
+          <span className="block truncate text-xs muted" title={invoice.amcContractId?.contractType || '-'}>{invoice.amcContractId?.contractType || '-'}</span>
+        </Link>
+      );
+    }
+    return <span className="muted">-</span>;
+  }
 
   return (
-    <div className="payments-page">
-      <PageHeader title="Payments" eyebrow="Billing">Record cash, UPI, and partial payments with invoice balance tracking.</PageHeader>
-      <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard icon={CreditCard} label="Total Collected" value={currency(paymentTotals.totalCollected)} tone="green" />
-        <StatCard icon={AlertTriangle} label="Pending Balance" value={currency(paymentTotals.pendingBalance)} tone="red" />
-        <StatCard icon={CheckCircle2} label="Paid Invoices" value={paymentTotals.paidInvoices} tone="green" />
-        <StatCard icon={ReceiptText} label="Partial Invoices" value={paymentTotals.partialInvoices} tone="yellow" />
-        <StatCard icon={CalendarClock} label="Today's Collection" value={currency(paymentTotals.todayCollection)} />
+    <div className="billing-page payments-page">
+      <section className="billing-hero mb-5">
+        <div className="relative z-[1]">
+          <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">Billing</p>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Payments</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 muted">Record cash, UPI, and partial payments with invoice balance tracking.</p>
+        </div>
+      </section>
+
+      <div className="billing-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {paymentKpis.map((item) => <BillingMetricCard key={item.label} {...item} />)}
       </div>
-      <div className="surface mb-5 grid gap-3 p-4 xl:grid-cols-[1fr_160px_140px_160px_160px]">
-        <SearchBox value={search} onChange={setSearch} placeholder="Search payment, invoice, customer, method" />
+
+      <div className="surface billing-filter-bar mb-5 grid gap-3 p-4 xl:grid-cols-[minmax(320px,1fr)_155px_145px_155px_155px_auto]">
+        <div className="min-w-0">
+          <SearchBox value={search} onChange={setSearch} placeholder="Search payment ID, invoice ID, work order ID, customer, phone" />
+        </div>
         <select className="input" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
           <option value="">All statuses</option>
           {['Paid', 'Partial', 'Pending'].map((item) => <option key={item}>{item}</option>)}
@@ -303,10 +359,17 @@ export function PaymentsPage() {
         </select>
         <input className="input" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        <button type="button" className="btn btn-secondary h-10 whitespace-nowrap px-4" disabled={!hasActiveFilters} onClick={resetFilters}>Reset Filters</button>
       </div>
-      <form className="surface mb-5 grid gap-4 p-5 xl:grid-cols-[1.2fr_.8fr]" onSubmit={submit}>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="md:col-span-2">
+
+      <form className="surface payment-entry-panel mb-5 grid gap-5 p-5 xl:grid-cols-[1.05fr_.95fr]" onSubmit={submit}>
+        <div>
+          <div className="mb-4">
+            <h2 className="text-xl font-black">Record Payment</h2>
+            <p className="mt-1 text-sm muted">Select an invoice, confirm received amount, and record the payment.</p>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_180px_160px_auto]">
+          <label className="lg:col-span-4">
             <span className="label">Select Invoice</span>
             <select className="input" value={form.invoiceId} onChange={(event) => selectInvoice(event.target.value)} required>
               <option value="">Select invoice</option>
@@ -318,7 +381,8 @@ export function PaymentsPage() {
           </label>
           <label>
             <span className="label">Payment Amount</span>
-            <input className="input" type="number" min="1" placeholder="Paid amount" value={form.paidAmount} onChange={(event) => setForm((current) => ({ ...current, paidAmount: event.target.value }))} required />
+            <input className="input payment-amount-input" type="number" min="1" placeholder="Enter amount received" value={form.paidAmount} onChange={(event) => setForm((current) => ({ ...current, paidAmount: event.target.value }))} required />
+            {selectedInvoice ? <span className="mt-1 block text-xs font-semibold text-amber-100">Balance due: {currency(selectedBalanceDue)}</span> : null}
           </label>
           <label>
             <span className="label">Payment Method</span>
@@ -326,39 +390,115 @@ export function PaymentsPage() {
               <option>Cash</option><option>UPI</option><option disabled>Cash + UPI</option>
             </select>
           </label>
-          {form.method === 'UPI' ? <label><span className="label">Transaction ID</span><input className="input" placeholder="Transaction ID (optional)" value={form.transactionId} onChange={(event) => setForm((current) => ({ ...current, transactionId: event.target.value }))} /></label> : null}
-          <label>
-            <span className="label">Payment Note</span>
-            <input className="input" placeholder="Payment note not supported by current API" disabled />
-          </label>
-          <button type="submit" className="btn btn-primary self-end"><CreditCard className="h-4 w-4" />Record Payment</button>
+          {form.method === 'UPI' ? <label><span className="label">Transaction ID</span><input className="input" placeholder="Transaction ID (optional)" value={form.transactionId} onChange={(event) => setForm((current) => ({ ...current, transactionId: event.target.value }))} /></label> : <div className="hidden lg:block" />}
+          <button type="submit" className="btn btn-primary h-10 self-end disabled:cursor-not-allowed disabled:opacity-50" disabled={!canRecordPayment}><CreditCard className="h-4 w-4" />Record Payment</button>
+          </div>
         </div>
-        <div className="rounded-card bg-[var(--surface-2)] p-4">
-          <h2 className="font-black">Selected Invoice</h2>
+        <div className="selected-invoice-card">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="font-black">Selected Invoice</h2>
+            {selectedInvoice ? <BillingStatusPill status={selectedInvoice.status} /> : null}
+          </div>
           {selectedInvoice ? (
             <div className="mt-4 grid gap-3">
-              <div><p className="text-sm muted">Customer</p><p className="font-bold">{selectedInvoice.customerId?.name || '-'}</p></div>
-              <div className="grid grid-cols-3 gap-2">
-                <div><p className="text-xs muted">Total</p><p className="font-black">{currency(selectedInvoice.total)}</p></div>
-                <div><p className="text-xs muted">Paid</p><p className="font-black text-emerald-100">{currency(selectedInvoice.paidAmount)}</p></div>
-                <div><p className="text-xs muted">Balance</p><p className="font-black text-amber-100">{currency(selectedInvoice.balance)}</p></div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <BillingInfo label="Invoice ID" value={getInvoiceDisplayId(selectedInvoice)} />
+                <BillingInfo label="Linked Source" value={invoiceSourceLabel(selectedInvoice)} />
               </div>
-              <StatusBadge status={selectedInvoice.status} />
+              <div className="billing-info-block">
+                <p className="text-xs font-black uppercase text-slate-400">Customer</p>
+                <p className="mt-1 truncate font-black text-slate-100" title={selectedInvoice.customerId?.name || '-'}>{selectedInvoice.customerId?.name || '-'}</p>
+                <p className="text-xs muted">{selectedInvoice.customerId?.phone || '-'}</p>
+                <p className="text-xs muted">Customer ID: {getCustomerDisplayId(selectedInvoice.customerId)}</p>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <BillingInfo label="Invoice Total" value={currency(selectedInvoice.total)} strong />
+                <BillingInfo label="Paid Amount" value={currency(selectedInvoice.paidAmount)} tone="green" />
+                <BillingInfo label="Balance Due" value={currency(selectedBalanceDue)} tone={selectedBalanceDue > 0 ? 'amber' : 'green'} />
+              </div>
             </div>
-          ) : <p className="mt-3 text-sm muted">Select an invoice to see customer, total, paid amount, and balance.</p>}
+          ) : (
+            <div className="billing-inline-empty">
+              <ReceiptText className="h-8 w-8 text-[var(--brand)]" />
+              <div>
+                <p className="font-black text-slate-100">No invoice selected</p>
+                <p className="mt-1 text-sm muted">Select an invoice to view balance and record payment.</p>
+              </div>
+            </div>
+          )}
         </div>
       </form>
-      {!data.payments?.length ? <EmptyState title="No payments recorded yet" message="Payments will appear after invoice payment is recorded." /> : (
+      {!visiblePayments.length ? (
+        <EmptyState
+          icon={CreditCard}
+          title={hasActiveFilters ? 'No payments found' : 'No payments recorded'}
+          message={hasActiveFilters ? 'Try resetting filters to view all recorded payments.' : 'Payments will appear here after invoice payments are recorded.'}
+          action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={resetFilters}>Reset Filters</button> : null}
+        />
+      ) : (
         <>
-        <Table>
-          <thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th>Amount Paid</th><th>Method</th><th>Balance After</th><th>Status</th></tr></thead>
-          <tbody className="divide-y divide-[var(--line)]">
-            {data.payments.map((payment) => <tr key={payment.id}><td>{formatDate(payment.createdAt)}</td><td className="font-bold"><Link className="text-sky-100 hover:text-[var(--brand)]" to="/admin/invoices">{payment.invoiceId?.invoiceNumber}</Link></td><td>{payment.customerId?.name}</td><td className="font-bold text-emerald-100">{currency(payment.paidAmount)}</td><td>{paymentMethodDisplay(payment)}</td><td className={Number(payment.balance || 0) > 0 ? 'font-bold text-amber-100' : 'text-emerald-100'}>{currency(payment.balance)}</td><td><StatusBadge status={payment.status} /></td></tr>)}
-          </tbody>
-        </Table>
+        <div className="table-wrap billing-table-wrap bg-[var(--surface)]">
+          <table className="data-table payments-table">
+            <thead><tr><th>Date</th><th>Payment ID</th><th>Linked Invoice</th><th>Linked Source</th><th>Customer</th><th className="text-right">Amount Paid</th><th>Method</th><th className="text-right">Balance After</th></tr></thead>
+            <tbody className="divide-y divide-[var(--line)]">
+              {visiblePayments.map((payment) => {
+                const balanceAfter = Number(payment.balance || 0);
+                return (
+                  <tr key={payment.id}>
+                    <td className="whitespace-nowrap">{formatDate(payment.createdAt)}</td>
+                    <td className="font-bold"><span className="billing-id-text">{getPaymentDisplayId(payment)}</span></td>
+                    <td className="font-bold"><Link className="billing-link" to="/admin/invoices">{getInvoiceDisplayId(payment.invoiceId)}</Link></td>
+                    <td>{invoiceSourceCell(payment.invoiceId)}</td>
+                    <td>
+                      <span className="block truncate font-semibold text-slate-100" title={payment.customerId?.name || '-'}>{payment.customerId?.name || '-'}</span>
+                      <span className="block text-xs muted">{payment.customerId?.phone || '-'}</span>
+                    </td>
+                    <td className="billing-money-cell text-right text-emerald-100">{currency(payment.paidAmount)}</td>
+                    <td><span className="billing-method-pill">{paymentMethodDisplay(payment)}</span></td>
+                    <td className={`billing-money-cell text-right ${balanceAfter > 0 ? 'text-amber-100' : 'text-emerald-100'}`}>
+                      {currency(payment.balance)}
+                      <span className="mt-1 block"><BillingStatusPill status={payment.status} /></span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         <PaginationControls pagination={paginationFrom(data, data.payments?.length || 0, limit)} onPageChange={setPage} />
         </>
       )}
     </div>
   );
+}
+
+function BillingMetricCard({ icon: Icon, label, value, helper, tone = 'blue', glow = false }) {
+  return (
+    <div className={`billing-metric-card billing-metric-${tone} ${glow ? 'billing-metric-glow' : ''}`}>
+      <div className="billing-metric-icon"><Icon className="h-4 w-4" /></div>
+      <div className="min-w-0">
+        <p className="billing-metric-label">{label}</p>
+        <p className="billing-metric-value" title={String(value)}>{value}</p>
+        <p className="billing-metric-helper">{helper}</p>
+      </div>
+    </div>
+  );
+}
+
+function BillingInfo({ label, value, tone = '', strong = false }) {
+  return (
+    <div className="billing-info-block">
+      <p className="text-xs font-black uppercase text-slate-400">{label}</p>
+      <p className={`mt-1 truncate ${strong ? 'font-black' : 'font-bold'} ${tone === 'green' ? 'text-emerald-100' : tone === 'amber' ? 'text-amber-100' : 'text-slate-100'}`} title={String(value)}>{value}</p>
+    </div>
+  );
+}
+
+function BillingStatusPill({ status }) {
+  const tone = {
+    Paid: 'billing-status-paid',
+    Pending: 'billing-status-pending',
+    Partial: 'billing-status-partial'
+  }[status] || 'billing-status-neutral';
+  return <span className={`billing-status-pill ${tone}`}>{status || '-'}</span>;
 }

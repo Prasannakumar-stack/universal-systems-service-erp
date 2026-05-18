@@ -139,6 +139,7 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { normalizeAmcCoverageType } from '../../shared/amcCoverage.js';
 
 export function AMCRenewalsPage() {
   const { request } = useAuth();
@@ -148,6 +149,10 @@ export function AMCRenewalsPage() {
   const renewals = data?.renewals || [];
   const expiring = renewals.filter((contract) => contract.renewalStatus === 'Renewal Due');
   const expired = renewals.filter((contract) => contract.renewalStatus === 'Expired');
+  const renewalKpis = [
+    { icon: Bell, label: 'Expiring in 30 Days', value: expiring.length, helper: 'Renew these before coverage lapses.', tone: 'amber' },
+    { icon: AlertTriangle, label: 'Expired Contracts', value: expired.length, helper: 'Coverage already ended and needs action.', tone: 'red' }
+  ];
 
   async function createJob(contract) {
     try {
@@ -163,58 +168,102 @@ export function AMCRenewalsPage() {
     }
   }
 
+  function renewContract(contract) {
+    navigate('/admin/amc-contracts', { state: { renewContract: contract } });
+  }
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
   return (
-    <>
-      <PageHeader
-        title="AMC Renewals"
-        eyebrow="AMC & Contracts"
-        action={<Link className="btn btn-primary" to="/admin/amc-contracts"><Plus className="h-4 w-4" />New Contract</Link>}
-      >
-        Review contracts expiring in 30 days and expired AMC agreements.
-      </PageHeader>
+    <div className="amc-module-page">
+      <section className="amc-page-header mb-5">
+        <div className="relative z-[1] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">AMC & Contracts</p>
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">AMC Renewals</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Review contracts expiring in 30 days and expired AMC agreements.</p>
+          </div>
+          <Link className="btn btn-primary h-10 px-4" to="/admin/amc-contracts"><Plus className="h-4 w-4" />New Contract</Link>
+        </div>
+      </section>
       <div className="surface mb-5 p-3">
-        <div className="tabs-list">
+        <div className="tabs-list amc-tabs border-b-0">
           <Link className="tab-button" to="/admin/amc-contracts">Contracts</Link>
           <Link className="tab-button" to="/admin/amc-schedule">Schedule</Link>
           <Link className="tab-button tab-button-active" to="/admin/amc-renewals">Renewals</Link>
           <Link className="tab-button" to="/admin/warranties">Warranties</Link>
         </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <StatCard icon={AlertTriangle} label="Expiring in 30 Days" value={expiring.length} tone="yellow" />
-        <StatCard icon={AlertTriangle} label="Expired Contracts" value={expired.length} tone="red" />
+      <div className="amc-kpi-grid grid gap-4 sm:grid-cols-2">
+        {renewalKpis.map((item) => <AmcMetricCard key={item.label} {...item} />)}
       </div>
-      <div className="surface mt-6 p-5">
+      <div className="surface amc-table-card mt-6 p-5">
         {!renewals.length ? (
-          <EmptyState title="No AMC renewals due" message="Renewal reminders will appear when contracts are near expiry." action={<Link className="btn btn-secondary" to="/admin/amc-contracts">View Contracts</Link>} />
+          <EmptyState
+            icon={Bell}
+            title="No AMC renewals due"
+            message="Renewal reminders will appear when contracts are near expiry."
+            action={<Link className="btn btn-secondary" to="/admin/amc-contracts">View Contracts</Link>}
+          />
         ) : (
-          <Table>
-            <thead><tr><th>Contract</th><th>Customer</th><th>Phone</th><th>Contract Type</th><th>End Date</th><th>Renewal Status</th><th>Value</th><th>Action</th></tr></thead>
+          <div className="table-wrap amc-table-wrap bg-[var(--surface)]">
+            <table className="data-table amc-renewals-table">
+            <thead><tr><th>Contract ID</th><th>Customer</th><th>Phone</th><th>Contract Type</th><th>End Date</th><th>Renewal Status</th><th>Value</th><th className="text-right">Action</th></tr></thead>
             <tbody>
               {renewals.map((contract) => (
-                <tr key={recordId(contract)}>
-                  <td className="font-bold">{contract.contractId}</td>
-                  <td>{contract.customerName}</td>
-                  <td>{contract.phone}</td>
-                  <td>{contract.contractType}</td>
-                  <td>{formatDate(contract.endDate)}</td>
-                  <td><AmcStatusBadge status={contract.renewalStatus} /></td>
-                  <td>{currency(contract.contractValue)}</td>
+                <tr key={recordId(contract)} className={contract.renewalStatus === 'Expired' ? 'amc-row-overdue' : ''}>
+                  <td className="font-bold"><span className="amc-id-text">{contract.contractId}</span></td>
+                  <td><span className="block truncate font-semibold text-slate-100" title={contract.customerName || '-'}>{contract.customerName || '-'}</span></td>
+                  <td><span className="block whitespace-nowrap text-sm text-slate-200">{contract.phone || '-'}</span></td>
                   <td>
-                    <div className="flex flex-wrap gap-2">
-                      <a className="btn btn-secondary py-2" href={amcWhatsappHref(contract)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
-                      <button className="btn btn-primary py-2" onClick={() => createJob(contract)}>Create Job</button>
+                    <span className="block truncate" title={contract.contractType || '-'}>{contract.contractType || '-'}</span>
+                    <span className="mt-1 block truncate text-xs text-emerald-100" title={normalizeAmcCoverageType(contract.coverageType)}>{normalizeAmcCoverageType(contract.coverageType)}</span>
+                  </td>
+                  <td className="whitespace-nowrap">{formatDate(contract.endDate)}</td>
+                  <td><AmcStatusPill status={contract.renewalStatus} /></td>
+                  <td className="font-black text-slate-100">{currency(contract.contractValue)}</td>
+                  <td className="text-right">
+                    <div className="amc-actions">
+                      <a className="btn btn-secondary amc-action-button amc-whatsapp-action" href={amcWhatsappHref(contract)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+                      <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button>
+                      <button className="btn btn-secondary amc-action-button" type="button" onClick={() => renewContract(contract)}><FileText className="h-4 w-4" />Renew</button>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </Table>
+            </table>
+          </div>
         )}
       </div>
-    </>
+    </div>
   );
+}
+
+function AmcMetricCard({ icon: Icon, label, value, helper, tone = 'blue' }) {
+  return (
+    <div className={`amc-metric-card amc-metric-${tone}`}>
+      <div className="amc-metric-icon"><Icon className="h-4 w-4" /></div>
+      <div className="min-w-0">
+        <p className="amc-metric-label">{label}</p>
+        <p className="amc-metric-value" title={String(value)}>{value}</p>
+        <p className="amc-metric-helper">{helper}</p>
+      </div>
+    </div>
+  );
+}
+
+function AmcStatusPill({ status }) {
+  const tone = {
+    Active: 'amc-status-active',
+    Upcoming: 'amc-status-upcoming',
+    'Due Today': 'amc-status-due',
+    Overdue: 'amc-status-overdue',
+    Completed: 'amc-status-completed',
+    'Renewal Due': 'amc-status-renewal',
+    Expired: 'amc-status-expired',
+    Cancelled: 'amc-status-cancelled'
+  }[status] || 'amc-status-cancelled';
+  return <span className={`amc-status-pill ${tone}`}>{status || '-'}</span>;
 }

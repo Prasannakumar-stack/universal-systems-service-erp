@@ -95,7 +95,7 @@ function serializeWorkOrder(order) {
       }
       : null,
     status: order.status,
-    priority: order.priority || '',
+    priority: order.priority || 'Normal',
     createdAt: order.createdAt,
     updatedAt: order.updatedAt
   };
@@ -172,6 +172,7 @@ export async function getAdminDashboardMetrics(user) {
     completedToday,
     completedJobs,
     overdueJobs,
+    urgentActiveJobs,
     pendingPayments,
     paymentsOverdue,
     lowStockItems,
@@ -198,6 +199,7 @@ export async function getAdminDashboardMetrics(user) {
     WorkOrder.countDocuments({ status: 'Completed', updatedAt: { $gte: today, $lt: tomorrow } }),
     WorkOrder.countDocuments({ status: 'Completed' }),
     WorkOrder.countDocuments({ status: { $in: activeWorkStatuses }, updatedAt: { $lt: dayAgo } }),
+    WorkOrder.countDocuments({ priority: 'Urgent', status: { $in: activeWorkStatuses } }),
     Invoice.countDocuments({ status: { $in: ['Pending', 'Partial'] }, balance: { $gt: 0 } }),
     Invoice.countDocuments({ status: { $in: ['Pending', 'Partial'] }, balance: { $gt: 0 }, createdAt: { $lt: sevenDayStart } }),
     InventoryPart.countDocuments({ $expr: { $and: [{ $gt: ['$available', 0] }, { $lte: ['$available', '$lowStockLimit'] }] } }),
@@ -273,6 +275,7 @@ export async function getAdminDashboardMetrics(user) {
     alerts: {
       outOfStockItems,
       overdueJobs,
+      urgentActiveJobs,
       lowStockItems,
       pendingPayments
     },
@@ -289,7 +292,8 @@ export async function getAdminDashboardMetrics(user) {
       amcRenewalsDue,
       amcVisitsThisWeek,
       expiredAmcContracts,
-      pendingPayments
+      pendingPayments,
+      urgentActiveJobs
     },
     recentBookings: recentBookings.map(serializeBooking),
     repairQueue: repairQueue.map(serializeWorkOrder),

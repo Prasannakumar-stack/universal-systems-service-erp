@@ -26,6 +26,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { company } from '../utils/constants.js';
+import { getCustomerDisplayId, getInvoiceDisplayId } from '../shared/idHelpers.js';
 import { adminWorkspaceRoles, canAccessRoles, normalizeRole, roleLabel } from '../utils/roles.js';
 
 const fullAccessRoles = ['admin', 'owner'];
@@ -383,10 +384,12 @@ function GlobalSearch({ role }) {
           request(`/invoices?search=${encodeURIComponent(value)}&limit=5`).catch(() => ({ invoices: [] })),
           request(`/inventory?search=${encodeURIComponent(value)}&limit=5`).catch(() => ({ parts: [] }))
         ]);
-        const customerResults = (customers.customers || []).map((customer) => ({
+        const customerResults = (customers.customers || [])
+          .filter((customer) => includes(customer.name) || includes(customer.phone) || includes(getCustomerDisplayId(customer)))
+          .map((customer) => ({
           type: 'Customer',
           title: customer.name,
-          meta: customer.phone || 'Customer profile',
+          meta: `${getCustomerDisplayId(customer)}${customer.phone ? ` - ${customer.phone}` : ''}`,
           to: `/admin/customers/${customer.id}`
         }));
         const bookingResults = (bookings.bookings || [])
@@ -398,10 +401,10 @@ function GlobalSearch({ role }) {
             to: '/admin/bookings'
           }));
         const invoiceResults = (invoices.invoices || [])
-          .filter((invoice) => includes(invoice.invoiceNumber) || includes(invoice.customerId?.name))
+          .filter((invoice) => includes(getInvoiceDisplayId(invoice)) || includes(invoice.invoiceNumber) || includes(invoice.customerId?.name))
           .map((invoice) => ({
             type: 'Invoice',
-            title: invoice.invoiceNumber,
+            title: getInvoiceDisplayId(invoice),
             meta: invoice.customerId?.name || 'Billing',
             to: '/admin/invoices'
           }));

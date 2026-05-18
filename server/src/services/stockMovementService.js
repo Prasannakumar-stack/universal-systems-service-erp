@@ -12,7 +12,7 @@ export function syncPartAvailability(part) {
   part.stock = part.onHand;
 }
 
-export async function applyStockMovement({ partId, type, quantity, source = 'Manual', note = '', userId = null }) {
+export async function applyStockMovement({ partId, type, quantity, source = 'Manual', sourceId = null, note = '', userId = null }) {
   if (!['ADD', 'USED', 'RETURN', 'ADJUST'].includes(type)) throw appError('Invalid stock movement type');
   const qty = numberValue(quantity, 0);
   if (!qty) throw appError('Quantity is required');
@@ -49,6 +49,7 @@ export async function applyStockMovement({ partId, type, quantity, source = 'Man
     quantity: qty,
     balanceAfter: part.onHand,
     source: clean(source) || 'Manual',
+    sourceId: sourceId || null,
     note: clean(note),
     userId
   });

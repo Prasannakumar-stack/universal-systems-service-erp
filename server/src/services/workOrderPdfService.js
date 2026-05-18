@@ -4,11 +4,12 @@ import PDFDocument from 'pdfkit';
 import WorkOrder from '../models/WorkOrder.js';
 import { COMPANY, LOGO_FULL_PATH, PDF_DIR } from '../config.js';
 import { appError } from '../utils/http.js';
+import { calculateAmcCoverageBreakdown, amcCoverageSummary } from './amcCoverageEngine.js';
 
 const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
 const boldFontPath = 'C:\\Windows\\Fonts\\arialbd.ttf';
 
-const pdfTypes = ['quotation', 'work', 'service-completed'];
+const pdfTypes = ['quotation', 'work', 'service-completed', 'amc-contract', 'amc-service-visit', 'amc-invoice'];
 
 function fontExists(filePath) {
   return fs.existsSync(filePath);
@@ -58,8 +59,13 @@ async function getPdfWorkOrder(workOrderId, user) {
   const workOrder = await WorkOrder.findById(workOrderId)
     .populate('customerId', 'name phone address devices')
     .populate('technicianId', 'name username role')
-    .populate('bookingId', 'bookingCode')
-    .populate('invoiceId', 'invoiceNumber total paidAmount balance status');
+    .populate('bookingId', 'bookingCode serviceType device')
+    .populate({
+      path: 'amcContractId',
+      select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices serviceFrequency contractValue startDate endDate status includedVisits invoiceId notes',
+      populate: { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status title notes' }
+    })
+    .populate('invoiceId', 'invoiceNumber total paidAmount balance status title notes');
   if (!workOrder) throw appError('Work order not found', 404);
   if (user.role === 'technician' && String(workOrder.technicianId?._id) !== String(user._id)) {
     throw appError('You do not have permission to view this work order', 403);
@@ -72,6 +78,9 @@ function isAllowed(type, workOrder) {
   if (type === 'quotation') return status === 'Pending';
   if (type === 'work') return status === 'Completed';
   if (type === 'service-completed') return status === 'Delivered';
+  if (type === 'amc-contract') return Boolean(workOrder.amcContractId);
+  if (type === 'amc-service-visit') return Boolean(workOrder.amcContractId) && ['Completed', 'Delivered'].includes(status);
+  if (type === 'amc-invoice') return Boolean(workOrder.amcContractId) && (Boolean(workOrder.amcContractId?.invoiceId) || Boolean(workOrder.invoiceId));
   return false;
 }
 
@@ -83,15 +92,47 @@ function serviceType(workOrder) {
   return workOrder.device || 'Service';
 }
 
-function buildRows(workOrder) {
+function partChargeType(part) {
+  return part?.chargeType === 'Covered under AMC' ? 'Covered under AMC' : 'Chargeable';
+}
+
+function buildRows(workOrder, options = {}) {
   const rows = [];
   const serviceCharge = Number(workOrder.serviceCharge || 0);
-  rows.push({
-    description: `Service (${serviceType(workOrder)})`,
-    quantity: 1,
-    price: serviceCharge,
-    total: serviceCharge
-  });
+  const billingOnly = Boolean(options.billingOnly);
+  const isAmcWorkOrder = Boolean(workOrder.amcContractId);
+  if (isAmcWorkOrder) {
+    const breakdown = calculateAmcCoverageBreakdown(workOrder);
+    if ((!billingOnly || breakdown.chargeableServiceTotal > 0) && serviceCharge > 0) {
+      const covered = breakdown.coverService;
+      if (!billingOnly || !covered) {
+        rows.push({
+          description: `Service (${serviceType(workOrder)})${covered ? ' (Covered by AMC)' : ' (Chargeable)'}`,
+          quantity: 1,
+          price: serviceCharge,
+          total: covered ? 0 : serviceCharge
+        });
+      }
+    }
+    breakdown.parts.forEach((part) => {
+      if (billingOnly && part.coveredByAmc) return;
+      rows.push({
+        description: part.coveredByAmc ? `${part.name} (Covered by AMC)` : `${part.name} (Chargeable)`,
+        quantity: part.quantity,
+        price: part.unitPrice,
+        total: part.coveredByAmc ? 0 : part.total
+      });
+    });
+    return rows;
+  }
+  if (!billingOnly || serviceCharge > 0) {
+    rows.push({
+      description: `Service (${serviceType(workOrder)})`,
+      quantity: 1,
+      price: serviceCharge,
+      total: serviceCharge
+    });
+  }
   (workOrder.partsUsed || []).forEach((part) => {
     rows.push({
       description: part.name,
@@ -101,6 +142,33 @@ function buildRows(workOrder) {
     });
   });
   return rows;
+}
+
+function contractStatus(contract) {
+  if (!contract) return '-';
+  if (contract.status === 'Cancelled') return 'Cancelled';
+  const end = new Date(contract.endDate);
+  if (Number.isNaN(end.getTime())) return contract.status || 'Active';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  const daysLeft = Math.ceil((end.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+  if (daysLeft < 0) return 'Expired';
+  if (daysLeft <= 30) return 'Renewal Due';
+  return 'Active';
+}
+
+function amcCoveredNotCovered(contract = {}) {
+  const coverage = amcCoverageSummary(contract);
+  const covered = [];
+  const notCovered = ['Physical damage', 'Customer misuse'];
+  if (coverage.coverParts) covered.push('Replacement parts');
+  else notCovered.push('Replacement parts');
+  if (coverage.coverService) covered.push('Service labor');
+  else notCovered.push('Repair/service labor');
+  if (coverage.coverVisits) covered.push(`${contract.serviceFrequency || 'Scheduled'} visits`);
+  else notCovered.push('Service visits');
+  return { covered, notCovered };
 }
 
 function addHeader(doc, title) {
@@ -189,9 +257,10 @@ function buildQuotation(doc, workOrder) {
 }
 
 function buildInvoice(doc, workOrder) {
-  addHeader(doc, 'INVOICE');
+  const isAmcWorkOrder = Boolean(workOrder.amcContractId);
+  addHeader(doc, isAmcWorkOrder ? 'EXTRA PARTS INVOICE' : 'INVOICE');
   addCustomerDetails(doc, workOrder, 205);
-  const rows = buildRows(workOrder);
+  const rows = buildRows(workOrder, { billingOnly: isAmcWorkOrder });
   const subtotal = rows.reduce((sum, row) => sum + Number(row.total || 0), 0);
   const invoice = workOrder.invoiceId;
   const total = Number(invoice?.total ?? subtotal);
@@ -206,6 +275,114 @@ function buildInvoice(doc, workOrder) {
   doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text('WORK NOTICE', 52, y + 116);
   doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155').text('Your product/service has been successfully completed.\nYou may collect your product.', 52, y + 136, { width: 492, lineGap: 5 });
   footer(doc, 'Thank you for choosing Universal Systems.');
+}
+
+function addAmcContractBlock(doc, workOrder, y, title = 'AMC CONTRACT SUMMARY') {
+  const contract = workOrder.amcContractId || {};
+  const invoice = contract.invoiceId || {};
+  const coverage = amcCoverageSummary(contract);
+  const value = Number(contract.contractValue || invoice.total || 0);
+  const paid = Number(invoice.paidAmount || 0);
+  const balance = Number(invoice.balance ?? Math.max(0, value - paid));
+  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(11).fillColor('#0f172a').text(title, 52, y);
+  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#334155');
+  const left = [
+    `Contract ID: ${contract.contractId || '-'}`,
+    `Contract Type: ${contract.contractType || '-'}`,
+    `Coverage Type: ${coverage.coverageType}`,
+    `Contract Status: ${contractStatus(contract)}`,
+    `Period: ${contract.startDate ? new Date(contract.startDate).toLocaleDateString('en-IN') : '-'} to ${contract.endDate ? new Date(contract.endDate).toLocaleDateString('en-IN') : '-'}`
+  ];
+  const right = [
+    `Contract Value: ${money(value)}`,
+    `Paid: ${money(paid)}`,
+    `Pending: ${money(balance)}`,
+    `Payment Status: ${invoice.status || 'Pending'}`
+  ];
+  left.forEach((text, index) => doc.text(text, 52, y + 20 + index * 16, { width: 230 }));
+  right.forEach((text, index) => doc.text(text, 310, y + 20 + index * 16, { width: 230 }));
+  doc.text(`Covered Devices: ${contract.coveredDevices || contract.coveredService || '-'}`, 52, y + 106, { width: 492 });
+}
+
+function buildAmcContractPdf(doc, workOrder) {
+  const contract = workOrder.amcContractId || {};
+  const coverage = amcCoverageSummary(contract);
+  const coverageLists = amcCoveredNotCovered(contract);
+  addHeader(doc, 'AMC CONTRACT');
+  addCustomerDetails(doc, workOrder, 205);
+  addAmcContractBlock(doc, workOrder, 315);
+  const rows = [
+    { description: contract.contractType || 'AMC Contract', quantity: 1, price: contract.contractValue || 0, total: contract.contractValue || 0 },
+    { description: `Included visits: ${contract.includedVisits || 0}`, quantity: 1, price: 0, total: 0 }
+  ];
+  let y = table(doc, rows, 455, 'Value');
+  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#334155');
+  doc.text(`Coverage Type: ${coverage.coverageType}`, 52, y, { width: 492 });
+  doc.text(`Coverage Rules: ${coverage.coverageRules.join('; ')}`, 52, y + 18, { width: 492 });
+  doc.text(`Devices / Assets: ${contract.coveredDevices || contract.coveredService || '-'}`, 52, y + 52, { width: 492 });
+  doc.text(`Renewal Terms: Renewal is due before ${contract.endDate ? new Date(contract.endDate).toLocaleDateString('en-IN') : 'contract expiry'} to continue AMC coverage.`, 52, y + 86, { width: 492 });
+  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text('COVERED', 52, y + 126);
+  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155').text(coverageLists.covered.map((item) => `\u2714 ${item}`).join('\n') || '-', 52, y + 144, { width: 230, lineGap: 4 });
+  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text('NOT COVERED', 310, y + 126);
+  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155').text(coverageLists.notCovered.map((item) => `\u2718 ${item}`).join('\n') || '-', 310, y + 144, { width: 230, lineGap: 4 });
+  doc.text(`Terms: ${contract.notes || 'AMC coverage is subject to contract value, period, devices, and service terms recorded by Universal Systems.'}`, 52, y + 220, { width: 492 });
+  doc.strokeColor('#94a3b8').lineWidth(0.7).moveTo(70, y + 278).lineTo(230, y + 278).stroke();
+  doc.moveTo(360, y + 278).lineTo(520, y + 278).stroke();
+  doc.fillColor('#334155').text('Customer Signature', 94, y + 286);
+  doc.text('Authorized Signature', 386, y + 286);
+  footer(doc, 'AMC coverage is subject to the contract terms recorded by Universal Systems.');
+}
+
+function buildAmcServiceVisitPdf(doc, workOrder) {
+  addHeader(doc, 'AMC SERVICE VISIT');
+  addCustomerDetails(doc, workOrder, 205);
+  addAmcContractBlock(doc, workOrder, 315, 'AMC INFORMATION');
+  const breakdown = calculateAmcCoverageBreakdown(workOrder);
+  const rows = buildRows(workOrder);
+  let y = table(doc, rows.length ? rows : [{ description: 'AMC service visit', quantity: 1, price: 0, total: 0 }], 455, 'Payable');
+  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text('SERVICE NOTES', 52, y);
+  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155');
+  doc.text(`Issue: ${workOrder.issue || '-'}`, 52, y + 18, { width: 492 });
+  doc.text(`Status: ${workOrder.status || '-'}`, 52, y + 34, { width: 492 });
+  const technicianNotes = (workOrder.notes || []).map((note) => note.text).filter(Boolean).join('; ');
+  doc.text(`Technician Notes: ${technicianNotes || '-'}`, 52, y + 50, { width: 492 });
+  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text('PARTS SECTION', 52, y + 82);
+  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155');
+  doc.text(`Covered Parts: ${breakdown.coveredParts.length ? breakdown.coveredParts.map((part) => `${part.name} ${money(part.total)}`).join(', ') : '-'}`, 52, y + 100, { width: 492 });
+  doc.text(`Chargeable Parts: ${breakdown.chargeableParts.length ? breakdown.chargeableParts.map((part) => `${part.name} ${money(part.total)}`).join(', ') : '-'}`, 52, y + 132, { width: 492 });
+  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text('BILLING SECTION', 52, y + 166);
+  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155');
+  doc.text(`Covered Amount: ${money(breakdown.coveredTotal)}`, 52, y + 184, { width: 240 });
+  doc.text(`Extra Payable Amount: ${money(breakdown.extraPayable)}`, 310, y + 184, { width: 230 });
+  doc.strokeColor('#94a3b8').lineWidth(0.7).moveTo(360, y + 230).lineTo(520, y + 230).stroke();
+  doc.text('Customer Signature', 386, y + 238);
+  footer(doc, 'AMC service visit record from Universal Systems.');
+}
+
+function buildAmcInvoicePdf(doc, workOrder) {
+  const contract = workOrder.amcContractId || {};
+  const contractInvoice = contract.invoiceId || {};
+  const extraInvoice = workOrder.invoiceId || {};
+  const invoice = extraInvoice.invoiceNumber ? extraInvoice : contractInvoice;
+  const breakdown = calculateAmcCoverageBreakdown(workOrder);
+  addHeader(doc, 'AMC INVOICE / RECEIPT');
+  addCustomerDetails(doc, workOrder, 205);
+  addAmcContractBlock(doc, workOrder, 315);
+  const total = Number(invoice.total || contract.contractValue || 0);
+  const paid = Number(invoice.paidAmount || 0);
+  const balance = Number(invoice.balance ?? Math.max(0, total - paid));
+  const rows = extraInvoice.invoiceNumber
+    ? buildRows(workOrder, { billingOnly: true })
+    : [{ description: `AMC Contract - ${contract.contractType || 'AMC'}`, quantity: 1, price: total, total }];
+  let y = table(doc, rows.length ? rows : [{ description: 'No extra payable amount', quantity: 1, price: 0, total: 0 }], 455, 'Amount');
+  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#334155');
+  doc.text(`Invoice: ${invoice.invoiceNumber || '-'}`, 52, y, { width: 240 });
+  doc.text(`Covered Amount: ${money(breakdown.coveredTotal)}`, 52, y + 18, { width: 240 });
+  doc.text(`Payable Amount: ${money(total)}`, 356, y, { width: 188, align: 'right' });
+  doc.text(`Paid: ${money(paid)}`, 356, y + 18, { width: 188, align: 'right' });
+  doc.text(`Balance: ${money(balance)}`, 356, y + 36, { width: 188, align: 'right' });
+  doc.text(`Payment Status: ${invoice.status || 'Pending'}`, 52, y + 36, { width: 240 });
+  footer(doc, 'AMC invoice and payment receipt summary from Universal Systems.');
 }
 
 function buildServiceCompleted(doc, workOrder) {
@@ -234,6 +411,9 @@ function buildPdf(doc, type, workOrder) {
   if (type === 'quotation') buildQuotation(doc, workOrder);
   if (type === 'work') buildInvoice(doc, workOrder);
   if (type === 'service-completed') buildServiceCompleted(doc, workOrder);
+  if (type === 'amc-contract') buildAmcContractPdf(doc, workOrder);
+  if (type === 'amc-service-visit') buildAmcServiceVisitPdf(doc, workOrder);
+  if (type === 'amc-invoice') buildAmcInvoicePdf(doc, workOrder);
 }
 
 export function pdfCaption(type, workOrder) {
@@ -241,6 +421,9 @@ export function pdfCaption(type, workOrder) {
   const total = buildRows(workOrder).reduce((sum, row) => sum + Number(row.total || 0), 0);
   if (type === 'quotation') return `Hello ${customer.name || 'Customer'}, please find your quotation from Universal Systems for ${serviceType(workOrder)}. Total: ${money(total)}. Please confirm approval.`;
   if (type === 'work') return `Hello ${customer.name || 'Customer'}, your invoice/work details from Universal Systems are ready. Total: ${money(workOrder.invoiceId?.total ?? total)}.`;
+  if (type === 'amc-contract') return `Hello ${customer.name || 'Customer'}, your AMC contract PDF from Universal Systems is ready. Contract value: ${money(workOrder.amcContractId?.contractValue || 0)}.`;
+  if (type === 'amc-service-visit') return `Hello ${customer.name || 'Customer'}, your AMC service visit PDF from Universal Systems is ready.`;
+  if (type === 'amc-invoice') return `Hello ${customer.name || 'Customer'}, your AMC invoice/receipt PDF from Universal Systems is ready. Balance: ${money(workOrder.invoiceId?.balance ?? workOrder.amcContractId?.invoiceId?.balance ?? 0)}.`;
   return `Hello ${customer.name || 'Customer'}, your service has been completed successfully. Thank you for choosing Universal Systems.`;
 }
 

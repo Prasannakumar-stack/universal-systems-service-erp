@@ -4,7 +4,7 @@ import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
-import { ALLOWED_ORIGINS, CLIENT_ORIGIN, COMPANY, IS_PRODUCTION, PORT, ROOT_DIR, UPLOAD_DIR } from './config.js';
+import { ALLOWED_ORIGINS, CLIENT_ORIGIN, COMPANY, IS_PRODUCTION, PDF_DIR, PORT, ROOT_DIR, UPLOAD_DIR, WHATSAPP_PDF_PUBLIC_BASE_URL } from './config.js';
 import { connectDb } from './db.js';
 import { bookingUpload, handleUploadErrors } from './upload.js';
 import { asyncHandler } from './utils/http.js';
@@ -75,6 +75,9 @@ app.use((_req, res, next) => {
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
 app.use('/uploads', express.static(UPLOAD_DIR));
+if (WHATSAPP_PDF_PUBLIC_BASE_URL) {
+  app.use('/pdfs', express.static(PDF_DIR));
+}
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, company: COMPANY.name, time: new Date().toISOString() });

@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import AMCContract from '../models/AMCContract.js';
+import Invoice from '../models/Invoice.js';
+import WorkOrder from '../models/WorkOrder.js';
 import { clean, appError, numberValue } from '../utils/http.js';
 import { upsertCustomer } from './customerService.js';
 import { createWorkOrder } from './workOrderService.js';
 import { logAudit } from './auditService.js';
+import { amcCoverageSummary, normalizeAmcCoverageType } from './amcCoverageEngine.js';
 
 const contractTypes = ['Basic AMC', 'Comprehensive AMC', 'CCTV AMC', 'Printer AMC', 'Networking AMC', 'Solar / UPS AMC', 'Custom'];
 const serviceFrequencies = ['Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
@@ -36,6 +39,19 @@ function normalizeDay(value) {
   const date = new Date(value);
   date.setHours(0, 0, 0, 0);
   return date;
+}
+
+function optionalDay(value) {
+  const raw = clean(value);
+  if (!raw) return null;
+  const date = normalizeDay(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function booleanValue(value) {
+  if (value === true) return true;
+  const raw = clean(value).toLowerCase();
+  return raw === 'true' || raw === 'yes' || raw === '1';
 }
 
 function addMonths(value, months) {
@@ -92,8 +108,16 @@ function visitStatus(visit) {
 
 function serializeContract(contract) {
   const item = contract.toJSON();
+  const coverage = amcCoverageSummary(item);
+  const warrantyIncluded = Boolean(item.warrantyIncluded);
   return {
     ...item,
+    ...coverage,
+    warrantyIncluded,
+    warrantyStartDate: warrantyIncluded ? item.warrantyStartDate || null : null,
+    warrantyEndDate: warrantyIncluded ? item.warrantyEndDate || null : null,
+    warrantyCoveredItems: warrantyIncluded ? item.warrantyCoveredItems || '' : '',
+    warrantyTerms: warrantyIncluded ? item.warrantyTerms || '' : '',
     status: contractStatus(contract),
     renewalStatus: renewalStatus(contract),
     visits: (contract.visits || []).map((visit) => {
@@ -101,6 +125,53 @@ function serializeContract(contract) {
       return { ...visitItem, status: visitStatus(visit) };
     })
   };
+}
+
+function emptyExtraChargeSummary() {
+  return {
+    invoiceCount: 0,
+    total: 0,
+    paid: 0,
+    pending: 0,
+    status: 'None',
+    invoiceIds: []
+  };
+}
+
+async function extraChargeSummaries(contractIds = []) {
+  const ids = contractIds.filter(Boolean);
+  if (!ids.length) return new Map();
+
+  const workOrders = await WorkOrder.find({ amcContractId: { $in: ids }, invoiceId: { $ne: null } }).select('amcContractId invoiceId').lean();
+  const invoiceToContract = new Map(workOrders.map((order) => [String(order.invoiceId), String(order.amcContractId)]));
+  const invoices = await Invoice.find({ _id: { $in: [...invoiceToContract.keys()] } }).select('_id total paidAmount balance status').lean();
+  const summaries = new Map(ids.map((id) => [String(id), emptyExtraChargeSummary()]));
+
+  invoices.forEach((invoice) => {
+    const contractId = invoiceToContract.get(String(invoice._id));
+    if (!contractId) return;
+    const summary = summaries.get(contractId) || emptyExtraChargeSummary();
+    summary.invoiceCount += 1;
+    summary.total += Number(invoice.total || 0);
+    summary.paid += Number(invoice.paidAmount || 0);
+    summary.pending += Number(invoice.balance || 0);
+    summary.invoiceIds.push(String(invoice._id));
+    summaries.set(contractId, summary);
+  });
+
+  summaries.forEach((summary) => {
+    if (!summary.invoiceCount) {
+      summary.status = 'None';
+    } else if (summary.pending <= 0) {
+      summary.status = 'Paid';
+    } else if (summary.paid > 0) {
+      summary.status = 'Partial';
+    } else {
+      summary.status = 'Pending';
+    }
+  });
+
+  return summaries;
 }
 
 function flattenSchedule(contracts = []) {
@@ -114,6 +185,7 @@ function flattenSchedule(contracts = []) {
       customerName: item.customerName,
       phone: item.phone,
       contractType: item.contractType,
+      coverageType: item.coverageType,
       serviceType: visit.serviceType || item.coveredService,
       scheduledDate: visit.scheduledDate,
       technicianId: visit.technicianId,
@@ -124,7 +196,7 @@ function flattenSchedule(contracts = []) {
 }
 
 export async function getAmcSummary() {
-  const contracts = await AMCContract.find().populate('visits.technicianId visits.workOrderId customerId').sort({ endDate: 1 });
+  const contracts = await AMCContract.find().populate('visits.technicianId visits.workOrderId customerId invoiceId').sort({ endDate: 1 });
   const serialized = contracts.map(serializeContract);
   const today = normalizeDay(new Date());
   const weekEnd = new Date(today);
@@ -151,12 +223,17 @@ export async function listAmcContracts(query = {}) {
       { customerName: new RegExp(search, 'i') },
       { phone: new RegExp(search, 'i') },
       { contractType: new RegExp(search, 'i') },
+      { coverageType: new RegExp(search, 'i') },
       { coveredService: new RegExp(search, 'i') }
     ];
   }
 
-  const contracts = await AMCContract.find(filter).populate('customerId visits.technicianId visits.workOrderId').sort({ createdAt: -1 });
-  const serialized = contracts.map(serializeContract);
+  const contracts = await AMCContract.find(filter).populate('customerId visits.technicianId visits.workOrderId invoiceId').sort({ createdAt: -1 });
+  const extras = await extraChargeSummaries(contracts.map((contract) => contract._id));
+  const serialized = contracts.map((contract) => ({
+    ...serializeContract(contract),
+    extraCharges: extras.get(String(contract._id)) || emptyExtraChargeSummary()
+  }));
   const summary = await getAmcSummary();
   return { contracts: serialized, summary };
 }
@@ -180,6 +257,14 @@ export async function createAmcContract(payload, user) {
   });
 
   const coveredService = clean(payload.coveredService) || coveredServiceByType[contractType] || contractType;
+  const coverageType = normalizeAmcCoverageType(payload.coverageType);
+  const coverage = amcCoverageSummary({
+    coverageType,
+    coverParts: payload.coverParts,
+    coverService: payload.coverService,
+    coverVisits: payload.coverVisits
+  });
+  const warrantyIncluded = booleanValue(payload.warrantyIncluded);
   const contract = await AMCContract.create({
     contractId: contractCode(),
     customerId: customer._id,
@@ -187,8 +272,17 @@ export async function createAmcContract(payload, user) {
     phone: customer.phone,
     address: clean(payload.address) || customer.address,
     contractType,
+    coverageType,
+    coverParts: coverage.coverParts,
+    coverService: coverage.coverService,
+    coverVisits: coverage.coverVisits,
     coveredService,
     coveredDevices: clean(payload.coveredDevices || payload.assets),
+    warrantyIncluded,
+    warrantyStartDate: warrantyIncluded ? optionalDay(payload.warrantyStartDate) : null,
+    warrantyEndDate: warrantyIncluded ? optionalDay(payload.warrantyEndDate) : null,
+    warrantyCoveredItems: warrantyIncluded ? clean(payload.warrantyCoveredItems) : '',
+    warrantyTerms: warrantyIncluded ? clean(payload.warrantyTerms) : '',
     serviceFrequency,
     startDate,
     endDate,
@@ -216,6 +310,7 @@ export async function createAmcContract(payload, user) {
         customerName: contract.customerName,
         phone: contract.phone,
         contractType: contract.contractType,
+        coverageType: contract.coverageType,
         contractValue: contract.contractValue
       }
     });
@@ -223,11 +318,11 @@ export async function createAmcContract(payload, user) {
     console.warn('Audit log failed for AMC contract create:', error.message);
   }
 
-  return serializeContract(await contract.populate('customerId visits.technicianId visits.workOrderId'));
+  return serializeContract(await contract.populate('customerId visits.technicianId visits.workOrderId invoiceId'));
 }
 
 export async function listAmcSchedule(query = {}) {
-  const contracts = await AMCContract.find().populate('customerId visits.technicianId visits.workOrderId').sort({ startDate: -1 });
+  const contracts = await AMCContract.find().populate('customerId visits.technicianId visits.workOrderId invoiceId').sort({ startDate: -1 });
   let schedule = flattenSchedule(contracts);
   const status = clean(query.status);
   if (status) schedule = schedule.filter((visit) => visit.status === status);
@@ -235,7 +330,7 @@ export async function listAmcSchedule(query = {}) {
 }
 
 export async function listAmcRenewals() {
-  const contracts = await AMCContract.find().populate('customerId visits.technicianId visits.workOrderId').sort({ endDate: 1 });
+  const contracts = await AMCContract.find().populate('customerId visits.technicianId visits.workOrderId invoiceId').sort({ endDate: 1 });
   const renewals = contracts.map(serializeContract).filter((contract) => ['Renewal Due', 'Expired'].includes(contract.renewalStatus));
   return { renewals };
 }
@@ -280,5 +375,5 @@ export async function createWorkOrderFromAmc(contractId, payload, user) {
     console.warn('Audit log failed for AMC visit conversion:', error.message);
   }
 
-  return { workOrder, contract: serializeContract(await contract.populate('customerId visits.technicianId visits.workOrderId')) };
+  return { workOrder, contract: serializeContract(await contract.populate('customerId visits.technicianId visits.workOrderId invoiceId')) };
 }

@@ -50,7 +50,10 @@ import {
   filterByRange,
   findInvoice,
   formatDate,
+  customerSearchText,
+  getCustomerDisplayId,
   getPdfLabel,
+  matchesDisplaySearch,
   inventoryCategories,
   InventoryStatusBadge,
   inventoryStockStatus,
@@ -106,7 +109,6 @@ import {
   StatCard,
   StatusBadge,
   statusTone,
-  Table,
   technicianAllowedStatuses,
   TechnicianJobCard,
   technicianJobFilters,
@@ -176,6 +178,7 @@ export function CustomersPage() {
   const customers = data?.customers || [];
   const workOrders = data?.workOrders || [];
   const invoices = data?.invoices || [];
+  const hasActiveFilters = Boolean(search || dateFrom || dateTo || customerType);
   const metricsByCustomer = useMemo(() => {
     const map = new Map();
     customers.forEach((customer) => {
@@ -197,22 +200,18 @@ export function CustomersPage() {
   }, [customers, workOrders, invoices]);
 
   const hasCustomerTypes = customers.some((customer) => customerTypeLabel(customer));
+  const formatListDate = (value) => {
+    if (!value) return 'Not available';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Not available';
+    return formatDate(value);
+  };
   const visibleCustomers = customers.filter((customer) => {
     const metrics = metricsByCustomer.get(recordId(customer)) || { jobs: [], invoices: [] };
     if (customerType && customerTypeLabel(customer) !== customerType) return false;
     const searchText = search.trim().toLowerCase();
     if (!searchText) return true;
-    const haystack = [
-      customer.name,
-      customer.phone,
-      customer.email,
-      customer.address,
-      customer.devices?.join(' '),
-      customerTypeLabel(customer),
-      ...metrics.jobs.map((order) => `${bookingLabel(order)} ${order.device || ''} ${order.issue || ''} ${order.status || ''}`),
-      ...metrics.invoices.map((invoice) => `${invoice.invoiceNumber || ''} ${invoice.status || ''}`)
-    ].join(' ').toLowerCase();
-    return haystack.includes(searchText);
+    return matchesDisplaySearch(searchText, customerSearchText(customer, metrics));
   });
 
   if (loading) return <LoadingBlock />;
@@ -222,19 +221,54 @@ export function CustomersPage() {
   return (
     <>
       <PageHeader title="Customers" eyebrow="CRM">Manage customer profiles, service history, devices, invoices, and payments.</PageHeader>
-      <div className="surface mb-5 grid gap-3 p-4 xl:grid-cols-[1fr_190px_160px_160px]">
-        <SearchBox value={search} onChange={setSearch} placeholder="Search customer name, phone, device, invoice, booking" />
-        <select className="input" value={customerType} onChange={(event) => setCustomerType(event.target.value)} disabled={!hasCustomerTypes}>
-          <option value="">{hasCustomerTypes ? 'All customer types' : 'Customer type unavailable'}</option>
-          {['Individual', 'Business', 'AMC Customer'].map((item) => <option key={item}>{item}</option>)}
-        </select>
-        <input className="input" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+      <div className="surface mb-5 flex flex-col gap-3 p-4 lg:flex-row lg:items-center">
+        <div className="min-w-0 flex-1">
+          <SearchBox value={search} onChange={setSearch} placeholder="Search customer ID, name, phone, work order, invoice, payment" />
+        </div>
+        {hasCustomerTypes ? (
+          <select className="input lg:w-44 lg:shrink-0" value={customerType} onChange={(event) => setCustomerType(event.target.value)}>
+            <option value="">All customer types</option>
+            {['Individual', 'Business', 'AMC Customer'].map((item) => <option key={item}>{item}</option>)}
+          </select>
+        ) : null}
+        <label className="relative block lg:w-40 lg:shrink-0">
+          <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
+          <input className="input pl-10" type="date" aria-label="Start date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+        </label>
+        <label className="relative block lg:w-40 lg:shrink-0">
+          <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
+          <input className="input pl-10" type="date" aria-label="End date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        </label>
+        {hasActiveFilters ? (
+          <button
+            className="btn h-10 shrink-0 border border-white/10 bg-white/[0.045] px-3.5 text-xs font-black text-sky-100 shadow-[0_0_18px_rgba(56,189,248,0.08)] hover:border-sky-300/35 hover:bg-sky-400/10 hover:text-white"
+            type="button"
+            onClick={() => {
+              setSearch('');
+              setCustomerType('');
+              setDateFrom('');
+              setDateTo('');
+            }}
+          >
+            <X className="h-3.5 w-3.5" />
+            Reset Filter
+          </button>
+        ) : null}
       </div>
       {!visibleCustomers.length ? <EmptyState title="No customers found" message="Customer records matching your filters will appear here." action={<Link className="btn btn-primary" to="/admin/bookings">Create Booking</Link>} /> : (
         <>
-        <Table>
-          <thead><tr><th>Customer Name</th><th>Phone</th><th>Devices / Services</th><th>Active Jobs</th><th>Pending Balance</th><th>Total Spent</th><th>Created Date</th><th>Action</th></tr></thead>
+        <div className="table-wrap bg-[var(--surface)] xl:overflow-x-visible">
+          <table className="data-table min-w-[900px] table-fixed xl:min-w-0">
+            <colgroup>
+              <col className="w-[27%]" />
+              <col className="w-[19%]" />
+              <col className="w-[9%]" />
+              <col className="w-[12%]" />
+              <col className="w-[11%]" />
+              <col className="w-[10%]" />
+              <col className="w-[12%]" />
+            </colgroup>
+          <thead><tr><th>Customer</th><th>Device / Service</th><th>Jobs</th><th>Balance</th><th>Spent</th><th>Created</th><th className="text-center">Action</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
             {visibleCustomers.map((customer) => {
               const metrics = metricsByCustomer.get(recordId(customer)) || { jobs: [], invoices: [] };
@@ -242,24 +276,59 @@ export function CustomersPage() {
               const pendingBalance = metrics.invoices.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0);
               const totalSpent = metrics.invoices.reduce((sum, invoice) => sum + Number(invoice.paidAmount || 0), 0);
               const devices = [...new Set([...(customer.devices || []), ...metrics.jobs.map((order) => order.device).filter(Boolean)])];
+              const initials = String(customer.name || '?')
+                .trim()
+                .split(/\s+/)
+                .slice(0, 2)
+                .map((part) => part[0])
+                .join('')
+                .toUpperCase();
               return (
                 <tr key={customer.id}>
-                  <td className="font-bold">
-                    <Link className="text-sky-100 hover:text-[var(--brand)]" to={`/admin/customers/${customer.id}`}>{customer.name}</Link>
-                    <span className="mt-1 block text-xs muted">{customerTypeLabel(customer) || customerCode(customer)}</span>
+                  <td>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--brand)]/25 bg-[rgba(117,196,255,0.12)] text-xs font-black text-[var(--brand)]">
+                        {initials}
+                      </span>
+                      <div className="min-w-0">
+                        <Link className="block truncate font-black text-sky-100 hover:text-[var(--brand)]" to={`/admin/customers/${customer.id}`}>
+                          {customer.name || 'Unnamed Customer'}
+                        </Link>
+                        <span className="mt-0.5 block truncate text-xs text-slate-300">{customer.phone || 'No phone'}</span>
+                        <span className="mt-0.5 block truncate text-xs muted">{getCustomerDisplayId(customer)}</span>
+                      </div>
+                    </div>
                   </td>
-                  <td>{customer.phone || '-'}</td>
-                  <td>{devices.length ? <div className="flex max-w-md flex-wrap gap-1.5">{devices.slice(0, 3).map((device) => <span key={device} className="status-badge">{device}</span>)}{devices.length > 3 ? <span className="status-badge">+{devices.length - 3}</span> : null}</div> : '-'}</td>
-                  <td><StatusBadge status={activeJobs.length ? `${activeJobs.length} Active` : 'No Active Jobs'} /></td>
+                  <td>
+                    {devices.length ? (
+                      <div className="min-w-0" title={devices.join(', ')}>
+                        <div className="truncate font-semibold text-slate-100">{devices[0]}</div>
+                        {devices.length > 1 ? <div className="mt-0.5 truncate text-xs muted">+{devices.length - 1} more</div> : null}
+                      </div>
+                    ) : <span className="muted">-</span>}
+                  </td>
+                  <td>
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${activeJobs.length ? 'bg-sky-400/15 text-sky-100' : 'bg-slate-500/15 text-slate-200'}`}>
+                      {activeJobs.length ? `${activeJobs.length} Active` : 'None'}
+                    </span>
+                  </td>
                   <td className={pendingBalance > 0 ? 'font-black text-amber-100' : 'muted'}>{currency(pendingBalance)}</td>
-                  <td className="font-bold">{currency(totalSpent)}</td>
-                  <td>{formatDate(customer.createdAt)}</td>
-                  <td><Link className="btn btn-secondary py-2" to={`/admin/customers/${customer.id}`}>View 360 Profile</Link></td>
+                  <td className={totalSpent > 0 ? 'font-black text-emerald-100' : 'muted'}>{currency(totalSpent)}</td>
+                  <td>{formatListDate(customer.createdAt)}</td>
+                  <td className="whitespace-nowrap text-center align-middle">
+                    <Link
+                      className="btn btn-secondary inline-flex h-8 items-center justify-center whitespace-nowrap border-sky-300/25 bg-sky-400/10 px-2.5 py-1 text-[11px] font-black text-sky-100 hover:bg-sky-400/15"
+                      to={`/admin/customers/${customer.id}`}
+                    >
+                      View 360 Profile
+                    </Link>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
-        </Table>
+          </table>
+        </div>
         <PaginationControls pagination={pagination} onPageChange={setPage} />
         </>
       )}

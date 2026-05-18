@@ -4,6 +4,9 @@ const inventoryPartSchema = new mongoose.Schema(
   {
     partName: { type: String, required: true, trim: true },
     category: { type: String, trim: true, default: 'General' },
+    sku: { type: String, trim: true, default: '' },
+    brand: { type: String, trim: true, default: '' },
+    unitType: { type: String, trim: true, default: 'Piece' },
     costPrice: { type: Number, min: 0, default: 0 },
     sellingPrice: { type: Number, min: 0, default: 0 },
     stock: { type: Number, min: 0, default: 0 },

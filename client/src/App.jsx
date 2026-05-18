@@ -31,6 +31,7 @@ const SystemSettingsPage = lazyRoute(() => import('./features/settings/SettingsP
 const TechnicianDashboard = lazyRoute(() => import('./features/technicians/TechnicianDashboard.jsx'), 'TechnicianDashboard');
 const TechnicianPanelPage = lazyRoute(() => import('./features/technicians/TechnicianPanelPage.jsx'), 'TechnicianPanelPage');
 const AMCContractsPage = lazyRoute(() => import('./features/workOrders/AMCContractsPage.jsx'), 'AMCContractsPage');
+const WarrantiesPage = lazyRoute(() => import('./features/workOrders/AMCContractsPage.jsx'), 'WarrantiesPage');
 const AMCRenewalsPage = lazyRoute(() => import('./features/workOrders/AMCRenewalsPage.jsx'), 'AMCRenewalsPage');
 const AMCSchedulePage = lazyRoute(() => import('./features/workOrders/AMCSchedulePage.jsx'), 'AMCSchedulePage');
 const WorkOrderDetailsPage = lazyRoute(() => import('./features/workOrders/WorkOrderDetailsPage.jsx'), 'WorkOrderDetailsPage');
@@ -95,7 +96,7 @@ export default function App() {
           <Route path="amc-contracts" element={lazyElement(<AMCContractsPage />)} />
           <Route path="amc-schedule" element={lazyElement(<AMCSchedulePage />)} />
           <Route path="amc-renewals" element={lazyElement(<AMCRenewalsPage />)} />
-          <Route path="warranties" element={<Navigate to="/admin/amc-contracts" replace />} />
+          <Route path="warranties" element={lazyElement(<WarrantiesPage />)} />
           <Route path="audit-logs" element={lazyElement(<AuditLogsPage />)} />
           <Route path="invoices" element={lazyElement(<InvoicesPage />)} />
           <Route path="reports" element={lazyElement(<ReportsAnalyticsPage section="main" />)} />

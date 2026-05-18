@@ -1,4 +1,5 @@
 import Customer from '../models/Customer.js';
+import AMCContract from '../models/AMCContract.js';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import WorkOrder from '../models/WorkOrder.js';
@@ -7,7 +8,7 @@ import { clean, required } from '../utils/http.js';
 import { addDateRange, paginatedPayload, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 
 export async function create(req, res) {
-  required(req.body, ['workOrderId']);
+  if (!req.body.workOrderId && !req.body.amcContractId) required(req.body, ['workOrderId']);
   const invoice = await createInvoice(req.body, req.user);
   res.status(201).json({ invoice, message: 'Invoice generated' });
 }
@@ -40,11 +41,15 @@ export async function list(req, res) {
         Customer.find({ $or: [{ name: regex }, { phone: regex }, { email: regex }] }).select('_id').limit(1000).lean(),
         WorkOrder.find({ $or: [{ device: regex }, { issue: regex }, { serviceType: regex }] }).select('_id').limit(1000).lean()
       ]);
+      const amcContracts = await AMCContract.find({ $or: [{ contractId: regex }, { customerName: regex }, { phone: regex }, { contractType: regex }, { coverageType: regex }, { coveredService: regex }, { coveredDevices: regex }] }).select('_id').limit(1000).lean();
       const searchFields = [
         { invoiceNumber: regex },
+        { title: regex },
+        { notes: regex },
         { status: regex },
         { customerId: { $in: customers.map((item) => item._id) } },
-        { workOrderId: { $in: workOrders.map((item) => item._id) } }
+        { workOrderId: { $in: workOrders.map((item) => item._id) } },
+        { amcContractId: { $in: amcContracts.map((item) => item._id) } }
       ];
       const objectId = validObjectId(req.query.search);
       if (objectId) searchFields.push({ _id: objectId });
@@ -55,8 +60,8 @@ export async function list(req, res) {
     const [total, rows, summaryRows, paymentMethods] = await Promise.all([
       Invoice.countDocuments(filter),
       Invoice.find(filter)
-        .select('invoiceNumber workOrderId customerId total paidAmount balance status createdAt updatedAt')
-        .populate('workOrderId customerId')
+        .select('invoiceNumber workOrderId amcContractId customerId title notes total paidAmount balance status adjustmentForInvoiceId createdAt updatedAt')
+        .populate('workOrderId amcContractId customerId')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -77,7 +82,7 @@ export async function list(req, res) {
       ]),
       Payment.distinct('method')
     ]);
-    const invoices = rows.map((invoice) => withNestedIds(invoice, ['workOrderId', 'customerId']));
+    const invoices = rows.map((invoice) => withNestedIds(invoice, ['workOrderId', 'amcContractId', 'customerId']));
     const summary = summaryRows[0] || { totalInvoices: 0, pending: 0, partial: 0, paid: 0, totalValue: 0, balance: 0 };
     res.json(paginatedPayload('invoices', invoices, paginationMeta(page, limit, total), {
       summary,

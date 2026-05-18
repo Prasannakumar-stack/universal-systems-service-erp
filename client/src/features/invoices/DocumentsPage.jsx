@@ -142,6 +142,11 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import {
+  buildWhatsappPdfMessage,
+  buildWhatsappWebUrl,
+  documentTypeToPdfType
+} from '../../shared/whatsappPdfMessage.js';
 
 function documentLabel(type) {
   if (type === 'invoice') return 'Invoice';
@@ -215,9 +220,17 @@ export function DocumentsPage() {
       push('Customer phone number not available', 'error');
       return;
     }
-    const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
-    const message = `Hello ${document.customerId?.name || 'Customer'}, your ${documentLabel(document.type)} from Universal Systems is ready. Total: ${currency(document.totalAmount)}.`;
-    window.open(`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+    const pdfType = documentTypeToPdfType(document.type);
+    const message = buildWhatsappPdfMessage(pdfType, {
+      customerName: document.customerId?.name,
+      serviceType: document.serviceType,
+      device: document.workOrderId?.device,
+      bookingId: document.workOrderId?.bookingId,
+      total: document.totalAmount,
+      manualAttachNote: true
+    });
+    const url = buildWhatsappWebUrl(phone, message);
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   return (
@@ -389,9 +402,17 @@ export function DocumentPreviewPage() {
       push('Customer phone number not available', 'error');
       return;
     }
-    const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
-    const message = `Hello ${document.customerId?.name || 'Customer'}, your ${documentLabel(document.type)} from Universal Systems is ready. Total: ${currency(document.totalAmount)}.`;
-    window.open(`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+    const pdfType = documentTypeToPdfType(document.type);
+    const message = buildWhatsappPdfMessage(pdfType, {
+      customerName: document.customerId?.name,
+      serviceType: document.serviceType,
+      device: document.workOrderId?.device,
+      bookingId: document.workOrderId?.bookingId,
+      total: document.totalAmount,
+      manualAttachNote: true
+    });
+    const url = buildWhatsappWebUrl(phone, message);
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   async function recordPayment(event) {

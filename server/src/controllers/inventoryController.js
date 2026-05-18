@@ -34,7 +34,7 @@ export async function list(req, res) {
             totalParts: { $sum: 1 },
             totalUnits: { $sum: { $ifNull: ['$onHand', 0] } },
             reserved: { $sum: { $ifNull: ['$reserved', 0] } },
-            stockValue: { $sum: { $multiply: [{ $ifNull: ['$onHand', 0] }, { $ifNull: ['$costPrice', '$sellingPrice'] }] } },
+            stockValue: { $sum: { $multiply: [{ $ifNull: ['$onHand', 0] }, { $ifNull: ['$costPrice', 0] }] } },
             lowStock: {
               $sum: {
                 $cond: [
@@ -70,6 +70,9 @@ export async function create(req, res) {
   let part = await InventoryPart.create({
     partName: clean(req.body.partName),
     category: clean(req.body.category) || 'General',
+    sku: clean(req.body.sku),
+    brand: clean(req.body.brand),
+    unitType: clean(req.body.unitType) || 'Piece',
     costPrice: numberValue(req.body.costPrice, 0),
     sellingPrice: numberValue(req.body.sellingPrice, 0),
     stock: 0,
@@ -102,6 +105,9 @@ export async function update(req, res) {
   if (!part) throw appError('Inventory part not found', 404);
   if (req.body.partName !== undefined) part.partName = clean(req.body.partName);
   if (req.body.category !== undefined) part.category = clean(req.body.category) || 'General';
+  if (req.body.sku !== undefined) part.sku = clean(req.body.sku);
+  if (req.body.brand !== undefined) part.brand = clean(req.body.brand);
+  if (req.body.unitType !== undefined) part.unitType = clean(req.body.unitType) || 'Piece';
   if (req.body.costPrice !== undefined) part.costPrice = numberValue(req.body.costPrice, 0);
   if (req.body.sellingPrice !== undefined) part.sellingPrice = numberValue(req.body.sellingPrice, 0);
   if (req.body.onHand !== undefined || req.body.stock !== undefined || req.body.availableStock !== undefined) {

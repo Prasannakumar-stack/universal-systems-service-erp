@@ -57,7 +57,11 @@ export async function list(req, res) {
         }
       ])
     ]);
-    const movements = rows.map((movement) => withNestedIds(movement, ['partId', 'userId']));
+    const movements = rows.map((movement) => {
+      const row = withNestedIds(movement, ['partId', 'userId']);
+      if (row.sourceId) row.sourceId = String(row.sourceId);
+      return row;
+    });
     const summary = summaryRows[0] || { addedToday: 0, usedToday: 0, returnedToday: 0, adjustments: 0 };
     res.json(paginatedPayload('movements', movements, paginationMeta(page, limit, total), { summary }));
   } catch (error) {
@@ -73,6 +77,7 @@ export async function create(req, res) {
     type: req.body.type,
     quantity: req.body.quantity,
     source: req.body.source,
+    sourceId: req.body.sourceId,
     note: req.body.note,
     userId: req.user._id
   });

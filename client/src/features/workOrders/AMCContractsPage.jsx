@@ -3,7 +3,6 @@ import {
   amcContractTypes,
   amcFrequencies,
   AmcStatusBadge,
-  amcWhatsappHref,
   apiBase,
   assetBase,
   averageHours,
@@ -33,7 +32,6 @@ import {
   customerPhone,
   customerTabs,
   customerTypeLabel,
-  customerWhatsAppHref,
   DashboardChart,
   dateInputValue,
   dateInRange,
@@ -95,7 +93,6 @@ import {
   ResponsiveContainer,
   Save,
   SearchBox,
-  Send,
   serviceTypeBucket,
   serviceTypes,
   ShieldCheck,
@@ -110,7 +107,6 @@ import {
   technicianJobFilters,
   TechnicianJobsView,
   TechnicianLoadingCards,
-  technicianWhatsAppHref,
   technicianWorkOrderTabs,
   timelineIcon,
   Tooltip,
@@ -139,6 +135,13 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import {
+  amcCoverageFlags,
+  amcCoverageRules,
+  amcCoverageTypes,
+  defaultAmcCoverageType,
+  normalizeAmcCoverageType
+} from '../../shared/amcCoverage.js';
 
 function defaultAmcForm() {
   const start = new Date();
@@ -150,12 +153,21 @@ function defaultAmcForm() {
     phone: '',
     address: '',
     contractType: 'Basic AMC',
+    coverageType: defaultAmcCoverageType,
+    coverParts: false,
+    coverService: true,
+    coverVisits: true,
     coveredDevices: '',
     serviceFrequency: 'Quarterly',
     startDate: dateInputValue(start),
     endDate: dateInputValue(end),
     contractValue: '',
     includedVisits: '4',
+    warrantyIncluded: false,
+    warrantyStartDate: '',
+    warrantyEndDate: '',
+    warrantyCoveredItems: '',
+    warrantyTerms: '',
     notes: ''
   };
 }
@@ -164,22 +176,40 @@ export function AMCContractsPage() {
   const { request } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(defaultAmcForm);
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState('');
+  const handledRenewalRef = useRef('');
   const { data, loading, error, reload } = useResource(() => request('/amc/contracts'), [request]);
 
   useEffect(() => {
     request('/customers?limit=100').then((result) => setCustomers(result.customers || [])).catch(() => setCustomers([]));
   }, [request]);
 
+  useEffect(() => {
+    const renewalContract = location.state?.renewContract;
+    const renewalId = recordId(renewalContract);
+    if (!renewalId || handledRenewalRef.current === renewalId) return;
+    handledRenewalRef.current = renewalId;
+    startRenewal(renewalContract);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
+
   const contracts = data?.contracts || [];
   const summary = data?.summary || {};
   const visibleContracts = contracts.filter((contract) => {
-    const text = `${contract.contractId} ${contract.customerName} ${contract.phone} ${contract.contractType} ${contract.coveredService}`.toLowerCase();
+    const text = `${contract.contractId} ${contract.customerName} ${contract.phone} ${contract.contractType} ${contract.coverageType} ${contract.coveredService} ${contract.coveredDevices}`.toLowerCase();
     return !search || text.includes(search.toLowerCase());
   });
+  const hasContractSearch = Boolean(search.trim());
+  const contractKpis = [
+    { icon: FileText, label: 'Active AMC Contracts', value: summary.activeContracts || 0, helper: 'Live service agreements under coverage.', tone: 'green' },
+    { icon: AlertTriangle, label: 'Renewals Due', value: summary.renewalDue || 0, helper: 'Contracts needing follow-up within 30 days.', tone: 'amber' },
+    { icon: CalendarClock, label: 'Visits This Week', value: summary.visitsThisWeek || 0, helper: 'Scheduled AMC visits for the next 7 days.', tone: 'blue' },
+    { icon: AlertTriangle, label: 'Expired Contracts', value: summary.expiredContracts || 0, helper: 'Coverage ended and should be renewed.', tone: 'red' }
+  ];
 
   function selectCustomer(customerId) {
     const customer = customers.find((item) => recordId(item) === customerId);
@@ -192,10 +222,74 @@ export function AMCContractsPage() {
     }));
   }
 
+  function updateCoverageType(coverageType) {
+    const normalized = normalizeAmcCoverageType(coverageType);
+    const flags = amcCoverageFlags({ coverageType: normalized });
+    setForm((current) => ({
+      ...current,
+      coverageType: normalized,
+      coverParts: flags.coverParts,
+      coverService: flags.coverService,
+      coverVisits: flags.coverVisits
+    }));
+  }
+
+  function updateCustomCoverageFlag(key, checked) {
+    setForm((current) => ({ ...current, [key]: checked }));
+  }
+
+  function renewalDates(contract) {
+    const start = contract?.endDate ? new Date(contract.endDate) : new Date();
+    if (!Number.isNaN(start.getTime())) start.setDate(start.getDate() + 1);
+    const safeStart = Number.isNaN(start.getTime()) ? new Date() : start;
+    const end = new Date(safeStart);
+    end.setFullYear(end.getFullYear() + 1);
+    return { startDate: dateInputValue(safeStart), endDate: dateInputValue(end) };
+  }
+
+  function startRenewal(contract) {
+    const coverage = amcCoverageFlags(contract);
+    const dates = renewalDates(contract);
+    setForm({
+      ...defaultAmcForm(),
+      customerId: recordId(contract?.customerId),
+      customerName: contract?.customerName || contract?.customerId?.name || '',
+      phone: contract?.phone || contract?.customerId?.phone || '',
+      address: contract?.address || contract?.customerId?.address || '',
+      contractType: contract?.contractType || 'Basic AMC',
+      coverageType: normalizeAmcCoverageType(contract?.coverageType),
+      coverParts: coverage.coverParts,
+      coverService: coverage.coverService,
+      coverVisits: coverage.coverVisits,
+      coveredDevices: contract?.coveredDevices || '',
+      serviceFrequency: contract?.serviceFrequency || 'Quarterly',
+      contractValue: contract?.contractValue ?? '',
+      includedVisits: contract?.includedVisits ?? '4',
+      warrantyIncluded: Boolean(contract?.warrantyIncluded),
+      warrantyStartDate: contract?.warrantyStartDate ? dateInputValue(contract.warrantyStartDate) : '',
+      warrantyEndDate: contract?.warrantyEndDate ? dateInputValue(contract.warrantyEndDate) : '',
+      warrantyCoveredItems: contract?.warrantyCoveredItems || '',
+      warrantyTerms: contract?.warrantyTerms || '',
+      notes: contract?.notes || '',
+      ...dates
+    });
+    setFormOpen(true);
+    push('Renewal draft loaded. Review value and coverage before saving.');
+  }
+
   async function submit(event) {
     event.preventDefault();
+    const payload = {
+      ...form,
+      coverageType: form.coverageType || defaultAmcCoverageType,
+      warrantyIncluded: Boolean(form.warrantyIncluded),
+      warrantyStartDate: form.warrantyIncluded ? form.warrantyStartDate || null : null,
+      warrantyEndDate: form.warrantyIncluded ? form.warrantyEndDate || null : null,
+      warrantyCoveredItems: form.warrantyIncluded ? form.warrantyCoveredItems || '' : '',
+      warrantyTerms: form.warrantyIncluded ? form.warrantyTerms || '' : ''
+    };
     try {
-      await request('/amc/contracts', { method: 'POST', body: JSON.stringify(form) });
+      await request('/amc/contracts', { method: 'POST', body: JSON.stringify(payload) });
       push('AMC contract created');
       setForm(defaultAmcForm());
       setFormOpen(false);
@@ -218,21 +312,49 @@ export function AMCContractsPage() {
     }
   }
 
+  async function createInvoice(contract) {
+    const existingInvoiceId = recordId(contract.invoiceId);
+    if (existingInvoiceId) {
+      navigate(`/admin/payments?invoiceId=${existingInvoiceId}`);
+      return;
+    }
+    try {
+      const result = await request('/invoices', {
+        method: 'POST',
+        body: JSON.stringify({
+          amcContractId: recordId(contract),
+          contractValue: contract.contractValue,
+          coverage: contract.coveredService || contract.coveredDevices,
+          notes: `AMC Coverage Type: ${normalizeAmcCoverageType(contract.coverageType)}\nCoverage Rules:\n${amcCoverageRules(contract).join('\n')}\nCoverage:\n${contract.coveredService || contract.coveredDevices || contract.contractType || 'AMC Service'}`
+        })
+      });
+      const invoiceId = recordId(result.invoice);
+      push('AMC invoice created');
+      await reload({ silent: true });
+      if (invoiceId) navigate(`/admin/payments?invoiceId=${invoiceId}`);
+    } catch (err) {
+      push(err.message, 'error');
+    }
+  }
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
   return (
-    <>
-      <PageHeader
-        title="AMC Contracts"
-        eyebrow="AMC & Contracts"
-        action={<button className="btn btn-primary" onClick={() => setFormOpen((value) => !value)}><Plus className="h-4 w-4" />New AMC Contract</button>}
-      >
-        Manage service contracts, covered assets, renewal status, visits, and AMC-linked repair jobs.
-      </PageHeader>
+    <div className="amc-module-page">
+      <section className="amc-page-header mb-5">
+        <div className="relative z-[1] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">AMC & Contracts</p>
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">AMC Contracts</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage service contracts, covered assets, renewal status, visits, and AMC-linked repair jobs.</p>
+          </div>
+          <button className="btn btn-primary h-10 px-4" type="button" onClick={() => setFormOpen((value) => !value)}><Plus className="h-4 w-4" />New AMC Contract</button>
+        </div>
+      </section>
 
       <div className="surface mb-5 p-3">
-        <div className="tabs-list">
+        <div className="tabs-list amc-tabs border-b-0">
           <Link className="tab-button tab-button-active" to="/admin/amc-contracts">Contracts</Link>
           <Link className="tab-button" to="/admin/amc-schedule">Schedule</Link>
           <Link className="tab-button" to="/admin/amc-renewals">Renewals</Link>
@@ -240,120 +362,421 @@ export function AMCContractsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={FileText} label="Active AMC Contracts" value={summary.activeContracts || 0} tone="green" />
-        <StatCard icon={AlertTriangle} label="Renewals Due" value={summary.renewalDue || 0} tone="yellow" />
-        <StatCard icon={CalendarClock} label="Visits This Week" value={summary.visitsThisWeek || 0} />
-        <StatCard icon={AlertTriangle} label="Expired Contracts" value={summary.expiredContracts || 0} tone="red" />
+      <div className="amc-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {contractKpis.map((item) => <AmcMetricCard key={item.label} {...item} />)}
       </div>
 
       {formOpen ? (
-        <form className="surface mt-6 p-5" onSubmit={submit}>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-xl font-black">Create AMC Contract</h2>
-            <button type="button" className="icon-button" onClick={() => setFormOpen(false)} aria-label="Close AMC form"><X className="h-4 w-4" /></button>
+        <form className="surface amc-form-shell mt-6 p-5" onSubmit={submit}>
+          <div className="mb-5 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">New Agreement</p>
+              <h2 className="mt-1 text-xl font-black">Create AMC Contract</h2>
+            </div>
+            <button type="button" className="icon-button h-9 w-9" onClick={() => setFormOpen(false)} aria-label="Close AMC form"><X className="h-4 w-4" /></button>
           </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <label>
-              <span className="label">Existing customer</span>
-              <select className="input" value={form.customerId} onChange={(event) => selectCustomer(event.target.value)}>
-                <option value="">Manual / new customer</option>
-                {customers.map((customer) => <option key={recordId(customer)} value={recordId(customer)}>{customer.name} - {customer.phone}</option>)}
-              </select>
-            </label>
-            <label>
-              <span className="label">Customer</span>
-              <input className="input" value={form.customerName} onChange={(event) => setForm((current) => ({ ...current, customerName: event.target.value }))} required />
-            </label>
-            <label>
-              <span className="label">Phone</span>
-              <input className="input" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} required />
-            </label>
-            <label className="md:col-span-3">
-              <span className="label">Address</span>
-              <input className="input" value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} />
-            </label>
-            <label>
-              <span className="label">Contract Type</span>
-              <select className="input" value={form.contractType} onChange={(event) => setForm((current) => ({ ...current, contractType: event.target.value }))}>
-                {amcContractTypes.map((type) => <option key={type}>{type}</option>)}
-              </select>
-            </label>
-            <label>
-              <span className="label">Service Frequency</span>
-              <select className="input" value={form.serviceFrequency} onChange={(event) => setForm((current) => ({ ...current, serviceFrequency: event.target.value }))}>
-                {amcFrequencies.map((frequency) => <option key={frequency}>{frequency}</option>)}
-              </select>
-            </label>
-            <label>
-              <span className="label">Included Visits</span>
-              <input className="input" type="number" min="0" value={form.includedVisits} onChange={(event) => setForm((current) => ({ ...current, includedVisits: event.target.value }))} />
-            </label>
-            <label>
-              <span className="label">Start Date</span>
-              <input className="input" type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} required />
-            </label>
-            <label>
-              <span className="label">End Date</span>
-              <input className="input" type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} required />
-            </label>
-            <label>
-              <span className="label">Contract Value</span>
-              <input className="input" type="number" min="0" value={form.contractValue} onChange={(event) => setForm((current) => ({ ...current, contractValue: event.target.value }))} />
-            </label>
-            <label className="md:col-span-3">
-              <span className="label">Covered Devices / Assets</span>
-              <textarea className="input min-h-24" value={form.coveredDevices} onChange={(event) => setForm((current) => ({ ...current, coveredDevices: event.target.value }))} placeholder="Example: office laptops, printer, CCTV DVR, network rack" />
-            </label>
-            <label className="md:col-span-3">
-              <span className="label">Notes</span>
-              <textarea className="input min-h-24" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
-            </label>
+          <div className="grid gap-4">
+            <AmcFormSection title="Customer Details" icon={Users}>
+              <label>
+                <span className="label">Existing customer</span>
+                <select className="input" value={form.customerId} onChange={(event) => selectCustomer(event.target.value)}>
+                  <option value="">Manual / new customer</option>
+                  {customers.map((customer) => <option key={recordId(customer)} value={recordId(customer)}>{customer.name} - {customer.phone}</option>)}
+                </select>
+              </label>
+              <label>
+                <span className="label">Customer <span className="amc-required">Required</span></span>
+                <input className="input" value={form.customerName} onChange={(event) => setForm((current) => ({ ...current, customerName: event.target.value }))} required />
+              </label>
+              <label>
+                <span className="label">Phone <span className="amc-required">Required</span></span>
+                <input className="input" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} required />
+              </label>
+              <label className="md:col-span-3">
+                <span className="label">Address</span>
+                <input className="input" value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} />
+              </label>
+            </AmcFormSection>
+
+            <AmcFormSection title="Contract Details" icon={ShieldCheck}>
+              <label>
+                <span className="label">Contract Type</span>
+                <select className="input" value={form.contractType} onChange={(event) => setForm((current) => ({ ...current, contractType: event.target.value }))}>
+                  {amcContractTypes.map((type) => <option key={type}>{type}</option>)}
+                </select>
+              </label>
+              <label>
+                <span className="label">Coverage Type</span>
+                <select className="input" value={form.coverageType} onChange={(event) => updateCoverageType(event.target.value)}>
+                  {amcCoverageTypes.map((type) => <option key={type}>{type}</option>)}
+                </select>
+              </label>
+              <label>
+                <span className="label">Service Frequency</span>
+                <select className="input" value={form.serviceFrequency} onChange={(event) => setForm((current) => ({ ...current, serviceFrequency: event.target.value }))}>
+                  {amcFrequencies.map((frequency) => <option key={frequency}>{frequency}</option>)}
+                </select>
+              </label>
+              <label>
+                <span className="label">Included Visits</span>
+                <input className="input" type="number" min="0" value={form.includedVisits} onChange={(event) => setForm((current) => ({ ...current, includedVisits: event.target.value }))} />
+              </label>
+              <label>
+                <span className="label">Start Date <span className="amc-required">Required</span></span>
+                <input className="input" type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} required />
+              </label>
+              <label>
+                <span className="label">End Date <span className="amc-required">Required</span></span>
+                <input className="input" type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} required />
+              </label>
+              <label className="amc-value-field">
+                <span className="label">Contract Value</span>
+                <input className="input" type="number" min="0" value={form.contractValue} onChange={(event) => setForm((current) => ({ ...current, contractValue: event.target.value }))} />
+              </label>
+              {form.coverageType === 'Custom AMC' ? (
+                <div className="md:col-span-3 grid gap-3 sm:grid-cols-3">
+                  {[
+                    ['coverParts', 'Cover Parts'],
+                    ['coverService', 'Cover Service'],
+                    ['coverVisits', 'Cover Visits']
+                  ].map(([key, label]) => (
+                    <label key={key} className="flex min-h-11 items-center gap-3 rounded-card border border-white/10 bg-[var(--surface-2)] px-3 py-2 text-sm font-bold text-slate-100">
+                      <input type="checkbox" checked={Boolean(form[key])} onChange={(event) => updateCustomCoverageFlag(key, event.target.checked)} />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+            </AmcFormSection>
+
+            <AmcFormSection title="Covered Devices" icon={Boxes}>
+              <label className="md:col-span-3">
+                <span className="label">Covered Devices / Assets</span>
+                <textarea className="input amc-compact-textarea" value={form.coveredDevices} onChange={(event) => setForm((current) => ({ ...current, coveredDevices: event.target.value }))} placeholder="Example: office laptops, printer, CCTV DVR, network rack" />
+              </label>
+            </AmcFormSection>
+
+            <AmcFormSection title="Warranty Details" icon={ShieldCheck}>
+              <label>
+                <span className="label">Warranty Included</span>
+                <select
+                  className="input"
+                  value={form.warrantyIncluded ? 'Yes' : 'No'}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    warrantyIncluded: event.target.value === 'Yes'
+                  }))}
+                >
+                  <option>No</option>
+                  <option>Yes</option>
+                </select>
+              </label>
+              {form.warrantyIncluded ? (
+                <>
+                  <label>
+                    <span className="label">Warranty Start Date</span>
+                    <input className="input" type="date" value={form.warrantyStartDate} onChange={(event) => setForm((current) => ({ ...current, warrantyStartDate: event.target.value }))} />
+                  </label>
+                  <label>
+                    <span className="label">Warranty End Date</span>
+                    <input className="input" type="date" value={form.warrantyEndDate} onChange={(event) => setForm((current) => ({ ...current, warrantyEndDate: event.target.value }))} />
+                  </label>
+                  <label className="md:col-span-3">
+                    <span className="label">Warranty Covered Items</span>
+                    <input
+                      className="input"
+                      value={form.warrantyCoveredItems}
+                      onChange={(event) => setForm((current) => ({ ...current, warrantyCoveredItems: event.target.value }))}
+                      placeholder="Example: CCTV camera, DVR, UPS battery, adapter"
+                    />
+                  </label>
+                  <label className="md:col-span-3">
+                    <span className="label">Warranty Terms / Notes</span>
+                    <textarea
+                      className="input amc-compact-textarea"
+                      value={form.warrantyTerms}
+                      onChange={(event) => setForm((current) => ({ ...current, warrantyTerms: event.target.value }))}
+                      placeholder="Example: physical damage not covered, service warranty only"
+                    />
+                  </label>
+                </>
+              ) : null}
+            </AmcFormSection>
+
+            <AmcFormSection title="Notes" icon={ClipboardList}>
+              <label className="md:col-span-3">
+                <span className="label">Notes</span>
+                <textarea className="input amc-notes-textarea" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
+              </label>
+            </AmcFormSection>
           </div>
           <div className="mt-5 flex justify-end">
-            <button className="btn btn-primary"><Save className="h-4 w-4" />Save AMC Contract</button>
+            <button className="btn btn-primary h-10 px-4"><Save className="h-4 w-4" />Save AMC Contract</button>
           </div>
         </form>
       ) : null}
 
-      <div className="surface mt-6 p-5">
-        <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-center">
+      <div className="surface amc-table-card mt-6 p-5">
+        <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
           <SearchBox value={search} onChange={setSearch} placeholder="Search contract, customer, phone, service" />
-          <Link className="btn btn-secondary" to="/admin/amc-schedule"><CalendarClock className="h-4 w-4" />Schedule</Link>
           <Link className="btn btn-secondary" to="/admin/amc-renewals"><AlertTriangle className="h-4 w-4" />Renewals</Link>
         </div>
         {!visibleContracts.length ? (
-          <EmptyState title="No AMC contracts yet" message="Create the first AMC contract to track visits and renewal reminders." action={<button className="btn btn-primary" onClick={() => setFormOpen(true)}>Create AMC Contract</button>} />
+          <EmptyState
+            icon={FileText}
+            title={hasContractSearch ? 'No contracts match your search' : 'No AMC contracts yet'}
+            message={hasContractSearch ? 'Clear the search to view all AMC contracts.' : 'Create the first AMC contract to track visits, warranty coverage, and renewal reminders.'}
+            action={hasContractSearch ? <button className="btn btn-secondary" type="button" onClick={() => setSearch('')}>Clear Search</button> : <button className="btn btn-primary" type="button" onClick={() => setFormOpen(true)}>Create AMC Contract</button>}
+          />
         ) : (
-          <Table>
-            <thead><tr><th>Contract ID</th><th>Customer</th><th>Plan / Coverage</th><th>Period</th><th>Value</th><th>Status</th><th>Action</th></tr></thead>
+          <div className="table-wrap amc-table-wrap bg-[var(--surface)]">
+            <table className="data-table amc-contracts-table">
+            <thead><tr><th>Contract ID</th><th>Customer</th><th>Plan / Coverage</th><th>Period</th><th>AMC Payment</th><th>Extra Charges</th><th>Status</th><th className="text-center">Action</th></tr></thead>
             <tbody>
-              {visibleContracts.map((contract) => (
-                <tr key={recordId(contract)}>
-                  <td className="font-bold">{contract.contractId}</td>
-                  <td>
-                    <span className="block font-semibold text-slate-100">{contract.customerName || '-'}</span>
-                    <span className="mt-1 block text-xs muted">Phone: {contract.phone || '-'}</span>
-                  </td>
-                  <td>
-                    <span className="block font-semibold text-slate-100">{contract.contractType || '-'}</span>
-                    <span className="mt-1 block text-xs muted">{contract.coveredService || '-'}</span>
-                  </td>
-                  <td className="whitespace-nowrap">{formatDate(contract.startDate)} to {formatDate(contract.endDate)}</td>
-                  <td>{currency(contract.contractValue)}</td>
-                  <td><AmcStatusBadge status={contract.status} /></td>
-                  <td>
-                    <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-                      <Link className="btn btn-secondary py-2" to="/admin/amc-schedule">Schedule</Link>
-                      <button className="btn btn-primary py-2" onClick={() => createJob(contract)}>Create Job</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {visibleContracts.map((contract) => {
+                const contractStatus = contract.renewalStatus === 'Renewal Due' ? contract.renewalStatus : contract.status;
+                const isRenewalDue = contractStatus === 'Renewal Due';
+                const invoiceId = recordId(contract.invoiceId);
+                const payment = amcPaymentSummary(contract);
+                const extra = extraChargeSummary(contract);
+                return (
+                  <tr key={recordId(contract)}>
+                    <td className="font-bold"><span className="amc-id-text" title={contract.contractId || '-'}>{contract.contractId}</span></td>
+                    <td>
+                      <span className="block truncate font-semibold text-slate-100" title={contract.customerName || '-'}>{contract.customerName || '-'}</span>
+                      <span className="mt-1 block text-xs muted">Phone: {contract.phone || '-'}</span>
+                    </td>
+                    <td>
+                      <span className="block truncate font-semibold text-slate-100" title={contract.contractType || '-'}>{contract.contractType || '-'}</span>
+                      <span className="mt-1 block truncate text-xs text-emerald-100" title={normalizeAmcCoverageType(contract.coverageType)}>{normalizeAmcCoverageType(contract.coverageType)}</span>
+                      <span className="mt-1 block truncate text-xs muted" title={contract.coveredService || contract.coveredDevices || '-'}>{contract.coveredService || contract.coveredDevices || '-'}</span>
+                      {contract.warrantyIncluded ? <span className="mt-1 block truncate text-xs text-sky-100">{amcWarrantyLine(contract)}</span> : null}
+                    </td>
+                    <td className="whitespace-nowrap">{formatDate(contract.startDate)} to {formatDate(contract.endDate)}</td>
+                    <td>
+                      <div className="amc-payment-stack">
+                        <AmcPaymentPill status={payment.status} hasInvoice={Boolean(invoiceId)} />
+                        <span className="amc-payment-row"><span>Contract Value</span><b>{currency(payment.contractValue)}</b></span>
+                        <span className="amc-payment-row"><span>AMC Paid</span><b>{currency(payment.paid)}</b></span>
+                        <span className="amc-payment-row"><span>AMC Pending</span><b>{currency(payment.pending)}</b></span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="amc-payment-stack">
+                        <ExtraChargePill status={extra.status} />
+                        <span className="amc-payment-row"><span>Extra Invoice Total</span><b>{currency(extra.total)}</b></span>
+                        <span className="amc-payment-row"><span>Extra Paid</span><b>{currency(extra.paid)}</b></span>
+                        <span className="amc-payment-row"><span>Extra Pending</span><b>{currency(extra.pending)}</b></span>
+                      </div>
+                    </td>
+                    <td>
+                      <AmcStatusPill status={contractStatus} />
+                      <span className="mt-1 block text-xs muted">{amcRenewalHelper(contract)}</span>
+                    </td>
+                    <td className="text-center">
+                      <div className="amc-actions justify-center">
+                        <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button>
+                        {invoiceId
+                          ? <Link className="btn btn-secondary amc-action-button" to={`/admin/payments?invoiceId=${invoiceId}`}><CreditCard className="h-4 w-4" />Go to Payments</Link>
+                          : <button className="btn btn-secondary amc-action-button" type="button" onClick={() => createInvoice(contract)}><ReceiptText className="h-4 w-4" />Create Invoice</button>}
+                        {isRenewalDue ? <button className="btn btn-secondary amc-action-button" type="button" onClick={() => startRenewal(contract)}><AlertTriangle className="h-4 w-4" />Renew</button> : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
-          </Table>
+            </table>
+          </div>
         )}
       </div>
-    </>
+    </div>
   );
+}
+
+function amcPaymentSummary(contract) {
+  const invoice = contract?.invoiceId && typeof contract.invoiceId === 'object' ? contract.invoiceId : null;
+  const rawContractValue = contract?.contractValue;
+  const contractValue = Math.max(0, Number(rawContractValue !== undefined && rawContractValue !== null && rawContractValue !== '' ? rawContractValue : invoice?.total || 0) || 0);
+  const paid = Math.max(0, Number(invoice?.paidAmount ?? 0) || 0);
+  const pending = Math.max(0, contractValue - paid);
+  let status = 'Pending';
+  if (pending <= 0 && contractValue > 0) status = 'Paid';
+  else if (paid > 0 && pending > 0) status = 'Partial';
+  return { contractValue, paid, pending, status };
+}
+
+function extraChargeSummary(contract) {
+  const extra = contract?.extraCharges || {};
+  const total = Math.max(0, Number(extra.total || 0) || 0);
+  const paid = Math.max(0, Number(extra.paid || 0) || 0);
+  const pending = Math.max(0, Number(extra.pending ?? total - paid) || 0);
+  let status = 'No Extra Invoice';
+  if (total <= 0) status = 'No Extra Invoice';
+  else if (pending <= 0) status = 'Paid';
+  else if (paid > 0 && pending > 0) status = 'Partial';
+  else status = 'Pending';
+  return { total, paid, pending, status };
+}
+
+function amcWarrantyLine(contract) {
+  if (!contract?.warrantyIncluded) return '';
+  return contract.warrantyEndDate ? `Warranty: Active until ${formatDate(contract.warrantyEndDate)}` : 'Warranty: Included';
+}
+
+function amcRenewalHelper(contract) {
+  if (!contract?.endDate) return '';
+  if (contract.renewalStatus === 'Renewed') return 'Renewed';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(contract.endDate);
+  end.setHours(0, 0, 0, 0);
+  const daysLeft = Math.ceil((end.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+  if (Number.isNaN(daysLeft)) return '';
+  if (daysLeft < 0) return `${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? '' : 's'} overdue`;
+  if (daysLeft === 0) return 'Expires today';
+  if (daysLeft === 1) return 'Expires tomorrow';
+  if (daysLeft <= 30) return `${daysLeft} days left`;
+  return '';
+}
+
+function AmcMetricCard({ icon: Icon, label, value, helper, tone = 'blue' }) {
+  return (
+    <div className={`amc-metric-card amc-metric-${tone}`}>
+      <div className="amc-metric-icon"><Icon className="h-4 w-4" /></div>
+      <div className="min-w-0">
+        <p className="amc-metric-label">{label}</p>
+        <p className="amc-metric-value" title={String(value)}>{value}</p>
+        <p className="amc-metric-helper">{helper}</p>
+      </div>
+    </div>
+  );
+}
+
+export function WarrantiesPage() {
+  const { request } = useAuth();
+  const { data, loading, error } = useResource(() => request('/amc/contracts'), [request]);
+  const warrantyContracts = (data?.contracts || []).filter((contract) => Boolean(contract.warrantyIncluded));
+
+  if (loading) return <LoadingBlock />;
+  if (error) return <ErrorBlock message={error} />;
+
+  return (
+    <div className="amc-module-page">
+      <section className="amc-page-header mb-5">
+        <div className="relative z-[1] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">AMC & Contracts</p>
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Warranties</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Track warranty coverage linked to customer devices and service contracts.</p>
+          </div>
+          <Link className="btn btn-secondary h-10 px-4" to="/admin/amc-contracts"><FileText className="h-4 w-4" />Contracts</Link>
+        </div>
+      </section>
+      <div className="surface mb-5 p-3">
+        <div className="tabs-list amc-tabs border-b-0">
+          <Link className="tab-button" to="/admin/amc-contracts">Contracts</Link>
+          <Link className="tab-button" to="/admin/amc-schedule">Schedule</Link>
+          <Link className="tab-button" to="/admin/amc-renewals">Renewals</Link>
+          <Link className="tab-button tab-button-active" to="/admin/warranties">Warranties</Link>
+        </div>
+      </div>
+      <div className="surface amc-table-card p-5">
+        {!warrantyContracts.length ? (
+          <EmptyState
+            icon={ShieldCheck}
+            title="No warranty records yet"
+            message="Warranty records will appear here when linked to customer devices or AMC contracts."
+          />
+        ) : (
+          <div className="table-wrap bg-[var(--surface)]">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Contract ID</th>
+                  <th>Customer</th>
+                  <th>Warranty Period</th>
+                  <th>Covered Items</th>
+                  <th>Terms / Notes</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {warrantyContracts.map((contract) => (
+                  <tr key={recordId(contract)}>
+                    <td className="font-bold">{contract.contractId || '-'}</td>
+                    <td>
+                      <span className="block font-semibold text-slate-100">{contract.customerName || '-'}</span>
+                      <span className="mt-1 block text-xs muted">{contract.phone || '-'}</span>
+                    </td>
+                    <td className="whitespace-nowrap">{formatDate(contract.warrantyStartDate)} to {formatDate(contract.warrantyEndDate)}</td>
+                    <td className="max-w-[260px] text-sm muted">{contract.warrantyCoveredItems || contract.coveredDevices || '-'}</td>
+                    <td className="max-w-[280px] text-sm muted">{contract.warrantyTerms || '-'}</td>
+                    <td><AmcStatusPill status={contract.warrantyEndDate && new Date(contract.warrantyEndDate) < new Date() ? 'Expired' : 'Active'} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AmcFormSection({ title, icon: Icon, children }) {
+  return (
+    <section className="amc-form-section">
+      <div className="amc-form-section-heading">
+        <span className="amc-form-section-icon"><Icon className="h-4 w-4" /></span>
+        <h3>{title}</h3>
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">{children}</div>
+    </section>
+  );
+}
+
+function AmcPaymentPill({ status, hasInvoice = false }) {
+  const tone = {
+    Paid: 'amc-payment-paid',
+    Partial: 'amc-payment-partial',
+    Pending: 'amc-payment-pending'
+  }[status] || 'amc-payment-pending';
+  const title = {
+    Paid: 'Contract fully paid',
+    Partial: 'Customer paid partially',
+    Pending: 'No payment recorded'
+  }[status] || 'No payment recorded';
+  return (
+    <span className={`amc-payment-pill ${tone}`} title={title}>
+      {hasInvoice && status === 'Paid' ? <ReceiptText className="h-3.5 w-3.5" /> : null}
+      {status}
+    </span>
+  );
+}
+
+function ExtraChargePill({ status }) {
+  const tone = {
+    Paid: 'amc-payment-paid',
+    Partial: 'amc-payment-partial',
+    Pending: 'amc-payment-pending',
+    'No Extra Invoice': 'amc-status-upcoming',
+    None: 'amc-status-upcoming'
+  }[status] || 'amc-status-upcoming';
+  return <span className={`amc-payment-pill ${tone}`}>{status === 'None' ? 'No Extra Invoice' : status}</span>;
+}
+
+function AmcStatusPill({ status }) {
+  const tone = {
+    Active: 'amc-status-active',
+    Renewed: 'amc-status-active',
+    Upcoming: 'amc-status-upcoming',
+    'Due Today': 'amc-status-due',
+    Overdue: 'amc-status-overdue',
+    Completed: 'amc-status-completed',
+    'Renewal Due': 'amc-status-renewal',
+    Expired: 'amc-status-expired',
+    Cancelled: 'amc-status-cancelled'
+  }[status] || 'amc-status-cancelled';
+  return <span className={`amc-status-pill ${tone}`}>{status || '-'}</span>;
 }

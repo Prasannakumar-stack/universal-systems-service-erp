@@ -13,6 +13,7 @@ function invoiceStatus(total, paidAmount) {
 export async function recordPayment(payload) {
   const invoice = await Invoice.findById(payload.invoiceId);
   if (!invoice) throw appError('Invoice not found', 404);
+  if (invoice.status === 'Void') throw appError('Cannot record payment against a void invoice', 400);
 
   const paidAmount = numberValue(payload.paidAmount ?? payload.amount, 0);
   if (paidAmount <= 0) throw appError('Payment amount must be greater than zero');

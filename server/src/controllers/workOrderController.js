@@ -8,12 +8,18 @@ import {
   listWorkOrders,
   markDocumentSent,
   removePart,
+  updatePart,
   requestPart,
+  approvePartRequest,
+  rejectPartRequest,
+  movePartRequestToUsed,
   updateApproval,
   updateServiceCharge,
+  updatePriority,
   updateStatus
 } from '../services/workOrderService.js';
 import { generateWorkOrderPdf } from '../services/workOrderPdfService.js';
+import { sendWorkOrderPdfViaWhatsapp } from '../services/workOrderWhatsappPdfService.js';
 import { required } from '../utils/http.js';
 
 export async function create(req, res) {
@@ -57,14 +63,39 @@ export async function deletePart(req, res) {
   res.json({ workOrder, message: 'Part removed' });
 }
 
+export async function patchPart(req, res) {
+  const workOrder = await updatePart(req.params.id, req.params.partId, req.body, req.user);
+  res.json({ workOrder, message: 'Part updated' });
+}
+
 export async function patchServiceCharge(req, res) {
   const workOrder = await updateServiceCharge(req.params.id, req.body, req.user);
   res.json({ workOrder, message: 'Service charge updated' });
 }
 
+export async function patchPriority(req, res) {
+  const workOrder = await updatePriority(req.params.id, req.body, req.user);
+  res.json({ workOrder, message: 'Priority updated' });
+}
+
 export async function postPartRequest(req, res) {
   const workOrder = await requestPart(req.params.id, req.body, req.user);
   res.status(201).json({ workOrder, message: 'Part requested' });
+}
+
+export async function patchApprovePartRequest(req, res) {
+  const workOrder = await approvePartRequest(req.params.id, req.params.requestId, req.user);
+  res.json({ workOrder, message: 'Part request approved' });
+}
+
+export async function patchRejectPartRequest(req, res) {
+  const workOrder = await rejectPartRequest(req.params.id, req.params.requestId, req.body, req.user);
+  res.json({ workOrder, message: 'Part request rejected' });
+}
+
+export async function patchMovePartRequestToUsed(req, res) {
+  const workOrder = await movePartRequestToUsed(req.params.id, req.params.requestId, req.user, req.body || {});
+  res.json({ workOrder, message: 'Part moved to Parts Used' });
 }
 
 export async function postImages(req, res) {
@@ -80,6 +111,39 @@ export async function postAutoAssign(req, res) {
 export async function downloadPdf(req, res) {
   const pdf = await generateWorkOrderPdf({ workOrderId: req.params.id, type: req.params.type, user: req.user });
   res.download(pdf.filePath, pdf.filename);
+}
+
+export async function postSendPdfWhatsapp(req, res) {
+  const result = await sendWorkOrderPdfViaWhatsapp({
+    workOrderId: req.params.id,
+    type: req.params.type,
+    user: req.user
+  });
+  const label =
+    req.params.type === 'quotation'
+      ? 'Quotation PDF'
+      : req.params.type === 'work'
+        ? 'Invoice PDF'
+        : req.params.type === 'amc-contract'
+          ? 'AMC Contract PDF'
+          : req.params.type === 'amc-service-visit'
+            ? 'AMC Service Visit PDF'
+            : req.params.type === 'amc-invoice'
+              ? 'AMC Invoice / Receipt PDF'
+              : 'Service Completed PDF';
+  res.json({
+    success: true,
+    sentViaApi: result.sentViaApi,
+    apiConfigured: result.apiConfigured,
+    fallback: Boolean(result.fallback),
+    whatsappMessage: result.message,
+    whatsappUrl: result.whatsappUrl,
+    pdfUrl: result.pdfUrl || '',
+    pdfFilename: result.pdfFilename || '',
+    fallbackNote: result.fallbackNote || '',
+    workOrder: result.workOrder,
+    message: result.sentViaApi ? `${label} sent via WhatsApp` : result.fallbackNote
+  });
 }
 
 export async function patchDocumentSent(req, res) {

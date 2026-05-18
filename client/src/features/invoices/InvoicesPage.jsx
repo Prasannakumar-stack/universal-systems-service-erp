@@ -50,7 +50,12 @@ import {
   filterByRange,
   findInvoice,
   formatDate,
+  getCustomerDisplayId,
+  getInvoiceDisplayId,
+  getWorkOrderDisplayId,
   getPdfLabel,
+  invoiceSearchText,
+  matchesDisplaySearch,
   inventoryCategories,
   InventoryStatusBadge,
   inventoryStockStatus,
@@ -170,6 +175,10 @@ export function InvoicesPage() {
   }, [search, status, paymentMethod, dateFrom, dateTo]);
 
   const invoices = data?.invoices || data?.data || [];
+  const searchTerm = search.trim();
+  const visibleInvoices = searchTerm
+    ? invoices.filter((invoice) => matchesDisplaySearch(searchTerm, invoiceSearchText(invoice)))
+    : invoices;
   const totals = data?.summary || {
     totalInvoices: invoices.length,
     pending: invoices.filter((invoice) => invoice.status === 'Pending').length,
@@ -179,6 +188,23 @@ export function InvoicesPage() {
     balance: invoices.reduce((sum, invoice) => sum + invoiceDueAmount(invoice), 0)
   };
   const availableMethods = data?.paymentMethods || [];
+  const hasActiveFilters = Boolean(search.trim() || status || paymentMethod || dateFrom || dateTo);
+  const invoiceKpis = [
+    { icon: ReceiptText, label: 'Total Invoices', value: totals.totalInvoices, helper: 'Generated invoices', tone: 'blue' },
+    { icon: AlertTriangle, label: 'Pending Invoices', value: totals.pending, helper: 'Need follow-up', tone: 'amber' },
+    { icon: CreditCard, label: 'Partial Payments', value: totals.partial, helper: 'Partially collected', tone: 'amber' },
+    { icon: CheckCircle2, label: 'Paid Invoices', value: totals.paid, helper: 'Fully paid', tone: 'green' },
+    { icon: ReceiptText, label: 'Total Invoice Value', value: currency(totals.totalValue), helper: 'Billed amount', tone: 'blue' },
+    { icon: AlertTriangle, label: 'Pending Balance', value: currency(totals.balance), helper: 'Outstanding amount', tone: 'amber', glow: Number(totals.balance || 0) > 0 }
+  ];
+
+  function resetFilters() {
+    setSearch('');
+    setStatus('');
+    setPaymentMethod('');
+    setDateFrom('');
+    setDateTo('');
+  }
 
   async function downloadWorkPdf(invoice, preview = false) {
     const workOrderId = recordId(invoice.workOrderId);
@@ -216,23 +242,51 @@ export function InvoicesPage() {
     window.open(`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
   }
 
+  function invoiceSourceCell(invoice) {
+    if (recordId(invoice.workOrderId)) {
+      return (
+        <Link className="billing-link" to={`/admin/work-orders/${recordId(invoice.workOrderId)}`}>
+          {getWorkOrderDisplayId(invoice.workOrderId)}
+          <span className="block truncate text-xs muted" title={invoice.workOrderId?.device || '-'}>{invoice.workOrderId?.device || '-'}</span>
+        </Link>
+      );
+    }
+    if (recordId(invoice.amcContractId)) {
+      return (
+        <Link className="billing-link" to="/admin/amc-contracts">
+          {invoice.amcContractId?.contractId || 'AMC Contract'}
+          <span className="block truncate text-xs muted" title={invoice.amcContractId?.contractType || invoice.title || '-'}>{invoice.amcContractId?.contractType || invoice.title || '-'}</span>
+        </Link>
+      );
+    }
+    return <span className="muted">-</span>;
+  }
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
   const pagination = paginationFrom(data, invoices.length, limit);
 
   return (
-    <>
-      <PageHeader title="Invoices" eyebrow="Billing" action={<Link className="btn btn-primary" to="/admin/payments"><CreditCard className="h-4 w-4" />Record Payment</Link>}>Invoices are generated from repair/service jobs and linked to payments.</PageHeader>
-      <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <StatCard icon={ReceiptText} label="Total Invoices" value={totals.totalInvoices} />
-        <StatCard icon={ReceiptText} label="Pending Invoices" value={totals.pending} tone="yellow" />
-        <StatCard icon={CreditCard} label="Partial Payments" value={totals.partial} tone="yellow" />
-        <StatCard icon={CheckCircle2} label="Paid Invoices" value={totals.paid} tone="green" />
-        <StatCard icon={ReceiptText} label="Total Invoice Value" value={currency(totals.totalValue)} />
-        <StatCard icon={AlertTriangle} label="Pending Balance" value={currency(totals.balance)} tone="red" />
+    <div className="billing-page invoices-page">
+      <section className="billing-hero mb-5">
+        <div className="relative z-[1] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">Billing</p>
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Invoices</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Invoices are generated from service jobs and linked to payments.</p>
+          </div>
+          <Link className="btn btn-primary h-10 px-4" to="/admin/payments"><CreditCard className="h-4 w-4" />Record Payment</Link>
+        </div>
+      </section>
+
+      <div className="billing-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        {invoiceKpis.map((item) => <BillingMetricCard key={item.label} {...item} />)}
       </div>
-      <div className="surface mb-5 grid gap-3 p-4 xl:grid-cols-[1fr_170px_170px_160px_160px]">
-        <SearchBox value={search} onChange={setSearch} placeholder="Search invoice, customer, phone, service job" />
+
+      <div className="surface billing-filter-bar mb-5 grid gap-3 p-4 xl:grid-cols-[minmax(320px,1fr)_160px_180px_155px_155px_auto]">
+        <div className="min-w-0">
+          <SearchBox value={search} onChange={setSearch} placeholder="Search invoice ID, work order ID, customer ID, name, phone" />
+        </div>
         <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">All statuses</option>
           {['Pending', 'Partial', 'Paid'].map((item) => <option key={item}>{item}</option>)}
@@ -243,38 +297,80 @@ export function InvoicesPage() {
         </select>
         <input className="input" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        <button type="button" className="btn btn-secondary h-10 whitespace-nowrap px-4" disabled={!hasActiveFilters} onClick={resetFilters}>Reset Filters</button>
       </div>
-      {!invoices.length ? <EmptyState title="No invoices generated yet" message="Invoices will appear after a repair/service job is billed." /> : (
+
+      {!visibleInvoices.length ? (
+        <EmptyState
+          icon={ReceiptText}
+          title={hasActiveFilters ? 'No invoices found' : 'No invoices found'}
+          message={hasActiveFilters ? 'Try resetting filters to view all generated invoices.' : 'Generated invoices will appear here after service jobs are billed.'}
+          action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={resetFilters}>Reset Filters</button> : null}
+        />
+      ) : (
         <>
-        <Table>
-          <thead><tr><th>Invoice Number</th><th>Customer</th><th>Work Order / Job</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th>Created Date</th><th>Action</th></tr></thead>
-          <tbody className="divide-y divide-[var(--line)]">
-            {invoices.map((invoice) => (
-              <tr key={invoice.id}>
-                <td className="font-bold">{invoice.invoiceNumber}</td>
-                <td>{invoice.customerId?.name}<span className="block text-xs muted">{invoice.customerId?.phone}</span></td>
-                <td>{recordId(invoice.workOrderId) ? <Link className="text-sky-100 hover:text-[var(--brand)]" to={`/admin/work-orders/${recordId(invoice.workOrderId)}`}>{bookingLabel(invoice.workOrderId)}<span className="block text-xs muted">{invoice.workOrderId?.device || '-'}</span></Link> : '-'}</td>
-                <td>{currency(invoice.total)}</td>
-                <td>{currency(invoice.paidAmount)}</td>
-                <td className={invoiceDueAmount(invoice) > 0 ? 'font-black text-amber-100' : 'font-bold text-emerald-100'}>{currency(invoiceDueAmount(invoice))}</td>
-                <td><StatusBadge status={invoice.status} /></td>
-                <td>{formatDate(invoice.createdAt)}</td>
-                <td>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" className="btn btn-secondary py-2 disabled:cursor-not-allowed disabled:opacity-50" disabled={invoice.workOrderId?.status !== 'Completed'} onClick={() => downloadWorkPdf(invoice, true)}>Preview</button>
-                    <button type="button" className="btn btn-secondary py-2 disabled:cursor-not-allowed disabled:opacity-50" disabled={invoice.workOrderId?.status !== 'Completed'} onClick={() => downloadWorkPdf(invoice)}><Download className="h-4 w-4" />PDF</button>
-                    <Link className="btn btn-primary py-2" to={`/admin/payments?invoiceId=${invoice.id || invoice._id}`}>Go to Payments</Link>
-                    <button type="button" className="btn btn-secondary py-2" onClick={() => sendInvoiceWhatsApp(invoice)}><Send className="h-4 w-4" />WhatsApp</button>
-                  </div>
-                  {invoice.workOrderId?.status !== 'Completed' ? <p className="mt-2 text-xs font-semibold text-amber-100">Complete the job before downloading invoice PDF</p> : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
+        <div className="table-wrap billing-table-wrap bg-[var(--surface)]">
+          <table className="data-table invoices-table">
+            <thead><tr><th>Invoice ID</th><th>Customer</th><th>Linked Source</th><th className="text-right">Total</th><th className="text-right">Paid</th><th className="text-right">Balance</th><th className="text-center">Status</th><th>Created Date</th><th className="text-right">Action</th></tr></thead>
+            <tbody className="divide-y divide-[var(--line)]">
+              {visibleInvoices.map((invoice) => {
+                const dueAmount = invoiceDueAmount(invoice);
+                const pdfReady = invoice.workOrderId?.status === 'Completed';
+                const invoiceId = invoice.id || invoice._id;
+                return (
+                  <tr key={invoice.id || invoice._id}>
+                    <td className="font-bold"><span className="billing-id-text">{getInvoiceDisplayId(invoice)}</span></td>
+                    <td>
+                      <span className="block truncate font-semibold text-slate-100" title={invoice.customerId?.name || '-'}>{invoice.customerId?.name || '-'}</span>
+                      <span className="block text-xs muted">{invoice.customerId?.phone || '-'}</span>
+                      <span className="block text-xs muted">Customer ID: {getCustomerDisplayId(invoice.customerId)}</span>
+                    </td>
+                    <td>{invoiceSourceCell(invoice)}</td>
+                    <td className="billing-money-cell text-right">{currency(invoice.total)}</td>
+                    <td className="billing-money-cell text-right text-emerald-100">{currency(invoice.paidAmount)}</td>
+                    <td className={`billing-money-cell text-right ${dueAmount > 0 ? 'text-amber-100' : 'text-emerald-100'}`}>{currency(dueAmount)}</td>
+                    <td className="text-center"><BillingStatusPill status={invoice.status} /></td>
+                    <td className="whitespace-nowrap">{formatDate(invoice.createdAt)}</td>
+                    <td className="text-right">
+                      <div className="billing-actions">
+                        <Link className={`btn ${dueAmount > 0 ? 'btn-primary' : 'btn-secondary'} billing-action-main`} to={`/admin/payments?invoiceId=${invoiceId}`}>Go to Payments</Link>
+                        <button type="button" className="btn btn-secondary billing-action-button disabled:cursor-not-allowed disabled:opacity-50" title={pdfReady ? 'Preview invoice PDF' : 'PDF available after job completion'} disabled={!pdfReady} onClick={() => downloadWorkPdf(invoice, true)}>Preview</button>
+                        <button type="button" className="btn btn-secondary billing-action-button disabled:cursor-not-allowed disabled:opacity-50" title={pdfReady ? 'Download invoice PDF' : 'PDF available after job completion'} disabled={!pdfReady} onClick={() => downloadWorkPdf(invoice)}><Download className="h-4 w-4" />PDF</button>
+                        <button type="button" className="btn btn-secondary billing-action-button" onClick={() => sendInvoiceWhatsApp(invoice)}><Send className="h-4 w-4" />WhatsApp</button>
+                        {!pdfReady ? <span className="billing-locked-badge">PDF locked</span> : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         <PaginationControls pagination={pagination} onPageChange={setPage} />
         </>
       )}
-    </>
+    </div>
   );
+}
+
+function BillingMetricCard({ icon: Icon, label, value, helper, tone = 'blue', glow = false }) {
+  return (
+    <div className={`billing-metric-card billing-metric-${tone} ${glow ? 'billing-metric-glow' : ''}`}>
+      <div className="billing-metric-icon"><Icon className="h-4 w-4" /></div>
+      <div className="min-w-0">
+        <p className="billing-metric-label">{label}</p>
+        <p className="billing-metric-value" title={String(value)}>{value}</p>
+        <p className="billing-metric-helper">{helper}</p>
+      </div>
+    </div>
+  );
+}
+
+function BillingStatusPill({ status }) {
+  const tone = {
+    Paid: 'billing-status-paid',
+    Pending: 'billing-status-pending',
+    Partial: 'billing-status-partial'
+  }[status] || 'billing-status-neutral';
+  return <span className={`billing-status-pill ${tone}`}>{status || '-'}</span>;
 }

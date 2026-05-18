@@ -7,6 +7,51 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { apiBase, company, serviceTypes } from '../utils/constants.js';
 import { currency, formatDate, statusTone } from '../utils/format.js';
+import {
+  customerSearchText,
+  getCustomerDisplayId,
+  getInvoiceDisplayId,
+  getPaymentDisplayId,
+  getWorkOrderDisplayId,
+  invoiceSearchText,
+  matchesDisplaySearch,
+  paymentSearchText,
+  workOrderCompletedDateDisplay,
+  workOrderSearchText
+} from './idHelpers.js';
+import {
+  normalizeWorkOrderPriority,
+  sortWorkOrdersByPriority,
+  WorkOrderPriorityBadge,
+  WORK_ORDER_PRIORITIES,
+  workOrderPriorityRank,
+  workOrderPriorityTone,
+  countUrgentActiveJobs,
+  COMPLETED_WORK_ORDER_STATUSES
+} from './workOrderPriority.jsx';
+
+export {
+  WORK_ORDER_PRIORITIES,
+  normalizeWorkOrderPriority,
+  sortWorkOrdersByPriority,
+  WorkOrderPriorityBadge,
+  workOrderPriorityRank,
+  workOrderPriorityTone,
+  countUrgentActiveJobs,
+  COMPLETED_WORK_ORDER_STATUSES
+};
+export {
+  getCustomerDisplayId,
+  getWorkOrderDisplayId,
+  getInvoiceDisplayId,
+  getPaymentDisplayId,
+  workOrderCompletedDateDisplay,
+  workOrderSearchText,
+  invoiceSearchText,
+  paymentSearchText,
+  customerSearchText,
+  matchesDisplaySearch
+};
 export {
   useCallback,
   useEffect,
@@ -282,7 +327,6 @@ export const workOrderPdfFlows = [
 ];
 
 export const workOrderTabs = [
-  { id: 'overview', label: 'Overview' },
   { id: 'parts', label: 'Parts' },
   { id: 'partRequests', label: 'Part Requests' },
   { id: 'billing', label: 'Billing' },
@@ -328,6 +372,9 @@ export function getPdfLabel(pdfType) {
   if (pdfType === 'quotation') return 'Quotation PDF';
   if (pdfType === 'work') return 'Invoice PDF';
   if (pdfType === 'service-completed') return 'Service Completed PDF';
+  if (pdfType === 'amc-contract') return 'AMC Contract PDF';
+  if (pdfType === 'amc-service-visit') return 'AMC Service Visit PDF';
+  if (pdfType === 'amc-invoice') return 'AMC Invoice / Receipt PDF';
   return 'PDF';
 }
 
@@ -341,11 +388,11 @@ export function timelineIcon(item) {
 }
 
 export function bookingLabel(order) {
-  return order?.bookingId?.bookingCode || `WO-${String(order?.id || order?._id || '').slice(-6).toUpperCase()}`;
+  return getWorkOrderDisplayId(order);
 }
 
 export function customerCode(customer) {
-  return `US-CUST-${String(recordId(customer)).slice(-5).toUpperCase()}`;
+  return getCustomerDisplayId(customer);
 }
 
 export function customerTypeLabel(customer) {
@@ -381,10 +428,7 @@ export function technicianWhatsAppHref(order) {
 }
 
 export function jobPriority(order) {
-  if (order?.priority) return order.priority;
-  if (order?.status === 'Awaiting Parts') return 'High';
-  if (isTechnicianOverdueJob(order)) return 'High';
-  return 'Normal';
+  return normalizeWorkOrderPriority(order?.priority);
 }
 
 export function jobScheduleLabel(order) {
@@ -764,7 +808,7 @@ export function TechnicianJobCard({ job, base = '/tech/work-orders', onStatusCha
         <p className="line-clamp-2"><span className="font-bold">Issue:</span> {job.issue || 'No issue captured'}</p>
         {customer.address ? <p className="line-clamp-2 muted"><span className="font-bold text-slate-200">Address:</span> {customer.address}</p> : null}
         <div className="flex flex-wrap gap-2">
-          <span className={`rounded-full px-2.5 py-1 text-xs font-black ${priority === 'High' ? 'bg-amber-400/15 text-amber-100' : 'bg-sky-400/15 text-sky-100'}`}>{priority} Priority</span>
+          <WorkOrderPriorityBadge priority={priority} />
           <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold text-slate-200">{jobScheduleLabel(job)}</span>
         </div>
       </div>
@@ -793,9 +837,13 @@ export function TechnicianJobsView({ jobs, search, setSearch, filter, setFilter,
       if (filter === 'All Assigned') return true;
       return job.status === filter;
     });
-    return rows.sort((a, b) => {
+    return sortWorkOrdersByPriority(rows).sort((a, b) => {
       const activeRank = (item) => ['Pending', 'In Progress', 'Awaiting Parts'].includes(item.status) ? 0 : 1;
-      return activeRank(a) - activeRank(b) || new Date(a.scheduledAt || a.createdAt || 0) - new Date(b.scheduledAt || b.createdAt || 0);
+      const activeDiff = activeRank(a) - activeRank(b);
+      if (activeDiff !== 0) return activeDiff;
+      const priorityDiff = workOrderPriorityRank(a.priority) - workOrderPriorityRank(b.priority);
+      if (priorityDiff !== 0) return priorityDiff;
+      return new Date(a.scheduledAt || a.createdAt || 0) - new Date(b.scheduledAt || b.createdAt || 0);
     });
   }, [jobs, filter]);
 

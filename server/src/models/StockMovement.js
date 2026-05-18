@@ -7,6 +7,7 @@ const stockMovementSchema = new mongoose.Schema(
     quantity: { type: Number, required: true },
     balanceAfter: { type: Number, default: 0 },
     source: { type: String, trim: true, default: 'Manual' },
+    sourceId: { type: mongoose.Schema.Types.ObjectId, default: null },
     note: { type: String, trim: true, default: '' },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
   },

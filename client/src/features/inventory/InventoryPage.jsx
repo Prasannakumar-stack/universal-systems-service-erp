@@ -143,6 +143,8 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 
+const inventoryUnitTypes = ['Piece', 'Box', 'Meter', 'Pack'];
+
 export function InventoryPage() {
   const { request } = useAuth();
   const { push } = useToast();
@@ -182,7 +184,7 @@ export function InventoryPage() {
     });
     return rows.sort((a, b) => {
       if (sortBy === 'stock') return Number(a.available || 0) - Number(b.available || 0);
-      if (sortBy === 'value') return (Number(b.onHand || 0) * Number(b.costPrice || b.sellingPrice || 0)) - (Number(a.onHand || 0) * Number(a.costPrice || a.sellingPrice || 0));
+      if (sortBy === 'value') return (Number(b.onHand || 0) * Number(b.costPrice || 0)) - (Number(a.onHand || 0) * Number(a.costPrice || 0));
       return String(a.partName || '').localeCompare(String(b.partName || ''));
     });
   }, [parts, search, category, stockStatus, sortBy]);
@@ -190,10 +192,19 @@ export function InventoryPage() {
     totalParts: parts.length,
     lowStock: parts.filter((part) => inventoryStockStatus(part) === 'low').length,
     outOfStock: parts.filter((part) => inventoryStockStatus(part) === 'out').length,
-    stockValue: parts.reduce((sum, part) => sum + Number(part.onHand || 0) * Number(part.costPrice || part.sellingPrice || 0), 0),
+    stockValue: parts.reduce((sum, part) => sum + Number(part.onHand || 0) * Number(part.costPrice || 0), 0),
     totalUnits: parts.reduce((sum, part) => sum + Number(part.onHand || 0), 0),
     reserved: parts.reduce((sum, part) => sum + Number(part.reserved || 0), 0)
   }), [data?.summary, parts]);
+  const hasActiveFilters = Boolean(search || category || stockStatus || sortBy !== 'name');
+  const inventoryKpis = [
+    { label: 'Total Parts', value: totals.totalParts, helper: 'Products tracked in inventory', icon: PackagePlus, tone: 'blue' },
+    { label: 'Total Units', value: totals.totalUnits, helper: 'Current on-hand quantity', icon: Boxes, tone: 'blue' },
+    { label: 'Low Stock Items', value: totals.lowStock, helper: 'Needs purchase planning', icon: AlertTriangle, tone: totals.lowStock > 0 ? 'amber' : 'green' },
+    { label: 'Out of Stock Items', value: totals.outOfStock, helper: 'Requires immediate attention', icon: AlertTriangle, tone: totals.outOfStock > 0 ? 'red' : 'green' },
+    { label: 'Total Stock Value', value: currency(totals.stockValue), helper: 'On-hand stock valuation', icon: CreditCard, tone: 'blue' },
+    { label: 'Reserved Stock', value: totals.reserved, helper: 'Held for active service jobs', icon: ClipboardList, tone: 'blue' }
+  ];
 
   async function savePart(partForm) {
     try {
@@ -201,6 +212,9 @@ export function InventoryPage() {
         const payload = {
           partName: partForm.partName,
           category: partForm.category,
+          sku: partForm.sku,
+          brand: partForm.brand,
+          unitType: partForm.unitType,
           costPrice: partForm.costPrice,
           sellingPrice: partForm.sellingPrice,
           onHand: partForm.onHand,
@@ -262,31 +276,32 @@ export function InventoryPage() {
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
   const pagination = paginationFrom(data, filteredParts.length, limit);
+  const totalPartCount = data?.pagination?.total || totals.totalParts || parts.length;
   return (
     <div className="inventory-page">
-      <PageHeader
-        title="Inventory / Stock Management"
-        eyebrow="Stock Control"
-        action={<button type="button" className="btn btn-primary" onClick={() => setEditor({})}><Plus className="h-4 w-4" />Add Part</button>}
-      >
-        Track parts, products, stock availability, reserved quantity, low stock, and stock value.
-      </PageHeader>
+      <section className="erp-page-header inventory-erp-header mb-5">
+        <div className="relative z-[1] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">Stock Control</p>
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Inventory / Stock Management</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Track stock availability, reserved quantity, low stock, value, and movement history.</p>
+          </div>
+          <button type="button" className="btn btn-primary h-10 px-4" onClick={() => setEditor({})}><Plus className="h-4 w-4" />Add Part</button>
+        </div>
+      </section>
       <div className="surface mb-5 p-3">
-        <div className="tabs-list">
+        <div className="tabs-list inventory-tabs border-b-0">
           <Link className="tab-button tab-button-active" to="/admin/parts">Products / Parts</Link>
           <Link className="tab-button" to="/admin/stock-movements">Stock Movements</Link>
         </div>
       </div>
-      <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <StatCard icon={PackagePlus} label="Total Parts" value={totals.totalParts} />
-        <StatCard icon={Boxes} label="Total Units" value={totals.totalUnits} />
-        <StatCard icon={AlertTriangle} label="Low Stock Items" value={totals.lowStock} tone="yellow" />
-        <StatCard icon={AlertTriangle} label="Out of Stock Items" value={totals.outOfStock} tone="red" />
-        <StatCard icon={CreditCard} label="Total Stock Value" value={currency(totals.stockValue)} />
-        <StatCard icon={ClipboardList} label="Reserved Stock" value={totals.reserved} />
+      <div className="inventory-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        {inventoryKpis.map((item) => <InventoryMetricCard key={item.label} {...item} />)}
       </div>
-      <div className="surface mb-5 grid gap-3 p-4 xl:grid-cols-[1fr_180px_180px_190px]">
-        <SearchBox value={search} onChange={setSearch} placeholder="Search part name, category, SKU, brand" />
+      <div className="surface inventory-filter-bar mb-5 grid gap-3 p-4 xl:grid-cols-[minmax(320px,1fr)_180px_180px_190px_auto]">
+        <div className="min-w-0">
+          <SearchBox value={search} onChange={setSearch} placeholder="Search part name, category, SKU, brand" />
+        </div>
         <select className="input" value={category} onChange={(event) => setCategory(event.target.value)}>
           <option value="">All categories</option>
           {categories.map((item) => <option key={item}>{item}</option>)}
@@ -302,11 +317,32 @@ export function InventoryPage() {
           <option value="stock">Sort: Stock Low to High</option>
           <option value="value">Sort: Stock Value</option>
         </select>
+        <button
+          type="button"
+          className="btn btn-secondary h-10 whitespace-nowrap px-4"
+          disabled={!hasActiveFilters}
+          onClick={() => {
+            setSearch('');
+            setCategory('');
+            setStockStatus('');
+            setSortBy('name');
+          }}
+        >
+          Reset Filters
+        </button>
+        <p className="inventory-count-pill xl:col-span-5">Showing <b>{filteredParts.length}</b> of <b>{totalPartCount}</b> parts</p>
       </div>
-      {!filteredParts.length ? <EmptyState title="No inventory items found" message="Try changing the search or filters." /> : (
+      {!filteredParts.length ? (
+        <EmptyState
+          icon={PackagePlus}
+          title={hasActiveFilters ? 'No parts match your filters' : 'No inventory items found'}
+          message={hasActiveFilters ? 'Try changing the search or filters.' : 'Add your first part to start tracking stock availability and value.'}
+          action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setCategory(''); setStockStatus(''); setSortBy('name'); }}>Reset Filters</button> : <button type="button" className="btn btn-primary" onClick={() => setEditor({})}>Add Part</button>}
+        />
+      ) : (
         <>
         <p className="mb-3 text-xs font-semibold muted">Available = On Hand - Reserved. Reserved means stock assigned to active service jobs but not yet billed.</p>
-        <div className="table-wrap inventory-products-table-wrap bg-[var(--surface)]">
+        <div className="table-wrap inventory-products-table-wrap surface bg-[var(--surface)]">
           <table className="data-table inventory-products-table">
             <colgroup>
               <col className="inventory-col-part" />
@@ -320,35 +356,41 @@ export function InventoryPage() {
             <thead><tr><th>Part / Product</th><th>Category</th><th>Stock</th><th>Pricing</th><th>Low Stock Limit</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody className="divide-y divide-[var(--line)]">
               {filteredParts.map((part) => {
-                const stockValue = Number(part.onHand || 0) * Number(part.costPrice || part.sellingPrice || 0);
+                const stockValue = Number(part.onHand || 0) * Number(part.costPrice || 0);
+                const reservedQuantity = Number(part.reserved || 0);
                 return (
                   <tr key={part.id}>
                     <td className="font-bold">
-                      {part.partName}
+                      <span className="block truncate text-slate-50" title={part.partName}>{part.partName}</span>
                       <span className="block text-xs font-normal muted">{part.brand || part.sku || 'Product / part'}</span>
                     </td>
-                    <td>{part.category || 'General'}</td>
+                    <td><span className="inline-flex rounded-full border border-white/10 bg-white/[0.045] px-2.5 py-1 text-xs font-bold text-slate-200">{part.category || 'General'}</span></td>
                     <td>
                       <div className="inventory-cell-stack">
                         <span>On hand: {part.onHand || 0}</span>
                         <span>Reserved: {part.reserved || 0}</span>
-                        <span className="font-black text-sky-100">Available: {part.available || 0}</span>
+                        <span className="inventory-available-value">Available: {part.available || 0}</span>
                       </div>
                     </td>
                     <td>
                       <div className="inventory-cell-stack">
                         <span>Selling: {currency(part.sellingPrice)}</span>
                         <span>Cost: {currency(part.costPrice)}</span>
-                        <span className="font-black text-sky-100">Value: {currency(stockValue)}</span>
+                        <span className="inventory-value-line">Value: {currency(stockValue)}</span>
                       </div>
                     </td>
                     <td className="text-center font-bold">{part.lowStockLimit}</td>
-                    <td><InventoryStatusBadge part={part} /></td>
                     <td>
+                      <div className="grid gap-1.5">
+                        <InventoryStatusBadge part={part} />
+                        {reservedQuantity > 0 ? <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.045] px-2.5 py-1 text-[11px] font-bold text-slate-300">Reserved {reservedQuantity}</span> : null}
+                      </div>
+                    </td>
+                    <td className="text-right">
                       <div className="inventory-actions">
-                        <button type="button" className="btn btn-secondary inventory-action-button" onClick={() => setEditor(part)}>Edit</button>
                         <button type="button" className="btn btn-primary inventory-action-button" onClick={() => setQuickStockPart(part)}><PackagePlus className="h-4 w-4" />Add Stock</button>
-                        <Link className="btn btn-secondary inventory-action-button inventory-action-wide" to={`/admin/stock-movements?partId=${part.id}`}>View Movements</Link>
+                        <button type="button" className="btn btn-secondary inventory-action-button" onClick={() => setEditor(part)}><Edit3 className="h-3.5 w-3.5" />Edit</button>
+                        <Link className="inventory-movement-link" to={`/admin/stock-movements?partId=${part.id}`}>View Movements</Link>
                         <button type="button" className="icon-button inventory-delete-button text-rose-100" onClick={() => setDeletePart(part)} aria-label={`Delete ${part.partName}`}><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </td>
@@ -381,6 +423,9 @@ function InventoryPartModal({ part, onClose, onSave }) {
     id: part.id || '',
     partName: part.partName || '',
     category: inventoryCategories.includes(part.category) ? part.category : 'Other',
+    sku: part.sku || '',
+    brand: part.brand || '',
+    unitType: inventoryUnitTypes.includes(part.unitType) ? part.unitType : 'Piece',
     costPrice: part.costPrice || 0,
     sellingPrice: part.sellingPrice || 0,
     onHand: part.onHand || 0,
@@ -404,6 +449,14 @@ function InventoryPartModal({ part, onClose, onSave }) {
             <span className="label">Category</span>
             <select className="input" value={form.category} onChange={(event) => update('category', event.target.value)}>
               {inventoryCategories.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </label>
+          <label><span className="label">SKU / Product Code</span><input className="input" value={form.sku} onChange={(event) => update('sku', event.target.value)} /></label>
+          <label><span className="label">Brand</span><input className="input" value={form.brand} onChange={(event) => update('brand', event.target.value)} /></label>
+          <label>
+            <span className="label">Unit Type</span>
+            <select className="input" value={form.unitType} onChange={(event) => update('unitType', event.target.value)}>
+              {inventoryUnitTypes.map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
           <label>
@@ -430,6 +483,9 @@ function InventoryPartModal({ part, onClose, onSave }) {
 
 function QuickStockModal({ part, onClose, onSave }) {
   const [form, setForm] = useState({ partId: part.id, type: 'ADD', quantity: 1, source: 'Purchase', note: '' });
+  const quantity = Number(form.quantity || 0);
+  const canSave = Boolean(form.partId && form.type && form.source && quantity && (form.type === 'ADJUST' || quantity > 0));
+  const movementReasons = ['Damaged item', 'Physical count correction', 'Returned by customer', 'AMC replacement', 'Wrong previous entry'];
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -437,10 +493,21 @@ function QuickStockModal({ part, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
-      <form className="surface w-full max-w-lg p-5" onSubmit={(event) => { event.preventDefault(); event.stopPropagation(); onSave(form); }}>
-        <h2 className="text-xl font-black">Add / Adjust Stock</h2>
+      <form className="surface inventory-manual-form w-full max-w-lg p-5" onSubmit={(event) => { event.preventDefault(); event.stopPropagation(); if (canSave) onSave(form); }}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Stock Movement</p>
+            <h2 className="mt-1 text-xl font-black">Add / Adjust Stock</h2>
+          </div>
+          <button type="button" className="icon-button h-8 w-8" onClick={onClose} aria-label="Close stock movement form"><X className="h-4 w-4" /></button>
+        </div>
         <div className="mt-4 grid gap-4">
           <label><span className="label">Part / Product</span><input className="input" value={part.partName} readOnly /></label>
+          <div className="grid gap-2 rounded-card border border-white/10 bg-white/[0.045] p-3 text-sm">
+            <div className="flex items-center justify-between gap-3"><span className="muted">Current On Hand</span><b>{part.onHand || 0}</b></div>
+            <div className="flex items-center justify-between gap-3"><span className="muted">Reserved</span><b>{part.reserved || 0}</b></div>
+            <div className="flex items-center justify-between gap-3"><span className="muted">Available</span><b className="text-sky-100">{part.available || 0}</b></div>
+          </div>
           <label>
             <span className="label">Movement Type</span>
             <select className="input" value={form.type} onChange={(event) => update('type', event.target.value)}>
@@ -456,12 +523,34 @@ function QuickStockModal({ part, onClose, onSave }) {
           </label>
           <label><span className="label">Note</span><input className="input" value={form.note} onChange={(event) => update('note', event.target.value)} /></label>
         </div>
-        <p className="mt-4 rounded-card bg-amber-400/10 p-3 text-sm font-semibold text-amber-100">Stock movements are recorded in the ledger and audit log.</p>
+        {form.source === 'Manual' ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {movementReasons.map((reason) => (
+              <button key={reason} type="button" className="rounded-full border border-white/10 bg-white/[0.045] px-3 py-1.5 text-xs font-bold text-slate-200 transition hover:border-sky-300/30 hover:bg-sky-400/10" onClick={() => update('note', reason)}>
+                {reason}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {form.type === 'ADJUST' ? <p className="mt-4 rounded-card border border-amber-300/20 bg-amber-400/10 p-3 text-sm font-semibold text-amber-100">This directly changes physical inventory count.</p> : null}
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary"><PackagePlus className="h-4 w-4" />Save Stock</button>
+          <button type="submit" className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={!canSave}><PackagePlus className="h-4 w-4" />Save Stock</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function InventoryMetricCard({ icon: Icon, label, value, helper, tone = 'blue' }) {
+  return (
+    <div className={`inventory-kpi-card inventory-kpi-${tone}`}>
+      <div className="inventory-kpi-icon"><Icon className="h-4 w-4" /></div>
+      <div className="min-w-0">
+        <p className="inventory-kpi-label">{label}</p>
+        <p className="inventory-kpi-value" title={String(value)}>{value}</p>
+        <p className="inventory-kpi-helper">{helper}</p>
+      </div>
     </div>
   );
 }

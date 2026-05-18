@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Bell, CalendarClock, CheckCircle2, ClipboardList, CreditCard, FileText, Loader2, PackagePlus, Plus, ReceiptText, UserRound, Wrench } from 'lucide-react';
+import { AlertTriangle, Bell, CalendarClock, CheckCircle2, ClipboardList, CreditCard, FileText, Plus, ReceiptText, UserRound, Wrench, Zap, ArrowUpRight } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { EmptyState, PageHeader } from '../../components/Ui.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { currency, formatDate, statusTone } from '../../utils/format.js';
+
+const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
+const panelActionClass = `rounded-lg bg-white/5 px-3 py-1.5 text-xs font-bold text-sky-400 transition-colors hover:bg-white/10 hover:text-sky-300 ${focusRing}`;
+const heroSecondaryActionClass = `inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition-all hover:-translate-y-0.5 hover:bg-white/10 ${focusRing}`;
 
 function useResource(load, deps = []) {
   const [data, setData] = useState(null);
@@ -32,17 +35,20 @@ function useResource(load, deps = []) {
 
 function LoadingBlock() {
   return (
-    <div className="grid gap-4">
-      <div className="surface animate-pulse p-5">
-        <div className="h-4 w-36 rounded bg-white/10" />
-        <div className="mt-4 h-8 w-64 max-w-full rounded bg-white/10" />
+    <div className="grid gap-6 p-6">
+      <div className="animate-pulse rounded-3xl border border-white/5 bg-[#0b172a] p-8">
+        <div className="h-6 w-48 rounded-md bg-white/10" />
+        <div className="mt-4 h-4 w-96 rounded-md bg-white/5 max-w-full" />
       </div>
-      <div className="grid gap-4 md:grid-cols-3">
-        {[1, 2, 3].map((item) => (
-          <div key={item} className="surface animate-pulse p-5">
-            <div className="h-10 w-10 rounded-card bg-white/10" />
-            <div className="mt-4 h-7 w-20 rounded bg-white/10" />
-            <div className="mt-3 h-3 w-28 rounded bg-white/10" />
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+        {[1, 2, 3, 4, 5].map((item) => (
+          <div key={item} className="animate-pulse rounded-2xl border border-white/5 bg-[#0b172a] p-5">
+            <div className="flex items-start justify-between">
+              <div className="h-4 w-24 rounded bg-white/10" />
+              <div className="h-10 w-10 rounded-xl bg-white/5" />
+            </div>
+            <div className="mt-4 h-8 w-16 rounded bg-white/10" />
+            <div className="mt-4 h-3 w-32 rounded bg-white/5 max-w-full" />
           </div>
         ))}
       </div>
@@ -50,12 +56,8 @@ function LoadingBlock() {
   );
 }
 
-function ErrorBlock({ message }) {
-  return <EmptyState title="Unable to load this view" message={message ? 'Please retry or check your access permission.' : 'Please retry or check your access permission.'} />;
-}
-
 function StatusBadge({ status }) {
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${statusTone(status)}`}>{status}</span>;
+  return <span className={`inline-flex max-w-[9rem] items-center justify-center overflow-hidden text-ellipsis whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${statusTone(status)}`}>{status}</span>;
 }
 
 function bookingSourceValue(record) {
@@ -69,14 +71,15 @@ function bookingSourceValue(record) {
 
 function BookingSourceBadge({ source }) {
   const label = bookingSourceValue({ bookingSource: source });
-  const tone = {
-    Call: 'booking-source-badge-call',
-    'Walk-in Shop': 'booking-source-badge-shop',
-    'Walk-in': 'booking-source-badge-shop',
-    Website: 'booking-source-badge-website',
-    Unknown: 'booking-source-badge-unknown'
-  }[label] || 'booking-source-badge-unknown';
-  return <span className={`booking-source-badge ${tone}`}>{label}</span>;
+  const tailwindTones = {
+    Call: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+    'Walk-in Shop': 'bg-sky-500/10 text-sky-400 border border-sky-500/20',
+    'Walk-in': 'bg-sky-500/10 text-sky-400 border border-sky-500/20',
+    Website: 'bg-purple-500/10 text-purple-400 border border-purple-500/20',
+    Unknown: 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+  };
+  const twTone = tailwindTones[label] || tailwindTones.Unknown;
+  return <span className={`inline-flex max-w-[9rem] items-center justify-center overflow-hidden text-ellipsis whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${twTone}`}>{label}</span>;
 }
 
 function recordId(record) {
@@ -97,100 +100,98 @@ function invoiceDueAmount(invoice) {
   return Number.isFinite(value) ? value : 0;
 }
 
-function isSameDay(value, day = new Date()) {
-  if (!value) return false;
-  const date = new Date(value);
-  return date.getFullYear() === day.getFullYear() && date.getMonth() === day.getMonth() && date.getDate() === day.getDate();
-}
-
-function buildSevenDaySeries(bookings = [], payments = []) {
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - index));
-    date.setHours(0, 0, 0, 0);
-    return {
-      key: date.toISOString().slice(0, 10),
-      label: date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
-      bookings: 0,
-      revenue: 0
-    };
-  });
-  const byKey = new Map(days.map((day) => [day.key, day]));
-  bookings.forEach((booking) => {
-    const key = new Date(booking.createdAt).toISOString().slice(0, 10);
-    if (byKey.has(key)) byKey.get(key).bookings += 1;
-  });
-  payments.forEach((payment) => {
-    const key = new Date(payment.createdAt).toISOString().slice(0, 10);
-    if (byKey.has(key)) byKey.get(key).revenue += Number(payment.paidAmount || payment.amount || 0);
-  });
-  return days;
-}
-
 function SmartMetricCard({ icon: Icon, label, value, tone, to, helper, glow = false }) {
   const numericValue = Number(value || 0);
   const displayValue = typeof value === 'string' ? value : numericValue;
-  const toneClass = {
-    red: 'dashboard-kpi-red',
-    yellow: 'dashboard-kpi-yellow',
-    blue: 'dashboard-kpi-blue',
-    green: 'dashboard-kpi-green'
-  }[tone] || 'border-sky-300/35 bg-sky-400/10 text-sky-100';
-  const iconClass = {
-    red: 'text-rose-300',
-    yellow: 'text-amber-200',
-    blue: 'text-sky-200',
-    green: 'text-emerald-200'
-  }[tone] || 'text-sky-200';
+  const valueClassName = typeof value === 'string'
+    ? 'mt-2 max-w-full whitespace-nowrap text-[1.05rem] leading-tight sm:text-xl xl:text-[1.25rem] 2xl:text-[1.4rem]'
+    : 'mt-2 truncate text-2xl sm:text-3xl';
+
+  const tones = {
+    red: 'from-rose-500/10 to-rose-900/20 border-rose-500/20 group-hover:border-rose-400/50 group-hover:shadow-[0_0_20px_rgba(225,29,72,0.15)]',
+    yellow: 'from-amber-500/10 to-amber-900/20 border-amber-500/20 group-hover:border-amber-400/50 group-hover:shadow-[0_0_20px_rgba(217,119,6,0.15)]',
+    blue: 'from-sky-500/10 to-sky-900/20 border-sky-500/20 group-hover:border-sky-400/50 group-hover:shadow-[0_0_20px_rgba(14,165,233,0.15)]',
+    green: 'from-emerald-500/10 to-emerald-900/20 border-emerald-500/20 group-hover:border-emerald-400/50 group-hover:shadow-[0_0_20px_rgba(16,185,129,0.15)]',
+  };
+
+  const iconBgTones = {
+    red: 'bg-rose-500/10 text-rose-400 border border-rose-500/20',
+    yellow: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+    blue: 'bg-sky-500/10 text-sky-400 border border-sky-500/20',
+    green: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+  };
+
+  const selectedTone = tones[tone] || tones.blue;
+  const selectedIconBg = iconBgTones[tone] || iconBgTones.blue;
 
   return (
-    <Link to={to} className={`dashboard-kpi-card lift-card ${toneClass} ${glow && numericValue > 0 ? 'dashboard-kpi-alert' : ''}`}>
-      <div className="flex h-full items-start justify-between gap-4">
-        <div className="dashboard-kpi-copy min-w-0">
-          <p className="dashboard-kpi-title text-xs font-black uppercase text-slate-300">{label}</p>
-          <p className="dashboard-kpi-value mt-3 text-3xl font-black text-white">{displayValue}</p>
-          <p className={`dashboard-kpi-helper mt-2 text-sm font-semibold ${numericValue === 0 && typeof value !== 'string' ? 'text-emerald-200' : 'muted'}`}>
-            {helper || (typeof value !== 'string' && numericValue === 0 ? 'All good' : 'Open details')}
-          </p>
+    <Link to={to} className={`group relative flex h-full min-h-[152px] flex-col overflow-hidden rounded-2xl border bg-gradient-to-br ${selectedTone} p-5 transition-all duration-300 hover:-translate-y-0.5 ${glow && numericValue > 0 ? 'ring-1 ring-white/10' : ''} ${focusRing}`}>
+      <div className="flex flex-1 flex-col justify-between">
+        <div className="flex items-start justify-between">
+          <div className="min-w-0 pr-3">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400/90">{label}</p>
+            <p className={`${valueClassName} font-black tracking-tight text-white`} title={String(displayValue)}>{displayValue}</p>
+          </div>
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${selectedIconBg}`}>
+            <Icon className="h-5 w-5" />
+          </div>
         </div>
-        <span className="dashboard-kpi-icon">
-          <Icon className={`h-5 w-5 ${iconClass}`} />
-        </span>
+        <div className="mt-5 flex items-center justify-between">
+          <p className={`min-w-0 truncate pr-2 text-xs font-semibold ${numericValue === 0 && typeof value !== 'string' ? 'text-emerald-400' : 'text-slate-400'}`} title={helper}>
+            {helper || (typeof value !== 'string' && numericValue === 0 ? 'All clear' : 'View details')}
+          </p>
+          <ArrowUpRight className="h-4 w-4 text-slate-500 opacity-0 transition-all duration-300 group-hover:translate-x-1 group-hover:-translate-y-1 group-hover:text-white group-hover:opacity-100" />
+        </div>
       </div>
     </Link>
   );
 }
 
 function PriorityAlerts({ alerts = [] }) {
-  const toneClass = {
-    critical: 'dashboard-alert-critical',
-    warning: 'dashboard-alert-warning',
-    info: 'dashboard-alert-info'
+  const visibleAlerts = alerts.filter((alert) => Number(alert.count || 0) > 0);
+  const tones = {
+    critical: 'border-rose-500/30 bg-rose-500/5',
+    warning: 'border-amber-500/30 bg-amber-500/5',
+    info: 'border-sky-500/30 bg-sky-500/5'
+  };
+
+  const badgeTones = {
+    critical: 'bg-rose-500/20 text-rose-300 border-rose-500/20',
+    warning: 'bg-amber-500/20 text-amber-300 border-amber-500/20',
+    info: 'bg-sky-500/20 text-sky-300 border-sky-500/20'
   };
 
   return (
-    <div className="dashboard-panel dashboard-priority-panel p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="rounded-3xl border border-white/5 bg-[#0b172a] p-6 shadow-xl lg:p-8">
+      <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-black">Priority Alerts</h2>
-          <p className="mt-1 text-sm muted">Critical stock, overdue work, and payment risk in one clear queue.</p>
+          <h2 className="text-xl font-black tracking-tight text-white">Priority Alerts</h2>
+          <p className="mt-1 text-sm font-medium text-slate-400">Critical stock, overdue work, and payment risk in one clear queue.</p>
         </div>
-        <span className="dashboard-panel-icon"><AlertTriangle className="h-5 w-5 text-[var(--warning)]" /></span>
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20">
+          <AlertTriangle className="h-6 w-6 text-amber-400" />
+        </div>
       </div>
-      <div className="dashboard-alert-grid">
-        {alerts.length ? alerts.map((alert) => (
-          <Link key={`${alert.level}-${alert.title}`} to={alert.to} className={`dashboard-alert-row alert-link ${toneClass[alert.level]}`}>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="dashboard-severity-badge">{alert.level}</span>
-                <span className="font-black">{alert.title}</span>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {visibleAlerts.length ? visibleAlerts.map((alert) => (
+          <Link key={`${alert.level}-${alert.title}`} to={alert.to} className={`group flex min-h-[150px] flex-col justify-between rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] ${tones[alert.level]} ${focusRing}`}>
+            <div>
+              <div className="flex items-center justify-between">
+                <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${badgeTones[alert.level]}`}>{alert.level}</span>
+                <span className="flex h-7 min-w-[1.75rem] items-center justify-center rounded-full bg-white/10 px-2.5 text-xs font-black text-white shadow-inner">{alert.count}</span>
               </div>
-              <p className="mt-1 text-sm opacity-80">{alert.message}</p>
+              <p className="mt-4 font-bold text-white transition-colors group-hover:text-sky-400">{alert.title}</p>
+              <p className="mt-1.5 text-xs font-medium text-slate-400 line-clamp-2">{alert.message}</p>
             </div>
-            <span className="dashboard-count-badge">{alert.count}</span>
-            <span className="dashboard-action-pill">{alert.action || 'View'}</span>
+            <div className="mt-5 flex items-center text-xs font-bold text-slate-300 transition-colors group-hover:text-white">
+              <span className="rounded-lg bg-white/5 px-3 py-1.5">{alert.action || 'View'}</span>
+            </div>
           </Link>
-        )) : <EmptyState title="No priority alerts" message="Inventory, jobs, and payments are clear." />}
+        )) : (
+          <div className="sm:col-span-2 lg:col-span-4">
+            <DashboardEmpty title="No priority alerts" message="Critical stock, overdue jobs, and payment risks will appear here." compact />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -198,28 +199,49 @@ function PriorityAlerts({ alerts = [] }) {
 
 function DashboardPanel({ title, icon: Icon, action, children, className = '' }) {
   return (
-    <section className={`dashboard-panel p-5 ${className}`}>
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-xl font-black">{title}</h2>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {action}
-          {Icon ? <span className="dashboard-panel-icon"><Icon className="h-5 w-5 text-[var(--brand)]" /></span> : null}
-        </div>
+    <section className={`flex flex-col rounded-3xl border border-white/5 bg-[#0b172a] p-5 shadow-xl lg:p-6 ${className}`}>
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <h2 className="flex items-center gap-2.5 text-lg font-black tracking-tight text-white">
+          {Icon && <Icon className="h-5 w-5 text-sky-400" />}
+          {title}
+        </h2>
+        {action}
       </div>
-      {children}
+      <div className="flex-1">
+        {children}
+      </div>
     </section>
   );
 }
 
-function DashboardEmpty({ title, message }) {
+function DashboardEmpty({ title, message, compact = false }) {
   return (
-    <div className="dashboard-empty-state">
-      <AlertTriangle className="mx-auto mb-2 h-4 w-4 text-[var(--brand)]" />
-      <p className="font-black">{title}</p>
-      <p className="mt-1 text-sm muted">{message}</p>
+    <div className={`flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 text-center backdrop-blur-sm ${compact ? 'min-h-0 p-3 sm:p-4' : 'h-full p-8'}`}>
+      <div className={`${compact ? 'mb-2 h-8 w-8' : 'mb-3 h-12 w-12'} flex items-center justify-center rounded-full bg-white/5`}>
+        <AlertTriangle className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-slate-400`} />
+      </div>
+      <p className="text-sm font-bold text-slate-200">{title}</p>
+      <p className="mt-1 max-w-[200px] text-xs font-medium text-slate-400">{message}</p>
     </div>
+  );
+}
+
+function MetaRow({ items = [] }) {
+  const visibleItems = items
+    .map((item) => (typeof item === 'object' ? item : { value: item }))
+    .filter((item) => item.value !== null && item.value !== undefined && String(item.value).trim() !== '');
+
+  if (!visibleItems.length) return null;
+
+  return (
+    <p className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+      {visibleItems.map((item, index) => (
+        <span key={`${item.value}-${index}`} className="inline-flex min-w-0 items-center gap-1.5">
+          {index > 0 && <span className="shrink-0 text-slate-600">·</span>}
+          <span className={`truncate ${item.className || 'max-w-[120px]'}`}>{item.value}</span>
+        </span>
+      ))}
+    </p>
   );
 }
 
@@ -227,93 +249,125 @@ function TechnicianWorkloadBars({ technicians = [] }) {
   const maxJobs = Math.max(1, ...technicians.map((tech) => Number(tech.activeJobs || 0)));
 
   return (
-    <div className="dashboard-panel p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xl font-black">Technician Workload</h2>
-        <Link className="btn btn-secondary py-2" to="/admin/reports/technicians">Report</Link>
-      </div>
-      <div className="mt-4 grid gap-4">
+    <DashboardPanel title="Technician Workload" icon={UserRound} action={<Link className={panelActionClass} to="/admin/reports/technicians">Report</Link>}>
+      <div className="grid gap-6">
         {technicians.length ? technicians.map((tech) => {
           const percent = Math.min(100, Math.round((Number(tech.activeJobs || 0) / maxJobs) * 100));
           return (
-            <div key={tech.id} className="dashboard-workload-row">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="truncate font-bold">{tech.name}</span>
-                <span className="text-xs muted">{tech.activeJobs} active</span>
+            <div key={tech.id} className="group">
+              <div className="mb-2.5 flex min-w-0 items-center justify-between gap-3">
+                <span className="min-w-0 truncate text-sm font-bold text-slate-200" title={tech.name}>{tech.name}</span>
+                <span className="rounded-md bg-white/5 px-2 py-0.5 text-xs font-bold text-slate-400">{tech.activeJobs} active</span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-emerald-300 transition-all" style={{ width: `${percent}%` }} />
+              <div className="h-2 overflow-hidden rounded-full bg-slate-800/50 shadow-inner">
+                <div className="h-full rounded-full bg-gradient-to-r from-sky-500 to-emerald-400 transition-all duration-1000 group-hover:shadow-[0_0_10px_rgba(56,189,248,0.5)]" style={{ width: `${percent}%` }} />
               </div>
             </div>
           );
-        }) : <DashboardEmpty title="No technician workload" message="Assigned jobs will show here." />}
+        }) : <DashboardEmpty title="No workload" message="Assigned jobs will show here." />}
       </div>
-    </div>
+    </DashboardPanel>
   );
 }
 
 function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0 }) {
   const totalRevenue = chartData.reduce((sum, item) => sum + Number(item.revenue || 0), 0);
   const bestDay = chartData.reduce((best, item) => Number(item.revenue || 0) > Number(best.revenue || 0) ? item : best, chartData[0] || { label: '-', revenue: 0 });
+  const hasData = totalRevenue > 0;
+  const monthlyRevenueLabel = currency(monthlyRevenue);
+  const totalRevenueLabel = currency(totalRevenue);
+  const bestDayRevenueLabel = currency(bestDay.revenue || 0);
 
   return (
-    <DashboardPanel title="Revenue Overview" icon={ReceiptText} action={<Link className="dashboard-card-action" to="/admin/reports/finance">Report</Link>} className="dashboard-revenue-card">
-      <div className="dashboard-chart-shell">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData}>
-            <CartesianGrid stroke="rgba(117,196,255,0.1)" vertical={false} />
-            <XAxis dataKey="label" stroke="#aebfd7" fontSize={11} tickLine={false} axisLine={false} />
-            <YAxis hide />
-            <Tooltip formatter={(value) => currency(value)} contentStyle={{ background: '#071426', border: '1px solid rgba(117,196,255,0.25)', borderRadius: 10, color: '#fff' }} />
-            <Bar dataKey="revenue" fill="#75c4ff" radius={[8, 8, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="dashboard-card-footer">
-        <div>
-          <p className="text-xs muted">This month</p>
-          <p className="font-black text-emerald-100">{currency(monthlyRevenue)}</p>
+    <DashboardPanel title="Revenue Overview" icon={Zap} action={<Link className={`rounded-lg bg-white/5 px-3 py-1.5 text-xs font-bold text-emerald-400 transition-colors hover:bg-white/10 hover:text-emerald-300 ${focusRing}`} to="/admin/reports/finance">Report</Link>} className="col-span-1 self-start xl:col-span-2">
+      <div className={`${hasData ? 'mb-4 sm:mb-6' : 'mb-3'} grid gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 sm:grid-cols-3 sm:gap-4 sm:p-5`}>
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">This Month</p>
+          <p className="mt-1 truncate text-xl font-black text-emerald-400 sm:text-2xl" title={monthlyRevenueLabel}>{monthlyRevenueLabel}</p>
         </div>
-        <div className="text-right">
-          <p className="text-xs muted">Best day</p>
-          <p className="font-black text-sky-100">{bestDay.label} - {currency(bestDay.revenue || 0)}</p>
+        <div className="min-w-0 border-t border-white/10 pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">7-Day Total</p>
+          <p className="mt-1 truncate text-xl font-black text-white sm:text-2xl" title={totalRevenueLabel}>{totalRevenueLabel}</p>
         </div>
-        <div className="text-right">
-          <p className="text-xs muted">7-day total</p>
-          <p className="font-black text-white">{currency(totalRevenue)}</p>
+        <div className="min-w-0 border-t border-white/10 pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Best Day ({bestDay.label})</p>
+          <p className="mt-1 truncate text-xl font-black text-sky-400 sm:text-2xl" title={bestDayRevenueLabel}>{bestDayRevenueLabel}</p>
         </div>
       </div>
+      {hasData ? (
+        <div className="h-[240px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+              <XAxis dataKey="label" stroke="#64748b" fontSize={11} fontWeight={600} tickLine={false} axisLine={false} />
+              <YAxis stroke="#64748b" fontSize={11} fontWeight={600} tickLine={false} axisLine={false} tickFormatter={(val) => val > 0 ? `₹${val}` : ''} />
+              <Tooltip
+                formatter={(value) => currency(value)}
+                contentStyle={{ background: '#0b172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', color: '#fff', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.2)' }}
+                cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+              />
+              <Bar dataKey="revenue" fill="url(#colorRevenue)" radius={[8, 8, 0, 0]} />
+              <defs>
+                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={1}/>
+                  <stop offset="100%" stopColor="#0284c7" stopOpacity={0.6}/>
+                </linearGradient>
+              </defs>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="flex items-center justify-center">
+          <DashboardEmpty title="No revenue activity this week" message="Revenue trends will appear after payments are recorded." compact />
+        </div>
+      )}
     </DashboardPanel>
   );
 }
 
 function ActivityFeedPanel({ notifications = [], reminders = [] }) {
-  const items = [
+  const rawItems = [
     ...notifications.map((item) => ({ ...item, feedType: 'Notification', feedDate: item.createdAt })),
     ...reminders.map((item) => ({ ...item, feedType: 'Reminder', feedDate: item.createdAt }))
-  ].sort((a, b) => new Date(b.feedDate || 0) - new Date(a.feedDate || 0)).slice(0, 8);
+  ]
+    .filter((item) => item.title || item.message)
+    .sort((a, b) => new Date(b.feedDate || 0) - new Date(a.feedDate || 0));
+
+  const uniqueItems = [];
+  const seenStock = new Set();
+  for (const item of rawItems) {
+    const stockText = `${item.title || ''} ${item.message || ''}`.toLowerCase();
+    if (stockText.includes('stock')) {
+      const key = stockText.replace(/\b\d+(\.\d+)?\b/g, '#').replace(/\s+/g, ' ').trim();
+      if (seenStock.has(key)) continue;
+      seenStock.add(key);
+    }
+    uniqueItems.push(item);
+  }
+  const items = uniqueItems.slice(0, 5);
 
   return (
-    <DashboardPanel title="Activity Feed" icon={Bell} action={<Link className="dashboard-card-action" to="/admin/dashboard">Live</Link>} className="dashboard-activity-card">
-      <div className="dashboard-timeline-list">
-        {items.length ? items.map((item) => (
-          <div key={`${item.feedType}-${item.id || item._id || item.title}`} className="dashboard-timeline-item">
-            <span className="dashboard-timeline-dot"><Bell className="h-3.5 w-3.5" /></span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="status-badge">{item.feedType}</span>
-                  {item.priority ? <span className="dashboard-soft-badge">{item.priority}</span> : null}
+    <DashboardPanel title="Activity Feed" icon={Bell} action={<Link className={panelActionClass} to="/admin/dashboard">Live</Link>}>
+      <div className="relative max-h-[330px] space-y-5 overflow-y-auto pl-8 pr-4 [scrollbar-color:rgba(148,163,184,0.28)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-600/30 [&::-webkit-scrollbar-track]:bg-transparent">
+        <span className="pointer-events-none absolute bottom-0 left-[7px] top-0 w-px bg-white/10" />
+        {items.length ? items.map((item, idx) => (
+          <div key={`${item.feedType}-${item.id || item._id || item.title || idx}`} className="relative group">
+            <span className="absolute -left-[31px] top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#0b172a] border border-sky-400/50 group-hover:border-sky-400 transition-colors">
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
+            </span>
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-300">{item.feedType}</span>
+                  {item.priority && <span className="rounded-md bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-rose-400 border border-rose-500/20">{item.priority}</span>}
                 </div>
-                <p className="mt-2 truncate font-black">{item.title}</p>
-                <p className="dashboard-feed-message mt-1 text-sm muted">{item.message}</p>
+                <p className="shrink-0 text-xs font-bold text-slate-500">{formatDate(item.feedDate)}</p>
               </div>
-              <p className="shrink-0 text-xs muted">{formatDate(item.feedDate)}</p>
-            </div>
+              <p className="mt-2 truncate text-sm font-bold text-white" title={item.title}>{item.title}</p>
+              <p className="mt-1 text-xs font-medium text-slate-400 line-clamp-2">{item.message}</p>
             </div>
           </div>
-        )) : <DashboardEmpty title="No activity yet" message="Notifications and reminders will appear here." />}
+        )) : <DashboardEmpty title="No activity" message="Events will appear here." />}
       </div>
     </DashboardPanel>
   );
@@ -396,9 +450,11 @@ function normalizeDashboardMetrics(payload = {}) {
 export function AdminDashboard() {
   const { request } = useAuth();
   const [lastUpdated, setLastUpdated] = useState(null);
+
   const loadDashboard = useCallback(async () => {
     return normalizeDashboardMetrics(await request('/dashboard/metrics'));
   }, [request]);
+
   const { data, loading, error, reload } = useResource(loadDashboard, [loadDashboard]);
   const dashboardData = data || emptyDashboardData;
   const chartData = dashboardData.revenueOverview || [];
@@ -407,6 +463,7 @@ export function AdminDashboard() {
   const pendingPaymentInvoices = dashboardData.pendingPaymentsList || [];
   const activeWorkOrders = dashboardData.repairQueue || [];
   const amcRenewalsDue = Number(dashboardData.stats?.amcRenewalsDue || 0) || (dashboardData.reminders || []).filter((item) => `${item.title || ''} ${item.message || ''}`.toLowerCase().includes('amc')).length;
+
   const alerts = useMemo(() => {
     if (!dashboardData) return [];
     return [
@@ -426,103 +483,142 @@ export function AdminDashboard() {
     return () => clearInterval(timer);
   }, [reload]);
 
-  if (loading) return <LoadingBlock />;
+  if (loading) return <div className="mx-auto max-w-[1920px] p-4 lg:p-8"><LoadingBlock /></div>;
 
   return (
-    <div className="admin-dashboard-page">
-      <PageHeader
-        title="Admin Dashboard"
-        eyebrow="Smart Service Command"
-        action={(
-          <div className="quick-actions flex flex-wrap justify-start gap-2 md:justify-end">
-            <Link className="btn btn-primary glow-action" to="/admin/bookings"><Plus className="h-4 w-4" />Booking</Link>
-            <Link className="btn btn-secondary" to="/admin/work-orders"><Plus className="h-4 w-4" />Service Job</Link>
-            <Link className="btn btn-secondary" to="/admin/technician-panel"><UserRound className="h-4 w-4" />Technician Panel</Link>
-            <Link className="btn btn-secondary" to="/admin/stock-movements"><PackagePlus className="h-4 w-4" />Add Stock</Link>
-            <Link className="btn btn-secondary" to="/admin/payments"><CreditCard className="h-4 w-4" />Record Payment</Link>
+    <div className="mx-auto max-w-[1920px] p-4 space-y-6 pb-12 sm:p-6 lg:p-8">
+      {/* Premium Header */}
+      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0b172a]/80 p-6 shadow-2xl backdrop-blur-xl lg:p-10">
+        <div className="absolute inset-0 bg-gradient-to-br from-sky-500/10 via-transparent to-emerald-500/5" />
+        <div className="absolute -right-40 -top-40 h-96 w-96 rounded-full bg-sky-500/10 blur-[100px] pointer-events-none" />
+        <div className="absolute -bottom-40 -left-40 h-96 w-96 rounded-full bg-emerald-500/10 blur-[100px] pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col gap-7 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-5xl">Dashboard</h1>
+            <p className="mt-3 text-sm font-medium text-slate-400 sm:text-base">Today's business overview, service activity, and priority alerts.</p>
+            {lastUpdated && (
+              <p className="mt-4 flex items-center gap-2 text-xs font-bold text-slate-500">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                LIVE UPDATED: {lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
           </div>
-        )}
-      >
-        Action-ready view of overdue work, billing, stock health, bookings, and technician load.
-        {lastUpdated ? <span className="mt-1 block text-xs">Last updated: {lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span> : null}
-      </PageHeader>
-      {error ? (
-        <div className="surface mb-5 border border-amber-300/25 bg-amber-400/10 p-3 text-sm font-semibold text-amber-100">
-          Dashboard metrics are temporarily unavailable. Showing the current dashboard shell while the next refresh retries.
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Link className={`inline-flex items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 py-3 text-sm font-bold text-white shadow-[0_0_20px_rgba(14,165,233,0.3)] transition-all hover:-translate-y-0.5 hover:bg-sky-400 hover:shadow-[0_0_25px_rgba(14,165,233,0.45)] ${focusRing}`} to="/admin/bookings">
+              <Plus className="h-4 w-4" /> New Booking
+            </Link>
+            <Link className={heroSecondaryActionClass} to="/admin/work-orders">
+              <Wrench className="h-4 w-4" /> New Work Order
+            </Link>
+            <Link className={heroSecondaryActionClass} to="/admin/payments">
+              <CreditCard className="h-4 w-4" /> Record Payment
+            </Link>
+          </div>
         </div>
-      ) : null}
-      <div className="dashboard-kpi-grid">
+      </div>
+
+      {error && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5 backdrop-blur-md">
+          <div className="flex items-center gap-3 text-amber-200">
+            <AlertTriangle className="h-5 w-5" />
+            <p className="text-sm font-bold">Dashboard metrics are temporarily unavailable. Retrying soon.</p>
+          </div>
+        </div>
+      )}
+
+      {/* KPI Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         <SmartMetricCard icon={CalendarClock} label="Today's Bookings" value={dashboardData.stats.todayBookings} helper="New intake today" tone="blue" to="/admin/bookings" />
-        <SmartMetricCard icon={ClipboardList} label="Pending Service Jobs" value={dashboardData.stats.pendingJobs} helper={`${dashboardData.stats.unassignedJobs || 0} unassigned`} tone="yellow" to="/admin/work-orders" />
+        <SmartMetricCard icon={ClipboardList} label="Pending Service Jobs" value={dashboardData.stats.pendingJobs} helper={`${dashboardData.stats.unassignedJobs || 0} total unassigned`} tone="yellow" to="/admin/work-orders" />
+        <SmartMetricCard icon={AlertTriangle} label="Urgent Jobs" value={dashboardData.stats.urgentActiveJobs || dashboardData.alerts?.urgentActiveJobs || 0} helper="Active jobs marked Urgent" tone="red" glow to="/admin/work-orders?priority=Urgent" />
         <SmartMetricCard icon={Wrench} label="Jobs In Progress" value={dashboardData.stats.inProgressJobs} helper={`${dashboardData.stats.awaitingPartsJobs || 0} awaiting parts`} tone="blue" to="/admin/work-orders" />
         <SmartMetricCard icon={CheckCircle2} label="Completed Today" value={completedToday} helper={`${dashboardData.stats.completedJobs || 0} completed total`} tone="green" to="/admin/work-orders" />
         <SmartMetricCard icon={CreditCard} label="Pending Payments" value={dashboardData.stats.pendingPayments || dashboardData.metrics.pendingPayments || 0} helper={`${dashboardData.stats.paymentsOverdue || 0} overdue`} tone="yellow" glow to="/admin/payments" />
         <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={dashboardData.metrics.lowStockItems || 0} helper={`${dashboardData.alerts.outOfStockItems || 0} out of stock`} tone="red" glow to="/admin/parts" />
-        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={dashboardData.stats.activeAmcContracts || 0} helper={`${amcRenewalsDue} renewals due, ${dashboardData.stats.amcVisitsThisWeek || 0} visits this week`} tone="green" to="/admin/amc-contracts" />
+        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={dashboardData.stats.activeAmcContracts || 0} helper={`${amcRenewalsDue} renewals due`} tone="green" to="/admin/amc-contracts" />
         <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={currency(monthlyRevenue)} helper="Collected this month" tone="green" to="/admin/reports/finance" />
       </div>
-      <div className="dashboard-priority-block">
-        <PriorityAlerts alerts={alerts} />
-      </div>
-      <div className="dashboard-main-grid">
-        <DashboardPanel title="Recent Bookings" icon={CalendarClock} action={<Link className="dashboard-card-action" to="/admin/bookings">View All</Link>} className="dashboard-list-card">
+
+      {/* Priority Alerts */}
+      <PriorityAlerts alerts={alerts} />
+
+      {/* Main Grid: Lists & Charts */}
+      <div className="grid gap-6 lg:gap-8 xl:grid-cols-3">
+        <DashboardPanel title="Recent Bookings" icon={CalendarClock} action={<Link className={panelActionClass} to="/admin/bookings">View All</Link>}>
           <div className="grid gap-3">
             {dashboardData.recentBookings?.length ? dashboardData.recentBookings.slice(0, 6).map((booking) => {
               const source = booking.source || booking.bookingSource || booking.channel || 'Walk-in';
               return (
-                <div key={booking.id} className="dashboard-row-card">
-                  <div className="min-w-0">
+                <div key={booking.id} className="group flex min-w-0 items-start justify-between gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-300 hover:bg-white/10 hover:shadow-lg">
+                  <div className="min-w-0 flex-1">
                     {booking.customerId ? (
-                      <Link className="truncate font-black text-sky-100 hover:text-[var(--brand)]" to={`/admin/customers/${recordId(booking.customerId)}`}>{booking.customerName}</Link>
-                    ) : <p className="truncate font-black">{booking.customerName}</p>}
-                    <p className="mt-1 truncate text-sm muted">{booking.bookingCode || booking.id} - {booking.serviceType || booking.device}</p>
-                    <p className="mt-0.5 truncate text-xs muted">{booking.device} - {formatDate(booking.createdAt || booking.updatedAt)}</p>
+                      <Link className={`block truncate text-sm font-bold text-sky-400 transition-colors hover:text-sky-300 ${focusRing}`} to={`/admin/customers/${recordId(booking.customerId)}`} title={booking.customerName}>{booking.customerName}</Link>
+                    ) : <p className="block truncate text-sm font-bold text-white" title={booking.customerName}>{booking.customerName}</p>}
+                    <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-300">{booking.serviceType || 'Service'}{booking.device ? ` · ${booking.device}` : ''}</p>
+                    <MetaRow items={[
+                      { value: booking.bookingCode || booking.id, className: 'max-w-[92px]' },
+                      { value: formatDate(booking.createdAt || booking.updatedAt), className: 'max-w-[120px]' }
+                    ]} />
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-2">
+                  <div className="flex max-w-[9rem] shrink-0 flex-col items-end gap-2.5">
                     <BookingSourceBadge source={source} />
-                    {booking.status ? <StatusBadge status={booking.status} /> : null}
+                    {booking.status && <StatusBadge status={booking.status} />}
                   </div>
                 </div>
               );
-            }) : <DashboardEmpty title="No new bookings" message="Fresh bookings will appear here as they arrive." />}
+            }) : <DashboardEmpty title="No new bookings" message="New bookings will appear here once created." />}
           </div>
         </DashboardPanel>
-        <DashboardPanel title="Repair & Service Queue" icon={Wrench} action={<Link className="dashboard-card-action" to="/admin/work-orders">View All</Link>} className="dashboard-list-card">
+
+        <DashboardPanel title="Service Queue" icon={Wrench} action={<Link className={panelActionClass} to="/admin/work-orders">View All</Link>}>
           <div className="grid gap-3">
-            {activeWorkOrders.length ? activeWorkOrders.map((order) => (
-              <Link key={order.id} to={`/admin/work-orders/${order.id}`} className="dashboard-row-card alert-link">
-                <div className="min-w-0">
-                  <p className="truncate font-black">{order.customerId?.name || order.customerName || 'Customer'}</p>
-                  <p className="mt-1 truncate text-sm muted">{order.serviceType || 'Service'} - {order.device}</p>
-                  <p className="mt-0.5 truncate text-xs muted">{order.technicianId?.name || 'Unassigned'}</p>
+            {activeWorkOrders.length ? activeWorkOrders.slice(0, 6).map((order) => (
+              <Link key={order.id} to={`/admin/work-orders/${order.id}`} className={`group flex min-w-0 items-start justify-between gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-300 hover:border-sky-500/30 hover:bg-white/10 hover:shadow-lg ${focusRing}`}>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-white transition-colors group-hover:text-sky-400" title={order.customerId?.name || order.customerName || 'Customer'}>{order.customerId?.name || order.customerName || 'Customer'}</p>
+                  <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-300">{order.serviceType || 'Service'}{order.device ? ` · ${order.device}` : ''}</p>
+                  <MetaRow items={[
+                    { value: order.id, className: 'max-w-[92px]' },
+                    { value: `Tech: ${order.technicianId?.name || 'Unassigned'}`, className: 'max-w-[120px]' },
+                    { value: formatDate(order.createdAt || order.updatedAt), className: 'max-w-[120px]' }
+                  ]} />
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
+                <div className="flex max-w-[9rem] shrink-0 flex-col items-end gap-2.5">
                   <StatusBadge status={order.status} />
-                  {order.priority ? <span className="dashboard-soft-badge">{order.priority}</span> : null}
+                  <span className={`max-w-full truncate rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${String(order.priority || 'Normal').toLowerCase() === 'urgent' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/20' : 'bg-slate-800 text-slate-300 border border-white/5'}`}>{order.priority || 'Normal'}</span>
                 </div>
               </Link>
-            )) : <DashboardEmpty title="No active service jobs" message="The repair queue is clear." />}
+            )) : <DashboardEmpty title="No active service jobs" message="The repair queue is currently clear." />}
           </div>
         </DashboardPanel>
-        <DashboardPanel title="Pending Payments" icon={CreditCard} action={<Link className="dashboard-card-action" to="/admin/payments">View All</Link>} className="dashboard-list-card">
+
+        <DashboardPanel title="Pending Payments" icon={CreditCard} action={<Link className={panelActionClass} to="/admin/payments">View All</Link>}>
           <div className="grid gap-3">
             {pendingPaymentInvoices.length ? pendingPaymentInvoices.slice(0, 6).map((invoice) => (
-              <Link key={invoice.id || invoice._id} to={`/admin/payments?invoiceId=${invoice.id || invoice._id}`} className="dashboard-row-card alert-link">
-                <div className="min-w-0">
-                  <p className="truncate font-black">{invoice.invoiceNumber}</p>
-                  <p className="mt-1 truncate text-sm muted">{invoice.customerId?.name || invoice.customerName || 'Customer'}</p>
+              <Link key={invoice.id || invoice._id} to={`/admin/payments?invoiceId=${invoice.id || invoice._id}`} className={`group flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-300 hover:border-amber-500/30 hover:bg-white/10 hover:shadow-lg ${focusRing}`}>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-white transition-colors group-hover:text-amber-400" title={invoice.invoiceNumber}>{invoice.invoiceNumber}</p>
+                  <p className="mt-1.5 truncate text-xs font-medium text-slate-400" title={invoice.customerId?.name || invoice.customerName || 'Customer'}>{invoice.customerId?.name || invoice.customerName || 'Customer'}</p>
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
-                  <span className="text-lg font-black text-amber-100">{currency(invoiceDueAmount(invoice))}</span>
+                <div className="flex min-w-0 shrink-0 flex-col items-end gap-2">
+                  <span className="max-w-[120px] truncate text-right text-lg font-black tracking-tight text-amber-400" title={currency(invoiceDueAmount(invoice))}>{currency(invoiceDueAmount(invoice))}</span>
                   <StatusBadge status={invoice.status || 'Pending'} />
                 </div>
               </Link>
-            )) : <DashboardEmpty title="No pending payments" message="All balances are currently clear." />}
+            )) : <DashboardEmpty title="No pending payments" message="Payments will appear here after invoices are unpaid." />}
           </div>
         </DashboardPanel>
-        <TechnicianWorkloadBars technicians={dashboardData.technicianWorkload || []} />
-        <ActivityFeedPanel notifications={dashboardData.notifications || []} reminders={dashboardData.reminders || []} />
+
         <RevenueOverviewCard chartData={chartData} monthlyRevenue={monthlyRevenue} />
+        <div className="flex flex-col gap-6 lg:gap-8 xl:col-span-1">
+          <TechnicianWorkloadBars technicians={dashboardData.technicianWorkload || []} />
+          <ActivityFeedPanel notifications={dashboardData.notifications || []} reminders={dashboardData.reminders || []} />
+        </div>
       </div>
     </div>
   );

@@ -152,9 +152,9 @@ const emptyTechnicianForm = {
 
 function SettingsInfoCard({ title, icon: Icon, children }) {
   return (
-    <div className="surface p-5">
+    <div className="surface admin-control-card p-5">
       <div className="flex items-start gap-3">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-card bg-sky-400/15 text-[var(--brand)]">
+        <div className="admin-control-icon">
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -242,10 +242,10 @@ function TeamAccessSection() {
   }
 
   return (
-    <div className="surface p-5 lg:col-span-2">
+    <div className="surface admin-control-card team-access-card p-5 lg:col-span-2">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-card bg-sky-400/15 text-[var(--brand)]">
+          <div className="admin-control-icon">
             <Users className="h-5 w-5" />
           </div>
           <div>
@@ -256,7 +256,7 @@ function TeamAccessSection() {
             <p className="mt-2 max-w-2xl text-sm leading-6 muted">Manage technician login access, temporary passwords, and account status.</p>
           </div>
         </div>
-        <button type="button" className="btn btn-primary shrink-0" onClick={() => setAddOpen(true)}>
+        <button type="button" className="btn btn-primary admin-compact-button shrink-0" onClick={() => setAddOpen(true)}>
           <Plus className="h-4 w-4" />
           Add Technician
         </button>
@@ -264,14 +264,11 @@ function TeamAccessSection() {
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         {[
-          ['Total Technicians', technicians.length],
-          ['Active Technicians', activeCount],
-          ['Disabled Accounts', disabledCount]
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-card border border-white/10 bg-white/[0.045] p-3">
-            <p className="text-xs font-black uppercase text-[var(--brand)]">{label}</p>
-            <p className="mt-1 text-2xl font-black">{value}</p>
-          </div>
+          { icon: Users, label: 'Total Technicians', value: technicians.length, helper: 'All technician logins', tone: 'blue' },
+          { icon: CheckCircle2, label: 'Active Technicians', value: activeCount, helper: 'Can access technician panel', tone: 'green' },
+          { icon: AlertTriangle, label: 'Disabled Accounts', value: disabledCount, helper: 'Login blocked', tone: 'gray' }
+        ].map((item) => (
+          <AdminMetricCard key={item.label} {...item} />
         ))}
       </div>
 
@@ -285,8 +282,8 @@ function TeamAccessSection() {
         ) : error ? (
           <div className="rounded-card border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">Unable to load technician accounts.</div>
         ) : technicians.length ? (
-          <div className="table-wrap bg-[var(--surface)]">
-            <table className="data-table">
+          <div className="table-wrap admin-table-wrap bg-[var(--surface)]">
+            <table className="data-table team-access-table">
               <thead>
                 <tr>
                   <th>Technician</th>
@@ -302,38 +299,39 @@ function TeamAccessSection() {
                   <tr key={tech.id}>
                     <td>
                       <div className="flex items-center gap-3">
-                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-card bg-sky-400/15 text-sm font-black text-sky-100">
+                        <div className="team-avatar">
                           {tech.name?.slice(0, 1) || 'T'}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-bold">{tech.name}</p>
+                          <p className="truncate font-bold text-slate-100" title={tech.name}>{tech.name}</p>
                           <p className="text-xs muted">Employee login account</p>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <p className="font-bold">{tech.username}</p>
+                      <p className="font-bold text-slate-100">{tech.username}</p>
                       <p className="text-xs muted">{tech.phone || 'No phone added'}</p>
                     </td>
-                    <td>{tech.role === 'admin' ? 'Admin' : 'Technician'}</td>
+                    <td><span className="admin-role-badge">{tech.role === 'admin' ? 'Admin' : 'Technician'}</span></td>
                     <td>
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${tech.active ? 'bg-emerald-400/15 text-emerald-100' : 'bg-slate-500/20 text-slate-200'}`}>
-                        {tech.active ? 'Active' : 'Inactive'}
-                      </span>
+                      <AccountStatusPill active={tech.active} />
                     </td>
-                    <td>{tech.createdAt || tech.updatedAt ? formatDate(tech.createdAt || tech.updatedAt) : '-'}<span className="block text-xs muted">{tech.updatedAt ? `Updated ${formatDate(tech.updatedAt)}` : ''}</span></td>
                     <td>
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" className="btn btn-secondary" onClick={() => setResetUser(tech)}>
+                      <span className="block font-semibold text-slate-200">{tech.createdAt ? formatDate(tech.createdAt) : '-'}</span>
+                      <span className="block text-xs muted">{tech.updatedAt ? `Updated ${formatDate(tech.updatedAt)}` : 'No update yet'}</span>
+                    </td>
+                    <td className="text-right">
+                      <div className="admin-row-actions">
+                        <button type="button" className="btn btn-primary admin-table-button" onClick={() => setResetUser(tech)}>
                           <KeyRound className="h-4 w-4" />
                           Reset Password
                         </button>
                         {tech.id !== user?.id ? (
-                          <button type="button" className="btn btn-secondary" onClick={() => toggleStatus(tech)}>
+                          <button type="button" className="btn btn-secondary admin-table-button" onClick={() => toggleStatus(tech)}>
                             {tech.active ? 'Disable' : 'Enable'}
                           </button>
                         ) : null}
-                        <button type="button" className="btn btn-secondary" onClick={() => setEditUser(tech)}>
+                        <button type="button" className="btn btn-secondary admin-table-button" onClick={() => setEditUser(tech)}>
                           <Edit3 className="h-4 w-4" />
                           Edit
                         </button>
@@ -396,19 +394,24 @@ function TechnicianAccountModal({ title, submitLabel, technician = null, editMod
 
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4">
-      <form className="surface max-h-[92vh] w-full max-w-2xl overflow-y-auto p-5" onSubmit={submit}>
+      <form className="surface admin-modal max-h-[92vh] w-full max-w-2xl overflow-y-auto p-5" onSubmit={submit}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-black">{title}</h2>
-            <p className="mt-1 text-sm muted">Technician credentials are encrypted before storage.</p>
+            <p className="mt-1 text-sm muted">{editMode ? 'Update technician profile, role, and account status.' : 'Create technician login access with a temporary password.'}</p>
           </div>
           <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close technician modal">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="mt-5 rounded-card border border-white/10 bg-white/[0.035] p-4">
+          <div className="mb-4 flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-[var(--brand)]" />
+            <h3 className="font-black">Login Details</h3>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
           <label>
-            <span className="label">Technician Name</span>
+            <span className="label">Technician Name <RequiredMark /></span>
             <input className="input" value={form.name} onChange={(event) => update('name', event.target.value)} required />
           </label>
           <label>
@@ -416,7 +419,7 @@ function TechnicianAccountModal({ title, submitLabel, technician = null, editMod
             <input className="input" value={form.phone} onChange={(event) => update('phone', event.target.value)} />
           </label>
           <label>
-            <span className="label">Username</span>
+            <span className="label">Username <RequiredMark /></span>
             <input className="input" value={form.username} onChange={(event) => update('username', event.target.value)} required />
           </label>
           <label>
@@ -429,12 +432,14 @@ function TechnicianAccountModal({ title, submitLabel, technician = null, editMod
           {!editMode ? (
             <>
               <label>
-                <span className="label">Temporary Password</span>
+                <span className="label">Temporary Password <RequiredMark /></span>
                 <input className="input" type="password" value={form.password} onChange={(event) => update('password', event.target.value)} minLength={6} required />
+                <span className="mt-1 block text-xs muted">Use a temporary password. Technician can use it for login.</span>
               </label>
               <label>
-                <span className="label">Confirm Password</span>
+                <span className="label">Confirm Password <RequiredMark /></span>
                 <input className="input" type="password" value={form.confirmPassword} onChange={(event) => update('confirmPassword', event.target.value)} minLength={6} required />
+                <span className={`mt-1 block text-xs font-semibold ${form.confirmPassword && form.password !== form.confirmPassword ? 'text-amber-100' : 'muted'}`}>{form.confirmPassword && form.password !== form.confirmPassword ? 'Passwords do not match yet.' : 'Repeat the temporary password.'}</span>
               </label>
             </>
           ) : null}
@@ -444,7 +449,9 @@ function TechnicianAccountModal({ title, submitLabel, technician = null, editMod
               <option>Active</option>
               <option>Inactive</option>
             </select>
+            <span className="mt-1 block text-xs muted">Active accounts can log in. Inactive accounts are blocked.</span>
           </label>
+          </div>
         </div>
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" className="btn btn-secondary" onClick={onClose}>
@@ -480,11 +487,11 @@ function ResetPasswordModal({ technician, onClose, onSubmit }) {
 
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4">
-      <form className="surface w-full max-w-md p-5" onSubmit={submit}>
+      <form className="surface admin-modal w-full max-w-md p-5" onSubmit={submit}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-black">Reset Password</h2>
-            <p className="mt-1 text-sm muted">{technician.name} will use this temporary password for technician login.</p>
+            <h2 className="text-lg font-black">Reset Technician Password</h2>
+            <p className="mt-1 text-sm muted">This will replace the technician's current password with a new temporary password.</p>
           </div>
           <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close password reset modal">
             <X className="h-5 w-5" />
@@ -498,6 +505,7 @@ function ResetPasswordModal({ technician, onClose, onSubmit }) {
           <label>
             <span className="label">Confirm Password</span>
             <input className="input" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={6} required />
+            <span className={`mt-1 block text-xs font-semibold ${confirmPassword && password !== confirmPassword ? 'text-amber-100' : 'muted'}`}>{confirmPassword && password !== confirmPassword ? 'Passwords do not match yet.' : `${technician.name} will use this for technician login.`}</span>
           </label>
         </div>
         <div className="mt-5 flex justify-end gap-2">
@@ -514,42 +522,107 @@ function ResetPasswordModal({ technician, onClose, onSubmit }) {
   );
 }
 
+function AdminMetricCard({ icon: Icon, label, value, helper, tone = 'blue' }) {
+  return (
+    <div className={`admin-metric-card admin-metric-${tone}`}>
+      <div className="admin-metric-icon"><Icon className="h-4 w-4" /></div>
+      <div className="min-w-0">
+        <p className="admin-metric-label">{label}</p>
+        <p className="admin-metric-value">{value}</p>
+        <p className="admin-metric-helper">{helper}</p>
+      </div>
+    </div>
+  );
+}
+
+function SettingsInfoItem({ icon: Icon, label, value }) {
+  return (
+    <div className="settings-info-item">
+      <Icon className="h-4 w-4 text-[var(--brand)]" />
+      <div className="min-w-0">
+        <p className="text-xs font-black uppercase text-slate-400">{label}</p>
+        <p className="mt-1 break-words font-bold text-slate-100">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function AccessSummaryItem({ title, description }) {
+  return (
+    <div className="access-summary-item">
+      <CheckCircle2 className="h-4 w-4 text-emerald-200" />
+      <div>
+        <p className="font-black text-slate-100">{title}</p>
+        <p className="mt-1 text-sm leading-6 muted">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+function SecurityNotesCard() {
+  const notes = [
+    'Passwords are encrypted and cannot be viewed after saving.',
+    'Reset password creates a new temporary login password.',
+    'Disabled accounts cannot access the technician panel.',
+    'Audit logs help track important system changes.'
+  ];
+  return (
+    <SettingsInfoCard title="Security Notes" icon={ShieldCheck}>
+      <div className="mt-4 grid gap-3">
+        {notes.map((note) => (
+          <div key={note} className="security-note-item">
+            <KeyRound className="h-4 w-4 text-amber-100" />
+            <p className="text-sm font-semibold text-slate-200">{note}</p>
+          </div>
+        ))}
+      </div>
+    </SettingsInfoCard>
+  );
+}
+
+function RequiredMark() {
+  return <span className="admin-required-mark">Required</span>;
+}
+
+function AccountStatusPill({ active }) {
+  return <span className={`admin-status-pill ${active ? 'admin-status-active' : 'admin-status-inactive'}`}>{active ? 'Active' : 'Inactive'}</span>;
+}
+
 export function SystemSettingsPage() {
   return (
-    <>
-      <PageHeader title="Settings" eyebrow="System">
-        Review workspace identity, access, and operational defaults.
-      </PageHeader>
+    <div className="admin-control-page settings-page">
+      <section className="admin-control-hero mb-5">
+        <div className="relative z-[1]">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">System</p>
+            <span className="admin-premium-badge">Admin Control Center</span>
+          </div>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Settings</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage workspace identity, team access, security, and operational defaults.</p>
+        </div>
+      </section>
       <div className="grid gap-5 lg:grid-cols-2">
         <SettingsInfoCard title="Workspace Profile" icon={ShieldCheck}>
-          <div className="mt-4 grid gap-3">
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
             {[
-              ['Company', company.name],
-              ['Location', company.address],
-              ['Phone', company.phones.join(' / ')],
-              ['Email', company.email]
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-card bg-[var(--surface-2)] p-3">
-                <p className="text-xs font-black uppercase text-[var(--brand)]">{label}</p>
-                <p className="mt-1 font-bold">{value}</p>
-              </div>
-            ))}
+              { icon: ShieldCheck, label: 'Company', value: company.name },
+              { icon: CalendarClock, label: 'Location', value: company.address },
+              { icon: PhoneCallIcon, label: 'Phone', value: company.phones.join(' / ') },
+              { icon: Send, label: 'Email', value: company.email }
+            ].map((item) => <SettingsInfoItem key={item.label} {...item} />)}
           </div>
         </SettingsInfoCard>
         <SettingsInfoCard title="System Access" icon={KeyRound}>
           <div className="mt-4 grid gap-3">
-            <div className="rounded-card bg-[var(--surface-2)] p-3">
-              <p className="text-xs font-black uppercase text-[var(--brand)]">Admin Sidebar</p>
-              <p className="mt-1 font-bold">Dashboard, operations, customers, inventory, billing, AMC, reports, audit logs, and settings.</p>
-            </div>
-            <div className="rounded-card bg-[var(--surface-2)] p-3">
-              <p className="text-xs font-black uppercase text-[var(--brand)]">Audit Trail</p>
-              <p className="mt-1 font-bold">Operational changes remain available from System / Audit Logs.</p>
-            </div>
+            <AccessSummaryItem title="Admin Sidebar" description="Full access to operations, billing, inventory, AMC, reports, audit logs, and settings." />
+            <AccessSummaryItem title="Audit Trail" description="Important operational changes are recorded in audit logs." />
+            <AccessSummaryItem title="Role Access" description="Admins manage the system. Technicians access assigned jobs." />
+            <AccessSummaryItem title="Technician Login" description="Technician credentials are managed from Team & Access." />
           </div>
         </SettingsInfoCard>
+        <SecurityNotesCard />
         <TeamAccessSection />
       </div>
-    </>
+    </div>
   );
 }

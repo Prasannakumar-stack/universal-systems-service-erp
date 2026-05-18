@@ -23,6 +23,7 @@ const workOrderSchema = new mongoose.Schema(
     issue: { type: String, required: true, trim: true },
     technicianId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     status: { type: String, enum: ['Pending', 'In Progress', 'Awaiting Parts', 'Completed', 'Delivered', 'Returned'], default: 'Pending' },
+    priority: { type: String, enum: ['Low', 'Normal', 'High', 'Urgent'], default: 'Normal' },
     completedAt: { type: Date, default: null },
     serviceCharge: { type: Number, min: 0, default: 0 },
     notes: [
@@ -39,6 +40,13 @@ const workOrderSchema = new mongoose.Schema(
         quantity: { type: Number, min: 1, required: true },
         unitPrice: { type: Number, min: 0, default: 0 },
         total: { type: Number, min: 0, default: 0 },
+        chargeType: { type: String, enum: ['Chargeable', 'Covered under AMC'], default: 'Chargeable' },
+        chargeTypeMode: { type: String, enum: ['Auto', 'Manual'], default: 'Auto' },
+        source: { type: String, trim: true, default: '' },
+        note: { type: String, trim: true, default: '' },
+        stockDeducted: { type: Boolean, default: false },
+        stockDeductedAt: { type: Date, default: null },
+        addedAt: { type: Date, default: Date.now },
         createdAt: { type: Date, default: Date.now }
       }
     ],
@@ -47,9 +55,19 @@ const workOrderSchema = new mongoose.Schema(
         inventoryPartId: { type: mongoose.Schema.Types.ObjectId, ref: 'InventoryPart', default: null },
         name: { type: String, required: true, trim: true },
         quantity: { type: Number, min: 1, required: true },
-        status: { type: String, enum: ['Requested', 'Reserved', 'Fulfilled', 'Cancelled'], default: 'Requested' },
+        status: {
+          type: String,
+          enum: ['Requested', 'Reserved', 'Fulfilled', 'Cancelled', 'Pending', 'Approved', 'Rejected', 'Moved to Parts Used'],
+          default: 'Pending'
+        },
         note: { type: String, trim: true, default: '' },
+        rejectionReason: { type: String, trim: true, default: '' },
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        approvedAt: { type: Date, default: null },
+        rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        rejectedAt: { type: Date, default: null },
+        movedAt: { type: Date, default: null },
         createdAt: { type: Date, default: Date.now }
       }
     ],
@@ -66,7 +84,7 @@ const workOrderSchema = new mongoose.Schema(
     timeline: [timelineSchema],
     documentsSent: [
       {
-        type: { type: String, enum: ['quotation', 'work', 'service-completed'], required: true },
+        type: { type: String, enum: ['quotation', 'work', 'service-completed', 'amc-contract', 'amc-service-visit', 'amc-invoice'], required: true },
         sentVia: { type: String, trim: true, default: 'WhatsApp' },
         sentAt: { type: Date, default: Date.now }
       }
@@ -76,5 +94,11 @@ const workOrderSchema = new mongoose.Schema(
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
+
+workOrderSchema.virtual('extraInvoices', {
+  ref: 'Invoice',
+  localField: '_id',
+  foreignField: 'workOrderId'
+});
 
 export default mongoose.model('WorkOrder', workOrderSchema);
