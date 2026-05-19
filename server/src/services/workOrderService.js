@@ -253,7 +253,6 @@ export async function listWorkOrders(query, user) {
   const filter = {};
   const clauses = [];
   const { page, limit, skip } = parsePagination(query);
-  if (user.role === 'technician') filter.technicianId = user._id;
   if (clean(query.status)) filter.status = clean(query.status);
   if (clean(query.priority)) filter.priority = clean(query.priority);
   if (clean(query.serviceType)) filter.serviceType = searchRegex(query.serviceType);
@@ -261,7 +260,7 @@ export async function listWorkOrders(query, user) {
     const source = searchRegex(query.source);
     clauses.push({ $or: [{ bookingSource: source }, { source }, { channel: source }] });
   }
-  if (user.role !== 'technician' && validObjectId(query.technicianId)) filter.technicianId = validObjectId(query.technicianId);
+  if (validObjectId(query.technicianId)) filter.technicianId = validObjectId(query.technicianId);
   if (validObjectId(query.customerId)) filter.customerId = validObjectId(query.customerId);
   addDateRange(filter, query);
 
@@ -298,9 +297,6 @@ export async function listWorkOrders(query, user) {
 export async function getWorkOrder(id, user) {
   const workOrder = await WorkOrder.findById(id).populate(detailPopulateWorkOrder);
   if (!workOrder) throw appError('Work order not found', 404);
-  if (user.role === 'technician' && String(workOrder.technicianId?._id) !== String(user._id)) {
-    throw appError('You do not have permission to view this work order', 403);
-  }
   return workOrder;
 }
 

@@ -145,8 +145,9 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 
-export function CustomersPage() {
+export function CustomersPage({ role = 'admin' }) {
   const { request } = useAuth();
+  const base = role === 'technician' ? '/tech' : '/admin';
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -260,7 +261,7 @@ export function CustomersPage() {
           </select>
         ) : null}
       </div>
-      {!visibleCustomers.length ? <EmptyState title="No customers found" message="Customer records matching your filters will appear here." action={<Link className="btn btn-primary" to="/admin/bookings">Create Booking</Link>} /> : (
+      {!visibleCustomers.length ? <EmptyState title="No customers found" message="Customer records matching your filters will appear here." action={<Link className="btn btn-primary" to={`${base}/bookings`}>Create Booking</Link>} /> : (
         <>
         <div className="table-wrap bg-[var(--surface)] xl:overflow-x-visible">
           <table className="data-table min-w-[900px] table-fixed xl:min-w-0">
@@ -273,7 +274,7 @@ export function CustomersPage() {
               <col className="w-[10%]" />
               <col className="w-[12%]" />
             </colgroup>
-          <thead><tr><th>Customer</th><th>Device / Service</th><th>Jobs</th><th>Balance</th><th>Spent</th><th>Created</th><th className="text-center">Action</th></tr></thead>
+          <thead><tr><th>Customer</th><th>Device / Service</th><th>{role === 'technician' ? 'Assigned / Attended Jobs' : 'Jobs'}</th><th>Balance</th><th>Spent</th><th>Created</th><th className="text-center">Action</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
             {visibleCustomers.map((customer) => {
               const metrics = metricsByCustomer.get(recordId(customer)) || { jobs: [], invoices: [] };
@@ -296,7 +297,7 @@ export function CustomersPage() {
                         {initials}
                       </span>
                       <div className="min-w-0">
-                        <Link className="block truncate font-black text-sky-100 hover:text-[var(--brand)]" to={`/admin/customers/${customer.id}`}>
+                        <Link className="block truncate font-black text-sky-100 hover:text-[var(--brand)]" to={`${base}/customers/${customer.id}`}>
                           {customer.name || 'Unnamed Customer'}
                         </Link>
                         <span className="mt-0.5 block truncate text-xs text-slate-300">{customer.phone || 'No phone'}</span>
@@ -323,7 +324,7 @@ export function CustomersPage() {
                   <td className="whitespace-nowrap text-center align-middle">
                     <Link
                       className="btn btn-secondary inline-flex h-8 items-center justify-center whitespace-nowrap border-sky-300/25 bg-sky-400/10 px-2.5 py-1 text-[11px] font-black text-sky-100 hover:bg-sky-400/15"
-                      to={`/admin/customers/${customer.id}`}
+                      to={`${base}/customers/${customer.id}`}
                     >
                       View 360 Profile
                     </Link>

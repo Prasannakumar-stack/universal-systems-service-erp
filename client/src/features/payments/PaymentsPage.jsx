@@ -149,10 +149,11 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 
-export function PaymentsPage() {
+export function PaymentsPage({ role = 'admin' }) {
   const { request } = useAuth();
   const { push } = useToast();
   const location = useLocation();
+  const base = role === 'technician' ? '/tech' : '/admin';
   const invoiceIdParam = useMemo(() => new URLSearchParams(location.search).get('invoiceId') || '', [location.search]);
   const invoiceIdParamHandled = useRef('');
   const [form, setForm] = useState({ invoiceId: invoiceIdParam, paidAmount: '', method: 'Cash', transactionId: '' });
@@ -319,11 +320,11 @@ export function PaymentsPage() {
 
   function invoiceSourceCell(invoice) {
     if (recordId(invoice?.workOrderId)) {
-      return <Link className="billing-link" to={`/admin/work-orders/${recordId(invoice.workOrderId)}`}>{getWorkOrderDisplayId(invoice.workOrderId)}</Link>;
+      return <Link className="billing-link" to={`${base}/work-orders/${recordId(invoice.workOrderId)}`}>{getWorkOrderDisplayId(invoice.workOrderId)}</Link>;
     }
     if (recordId(invoice?.amcContractId)) {
       return (
-        <Link className="billing-link" to="/admin/amc-contracts">
+        <Link className="billing-link" to={`${base}/amc-contracts`}>
           {invoice.amcContractId?.contractId || 'AMC Contract'}
           <span className="block truncate text-xs muted" title={invoice.amcContractId?.contractType || '-'}>{invoice.amcContractId?.contractType || '-'}</span>
         </Link>
@@ -448,7 +449,7 @@ export function PaymentsPage() {
                   <tr key={payment.id}>
                     <td className="whitespace-nowrap">{formatDate(payment.createdAt)}</td>
                     <td className="font-bold"><span className="billing-id-text">{getPaymentDisplayId(payment)}</span></td>
-                    <td className="font-bold"><Link className="billing-link" to="/admin/invoices">{getInvoiceDisplayId(payment.invoiceId)}</Link></td>
+                    <td className="font-bold"><Link className="billing-link" to={`${base}/invoices`}>{getInvoiceDisplayId(payment.invoiceId)}</Link></td>
                     <td>{invoiceSourceCell(payment.invoiceId)}</td>
                     <td>
                       <span className="block truncate font-semibold text-slate-100" title={payment.customerId?.name || '-'}>{payment.customerId?.name || '-'}</span>

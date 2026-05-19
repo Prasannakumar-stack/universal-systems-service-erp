@@ -331,9 +331,9 @@ export function WorkOrdersPage({ role = 'admin' }) {
   return (
     <div className="work-orders-page mx-auto max-w-[1920px] space-y-6">
       <header className="work-orders-page-header">
-        <p className="text-xs font-black uppercase tracking-widest text-sky-400/90">{role === 'admin' ? 'Operations' : 'Technician'}</p>
+        <p className="text-xs font-black uppercase tracking-widest text-sky-400/90">Operations</p>
         <h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">
-          {role === 'admin' ? 'Repair & Service Jobs' : 'My Repair & Service Jobs'}
+          Repair & Service Jobs
         </h1>
         <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-400">
           Track active service jobs, repairs, installations, parts, billing, and completion.

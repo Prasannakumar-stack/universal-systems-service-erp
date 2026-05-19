@@ -167,10 +167,14 @@ function customerTimelineMeta(event) {
   return { label: 'Log', Icon: CalendarClock, tone: 'border-slate-400/30 bg-slate-500/15 text-slate-200' };
 }
 
-export function CustomerProfilePage() {
+export function CustomerProfilePage({ role = 'admin' }) {
   const { id } = useParams();
   const { request } = useAuth();
   const { push } = useToast();
+  const base = role === 'technician' ? '/tech' : '/admin';
+  const workOrdersBase = `${base}/work-orders`;
+  const paymentsBase = `${base}/payments`;
+  const bookingsBase = `${base}/bookings`;
   const [activeTab, setActiveTab] = useState('overview');
   const [historySearch, setHistorySearch] = useState('');
   const debouncedHistorySearch = useDebouncedValue(historySearch);
@@ -283,7 +287,7 @@ export function CustomerProfilePage() {
         status: order.status,
         type: 'work_order',
         source: 'Service Job',
-        to: `/admin/work-orders/${order.id}`
+        to: `${workOrdersBase}/${order.id}`
       });
       (order.timeline || []).forEach((item) => events.push({
         date: item.createdAt,
@@ -292,12 +296,12 @@ export function CustomerProfilePage() {
         status: item.status,
         type: item.type || timelineIcon(item),
         source: item.userId?.name || item.userId?.username || 'Work Order',
-        to: `/admin/work-orders/${order.id}`
+        to: `${workOrdersBase}/${order.id}`
       }));
-      if (order.completedAt) events.push({ date: order.completedAt, title: 'Job completed', detail: `${bookingLabel(order)} completed.`, status: order.status, type: 'status', source: 'Work Order', to: `/admin/work-orders/${order.id}` });
+      if (order.completedAt) events.push({ date: order.completedAt, title: 'Job completed', detail: `${bookingLabel(order)} completed.`, status: order.status, type: 'status', source: 'Work Order', to: `${workOrdersBase}/${order.id}` });
     });
     invoices.forEach((invoice) => {
-      events.push({ date: invoice.createdAt, title: 'Invoice generated', detail: `${invoice.invoiceNumber} - ${currency(invoice.total)}`, status: invoice.status, type: 'invoice', source: 'Billing', to: recordId(invoice.workOrderId) ? `/admin/work-orders/${recordId(invoice.workOrderId)}` : '' });
+      events.push({ date: invoice.createdAt, title: 'Invoice generated', detail: `${invoice.invoiceNumber} - ${currency(invoice.total)}`, status: invoice.status, type: 'invoice', source: 'Billing', to: recordId(invoice.workOrderId) ? `${workOrdersBase}/${recordId(invoice.workOrderId)}` : '' });
     });
     payments.forEach((payment) => {
       events.push({ date: payment.createdAt, title: 'Payment recorded', detail: `${currency(payment.paidAmount)} via ${payment.method || '-'}`, status: payment.status, type: 'payment', source: 'Payments' });
@@ -309,11 +313,11 @@ export function CustomerProfilePage() {
         detail: item.message,
         type: item.type || 'communication',
         source: item.createdBy?.name || item.createdBy?.username || 'Team',
-        to: recordId(item.workOrderId) ? `/admin/work-orders/${recordId(item.workOrderId)}` : ''
+        to: recordId(item.workOrderId) ? `${workOrdersBase}/${recordId(item.workOrderId)}` : ''
       });
     });
     return events.filter((event) => event.date).sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [communications, customer.createdAt, serviceHistory, invoices, payments]);
+  }, [communications, customer.createdAt, serviceHistory, invoices, payments, workOrdersBase]);
   const whatsappPhone = String(customer.phone || '').replace(/\D/g, '');
   const pendingInvoice = invoices.find((invoice) => Number(invoice.balance || 0) > 0);
   const customerNameText = customer.name || 'Unnamed Customer';
@@ -366,14 +370,14 @@ export function CustomerProfilePage() {
   const amcStatus = customer.amcStatus || noAmcAdded;
   const warrantyStatus = customer.warrantyStatus || (customer.warrantyItems?.length ? `${customer.warrantyItems.length} active item${customer.warrantyItems.length === 1 ? '' : 's'}` : noWarrantyAdded);
   const showCustomerTypeBadge = Boolean(rawCustomerType);
-  const paymentLink = `/admin/payments${pendingInvoice ? `?invoiceId=${recordId(pendingInvoice)}` : ''}`;
+  const paymentLink = `${paymentsBase}${pendingInvoice ? `?invoiceId=${recordId(pendingInvoice)}` : ''}`;
   const bookingPrefillLink = useMemo(() => {
     const params = new URLSearchParams({ openBooking: '1' });
     if (customer.name) params.set('customerName', customer.name);
     if (customer.phone) params.set('phone', customer.phone);
     if (customer.address) params.set('address', customer.address);
-    return `/admin/bookings?${params.toString()}`;
-  }, [customer.address, customer.name, customer.phone]);
+    return `${bookingsBase}?${params.toString()}`;
+  }, [bookingsBase, customer.address, customer.name, customer.phone]);
   const hasHistoryFilters = Boolean(historySearch || historyStatus || historyServiceType || historyDateFrom || historyDateTo);
   const currentCustomerType = rawCustomerType;
   const profileDetails = [
@@ -654,7 +658,7 @@ export function CustomerProfilePage() {
               <h2 className="text-xl font-black">Recent Service Jobs</h2>
               <div className="mt-4 grid gap-3">
                 {serviceHistory.slice(0, 4).length ? serviceHistory.slice(0, 4).map((order) => (
-                  <Link key={order.id} className="rounded-card border border-white/10 bg-white/[0.045] p-4 transition hover:border-sky-300/30 hover:bg-sky-400/10" to={`/admin/work-orders/${order.id}`}>
+                  <Link key={order.id} className="rounded-card border border-white/10 bg-white/[0.045] p-4 transition hover:border-sky-300/30 hover:bg-sky-400/10" to={`${workOrdersBase}/${order.id}`}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <b className="truncate text-slate-50">{getWorkOrderDisplayId(order)}</b>
                       <StatusBadge status={order.status} />
@@ -771,7 +775,7 @@ export function CustomerProfilePage() {
                         <td>{technicianName ? <span className="block max-w-[10rem] truncate text-sm font-semibold text-slate-100" title={technicianName}>{technicianName}</span> : <span className="inline-flex rounded-full border border-slate-400/20 bg-slate-500/15 px-2.5 py-1 text-xs font-bold text-slate-200">Unassigned</span>}</td>
                         <td><StatusBadge status={order.status} /></td>
                         <td className="text-right"><span className="block whitespace-nowrap text-sm font-bold" title={currency(total)}>{currency(total)}</span></td>
-                        <td className="text-right"><Link className="btn btn-secondary h-8 px-3 py-1.5 text-xs" to={`/admin/work-orders/${order.id}`}>Open Job</Link></td>
+                        <td className="text-right"><Link className="btn btn-secondary h-8 px-3 py-1.5 text-xs" to={`${workOrdersBase}/${order.id}`}>Open Job</Link></td>
                       </tr>
                     );
                   })}
@@ -814,15 +818,15 @@ export function CustomerProfilePage() {
                         </div>
                       </td>
                       <td>{formatDisplayDate(invoice.createdAt)}</td>
-                      <td>{recordId(invoice.workOrderId) ? <Link className="truncate text-sky-100 hover:text-[var(--brand)]" to={`/admin/work-orders/${recordId(invoice.workOrderId)}`}>{getWorkOrderDisplayId(invoice.workOrderId)}</Link> : <span className="muted">{notAdded}</span>}</td>
+                      <td>{recordId(invoice.workOrderId) ? <Link className="truncate text-sky-100 hover:text-[var(--brand)]" to={`${workOrdersBase}/${recordId(invoice.workOrderId)}`}>{getWorkOrderDisplayId(invoice.workOrderId)}</Link> : <span className="muted">{notAdded}</span>}</td>
                       <td className="font-bold">{currency(invoice.total)}</td>
                       <td className="font-bold text-emerald-100">{currency(invoice.paidAmount)}</td>
                       <td className={Number(invoice.balance || 0) > 0 ? 'font-black text-amber-100' : 'font-bold text-emerald-100'}>{currency(invoice.balance)}</td>
                       <td><StatusBadge status={invoice.status} /></td>
                       <td>
                         <div className="flex flex-wrap justify-end gap-2">
-                          {recordId(invoice.workOrderId) ? <Link className="btn btn-secondary py-2" to={`/admin/work-orders/${recordId(invoice.workOrderId)}`}>Open Job</Link> : null}
-                          {Number(invoice.balance || 0) > 0 ? <Link className="btn btn-primary py-2" to={`/admin/payments?invoiceId=${recordId(invoice)}`}>Record Payment</Link> : null}
+                          {recordId(invoice.workOrderId) ? <Link className="btn btn-secondary py-2" to={`${workOrdersBase}/${recordId(invoice.workOrderId)}`}>Open Job</Link> : null}
+                          {Number(invoice.balance || 0) > 0 ? <Link className="btn btn-primary py-2" to={`${paymentsBase}?invoiceId=${recordId(invoice)}`}>Record Payment</Link> : null}
                         </div>
                       </td>
                     </tr>

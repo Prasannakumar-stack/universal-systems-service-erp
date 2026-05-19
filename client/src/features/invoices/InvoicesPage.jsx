@@ -145,9 +145,10 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 
-export function InvoicesPage() {
+export function InvoicesPage({ role = 'admin' }) {
   const { request } = useAuth();
   const { push } = useToast();
+  const base = role === 'technician' ? '/tech' : '/admin';
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -217,7 +218,7 @@ export function InvoicesPage() {
   function invoiceSourceCell(invoice) {
     if (recordId(invoice.workOrderId)) {
       return (
-        <Link className="billing-link" to={`/admin/work-orders/${recordId(invoice.workOrderId)}`}>
+        <Link className="billing-link" to={`${base}/work-orders/${recordId(invoice.workOrderId)}`}>
           {getWorkOrderDisplayId(invoice.workOrderId)}
           <span className="block truncate text-xs muted" title={invoice.workOrderId?.device || '-'}>{invoice.workOrderId?.device || '-'}</span>
         </Link>
@@ -225,7 +226,7 @@ export function InvoicesPage() {
     }
     if (recordId(invoice.amcContractId)) {
       return (
-        <Link className="billing-link" to="/admin/amc-contracts">
+        <Link className="billing-link" to={`${base}/amc-contracts`}>
           {invoice.amcContractId?.contractId || 'AMC Contract'}
           <span className="block truncate text-xs muted" title={invoice.amcContractId?.contractType || invoice.title || '-'}>{invoice.amcContractId?.contractType || invoice.title || '-'}</span>
         </Link>
@@ -304,7 +305,7 @@ export function InvoicesPage() {
                     <td className="whitespace-nowrap">{formatDate(invoice.createdAt)}</td>
                     <td className="text-center">
                       <div className="billing-actions">
-                        <Link className={`btn ${dueAmount > 0 ? 'btn-primary' : 'btn-secondary'} billing-action-main`} to={`/admin/payments?invoiceId=${invoiceId}`}>Go to Payment</Link>
+                        <Link className={`btn ${dueAmount > 0 ? 'btn-primary' : 'btn-secondary'} billing-action-main`} to={`${base}/payments?invoiceId=${invoiceId}`}>Go to Payment</Link>
                         <button type="button" className="btn btn-secondary billing-action-button" onClick={() => sendInvoiceWhatsApp(invoice)}><Send className="h-4 w-4" />WhatsApp</button>
                       </div>
                     </td>

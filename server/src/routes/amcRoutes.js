@@ -5,7 +5,7 @@ import { asyncHandler } from '../utils/http.js';
 
 const router = Router();
 
-router.use(authenticate, requireRole('admin'));
+router.use(authenticate, requireRole('admin', 'technician'));
 router.get('/contracts', asyncHandler(listContracts));
 router.post('/contracts', asyncHandler(createContract));
 router.get('/schedule', asyncHandler(listSchedule));

@@ -5,7 +5,7 @@ import { asyncHandler } from '../utils/http.js';
 
 const router = Router();
 
-router.use(authenticate, requireRole('admin'));
+router.use(authenticate, requireRole('admin', 'technician'));
 router.post('/', asyncHandler(create));
 router.get('/', asyncHandler(list));
 

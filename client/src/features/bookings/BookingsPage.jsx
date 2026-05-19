@@ -180,10 +180,12 @@ function BookingSourceBadge({ source }) {
   );
 }
 
-export function BookingsPage() {
+export function BookingsPage({ role = 'admin' }) {
   const { request } = useAuth();
   const { push } = useToast();
   const location = useLocation();
+  const isTechnician = role === 'technician';
+  const workOrdersBase = isTechnician ? '/tech/work-orders' : '/admin/work-orders';
   const [formOpen, setFormOpen] = useState(false);
   const [technicians, setTechnicians] = useState([]);
   const [search, setSearch] = useState('');
@@ -249,10 +251,10 @@ export function BookingsPage() {
         <div className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-sky-500/10 blur-[80px]" />
         <div className="relative z-10 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-widest text-sky-400/90">Admin</p>
+            <p className="text-xs font-black uppercase tracking-widest text-sky-400/90">{isTechnician ? 'Operations' : 'Admin'}</p>
             <h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Bookings</h1>
             <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-400">
-              Booking intake is kept separate from repair and service jobs. Convert a booking when service work begins.
+              {isTechnician ? 'Booking intake records with linked service jobs and customer contact actions.' : 'Booking intake is kept separate from repair and service jobs. Convert a booking when service work begins.'}
             </p>
           </div>
           <div className="relative shrink-0">
@@ -317,7 +319,7 @@ export function BookingsPage() {
               <th className="booking-source-column">Source</th>
               <th>Device / Service</th>
               <th>Issue</th>
-              <th>Convert / Open</th>
+              <th>{isTechnician ? 'Actions' : 'Convert / Open'}</th>
             </tr>
           </thead>
           <tbody>
@@ -349,7 +351,11 @@ export function BookingsPage() {
                   </span>
                 </td>
                 <td className="bookings-cell-action min-w-[15rem]">
-                  <ConvertBooking booking={booking} technicians={technicians} onConvert={convert} />
+                  {isTechnician ? (
+                    <TechnicianBookingActions booking={booking} workOrdersBase={workOrdersBase} />
+                  ) : (
+                    <ConvertBooking booking={booking} technicians={technicians} onConvert={convert} workOrdersBase={workOrdersBase} />
+                  )}
                 </td>
               </tr>
             ))}
@@ -366,7 +372,36 @@ export function BookingsPage() {
   );
 }
 
-function ConvertBooking({ booking, technicians, onConvert }) {
+function TechnicianBookingActions({ booking, workOrdersBase }) {
+  const workOrderId = recordId(booking.workOrderId);
+  const phone = String(booking.phone || '').trim();
+  const disabled = phone ? '' : 'pointer-events-none opacity-50';
+  const openJobClass = `btn btn-primary booking-action-button booking-open-job-btn ${workOrderId ? '' : 'pointer-events-none opacity-50'}`;
+
+  return (
+    <div className="booking-action-cell">
+      <div className="flex flex-wrap items-center gap-2">
+        <a className={`btn btn-secondary h-10 w-10 p-0 ${disabled}`} href={callHref(phone)} aria-label="Call customer">
+          <PhoneCallIcon className="h-4 w-4" />
+        </a>
+        <a className={`btn btn-secondary h-10 w-10 p-0 ${disabled}`} href={phone ? customerWhatsAppHref({ phone, name: booking.customerName }) : '#'} target="_blank" rel="noreferrer" aria-label="WhatsApp customer">
+          <Send className="h-4 w-4" />
+        </a>
+        {workOrderId ? (
+          <Link className={openJobClass} to={`${workOrdersBase}/${workOrderId}`}>
+            Open Job
+          </Link>
+        ) : (
+          <span className={openJobClass} aria-disabled="true">
+            Open Job
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConvertBooking({ booking, technicians, onConvert, workOrdersBase = '/admin/work-orders' }) {
   const [technicianId, setTechnicianId] = useState(booking.technicianId?.id || '');
   const focusRing =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
@@ -378,7 +413,7 @@ function ConvertBooking({ booking, technicians, onConvert }) {
           <Link
             className={`btn btn-secondary booking-action-button booking-open-job-btn inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-sky-100 transition-all hover:-translate-y-0.5 hover:border-sky-400/30 hover:bg-white/10 hover:text-white ${focusRing}`}
             style={{ maxWidth: 'none', minWidth: '9.25rem' }}
-            to={`/admin/work-orders/${booking.workOrderId.id || booking.workOrderId}`}
+            to={`${workOrdersBase}/${booking.workOrderId.id || booking.workOrderId}`}
           >
             Open Service Job
           </Link>

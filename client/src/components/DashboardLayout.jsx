@@ -164,7 +164,7 @@ function canOpenAdminPath(pathname, role) {
 }
 
 function canUseGlobalSearch(role) {
-  return canAccessRoles(role, [...fullAccessRoles, 'service_manager']);
+  return normalizeRole(role) === 'technician' || canAccessRoles(role, [...fullAccessRoles, 'service_manager']);
 }
 
 function sidebarBadgeClass(tone) {
@@ -227,37 +227,48 @@ function lowStockBadgeCountFromDashboard(dashboardData) {
   return Array.isArray(dashboardData?.lowStockAlerts) ? dashboardData.lowStockAlerts.length : 0;
 }
 
-function isPendingStatus(value) {
-  return String(value || '').trim().toLowerCase() === 'pending';
+function normalizePaymentStatus(invoice) {
+  return String(
+    invoice?.paymentStatus
+    || invoice?.invoiceStatus
+    || invoice?.status
+    || ''
+  ).trim().toLowerCase();
 }
 
-function isPartialStatus(value) {
-  const status = String(value || '').trim().toLowerCase();
+function isPendingInvoice(invoice) {
+  return normalizePaymentStatus(invoice) === 'pending';
+}
+
+function isPartialInvoice(invoice) {
+  const status = normalizePaymentStatus(invoice);
   return status === 'partial' || status === 'partially paid';
 }
 
-function getInvoicePaymentStatus(invoice) {
-  return invoice?.paymentStatus || invoice?.invoiceStatus || invoice?.status || '';
+function paymentRowsFromPayload(payload) {
+  return payload?.payments || payload?.data || [];
 }
 
-function invoiceRowsFromPayload(payload) {
-  return payload?.invoices || payload?.data || [];
+function paymentsBadgeCountFromRows(paymentRows) {
+  if (!Array.isArray(paymentRows)) return null;
+  const pendingInvoiceCount = paymentRows.filter(isPendingInvoice).length;
+  const partialInvoiceCount = paymentRows.filter(isPartialInvoice).length;
+  const paymentsBadgeCount = pendingInvoiceCount + partialInvoiceCount;
+  return paymentsBadgeCount > 0 ? paymentsBadgeCount : null;
 }
 
-function pendingPaymentCountFromInvoicePayloads(payloads = []) {
-  const invoices = payloads.flatMap(invoiceRowsFromPayload);
-  // Payments badge must show invoice payment attention count only.
-  // Never use payment history records here because paid payments also increase that count.
-  const pendingInvoiceCount = invoices.filter((invoice) => isPendingStatus(getInvoicePaymentStatus(invoice))).length;
-  const partialInvoiceCount = invoices.filter((invoice) => isPartialStatus(getInvoicePaymentStatus(invoice))).length;
-  return pendingInvoiceCount + partialInvoiceCount;
-}
+async function loadPaymentRowsForPaymentsBadge(request) {
+  const paymentRows = [];
+  const limit = 50;
 
-function pendingPaymentCountFromDashboard(dashboardData) {
-  if (Object.prototype.hasOwnProperty.call(dashboardData || {}, 'paymentBadgeCount')) {
-    return finiteNumber(dashboardData.paymentBadgeCount);
+  for (let page = 1; page <= 100; page += 1) {
+    const payload = await request(`/payments?limit=${limit}&page=${page}`);
+    const rows = paymentRowsFromPayload(payload);
+    paymentRows.push(...rows);
+    if (rows.length < limit) break;
   }
-  return 0;
+
+  return paymentRows;
 }
 
 function amcRenewalBadgeCountFromDashboard(dashboardData) {
@@ -269,30 +280,31 @@ function buildSidebarBadges(dashboardData) {
   const stats = dashboardData?.stats || {};
   const alerts = dashboardData?.alerts || {};
   const lowStockCount = lowStockBadgeCountFromDashboard(dashboardData);
-  const pendingPaymentCount = pendingPaymentCountFromDashboard(dashboardData);
+  const paymentsBadgeCount = dashboardData?.paymentsBadgeCount ?? null;
   return {
     bookings: { value: bookingBadgeCountFromDashboard(dashboardData), tone: 'blue' },
     workOrders: { value: workOrderBadgeCountFromDashboard(dashboardData), tone: 'blue' },
     lowStock: { value: lowStockCount, tone: Number(alerts.outOfStockItems || stats.lowStockCritical || 0) > 0 ? 'red' : 'orange' },
-    pendingPayments: { value: pendingPaymentCount, tone: 'green' },
+    pendingPayments: { value: paymentsBadgeCount > 0 ? paymentsBadgeCount : null, tone: 'red' },
     amcRenewals: { value: amcRenewalBadgeCountFromDashboard(dashboardData), tone: stats.expiredAmcContracts > 0 ? 'red' : 'orange' }
   };
 }
 
 function notificationTarget(item, role) {
   const normalizedRole = normalizeRole(role);
+  const base = normalizedRole === 'technician' ? '/tech' : '/admin';
   const id = item?.sourceId || '';
   const text = `${item?.type || ''} ${item?.title || ''} ${item?.message || ''}`.toLowerCase();
   if (text.includes('low stock') || text.includes('stock')) return '/admin/parts';
-  if (text.includes('payment')) return '/admin/payments';
-  if (text.includes('invoice')) return '/admin/invoices';
-  if (text.includes('amc') || text.includes('renewal')) return '/admin/amc-renewals';
-  if (text.includes('booking')) return '/admin/bookings';
+  if (text.includes('payment')) return `${base}/payments`;
+  if (text.includes('invoice')) return `${base}/invoices`;
+  if (text.includes('amc') || text.includes('renewal')) return normalizedRole === 'technician' ? '/tech/amc-contracts' : '/admin/amc-renewals';
+  if (text.includes('booking')) return `${base}/bookings`;
   if (text.includes('work order') || text.includes('job') || item?.type === 'WORK_ORDER') {
-    if (id) return normalizedRole === 'technician' ? `/tech/work-orders/${id}` : `/admin/work-orders/${id}`;
-    return normalizedRole === 'technician' ? '/tech/work-orders' : '/admin/work-orders';
+    if (id) return `${base}/work-orders/${id}`;
+    return `${base}/work-orders`;
   }
-  return normalizedRole === 'technician' ? '/tech/dashboard' : '/admin/dashboard';
+  return `${base}/dashboard`;
 }
 
 function SidebarBadge({ badge }) {
@@ -322,7 +334,7 @@ function SidebarItem({ link, close, badge }) {
   return (
     <NavLink
       to={link.to}
-      end={link.to === '/admin/dashboard'}
+      end={link.to === '/admin/dashboard' || link.to === '/tech/dashboard'}
       onClick={close}
       className={({ isActive }) => `enterprise-sidebar-item ${isSidebarLinkActive(link.to, location, isActive) ? 'enterprise-sidebar-item-active' : ''}`}
     >
@@ -336,7 +348,7 @@ function SidebarItem({ link, close, badge }) {
 function isSidebarLinkActive(to, location, isActive) {
   const [path, search = ''] = to.split('?');
   if (search) return location.pathname === path && location.search === `?${search}`;
-  if (to === '/admin/dashboard') return location.pathname === path;
+  if (to === '/admin/dashboard' || to === '/tech/dashboard') return location.pathname === path;
   if (to === '/admin/documents') return location.pathname.startsWith(path) && !new URLSearchParams(location.search).has('type');
   return isActive;
 }
@@ -352,13 +364,12 @@ function AdminSidebar({ close }) {
   useEffect(() => {
     let mounted = true;
     async function loadSidebarBadges() {
-      const [metricsData, pendingInvoicesData, partialInvoicesData] = await Promise.all([
+      const [metricsData, paymentRows] = await Promise.all([
         request('/dashboard/metrics').catch(() => null),
-        request('/invoices?status=Pending&limit=50').catch(() => null),
-        request('/invoices?status=Partial&limit=50').catch(() => null)
+        loadPaymentRowsForPaymentsBadge(request).catch(() => null)
       ]);
       if (!mounted) return;
-      const paymentBadgePatch = { paymentBadgeCount: pendingPaymentCountFromInvoicePayloads([pendingInvoicesData, partialInvoicesData]) };
+      const paymentBadgePatch = { paymentsBadgeCount: paymentsBadgeCountFromRows(paymentRows) };
       setDashboardData(metricsData ? { ...metricsData, ...paymentBadgePatch } : paymentBadgePatch);
     }
 
@@ -448,13 +459,13 @@ function TechnicianSidebar({ close }) {
           </span>
           <div className="min-w-0">
             <h2 className="text-lg font-black leading-tight">Universal Systems</h2>
-            <p className="text-sm font-bold text-sky-100">Technician ERP</p>
+            <p className="text-sm font-bold text-sky-100">Service ERP</p>
           </div>
         </div>
         <div className="mt-4 grid gap-2 rounded-card border border-white/10 bg-white/[0.045] p-3 text-xs text-slate-300">
           <span className="inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-[var(--brand)]" />Mettur Dam</span>
           <span className="inline-flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-[var(--brand)]" />{company.phones.join(' / ')}</span>
-          <span className="inline-flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 text-[var(--brand)]" />Assigned service workspace</span>
+          <span className="inline-flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 text-[var(--brand)]" />Sales, service, AMC & billing</span>
         </div>
       </div>
 
@@ -497,6 +508,8 @@ function GlobalSearch({ role }) {
   const navigate = useNavigate();
   const searchRef = useRef(null);
   const requestRef = useRef(request);
+  const isTechnician = normalizeRole(role) === 'technician';
+  const base = isTechnician ? '/tech' : '/admin';
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [resultGroups, setResultGroups] = useState([]);
@@ -539,7 +552,7 @@ function GlobalSearch({ role }) {
           items: (customers.customers || []).map((customer) => ({
             title: customer.name || getCustomerDisplayId(customer) || 'Customer',
             meta: [getCustomerDisplayId(customer), customer.phone].filter(Boolean).join(' - '),
-            to: `/admin/customers/${customer.id || customer._id}`
+            to: `${base}/customers/${customer.id || customer._id}`
           }))
         },
         {
@@ -547,7 +560,7 @@ function GlobalSearch({ role }) {
           items: (bookings.bookings || []).map((booking) => ({
             title: booking.bookingCode || 'Booking',
             meta: [booking.customerName, booking.phone, booking.serviceType || booking.device].filter(Boolean).join(' - '),
-            to: '/admin/bookings'
+            to: `${base}/bookings`
           }))
         },
         {
@@ -555,7 +568,7 @@ function GlobalSearch({ role }) {
           items: (workOrders.workOrders || workOrders.data || []).map((order) => ({
             title: getWorkOrderDisplayId(order),
             meta: [order.customerId?.name || order.customerName, order.serviceType || order.device, order.status].filter(Boolean).join(' - '),
-            to: `/admin/work-orders/${order.id || order._id}`
+            to: `${base}/work-orders/${order.id || order._id}`
           }))
         },
         {
@@ -563,7 +576,7 @@ function GlobalSearch({ role }) {
           items: (invoices.invoices || []).map((invoice) => ({
             title: getInvoiceDisplayId(invoice),
             meta: [invoice.customerId?.name || invoice.customerName, invoice.status, currency(invoice.total ?? invoice.totalAmount)].filter(Boolean).join(' - '),
-            to: '/admin/invoices'
+            to: `${base}/invoices`
           }))
         },
         {
@@ -573,7 +586,7 @@ function GlobalSearch({ role }) {
             return {
               title: getPaymentDisplayId(payment),
               meta: [payment.customerId?.name, payment.method, currency(payment.paidAmount ?? payment.amount)].filter(Boolean).join(' - '),
-              to: invoiceId ? `/admin/payments?invoiceId=${encodeURIComponent(invoiceId)}` : '/admin/payments'
+              to: invoiceId ? `${base}/payments?invoiceId=${encodeURIComponent(invoiceId)}` : `${base}/payments`
             };
           })
         },
@@ -585,7 +598,7 @@ function GlobalSearch({ role }) {
             to: '/admin/parts'
           }))
         }
-      ].map((group) => ({ ...group, items: group.items.slice(0, 5) })).filter((group) => group.items.length);
+      ].filter((group) => !isTechnician || group.label !== 'Products / Parts').map((group) => ({ ...group, items: group.items.slice(0, 5) })).filter((group) => group.items.length);
       setResultGroups(groups);
     }).finally(() => {
       if (active) setLoading(false);
@@ -821,17 +834,22 @@ function AdminTopBar({ role, openSidebar }) {
   const { user } = useAuth();
   const [quickOpen, setQuickOpen] = useState(false);
   const userRole = user?.role || role;
-  const quickActions = [
+  const isTechnician = normalizeRole(userRole) === 'technician';
+  const quickActions = (isTechnician ? [
+    { to: '/tech/bookings', label: 'Booking', icon: BookOpenCheck, primary: true },
+    { to: '/tech/work-orders', label: 'Service Job', icon: Wrench },
+    { to: '/tech/payments', label: 'Payment', icon: CreditCard }
+  ] : [
     { to: '/admin/bookings', label: 'Booking', icon: BookOpenCheck, roles: operationsRoles, primary: true },
     { to: '/admin/work-orders', label: 'Service Job', icon: Wrench, roles: [...operationsRoles, 'accounts_staff'] },
     { to: '/admin/payments', label: 'Payment', icon: CreditCard, roles: billingRoles }
-  ].filter((item) => canSeeLink(item, userRole));
+  ]).filter((item) => canSeeLink(item, userRole));
 
   return (
     <header className="enterprise-topbar">
       <div className="flex min-h-16 flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-6">
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <button className="icon-button enterprise-top-icon h-11 w-11 xl:hidden" onClick={openSidebar} aria-label="Open admin menu">
+          <button className="icon-button enterprise-top-icon h-11 w-11 xl:hidden" onClick={openSidebar} aria-label={`Open ${isTechnician ? 'technician' : 'admin'} menu`}>
             <Menu className="h-5 w-5" />
           </button>
           <GlobalSearch role={userRole} />
@@ -932,38 +950,21 @@ export default function DashboardLayout({ role }) {
 
   return (
     <div className="min-h-screen bg-[var(--bg)]">
-      <div className="fixed inset-y-0 left-0 z-40 hidden w-72 lg:block">
+      <div className="fixed inset-y-0 left-0 z-40 hidden w-[292px] xl:block">
         <TechnicianSidebar />
       </div>
-      <header className="sticky top-0 z-30 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-xl lg:ml-72">
-        <div className="flex h-16 items-center justify-between px-4 sm:px-6">
-          <button className="icon-button h-10 w-10 lg:hidden" onClick={() => setOpen(true)} aria-label="Open dashboard menu">
-            <Menu className="h-5 w-5" />
-          </button>
-          <div>
-            <p className="text-sm font-bold">{role === 'admin' ? 'Admin Panel' : 'Technician Panel'}</p>
-            <p className="text-xs muted">Universal Systems service workspace</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <NotificationCenter role={role} />
-            <a href="/" className="btn btn-secondary hidden sm:inline-flex">
-              <Wrench className="h-4 w-4" />
-              Website
-            </a>
-          </div>
-        </div>
-      </header>
+      <AdminTopBar role={role} openSidebar={() => setOpen(true)} />
       {open ? (
-        <div className="fixed inset-0 z-[70] bg-black/45 lg:hidden" onClick={() => setOpen(false)}>
-          <div className="h-full w-80 max-w-[88vw]" onClick={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-[70] bg-black/55 xl:hidden" onClick={() => setOpen(false)}>
+          <div className="h-full w-[292px] max-w-[88vw]" onClick={(event) => event.stopPropagation()}>
             <TechnicianSidebar close={() => setOpen(false)} />
-            <button className="absolute right-4 top-4 icon-button h-9 w-9 bg-[var(--surface)]" onClick={() => setOpen(false)} aria-label="Close dashboard menu">
+            <button className="absolute right-4 top-4 icon-button h-9 w-9 bg-[var(--surface)]" onClick={() => setOpen(false)} aria-label="Close technician menu">
               <X className="h-5 w-5" />
             </button>
           </div>
         </div>
       ) : null}
-      <main className="p-4 sm:p-6 lg:ml-72">
+      <main className="enterprise-main p-4 md:p-6">
         <Outlet />
       </main>
     </div>

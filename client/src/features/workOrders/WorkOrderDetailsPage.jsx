@@ -426,6 +426,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const { data, loading, error, reload } = useResource(() => request(`/work-orders/${id}`), [request, id]);
   const [liveOrder, setLiveOrder] = useState(null);
   const order = liveOrder || data?.workOrder;
+  const isTechnician = role === 'technician';
+  const base = isTechnician ? '/tech' : '/admin';
+  const paymentsBase = `${base}/payments`;
+  const workOrdersBase = `${base}/work-orders`;
+  const canManageBilling = role === 'admin' || isTechnician;
 
   useEffect(() => {
     if (!data?.workOrder) return;
@@ -854,7 +859,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     event?.stopPropagation?.();
     if (!recordId(amcContract)) return;
     if (amcInvoiceId) {
-      navigate(`/admin/payments?invoiceId=${encodeURIComponent(amcInvoiceId)}`);
+      navigate(`${paymentsBase}?invoiceId=${encodeURIComponent(amcInvoiceId)}`);
       return;
     }
     try {
@@ -871,7 +876,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         const invoiceId = recordId(result.invoice);
         push('AMC invoice created');
         reload({ silent: true });
-        if (invoiceId) navigate(`/admin/payments?invoiceId=${encodeURIComponent(invoiceId)}`);
+        if (invoiceId) navigate(`${paymentsBase}?invoiceId=${encodeURIComponent(invoiceId)}`);
       });
     } catch (err) {
       push(err.message, 'error');
@@ -1155,8 +1160,19 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     if (flow.amcOnly && !isAmcLinked) return flow.lockedText;
     return pdfLockedReason(flow, order);
   };
-  const contentTabs = ['parts', 'partRequests', 'billing', 'notes'];
-  const sideTabs = ['documents', 'timeline'];
+  const technicianCloneTabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'workUpdate', label: 'Checklist / Work Update' },
+    { id: 'parts', label: 'Parts' },
+    { id: 'partRequests', label: 'Part Requests' },
+    { id: 'billing', label: 'Billing' },
+    { id: 'notes', label: 'Notes' },
+    { id: 'photos', label: 'Photos' },
+    { id: 'documents', label: 'Documents' }
+  ];
+  const visibleWorkOrderTabs = isTechnician ? technicianCloneTabs : workOrderTabs;
+  const contentTabs = ['overview', 'workUpdate', 'parts', 'partRequests', 'billing', 'notes', 'photos'];
+  const sideTabs = isTechnician ? ['documents'] : ['documents', 'timeline'];
   const phone = customerPhone(order);
   const completedStatuses = ['Completed', 'Delivered', 'Returned'];
   const showCompletedDate = completedStatuses.includes(order.status);
@@ -1344,7 +1360,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     );
   }
 
-  if (role === 'technician') {
+  if (false && role === 'technician') {
     return (
       <div className="work-order-detail pb-28 sm:pb-0">
         <PageHeader
@@ -1637,7 +1653,16 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
   return (
     <div className="work-order-detail">
-      <PageHeader title={workOrderDisplayId} eyebrow="Repair & Service Job Details">
+      <PageHeader
+        title={workOrderDisplayId}
+        eyebrow="Repair & Service Job Details"
+        action={isTechnician ? (
+          <div className="flex flex-wrap gap-2">
+            <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
+            <a className={`btn btn-primary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+          </div>
+        ) : null}
+      >
         {order.customerId?.name || 'Customer'} - {order.device || 'Service job'}
       </PageHeader>
 
@@ -1699,7 +1724,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
       <div className="surface sticky top-20 z-20 mb-4 border border-white/10 bg-[#071426]/90 p-1.5 shadow-lg backdrop-blur">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {workOrderTabs.map((tab) => (
+          {visibleWorkOrderTabs.map((tab) => (
             <button key={tab.id} type="button" className={detailTabButtonClass(activeTab === tab.id)} onClick={() => setActiveTab(tab.id)}>
               {tab.label}
             </button>
@@ -1707,8 +1732,68 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         </div>
       </div>
 
-      {activeTab !== 'overview' ? <div className={`grid gap-4 ${sideTabs.includes(activeTab) ? '' : 'xl:grid-cols-[minmax(0,1fr)]'}`}>
+      {contentTabs.includes(activeTab) || sideTabs.includes(activeTab) ? <div className={`grid gap-4 ${sideTabs.includes(activeTab) ? '' : 'xl:grid-cols-[minmax(0,1fr)]'}`}>
         <div className={contentTabs.includes(activeTab) ? `grid ${activeTab === 'billing' ? 'gap-3' : 'gap-4'}` : 'hidden'}>
+          <div className={activeTab === 'overview' ? detailSectionClass : 'hidden'}>
+            <h2 className="text-xl font-black">Overview</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {[
+                ['Work Order ID', workOrderDisplayId],
+                ['Customer ID', customerDisplayId],
+                ...(invoiceDisplayId ? [['Invoice ID', invoiceDisplayId]] : []),
+                ['Customer Name', order.customerId?.name || '-'],
+                ['Phone', phone || '-'],
+                ['Service Type', order.serviceType || order.service || '-'],
+                ['Device', order.device || '-'],
+                ['Problem / Issue', order.issue || '-'],
+                ...(isAmcLinked ? [
+                  ['AMC Contract ID', amcContract?.contractId || '-'],
+                  ['AMC Contract Type', amcContract?.contractType || '-'],
+                  ['AMC Coverage Type', amcCoverageType],
+                  ['AMC Contract Value', currency(amcContractValue)],
+                  ['AMC Paid Amount', currency(amcPaidAmount)],
+                  ['AMC Pending Amount', currency(amcPendingAmount)],
+                  ['AMC Contract Status', amcContractStatus],
+                  ['AMC Payment Status', amcPaymentStatus],
+                  ['Covered Devices / Assets', amcContract?.coveredDevices || amcContract?.coveredService || '-']
+                ] : []),
+                ['Booking Source', <WorkOrderDetailSourceBadge key="overview-source" source={order} />],
+                ['Status', <WorkOrderBadgeGroup key="overview-status"><StatusBadge status={order.status} /></WorkOrderBadgeGroup>],
+                ['Completed Date', completedDateDisplay]
+              ].map(([label, value]) => (
+                <WorkOrderInfoCard key={label} label={label}>{value}</WorkOrderInfoCard>
+              ))}
+            </div>
+            {isTechnician ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call Customer</a>
+                <a className={`btn btn-primary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />Open WhatsApp</a>
+                <Link className="btn btn-secondary" to={workOrdersBase}>Back to Work Orders</Link>
+              </div>
+            ) : null}
+          </div>
+
+          <div className={activeTab === 'workUpdate' ? detailSectionClass : 'hidden'}>
+            <div className="grid gap-4 xl:grid-cols-[.85fr_1.15fr]">
+              <div>
+                <h2 className="text-xl font-black">Status Update</h2>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {workOrderDetailStatuses.map((status) => (
+                    <button key={status} type="button" className={`${detailStatusButtonClass(order.status === status)} justify-start`} onClick={() => saveStatus(status)}>
+                      {order.status === status ? <CheckCircle2 className="h-4 w-4" /> : null}
+                      {status}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <form onSubmit={addNote}>
+                <h2 className="text-xl font-black">Checklist / Work Update</h2>
+                <textarea className={`input mt-4 min-h-36 ${detailFocusRing}`} placeholder="Diagnosis / work update / follow-up needed" value={note} onChange={(event) => setNote(event.target.value)} />
+                <button type="submit" className="btn btn-primary mt-3 w-full sm:w-auto">Add Work Update</button>
+              </form>
+            </div>
+          </div>
+
           <div className={activeTab === 'parts' ? detailSectionClass : 'hidden'}>
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-3">
               <div>
@@ -1920,7 +2005,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                   <h2 className="mt-1 text-xl font-black">{amcContract?.contractId || 'AMC Contract'}</h2>
                   <p className="mt-1 text-sm muted">{amcContract?.contractType || '-'} - {amcContract?.coveredDevices || amcContract?.coveredService || 'Coverage not specified'}</p>
                 </div>
-                {role === 'admin' ? (
+                {canManageBilling ? (
                   <button type="button" className="btn btn-secondary h-10 px-4" onClick={createAmcInvoiceFromWorkOrder}>
                     <ReceiptText className="h-4 w-4" />{amcInvoiceId ? 'AMC Payments' : 'Create AMC Contract Invoice'}
                   </button>
@@ -2044,7 +2129,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                           <p className="mt-1 font-black">{currency(extraInvoiceDifferenceAmount)}</p>
                         </div>
                       </div>
-                      {role === 'admin' ? (
+                      {canManageBilling ? (
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           {canVoidRegenerateExtraInvoice ? (
                             <button type="button" className="btn btn-secondary py-2" onClick={(event) => handleExtraInvoiceMismatch('void-regenerate', event)}>
@@ -2064,7 +2149,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     </div>
                   ) : null}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {role === 'admin' && (!isAmcLinked || extraPayableTotal > 0) ? <button type="button" className="btn btn-secondary py-2" onClick={(event) => {
+                    {canManageBilling && (!isAmcLinked || extraPayableTotal > 0) ? <button type="button" className="btn btn-secondary py-2" onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
                       const targetInvoiceId = recordId(paymentTargetExtraInvoice);
@@ -2072,11 +2157,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                         alert('Invoice not found. Please generate invoice first.');
                         return;
                       }
-                      navigate(`/admin/payments?invoiceId=${encodeURIComponent(targetInvoiceId)}`);
+                      navigate(`${paymentsBase}?invoiceId=${encodeURIComponent(targetInvoiceId)}`);
                     }}>Go to Payments</button> : null}
                   </div>
                 </div>
-              ) : role === 'admin' && (!isAmcLinked || extraPayableTotal > 0) ? (
+              ) : canManageBilling && (!isAmcLinked || extraPayableTotal > 0) ? (
                 <>
                   <button type="button" className="btn btn-primary mt-3 disabled:cursor-not-allowed disabled:opacity-50" disabled={isAmcLinked && extraPayableTotal <= 0} onClick={generateInvoice}><ReceiptText className="h-4 w-4" />{isAmcLinked ? 'Generate Extra Charges Invoice' : 'Generate Invoice'}</button>
                 </>
@@ -2095,6 +2180,24 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               </div>
             </form>
             <div className="mt-4 grid gap-3">{order.notes?.length ? order.notes.map((item) => <div key={item._id || item.createdAt} className="rounded-xl border border-white/10 bg-slate-950/25 p-4"><p className="text-sm leading-6 text-slate-100">{item.text}</p><p className="mt-2 text-xs muted">{item.userId?.name || item.userId?.username || (item.userId ? 'Recorded user' : 'Team')} - {formatDate(item.createdAt)}</p></div>) : <EmptyState title="No notes yet." message="Add diagnosis, customer instruction, or work completion notes." />}</div>
+          </div>
+
+          <div className={activeTab === 'photos' ? detailSectionClass : 'hidden'}>
+            <h2 className="text-xl font-black">Photos</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {imageItems.length ? imageItems.map((image, index) => (
+                <a key={image.url || image.filename || index} className="rounded-card border border-[var(--line)] bg-[var(--surface-2)] p-4 transition hover:border-sky-300/60" href={uploadedAssetUrl(image.url)} target="_blank" rel="noreferrer">
+                  <FileText className="mb-3 h-5 w-5 text-[var(--brand)]" />
+                  <p className="font-black">{index === 0 ? 'Customer problem image' : `Service photo ${index}`}</p>
+                  <p className="mt-1 text-sm muted">{image.originalName || image.filename || `Image ${index + 1}`}</p>
+                </a>
+              )) : <EmptyState title="No image uploaded" message="Customer problem images and technician photos will appear here." />}
+            </div>
+            <form className={`${detailPanelClass} mt-4`} onSubmit={uploadPhotos}>
+              <h3 className="text-xs font-black uppercase tracking-wide text-sky-100">Upload Technician Photos</h3>
+              <input className="input mt-3" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => setPhotoFiles(Array.from(event.target.files || []))} />
+              <button type="submit" className="btn btn-primary mt-3"><PackagePlus className="h-4 w-4" />Upload Photos</button>
+            </form>
           </div>
         </div>
         <div className={sideTabs.includes(activeTab) ? 'grid content-start gap-4' : 'hidden'}>

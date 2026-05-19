@@ -29,11 +29,6 @@ const ReportsAnalyticsPage = lazyRoute(() => import('./features/reports/ReportsP
 const SystemSettingsPage = lazyRoute(() => import('./features/settings/SettingsPage.jsx'), 'SystemSettingsPage');
 const TechnicianDashboard = lazyRoute(() => import('./features/technicians/TechnicianDashboard.jsx'), 'TechnicianDashboard');
 const TechnicianPanelPage = lazyRoute(() => import('./features/technicians/TechnicianPanelPage.jsx'), 'TechnicianPanelPage');
-const TechnicianBookingsPage = lazyRoute(() => import('./features/technicians/TechnicianModules.jsx'), 'TechnicianBookingsPage');
-const TechnicianCustomersPage = lazyRoute(() => import('./features/technicians/TechnicianModules.jsx'), 'TechnicianCustomersPage');
-const TechnicianInvoicesPage = lazyRoute(() => import('./features/technicians/TechnicianModules.jsx'), 'TechnicianInvoicesPage');
-const TechnicianPaymentsPage = lazyRoute(() => import('./features/technicians/TechnicianModules.jsx'), 'TechnicianPaymentsPage');
-const TechnicianAMCContractsPage = lazyRoute(() => import('./features/technicians/TechnicianModules.jsx'), 'TechnicianAMCContractsPage');
 const TechnicianSettingsPage = lazyRoute(() => import('./features/technicians/TechnicianModules.jsx'), 'TechnicianSettingsPage');
 const AMCContractsPage = lazyRoute(() => import('./features/workOrders/AMCContractsPage.jsx'), 'AMCContractsPage');
 const WarrantiesPage = lazyRoute(() => import('./features/workOrders/AMCContractsPage.jsx'), 'WarrantiesPage');
@@ -123,13 +118,14 @@ export default function App() {
         <Route path="/tech" element={<DashboardLayout role="technician" />}>
           <Route index element={<Navigate to="/tech/dashboard" replace />} />
           <Route path="dashboard" element={lazyElement(<TechnicianDashboard />)} />
-          <Route path="bookings" element={lazyElement(<TechnicianBookingsPage />)} />
+          <Route path="bookings" element={lazyElement(<BookingsPage role="technician" />)} />
           <Route path="work-orders" element={lazyElement(<WorkOrdersPage role="technician" />)} />
           <Route path="work-orders/:id" element={lazyElement(<WorkOrderDetailsPage role="technician" />)} />
-          <Route path="customers" element={lazyElement(<TechnicianCustomersPage />)} />
-          <Route path="invoices" element={lazyElement(<TechnicianInvoicesPage />)} />
-          <Route path="payments" element={lazyElement(<TechnicianPaymentsPage />)} />
-          <Route path="amc-contracts" element={lazyElement(<TechnicianAMCContractsPage />)} />
+          <Route path="customers" element={lazyElement(<CustomersPage role="technician" />)} />
+          <Route path="customers/:id" element={lazyElement(<CustomerProfilePage role="technician" />)} />
+          <Route path="invoices" element={lazyElement(<InvoicesPage role="technician" />)} />
+          <Route path="payments" element={lazyElement(<PaymentsPage role="technician" />)} />
+          <Route path="amc-contracts" element={lazyElement(<AMCContractsPage role="technician" />)} />
           <Route path="settings" element={lazyElement(<TechnicianSettingsPage />)} />
         </Route>
         <Route path="/technician" element={<DashboardLayout role="technician" />}>
@@ -138,6 +134,7 @@ export default function App() {
           <Route path="bookings" element={<Navigate to="/tech/bookings" replace />} />
           <Route path="work-orders" element={<Navigate to="/tech/work-orders" replace />} />
           <Route path="customers" element={<Navigate to="/tech/customers" replace />} />
+          <Route path="customers/:id" element={lazyElement(<CustomerProfilePage role="technician" />)} />
           <Route path="invoices" element={<Navigate to="/tech/invoices" replace />} />
           <Route path="payments" element={<Navigate to="/tech/payments" replace />} />
           <Route path="amc-contracts" element={<Navigate to="/tech/amc-contracts" replace />} />
