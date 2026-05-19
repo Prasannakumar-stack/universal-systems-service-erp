@@ -1,4 +1,4 @@
-import { Mail } from 'lucide-react';
+import { Mail, RefreshCw } from 'lucide-react';
 import {
   AlertTriangle,
   amcContractTypes,
@@ -149,7 +149,7 @@ export function TechnicianPanelPage() {
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  const { data, loading, error } = useResource(async () => {
+  const { data, loading, error, reload } = useResource(async () => {
     const [usersResult, workOrdersResult] = await Promise.all([
       request('/users?role=technician&limit=100').catch(() => ({ users: [] })),
       request('/work-orders?limit=100').catch(() => ({ workOrders: [] }))
@@ -189,20 +189,40 @@ export function TechnicianPanelPage() {
   }, [debouncedSearch, roleFilter, statusFilter, technicians]);
   const totalAssignedJobs = technicians.reduce((sum, tech) => sum + (assignedJobCounts[recordId(tech)] || 0), 0);
   const activeTechnicians = technicians.filter((tech) => tech.active).length;
-  const lowWorkloadTechnicians = technicians.filter((tech) => tech.active && (assignedJobCounts[recordId(tech)] || 0) <= 5).length;
-  const overloadedTechnicians = technicians.filter((tech) => tech.active && (assignedJobCounts[recordId(tech)] || 0) >= 6).length;
+  const lowWorkloadTechnicians = technicians.filter((tech) => tech.active && (assignedJobCounts[recordId(tech)] || 0) <= 1).length;
   const technicianKpis = [
     { icon: Users, label: 'Total Technicians', value: technicians.length, helper: 'All technician accounts', tone: 'blue' },
     { icon: CheckCircle2, label: 'Active Technicians', value: activeTechnicians, helper: 'Available for login', tone: 'green' },
-    { icon: ShieldCheck, label: 'Available / Low Workload', value: lowWorkloadTechnicians, helper: '0-5 assigned jobs', tone: 'cyan' },
-    { icon: Wrench, label: 'Assigned Jobs', value: totalAssignedJobs, helper: 'Linked to technicians', tone: 'blue' },
-    ...(overloadedTechnicians ? [{ icon: AlertTriangle, label: 'Overloaded Technicians', value: overloadedTechnicians, helper: '6+ assigned jobs', tone: 'amber' }] : [])
+    { icon: ShieldCheck, label: 'Available / Low Workload', value: lowWorkloadTechnicians, helper: '0-1 assigned jobs', tone: 'cyan' },
+    { icon: Wrench, label: 'Assigned Jobs', value: totalAssignedJobs, helper: 'Linked to technicians', tone: 'blue' }
   ];
 
   function clearFilters() {
     setSearch('');
     setStatusFilter('');
     setRoleFilter('');
+  }
+
+  function exportTechnicians() {
+    downloadCsv(
+      'technicians.csv',
+      ['Technician', 'Phone', 'Email', 'Role', 'Status', 'Workload', 'Assigned Jobs', 'Last Active'],
+      visibleTechnicians.map((tech) => {
+        const techId = recordId(tech);
+        const assignedJobs = assignedJobCounts[techId] || 0;
+        const workload = technicianWorkload(assignedJobs);
+        return [
+          tech.name || 'Technician',
+          tech.phone || '',
+          tech.email || '',
+          technicianRoleLabel(tech),
+          tech.active ? 'Active' : 'Inactive',
+          workload.label,
+          assignedJobs,
+          technicianLastActive(tech)
+        ];
+      })
+    );
   }
 
   return (
@@ -215,16 +235,17 @@ export function TechnicianPanelPage() {
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage technicians, availability, workload, and assigned service jobs.</p>
           </div>
           <div className="technician-hero-side">
-            <div className="technician-hero-illustration" aria-hidden="true">
-              <span className="technician-illustration-node technician-illustration-node-main"><Users className="h-6 w-6" /></span>
-              <span className="technician-illustration-node technician-illustration-node-a"><UserRound className="h-4 w-4" /></span>
-              <span className="technician-illustration-node technician-illustration-node-b"><UserRound className="h-4 w-4" /></span>
-              <span className="technician-illustration-line technician-illustration-line-a" />
-              <span className="technician-illustration-line technician-illustration-line-b" />
-            </div>
-            <button type="button" className="btn btn-primary technician-hero-add-button" disabled title="Add Technician is managed from Settings">
+            <Link className="btn btn-primary technician-hero-action" to="/admin/settings" title="Open Team & Access settings">
               <Plus className="h-4 w-4" />
               Add Technician
+            </Link>
+            <button type="button" className="btn btn-secondary technician-hero-action" onClick={exportTechnicians} disabled={!visibleTechnicians.length}>
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+            <button type="button" className="btn btn-secondary technician-hero-action" onClick={() => reload({ silent: true })} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
             </button>
           </div>
         </div>
@@ -277,6 +298,7 @@ export function TechnicianPanelPage() {
                   <th>STATUS</th>
                   <th>WORKLOAD</th>
                   <th className="text-center">ASSIGNED JOBS</th>
+                  <th>LAST ACTIVE</th>
                   <th className="text-center">ACTION</th>
                 </tr>
               </thead>
@@ -329,6 +351,9 @@ export function TechnicianPanelPage() {
                           </div>
                         )}
                       </td>
+                      <td>
+                        <span className="font-semibold text-slate-200">{technicianLastActive(tech)}</span>
+                      </td>
                       <td className="text-center">
                         <div className="technician-action-stack">
                           {assignedJobs > 0 ? (
@@ -348,7 +373,7 @@ export function TechnicianPanelPage() {
             </div>
           </div>
         ) : (
-          <EmptyState icon={Users} title="No technicians found" message={hasActiveFilters ? 'Try clearing filters or add a technician.' : 'Technician accounts will appear here after they are created.'} action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={clearFilters}>Clear Filters</button> : null} />
+          <EmptyState icon={Users} title="No technicians found." message={hasActiveFilters ? 'Try changing filters or add a new technician.' : 'Technician accounts will appear here after they are created.'} action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={clearFilters}>Clear Filters</button> : null} />
         )}
       </section>
     </div>
@@ -380,9 +405,15 @@ function technicianRoleLabel(technician = {}) {
 }
 
 function technicianWorkload(count = 0) {
-  if (count <= 0) return { label: 'Available', helper: '0 jobs', tone: 'available' };
-  if (count >= 6) return { label: 'Busy', helper: '6+ jobs', tone: 'busy' };
-  return { label: 'Normal', helper: '1-5 jobs', tone: 'normal' };
+  if (count <= 1) return { label: 'Low', helper: '0-1 jobs', tone: 'low' };
+  if (count <= 5) return { label: 'Normal', helper: '2-5 jobs', tone: 'normal' };
+  if (count <= 10) return { label: 'High', helper: '6-10 jobs', tone: 'high' };
+  return { label: 'Overloaded', helper: '11+ jobs', tone: 'overloaded' };
+}
+
+function technicianLastActive(technician = {}) {
+  const lastActive = technician.lastActiveAt || technician.lastActive || technician.lastLoginAt || technician.lastLogin || technician.lastSeenAt;
+  return lastActive ? formatDate(lastActive) : 'Never logged in';
 }
 
 function TechnicianStatusPill({ active }) {

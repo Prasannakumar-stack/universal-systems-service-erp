@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   AmcStatusBadge,
+  Bell,
   BookOpenCheck,
   BookingSourceBadge,
   CalendarClock,
@@ -19,6 +20,7 @@ import {
   invoiceDueAmount,
   isCompletedJob,
   isToday,
+  KeyRound,
   Link,
   LoadingBlock,
   PackagePlus,
@@ -29,6 +31,7 @@ import {
   SearchBox,
   Send,
   serviceTypes,
+  Save,
   ShieldCheck,
   StatCard,
   StatusBadge,
@@ -39,6 +42,7 @@ import {
   useMemo,
   useState,
   useToast,
+  UserRound,
   Users,
   Wrench
 } from '../../shared/phase1Shared.jsx';
@@ -671,81 +675,258 @@ export function TechnicianAMCContractsPage() {
   );
 }
 
+function settingsFallback(value) {
+  const normalizedValue = text(value);
+  return normalizedValue || 'Not available';
+}
+
+function technicianEmployeeId(user) {
+  return settingsFallback(user?.employeeId || user?.employeeCode || user?.id || user?._id);
+}
+
+function technicianInitial(user) {
+  return (text(user?.name || user?.username || 'T')[0] || 'T').toUpperCase();
+}
+
+function accountStatus(user) {
+  if (user?.status) return user.status;
+  if (user?.active === true || user?.isActive === true) return 'Active';
+  if (user?.active === false || user?.isActive === false) return 'Inactive';
+  return 'Not available';
+}
+
+function SettingsCard({ icon: Icon, title, description, children, className = '' }) {
+  return (
+    <section className={`surface p-5 ${className}`}>
+      <div className="flex items-start gap-3">
+        <div className="inline-grid h-10 w-10 shrink-0 place-items-center rounded-card border border-white/10 bg-[var(--surface-2)] text-[var(--brand-2)]">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-black text-slate-100">{title}</h2>
+          {description ? <p className="mt-1 text-sm leading-5 muted">{description}</p> : null}
+        </div>
+      </div>
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function AccountDetailRow({ label, value }) {
+  return (
+    <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
+      <p className="text-xs font-black uppercase tracking-wide muted">{label}</p>
+      <p className="mt-1 break-words font-bold text-slate-100">{settingsFallback(value)}</p>
+    </div>
+  );
+}
+
 export function TechnicianSettingsPage() {
   const { request, user, setUser } = useAuth();
   const { push } = useToast();
-  const [form, setForm] = useState({ name: user?.name || '', phone: user?.phone || '', password: '', confirmPassword: '' });
+  const [profileForm, setProfileForm] = useState({ name: user?.name || '', phone: user?.phone || '' });
+  const [passwordForm, setPasswordForm] = useState({ password: '', confirmPassword: '' });
+  const [preferences, setPreferences] = useState({
+    newJobAssigned: true,
+    partRequestApproved: true,
+    paymentPending: true,
+    amcVisitDue: true,
+    workOrderStatusUpdated: true
+  });
+  const lastUpdatedTime = useMemo(
+    () => new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    []
+  );
+  const employeeId = technicianEmployeeId(user);
+  const displayName = settingsFallback(user?.name || user?.username);
+  const username = settingsFallback(user?.username);
 
   useEffect(() => {
-    setForm((current) => ({ ...current, name: user?.name || '', phone: user?.phone || '' }));
+    setProfileForm({ name: user?.name || '', phone: user?.phone || '' });
   }, [user?.name, user?.phone]);
 
-  async function submit(event) {
+  function syncUser(result) {
+    if (!result?.user) return;
+    setUser(result.user);
+    localStorage.setItem('us_user', JSON.stringify(result.user));
+  }
+
+  async function saveProfile(event) {
     event.preventDefault();
-    if (form.password && form.password !== form.confirmPassword) {
-      push('Password confirmation does not match', 'error');
-      return;
-    }
-    const payload = { name: form.name, phone: form.phone };
-    if (form.password) payload.password = form.password;
     try {
-      const result = await request('/auth/profile', { method: 'PATCH', body: JSON.stringify(payload) });
-      setUser(result.user);
-      localStorage.setItem('us_user', JSON.stringify(result.user));
-      setForm((current) => ({ ...current, password: '', confirmPassword: '' }));
+      const result = await request('/auth/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({ name: profileForm.name, phone: profileForm.phone })
+      });
+      syncUser(result);
       push('Profile updated');
     } catch (err) {
       push(err.message, 'error');
     }
   }
 
+  async function updatePassword(event) {
+    event.preventDefault();
+    if (!passwordForm.password || !passwordForm.confirmPassword) {
+      push('New password and confirmation are required', 'error');
+      return;
+    }
+    if (passwordForm.password !== passwordForm.confirmPassword) {
+      push('New password and confirmation must match', 'error');
+      return;
+    }
+    try {
+      const result = await request('/auth/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({ password: passwordForm.password })
+      });
+      syncUser(result);
+      setPasswordForm({ password: '', confirmPassword: '' });
+      push('Password updated');
+    } catch (err) {
+      push(err.message, 'error');
+    }
+  }
+
+  function updatePreference(key) {
+    setPreferences((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  function savePreferences(event) {
+    event.preventDefault();
+    push('Notification preferences saved locally');
+  }
+
   return (
-    <div className="mx-auto max-w-[1200px] space-y-6">
-      <PageHeader title="Settings" eyebrow="Technician">
-        Profile, phone number, password, and basic account details.
+    <div className="mx-auto max-w-[1600px] space-y-6">
+      <PageHeader
+        title="Settings"
+        eyebrow="TECHNICIAN"
+        action={(
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-bold muted">
+            <CalendarClock className="h-4 w-4 text-[var(--brand-2)]" />
+            Last updated: Today, {lastUpdatedTime}
+          </div>
+        )}
+      >
+        Manage your profile, security settings, and account preferences.
       </PageHeader>
-      <div className="grid gap-5 lg:grid-cols-[1fr_.8fr]">
-        <form className="surface p-5" onSubmit={submit}>
-          <h2 className="text-xl font-black">Profile</h2>
-          <div className="mt-4 grid gap-4">
+
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <SettingsCard icon={UserRound} title="Profile Information" description="Keep your technician contact details current.">
+          <form className="grid gap-4" onSubmit={saveProfile}>
             <label>
-              <span className="label">Name</span>
-              <input className="input" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+              <span className="label">Full Name</span>
+              <input
+                className="input"
+                value={profileForm.name}
+                onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))}
+              />
             </label>
             <label>
-              <span className="label">Phone</span>
-              <input className="input" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} />
+              <span className="label">Phone Number</span>
+              <input
+                className="input"
+                value={profileForm.phone}
+                onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
+              />
+            </label>
+            <button className="btn btn-primary justify-center" type="submit">
+              <Save className="h-4 w-4" />
+              Save Profile
+            </button>
+          </form>
+        </SettingsCard>
+
+        <SettingsCard icon={KeyRound} title="Change Password" description="Update your account password securely.">
+          <form className="grid gap-4" onSubmit={updatePassword}>
+            <label>
+              <span className="label">New Password</span>
+              <input
+                className="input"
+                type="password"
+                value={passwordForm.password}
+                onChange={(event) => setPasswordForm((current) => ({ ...current, password: event.target.value }))}
+              />
             </label>
             <label>
-              <span className="label">New password</span>
-              <input className="input" type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
+              <span className="label">Confirm New Password</span>
+              <input
+                className="input"
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+              />
             </label>
-            <label>
-              <span className="label">Confirm password</span>
-              <input className="input" type="password" value={form.confirmPassword} onChange={(event) => setForm((current) => ({ ...current, confirmPassword: event.target.value }))} />
-            </label>
+            <button className="btn btn-primary justify-center" type="submit">
+              <KeyRound className="h-4 w-4" />
+              Update Password
+            </button>
+          </form>
+        </SettingsCard>
+
+        <SettingsCard icon={FileText} title="Profile Photo" description="Your technician identity shown across the panel.">
+          <div className="grid justify-items-center gap-4 text-center">
+            <div className="grid h-24 w-24 place-items-center rounded-full border border-sky-400/30 bg-sky-500/15 text-3xl font-black text-sky-100 shadow-[0_16px_50px_rgba(14,165,233,0.16)]">
+              {technicianInitial(user)}
+            </div>
+            <div>
+              <p className="text-lg font-black text-slate-100">{displayName}</p>
+              <div className="mt-2 flex flex-wrap justify-center gap-2">
+                <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-emerald-200">
+                  Technician
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-xs font-bold muted">
+                  {username !== 'Not available' ? username : employeeId}
+                </span>
+              </div>
+            </div>
+            <button className="btn btn-secondary justify-center" type="button" onClick={() => push('Profile photo upload is not available yet')}>
+              <UserRound className="h-4 w-4" />
+              Change Photo
+            </button>
           </div>
-          <button className="btn btn-primary mt-5" type="submit">
-            Save Profile
-          </button>
-        </form>
-        <div className="surface p-5">
-          <h2 className="text-xl font-black">Account Details</h2>
-          <div className="mt-4 grid gap-3 text-sm">
-            <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
-              <p className="text-xs font-black uppercase tracking-wide muted">Role</p>
-              <p className="mt-1 font-bold text-slate-100">Technician</p>
-            </div>
-            <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
-              <p className="text-xs font-black uppercase tracking-wide muted">Username</p>
-              <p className="mt-1 font-bold text-slate-100">{user?.username || '-'}</p>
-            </div>
-            <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
-              <p className="text-xs font-black uppercase tracking-wide muted">Phone</p>
-              <p className="mt-1 font-bold text-slate-100">{user?.phone || '-'}</p>
-            </div>
+        </SettingsCard>
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2">
+        <SettingsCard icon={ShieldCheck} title="Account Details" description="Read-only technician account information.">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <AccountDetailRow label="Employee ID" value={employeeId} />
+            <AccountDetailRow label="Branch / Location" value={user?.branch || user?.location} />
+            <AccountDetailRow label="Role" value="Technician" />
+            <AccountDetailRow label="Username" value={user?.username} />
+            <AccountDetailRow label="Phone" value={user?.phone} />
+            <AccountDetailRow label="Account Status" value={accountStatus(user)} />
+            <AccountDetailRow label="Last Login" value={user?.lastLogin ? formatDate(user.lastLogin) : ''} />
           </div>
-        </div>
+        </SettingsCard>
+
+        <SettingsCard icon={Bell} title="Notification Preferences" description="Choose the operational alerts you want highlighted.">
+          <form className="grid gap-3" onSubmit={savePreferences}>
+            {[
+              ['newJobAssigned', 'New job assigned'],
+              ['partRequestApproved', 'Part request approved'],
+              ['paymentPending', 'Payment pending'],
+              ['amcVisitDue', 'AMC visit due'],
+              ['workOrderStatusUpdated', 'Work order status updated']
+            ].map(([key, label]) => (
+              <label key={key} className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
+                <span className="text-sm font-bold text-slate-100">{label}</span>
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--brand)]"
+                  checked={preferences[key]}
+                  onChange={() => updatePreference(key)}
+                />
+              </label>
+            ))}
+            <button className="btn btn-primary mt-2 justify-center" type="submit">
+              <Save className="h-4 w-4" />
+              Save Preferences
+            </button>
+          </form>
+        </SettingsCard>
       </div>
     </div>
   );
