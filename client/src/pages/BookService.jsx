@@ -9,6 +9,7 @@ const initial = {
   phone: '',
   address: '',
   serviceType: serviceTypes[0] || 'PC / Laptop Service',
+  device: '',
   bookingSource: 'Website',
   problemDescription: '',
   preferredDateTime: ''
@@ -41,8 +42,8 @@ export default function BookService() {
       }
     }
     if (targetStep === 2) {
-      if (!form.serviceType.trim() || !form.problemDescription.trim()) {
-        push('Service type and problem description are required', 'error');
+      if (!form.serviceType.trim() || !form.device.trim() || !form.problemDescription.trim()) {
+        push('Service type, device, and problem description are required', 'error');
         return false;
       }
     }
@@ -50,8 +51,16 @@ export default function BookService() {
   }
 
   function next() {
-    if (!validateStep(step)) return;
-    setStep((current) => Math.min(3, current + 1));
+    if (loading) return;
+    if (step === 1) {
+      if (!validateStep(1)) return;
+      setStep(2);
+      return;
+    }
+    if (step === 2) {
+      if (!validateStep(2)) return;
+      setStep(3);
+    }
   }
 
   function previous() {
@@ -82,6 +91,7 @@ export default function BookService() {
 
   async function submit(event) {
     event.preventDefault();
+    if (step !== 3) return;
     if (!validateStep(1) || !validateStep(2)) return;
     const data = new FormData();
     Object.entries(form).forEach(([key, value]) => data.append(key, value));
@@ -89,7 +99,7 @@ export default function BookService() {
     setLoading(true);
     try {
       const result = await createBooking(data);
-      push(`Booking saved: ${result.booking.booking_code}`);
+      push(`Booking saved: ${result.booking.bookingCode || result.booking.booking_code}`);
       setForm(initial);
       removeImage();
       setStep(1);
@@ -161,7 +171,11 @@ export default function BookService() {
                   </select>
                 </label>
                 <label>
-                  <span className="label">Problem description</span>
+                  <span className="label">Device</span>
+                  <input className="input" value={form.device} onChange={(event) => update('device', event.target.value)} placeholder="Laptop, desktop, printer, CCTV, UPS..." />
+                </label>
+                <label>
+                  <span className="label">Issue / problem description</span>
                   <textarea className="input min-h-32" value={form.problemDescription} onChange={(event) => update('problemDescription', event.target.value)} />
                 </label>
                 <label>
@@ -181,6 +195,7 @@ export default function BookService() {
                       ['Phone', form.phone],
                       ['Address', form.address],
                       ['Service', form.serviceType],
+                      ['Device', form.device],
                       ['Problem', form.problemDescription],
                       ['Preferred', form.preferredDateTime || 'Not specified'],
                       ['Image', image ? image.name : 'No image selected']
@@ -261,7 +276,7 @@ export default function BookService() {
               Back
             </button>
             {step < 3 ? (
-              <button type="button" className="btn btn-primary" onClick={next}>
+              <button type="button" className="btn btn-primary" onClick={next} disabled={loading}>
                 Continue
               </button>
             ) : (
