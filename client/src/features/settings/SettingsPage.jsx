@@ -150,15 +150,25 @@ const emptyTechnicianForm = {
   status: 'Active'
 };
 
-function SettingsInfoCard({ title, icon: Icon, children }) {
+const settingsTabs = [
+  { id: 'workspace', label: 'Workspace Profile' },
+  { id: 'security', label: 'Security' },
+  { id: 'team', label: 'Team Access' },
+  { id: 'preferences', label: 'Preferences' }
+];
+
+function SettingsInfoCard({ title, icon: Icon, children, action = null, className = '' }) {
   return (
-    <div className="surface admin-control-card p-5">
+    <div className={`surface admin-control-card p-5 ${className}`}>
       <div className="flex items-start gap-3">
         <div className="admin-control-icon">
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-xl font-black">{title}</h2>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h2 className="text-xl font-black">{title}</h2>
+            {action}
+          </div>
           {children}
         </div>
       </div>
@@ -167,12 +177,17 @@ function SettingsInfoCard({ title, icon: Icon, children }) {
 }
 
 function TeamAccessSection() {
-  const { request, user } = useAuth();
-  const { push } = useToast();
-  const [addOpen, setAddOpen] = useState(false);
-  const [editUser, setEditUser] = useState(null);
-  const [resetUser, setResetUser] = useState(null);
-  const { data, loading, error, reload } = useResource(() => request('/users?role=technician&limit=100'), [request]);
+  const { request } = useAuth();
+  const { data, loading, error } = useResource(async () => {
+    const [usersResult, workOrdersResult] = await Promise.all([
+      request('/users?role=technician&limit=100').catch(() => ({ users: [] })),
+      request('/work-orders?limit=100').catch(() => ({ workOrders: [] }))
+    ]);
+    return {
+      users: usersResult.users || [],
+      workOrders: workOrdersResult.workOrders || []
+    };
+  }, [request]);
 
   const technicians = useMemo(
     () => (data?.users || [])
@@ -180,69 +195,17 @@ function TeamAccessSection() {
       .sort((a, b) => a.name.localeCompare(b.name)),
     [data?.users]
   );
+  const assignedJobCounts = useMemo(() => (data?.workOrders || []).reduce((map, job) => {
+    const technicianId = recordId(job.technicianId);
+    if (technicianId) map[technicianId] = (map[technicianId] || 0) + 1;
+    return map;
+  }, {}), [data?.workOrders]);
   const activeCount = technicians.filter((tech) => tech.active).length;
   const disabledCount = technicians.length - activeCount;
-
-  async function toggleStatus(technician) {
-    try {
-      await request(`/users/${technician.id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isActive: !technician.active })
-      });
-      push(technician.active ? 'Technician account disabled' : 'Technician account enabled');
-      reload({ silent: true });
-    } catch (err) {
-      push(err.message, 'error');
-    }
-  }
-
-  async function createTechnician(form) {
-    if (form.password !== form.confirmPassword) throw new Error('Passwords do not match');
-    await request('/users', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: form.name,
-        phone: form.phone,
-        username: form.username,
-        password: form.password,
-        role: 'technician',
-        isActive: form.status === 'Active'
-      })
-    });
-    push('Technician created');
-    setAddOpen(false);
-    reload({ silent: true });
-  }
-
-  async function updateTechnician(form) {
-    await request(`/users/${editUser.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        name: form.name,
-        phone: form.phone,
-        username: form.username,
-        role: 'technician',
-        isActive: form.status === 'Active'
-      })
-    });
-    push('Technician updated');
-    setEditUser(null);
-    reload({ silent: true });
-  }
-
-  async function resetPassword(password, confirmPassword) {
-    if (password !== confirmPassword) throw new Error('Passwords do not match');
-    await request(`/users/${resetUser.id}/reset-password`, {
-      method: 'PATCH',
-      body: JSON.stringify({ password })
-    });
-    push('Temporary password updated. Share it securely with the technician.');
-    setResetUser(null);
-    reload({ silent: true });
-  }
+  const lowWorkloadCount = technicians.filter((tech) => tech.active && (assignedJobCounts[recordId(tech)] || 0) <= 1).length;
 
   return (
-    <div className="surface admin-control-card team-access-card p-5 lg:col-span-2">
+    <div className="surface admin-control-card team-access-card p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-3">
           <div className="admin-control-icon">
@@ -256,114 +219,29 @@ function TeamAccessSection() {
             <p className="mt-2 max-w-2xl text-sm leading-6 muted">Manage technician login access, temporary passwords, and account status.</p>
           </div>
         </div>
-        <button type="button" className="btn btn-primary admin-compact-button shrink-0" onClick={() => setAddOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Add Technician
-        </button>
+        <Link className="btn btn-primary admin-compact-button shrink-0" to="/admin/technician-panel">
+          <Users className="h-4 w-4" />
+          Manage Staff / Technicians
+        </Link>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { icon: Users, label: 'Total Technicians', value: technicians.length, helper: 'All technician logins', tone: 'blue' },
-          { icon: CheckCircle2, label: 'Active Technicians', value: activeCount, helper: 'Can access technician panel', tone: 'green' },
-          { icon: AlertTriangle, label: 'Disabled Accounts', value: disabledCount, helper: 'Login blocked', tone: 'gray' }
+          { icon: CheckCircle2, label: 'Active Technicians', value: loading ? '-' : activeCount, helper: 'Can access technician panel', tone: 'green' },
+          { icon: AlertTriangle, label: 'Disabled Accounts', value: loading ? '-' : disabledCount, helper: 'Login blocked', tone: 'gray' },
+          { icon: Users, label: 'Total Technicians', value: loading ? '-' : technicians.length, helper: 'All technician logins', tone: 'blue' },
+          { icon: ShieldCheck, label: 'Available / Low Workload', value: loading ? '-' : lowWorkloadCount, helper: '0-1 assigned jobs', tone: 'cyan' }
         ].map((item) => (
           <AdminMetricCard key={item.label} {...item} />
         ))}
       </div>
 
-      <div className="mt-4 rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm muted">
-        Passwords are encrypted and cannot be viewed after saving.
-      </div>
-
-      <div className="mt-5">
-        {loading ? (
-          <div className="rounded-card border border-[var(--line)] bg-[var(--surface-2)] p-4 text-sm muted">Loading technician accounts...</div>
-        ) : error ? (
-          <div className="rounded-card border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">Unable to load technician accounts.</div>
-        ) : technicians.length ? (
-          <div className="table-wrap admin-table-wrap bg-[var(--surface)]">
-            <table className="data-table team-access-table">
-              <thead>
-                <tr>
-                  <th>Technician</th>
-                  <th>Username / Phone</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Created / Updated</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--line)]">
-                {technicians.map((tech) => (
-                  <tr key={tech.id}>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <div className="team-avatar">
-                          {tech.name?.slice(0, 1) || 'T'}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-bold text-slate-100" title={tech.name}>{tech.name}</p>
-                          <p className="text-xs muted">Employee login account</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <p className="font-bold text-slate-100">{tech.username}</p>
-                      <p className="text-xs muted">{tech.phone || 'No phone added'}</p>
-                    </td>
-                    <td><span className="admin-role-badge">{tech.role === 'admin' ? 'Admin' : 'Technician'}</span></td>
-                    <td>
-                      <AccountStatusPill active={tech.active} />
-                    </td>
-                    <td>
-                      <span className="block font-semibold text-slate-200">{tech.createdAt ? formatDate(tech.createdAt) : '-'}</span>
-                      <span className="block text-xs muted">{tech.updatedAt ? `Updated ${formatDate(tech.updatedAt)}` : 'No update yet'}</span>
-                    </td>
-                    <td className="text-right">
-                      <div className="admin-row-actions">
-                        <button type="button" className="btn btn-primary admin-table-button" onClick={() => setResetUser(tech)}>
-                          <KeyRound className="h-4 w-4" />
-                          Reset Password
-                        </button>
-                        {tech.id !== user?.id ? (
-                          <button type="button" className="btn btn-secondary admin-table-button" onClick={() => toggleStatus(tech)}>
-                            {tech.active ? 'Disable' : 'Enable'}
-                          </button>
-                        ) : null}
-                        <button type="button" className="btn btn-secondary admin-table-button" onClick={() => setEditUser(tech)}>
-                          <Edit3 className="h-4 w-4" />
-                          Edit
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState
-            title="No team members found"
-            message="Add your first admin or technician."
-            action={
-              <button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}>
-                <Plus className="h-4 w-4" />
-                Add Technician
-              </button>
-            }
-          />
-        )}
-      </div>
-
-      {addOpen ? <TechnicianAccountModal title="Add Technician" submitLabel="Create Technician" onClose={() => setAddOpen(false)} onSubmit={createTechnician} /> : null}
-      {editUser ? <TechnicianAccountModal title="Edit Technician" submitLabel="Save Changes" technician={editUser} editMode onClose={() => setEditUser(null)} onSubmit={updateTechnician} /> : null}
-      {resetUser ? <ResetPasswordModal technician={resetUser} onClose={() => setResetUser(null)} onSubmit={resetPassword} /> : null}
+      {error ? <div className="mt-4 rounded-card border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">Unable to load team summary.</div> : null}
     </div>
   );
 }
 
-function TechnicianAccountModal({ title, submitLabel, technician = null, editMode = false, onClose, onSubmit }) {
+export function TechnicianAccountModal({ title, submitLabel, technician = null, editMode = false, onClose, onSubmit }) {
   const { push } = useToast();
   const [form, setForm] = useState(() => technician ? {
     name: technician.name || '',
@@ -467,7 +345,7 @@ function TechnicianAccountModal({ title, submitLabel, technician = null, editMod
   );
 }
 
-function ResetPasswordModal({ technician, onClose, onSubmit }) {
+export function ResetPasswordModal({ technician, onClose, onSubmit }) {
   const { push } = useToast();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -589,39 +467,184 @@ function AccountStatusPill({ active }) {
 }
 
 export function SystemSettingsPage() {
+  const { push } = useToast();
+  const [activeTab, setActiveTab] = useState('workspace');
+  const [preferences, setPreferences] = useState({
+    defaultNotifications: true,
+    dashboardFocus: true,
+    pdfDocuments: true
+  });
+  const lastUpdatedTime = useMemo(
+    () => new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    []
+  );
+
+  function exportSettings() {
+    downloadCsv('settings-export.csv', ['Setting', 'Value'], [
+      ['Company', company.name],
+      ['Location', company.address],
+      ['Phone', company.phones.join(' / ')],
+      ['Email', company.email],
+      ['Default Notifications', preferences.defaultNotifications ? 'Enabled' : 'Disabled'],
+      ['Dashboard Preferences', preferences.dashboardFocus ? 'Enabled' : 'Disabled'],
+      ['PDF / Document Preferences', preferences.pdfDocuments ? 'Enabled' : 'Disabled']
+    ]);
+  }
+
+  function updatePreference(key) {
+    setPreferences((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  function savePreferences() {
+    push('Preferences saved locally');
+  }
+
   return (
     <div className="admin-control-page settings-page">
       <section className="admin-control-hero mb-5">
-        <div className="relative z-[1]">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">System</p>
-            <span className="admin-premium-badge">Admin Control Center</span>
+        <div className="settings-hero-content">
+          <div className="relative z-[1] min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">SYSTEM</p>
+              <span className="admin-premium-badge">ADMIN CONTROL CENTER</span>
+            </div>
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Settings</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage workspace identity, team access, security, and operational defaults.</p>
           </div>
-          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Settings</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage workspace identity, team access, security, and operational defaults.</p>
+          <div className="settings-hero-actions">
+            <div className="settings-last-updated">
+              <CalendarClock className="h-4 w-4 text-[var(--brand-2)]" />
+              Last updated: Today, {lastUpdatedTime}
+            </div>
+            <button type="button" className="btn btn-secondary admin-compact-button" onClick={exportSettings}>
+              <Download className="h-4 w-4" />
+              Export Settings
+            </button>
+            <Link className="btn btn-secondary admin-compact-button" to="/admin/audit-logs">
+              <ReceiptText className="h-4 w-4" />
+              View Audit Logs
+            </Link>
+          </div>
         </div>
       </section>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <SettingsInfoCard title="Workspace Profile" icon={ShieldCheck}>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+
+      <div className="surface settings-tabs-card p-2">
+        <div className="tabs-list amc-tabs settings-tabs border-b-0">
+          {settingsTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`tab-button ${activeTab === tab.id ? 'tab-button-active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5">
+        {activeTab === 'workspace' ? (
+          <div className="grid gap-5 lg:grid-cols-2">
+            <SettingsInfoCard
+              title="Workspace Profile"
+              icon={ShieldCheck}
+              className="lg:col-span-2"
+              action={(
+                <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => push('Workspace profile editing is not connected yet')}>
+                  <Edit3 className="h-4 w-4" />
+                  Edit Profile
+                </button>
+              )}
+            >
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { icon: ShieldCheck, label: 'Company', value: company.name },
+                  { icon: CalendarClock, label: 'Location', value: company.address },
+                  { icon: PhoneCallIcon, label: 'Phone', value: company.phones.join(' / ') },
+                  { icon: Send, label: 'Email', value: company.email }
+                ].map((item) => <SettingsInfoItem key={item.label} {...item} />)}
+              </div>
+            </SettingsInfoCard>
+          </div>
+        ) : null}
+
+        {activeTab === 'security' ? (
+          <div className="grid gap-5 lg:grid-cols-2">
+            <SecurityNotesCard />
+            <SettingsInfoCard title="System Access" icon={KeyRound}>
+              <div className="mt-4 grid gap-3">
+                <AccessSummaryItem title="Admin Sidebar" description="Full access to operations, billing, inventory, AMC, reports, audit logs, and settings." />
+                <AccessSummaryItem title="Audit Trail" description="Important operational changes are recorded in audit logs." />
+                <AccessSummaryItem title="Role Access" description="Admins manage the system. Technicians access assigned jobs." />
+                <AccessSummaryItem title="Technician Login" description="Technician credentials are managed from Staff / Technicians." />
+              </div>
+            </SettingsInfoCard>
+          </div>
+        ) : null}
+
+        {activeTab === 'team' ? (
+          <TeamAccessSection />
+        ) : null}
+
+        {activeTab === 'preferences' ? (
+          <div className="grid gap-5 lg:grid-cols-3">
             {[
-              { icon: ShieldCheck, label: 'Company', value: company.name },
-              { icon: CalendarClock, label: 'Location', value: company.address },
-              { icon: PhoneCallIcon, label: 'Phone', value: company.phones.join(' / ') },
-              { icon: Send, label: 'Email', value: company.email }
-            ].map((item) => <SettingsInfoItem key={item.label} {...item} />)}
+              {
+                key: 'defaultNotifications',
+                icon: Bell,
+                title: 'Default Notification Settings',
+                description: 'Keep operational reminders visible for jobs, payments, AMC visits, and approvals.'
+              },
+              {
+                key: 'dashboardFocus',
+                icon: BarChart,
+                title: 'Dashboard Preferences',
+                description: 'Prioritize operational KPIs and compact admin summaries on dashboard surfaces.'
+              },
+              {
+                key: 'pdfDocuments',
+                icon: FileText,
+                title: 'PDF / Document Preferences',
+                description: 'Use standard invoice, quotation, and service document defaults where supported.'
+              }
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.key} className="surface admin-control-card settings-preference-card p-5">
+                  <div className="flex items-start gap-3">
+                    <div className="admin-control-icon">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-black">{item.title}</h2>
+                      <p className="mt-2 text-sm leading-6 muted">{item.description}</p>
+                    </div>
+                  </div>
+                  <label className="mt-5 flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
+                    <span className="text-sm font-bold text-slate-100">Enabled</span>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[var(--brand)]"
+                      checked={preferences[item.key]}
+                      onChange={() => updatePreference(item.key)}
+                    />
+                  </label>
+                </div>
+              );
+            })}
+            <div className="surface admin-control-card settings-preference-save p-5 lg:col-span-3">
+              <div>
+                <h2 className="text-xl font-black">Preference Defaults</h2>
+                <p className="mt-2 text-sm leading-6 muted">These preference controls are local UI defaults until backend preference storage is added.</p>
+              </div>
+              <button type="button" className="btn btn-primary" onClick={savePreferences}>
+                <Save className="h-4 w-4" />
+                Save Preferences
+              </button>
+            </div>
           </div>
-        </SettingsInfoCard>
-        <SettingsInfoCard title="System Access" icon={KeyRound}>
-          <div className="mt-4 grid gap-3">
-            <AccessSummaryItem title="Admin Sidebar" description="Full access to operations, billing, inventory, AMC, reports, audit logs, and settings." />
-            <AccessSummaryItem title="Audit Trail" description="Important operational changes are recorded in audit logs." />
-            <AccessSummaryItem title="Role Access" description="Admins manage the system. Technicians access assigned jobs." />
-            <AccessSummaryItem title="Technician Login" description="Technician credentials are managed from Team & Access." />
-          </div>
-        </SettingsInfoCard>
-        <SecurityNotesCard />
-        <TeamAccessSection />
+        ) : null}
       </div>
     </div>
   );

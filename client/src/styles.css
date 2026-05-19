@@ -2529,6 +2529,61 @@ button:disabled {
     filter: blur(4px);
   }
 
+  .settings-hero-content {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 1.25rem;
+  }
+
+  .settings-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.65rem;
+  }
+
+  .settings-last-updated {
+    display: inline-flex;
+    min-height: 2.25rem;
+    align-items: center;
+    gap: 0.45rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.035);
+    padding: 0.5rem 0.75rem;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 850;
+    white-space: nowrap;
+  }
+
+  .settings-tabs-card {
+    overflow-x: auto;
+  }
+
+  .settings-tabs {
+    min-width: max-content;
+    gap: 0.35rem;
+  }
+
+  .settings-tabs .tab-button {
+    min-height: 2.4rem;
+  }
+
+  .settings-preference-card {
+    min-height: 13rem;
+  }
+
+  .settings-preference-save {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
   .admin-premium-badge,
   .admin-required-mark,
   .admin-role-badge,
@@ -2813,7 +2868,7 @@ button:disabled {
 
   .technician-management-table {
     width: 100%;
-    min-width: 1120px;
+    min-width: 1360px;
   }
 
   .audit-table {
@@ -2867,27 +2922,27 @@ button:disabled {
   .team-access-table td:nth-child(6) { width: 20%; }
 
   .technician-management-table th:nth-child(1),
-  .technician-management-table td:nth-child(1) { width: 19%; }
+  .technician-management-table td:nth-child(1) { width: 16%; }
   .technician-management-table th:nth-child(2),
-  .technician-management-table td:nth-child(2) { width: 18%; }
+  .technician-management-table td:nth-child(2) { width: 15%; }
   .technician-management-table th:nth-child(3),
-  .technician-management-table td:nth-child(3) { width: 10%; }
+  .technician-management-table td:nth-child(3) { width: 9%; }
   .technician-management-table th:nth-child(4),
-  .technician-management-table td:nth-child(4) { width: 10%; }
+  .technician-management-table td:nth-child(4) { width: 8%; }
   .technician-management-table th:nth-child(5),
-  .technician-management-table td:nth-child(5) { width: 13%; }
+  .technician-management-table td:nth-child(5) { width: 12%; }
   .technician-management-table th:nth-child(6),
   .technician-management-table td:nth-child(6) {
-    width: 10%;
+    width: 9%;
     text-align: center;
   }
   .technician-management-table th:nth-child(7),
   .technician-management-table td:nth-child(7) {
-    width: 11%;
+    width: 10%;
   }
   .technician-management-table th:nth-child(8),
   .technician-management-table td:nth-child(8) {
-    width: 9%;
+    width: 21%;
     text-align: center;
   }
 
@@ -2992,6 +3047,10 @@ button:disabled {
 
   .technician-action-stack {
     display: flex;
+    justify-content: center;
+  }
+
+  .technician-row-actions {
     justify-content: center;
   }
 
@@ -3193,6 +3252,14 @@ button:disabled {
       grid-template-columns: 1fr;
     }
 
+    .settings-hero-content {
+      grid-template-columns: 1fr;
+    }
+
+    .settings-hero-actions {
+      justify-content: flex-start;
+    }
+
     .technician-hero-side {
       justify-content: flex-start;
     }
@@ -3202,7 +3269,7 @@ button:disabled {
     }
 
     .technician-management-table {
-      min-width: 1120px;
+      min-width: 1360px;
     }
 
     .admin-row-actions {
@@ -3213,6 +3280,11 @@ button:disabled {
     .admin-filter-bar .btn,
     .technician-filter-row .btn {
       width: 100%;
+    }
+
+    .settings-preference-save {
+      align-items: stretch;
+      flex-direction: column;
     }
   }
 

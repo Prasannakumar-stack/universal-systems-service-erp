@@ -142,13 +142,18 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { ResetPasswordModal, TechnicianAccountModal } from '../settings/SettingsPage.jsx';
 
 export function TechnicianPanelPage() {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
+  const { push } = useToast();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
+  const [editUser, setEditUser] = useState(null);
+  const [resetUser, setResetUser] = useState(null);
   const { data, loading, error, reload } = useResource(async () => {
     const [usersResult, workOrdersResult] = await Promise.all([
       request('/users?role=technician&limit=100').catch(() => ({ users: [] })),
@@ -203,6 +208,64 @@ export function TechnicianPanelPage() {
     setRoleFilter('');
   }
 
+  async function toggleStatus(technician) {
+    try {
+      await request(`/users/${recordId(technician)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: !technician.active })
+      });
+      push(technician.active ? 'Technician account disabled' : 'Technician account enabled');
+      reload({ silent: true });
+    } catch (err) {
+      push(err.message, 'error');
+    }
+  }
+
+  async function createTechnician(form) {
+    if (form.password !== form.confirmPassword) throw new Error('Passwords do not match');
+    await request('/users', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: form.name,
+        phone: form.phone,
+        username: form.username,
+        password: form.password,
+        role: 'technician',
+        isActive: form.status === 'Active'
+      })
+    });
+    push('Technician created');
+    setAddOpen(false);
+    reload({ silent: true });
+  }
+
+  async function updateTechnician(form) {
+    await request(`/users/${recordId(editUser)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: form.name,
+        phone: form.phone,
+        username: form.username,
+        role: 'technician',
+        isActive: form.status === 'Active'
+      })
+    });
+    push('Technician updated');
+    setEditUser(null);
+    reload({ silent: true });
+  }
+
+  async function resetPassword(password, confirmPassword) {
+    if (password !== confirmPassword) throw new Error('Passwords do not match');
+    await request(`/users/${recordId(resetUser)}/reset-password`, {
+      method: 'PATCH',
+      body: JSON.stringify({ password })
+    });
+    push('Temporary password updated. Share it securely with the technician.');
+    setResetUser(null);
+    reload({ silent: true });
+  }
+
   function exportTechnicians() {
     downloadCsv(
       'technicians.csv',
@@ -235,10 +298,10 @@ export function TechnicianPanelPage() {
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage technicians, availability, workload, and assigned service jobs.</p>
           </div>
           <div className="technician-hero-side">
-            <Link className="btn btn-primary technician-hero-action" to="/admin/settings" title="Open Team & Access settings">
+            <button type="button" className="btn btn-primary technician-hero-action" onClick={() => setAddOpen(true)}>
               <Plus className="h-4 w-4" />
               Add Technician
-            </Link>
+            </button>
             <button type="button" className="btn btn-secondary technician-hero-action" onClick={exportTechnicians} disabled={!visibleTechnicians.length}>
               <Download className="h-4 w-4" />
               Export
@@ -355,12 +418,25 @@ export function TechnicianPanelPage() {
                         <span className="font-semibold text-slate-200">{technicianLastActive(tech)}</span>
                       </td>
                       <td className="text-center">
-                        <div className="technician-action-stack">
+                        <div className="admin-row-actions technician-row-actions">
                           {assignedJobs > 0 ? (
                             <Link className="btn btn-secondary admin-table-button" to={jobsPath}>View Jobs</Link>
                           ) : (
                             <span className="technician-no-jobs-pill">No Jobs</span>
                           )}
+                          <button type="button" className="btn btn-primary admin-table-button" onClick={() => setResetUser(tech)}>
+                            <KeyRound className="h-4 w-4" />
+                            Reset Password
+                          </button>
+                          {techId !== recordId(user) ? (
+                            <button type="button" className="btn btn-secondary admin-table-button" onClick={() => toggleStatus(tech)}>
+                              {tech.active ? 'Disable' : 'Enable'}
+                            </button>
+                          ) : null}
+                          <button type="button" className="btn btn-secondary admin-table-button" onClick={() => setEditUser(tech)}>
+                            <Edit3 className="h-4 w-4" />
+                            Edit
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -376,6 +452,9 @@ export function TechnicianPanelPage() {
           <EmptyState icon={Users} title="No technicians found." message={hasActiveFilters ? 'Try changing filters or add a new technician.' : 'Technician accounts will appear here after they are created.'} action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={clearFilters}>Clear Filters</button> : null} />
         )}
       </section>
+      {addOpen ? <TechnicianAccountModal title="Add Technician" submitLabel="Create Technician" onClose={() => setAddOpen(false)} onSubmit={createTechnician} /> : null}
+      {editUser ? <TechnicianAccountModal title="Edit Technician" submitLabel="Save Changes" technician={editUser} editMode onClose={() => setEditUser(null)} onSubmit={updateTechnician} /> : null}
+      {resetUser ? <ResetPasswordModal technician={resetUser} onClose={() => setResetUser(null)} onSubmit={resetPassword} /> : null}
     </div>
   );
 }
