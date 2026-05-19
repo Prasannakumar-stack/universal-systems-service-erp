@@ -23,10 +23,11 @@ import {
   Wrench,
   X
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { company } from '../utils/constants.js';
-import { getCustomerDisplayId, getInvoiceDisplayId } from '../shared/idHelpers.js';
+import { currency } from '../utils/format.js';
+import { getCustomerDisplayId, getInvoiceDisplayId, getPaymentDisplayId, getWorkOrderDisplayId } from '../shared/idHelpers.js';
 import { adminWorkspaceRoles, canAccessRoles, normalizeRole, roleLabel } from '../utils/roles.js';
 
 const fullAccessRoles = ['admin', 'owner'];
@@ -91,10 +92,37 @@ const adminGroups = [
   }
 ];
 
-const technicianLinks = [
-  { to: '/tech/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/tech/work-orders', label: 'My Jobs', icon: BookOpenCheck },
-  { to: '/technician/profile', label: 'My Profile', icon: UserRound }
+const technicianGroups = [
+  {
+    title: '',
+    links: [{ to: '/tech/dashboard', label: 'Dashboard', icon: LayoutDashboard }]
+  },
+  {
+    title: 'Operations',
+    links: [
+      { to: '/tech/bookings', label: 'Bookings', icon: BookOpenCheck },
+      { to: '/tech/work-orders', label: 'Work Orders', icon: Wrench }
+    ]
+  },
+  {
+    title: 'Customers',
+    links: [{ to: '/tech/customers', label: 'Customers', icon: Users }]
+  },
+  {
+    title: 'Sales & Billing',
+    links: [
+      { to: '/tech/invoices', label: 'Invoices', icon: ReceiptText },
+      { to: '/tech/payments', label: 'Payments', icon: CreditCard }
+    ]
+  },
+  {
+    title: 'AMC & Warranty',
+    links: [{ to: '/tech/amc-contracts', label: 'AMC Contracts', icon: FileCheck2 }]
+  },
+  {
+    title: 'System',
+    links: [{ to: '/tech/settings', label: 'Settings', icon: Settings }]
+  }
 ];
 
 const adminRouteAccess = [
@@ -149,16 +177,105 @@ function sidebarBadgeClass(tone) {
   return classes[tone] || classes.blue;
 }
 
+function finiteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function hasFiniteNumber(source, key) {
+  return source && Object.prototype.hasOwnProperty.call(source, key) && Number.isFinite(Number(source[key]));
+}
+
+function normalizedStatus(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function sumExistingNumbers(source, keys) {
+  return keys.reduce((sum, key) => (hasFiniteNumber(source, key) ? sum + finiteNumber(source[key]) : sum), 0);
+}
+
+function isActionNeededBooking(record) {
+  const status = normalizedStatus(record?.status || record?.bookingStatus);
+  if (['completed', 'cancelled', 'canceled', 'converted', 'closed'].includes(status)) return false;
+  if (['pending', 'new', 'unassigned'].includes(status)) return true;
+  return !record?.technicianId && !record?.workOrderId && status !== '';
+}
+
+function bookingBadgeCountFromDashboard(dashboardData) {
+  const stats = dashboardData?.stats || {};
+  const explicitCount = sumExistingNumbers(stats, ['pendingBookings', 'newBookings', 'unassignedBookings']);
+  if (explicitCount > 0) return explicitCount;
+  return (dashboardData?.recentBookings || []).filter(isActionNeededBooking).length;
+}
+
+function workOrderBadgeCountFromDashboard(dashboardData) {
+  const stats = dashboardData?.stats || {};
+  const explicitCount = sumExistingNumbers(stats, ['pendingJobs', 'inProgressJobs', 'awaitingPartsJobs']);
+  if (explicitCount > 0) return explicitCount;
+  return (dashboardData?.repairQueue || []).filter((record) => (
+    ['pending', 'in progress', 'awaiting parts'].includes(normalizedStatus(record?.status))
+  )).length;
+}
+
+function lowStockBadgeCountFromDashboard(dashboardData) {
+  const metrics = dashboardData?.metrics || {};
+  const alerts = dashboardData?.alerts || {};
+  if (hasFiniteNumber(metrics, 'lowStockItems')) return finiteNumber(metrics.lowStockItems);
+  if (hasFiniteNumber(alerts, 'lowStockItems') || hasFiniteNumber(alerts, 'outOfStockItems')) {
+    return finiteNumber(alerts.lowStockItems) + finiteNumber(alerts.outOfStockItems);
+  }
+  return Array.isArray(dashboardData?.lowStockAlerts) ? dashboardData.lowStockAlerts.length : 0;
+}
+
+function isPendingStatus(value) {
+  return String(value || '').trim().toLowerCase() === 'pending';
+}
+
+function isPartialStatus(value) {
+  const status = String(value || '').trim().toLowerCase();
+  return status === 'partial' || status === 'partially paid';
+}
+
+function getInvoicePaymentStatus(invoice) {
+  return invoice?.paymentStatus || invoice?.invoiceStatus || invoice?.status || '';
+}
+
+function invoiceRowsFromPayload(payload) {
+  return payload?.invoices || payload?.data || [];
+}
+
+function pendingPaymentCountFromInvoicePayloads(payloads = []) {
+  const invoices = payloads.flatMap(invoiceRowsFromPayload);
+  // Payments badge must show invoice payment attention count only.
+  // Never use payment history records here because paid payments also increase that count.
+  const pendingInvoiceCount = invoices.filter((invoice) => isPendingStatus(getInvoicePaymentStatus(invoice))).length;
+  const partialInvoiceCount = invoices.filter((invoice) => isPartialStatus(getInvoicePaymentStatus(invoice))).length;
+  return pendingInvoiceCount + partialInvoiceCount;
+}
+
+function pendingPaymentCountFromDashboard(dashboardData) {
+  if (Object.prototype.hasOwnProperty.call(dashboardData || {}, 'paymentBadgeCount')) {
+    return finiteNumber(dashboardData.paymentBadgeCount);
+  }
+  return 0;
+}
+
+function amcRenewalBadgeCountFromDashboard(dashboardData) {
+  const stats = dashboardData?.stats || {};
+  return sumExistingNumbers(stats, ['amcRenewalsDue', 'expiredAmcContracts']);
+}
+
 function buildSidebarBadges(dashboardData) {
   const stats = dashboardData?.stats || {};
   const alerts = dashboardData?.alerts || {};
-  const lowStockCount = Number(dashboardData?.metrics?.lowStockItems || alerts.lowStockItems || 0);
+  const lowStockCount = lowStockBadgeCountFromDashboard(dashboardData);
+  const pendingPaymentCount = pendingPaymentCountFromDashboard(dashboardData);
   return {
-    bookings: { value: stats.todayBookings, tone: 'blue' },
-    workOrders: { value: stats.pendingJobs, tone: 'blue' },
+    bookings: { value: bookingBadgeCountFromDashboard(dashboardData), tone: 'blue' },
+    workOrders: { value: workOrderBadgeCountFromDashboard(dashboardData), tone: 'blue' },
     lowStock: { value: lowStockCount, tone: Number(alerts.outOfStockItems || stats.lowStockCritical || 0) > 0 ? 'red' : 'orange' },
-    pendingPayments: { value: stats.pendingPayments, tone: 'green' },
-    amcRenewals: { value: stats.amcRenewalsDue, tone: stats.expiredAmcContracts > 0 ? 'red' : 'orange' }
+    pendingPayments: { value: pendingPaymentCount, tone: 'green' },
+    amcRenewals: { value: amcRenewalBadgeCountFromDashboard(dashboardData), tone: stats.expiredAmcContracts > 0 ? 'red' : 'orange' }
   };
 }
 
@@ -227,23 +344,33 @@ function isSidebarLinkActive(to, location, isActive) {
 function AdminSidebar({ close }) {
   const { logout, request, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [dashboardData, setDashboardData] = useState(null);
   const groups = visibleAdminGroups(user?.role);
   const badges = buildSidebarBadges(dashboardData);
 
   useEffect(() => {
     let mounted = true;
-    request('/dashboard/metrics')
-      .then((data) => {
-        if (mounted) setDashboardData(data);
-      })
-      .catch(() => {
-        if (mounted) setDashboardData(null);
-      });
+    async function loadSidebarBadges() {
+      const [metricsData, pendingInvoicesData, partialInvoicesData] = await Promise.all([
+        request('/dashboard/metrics').catch(() => null),
+        request('/invoices?status=Pending&limit=50').catch(() => null),
+        request('/invoices?status=Partial&limit=50').catch(() => null)
+      ]);
+      if (!mounted) return;
+      const paymentBadgePatch = { paymentBadgeCount: pendingPaymentCountFromInvoicePayloads([pendingInvoicesData, partialInvoicesData]) };
+      setDashboardData(metricsData ? { ...metricsData, ...paymentBadgePatch } : paymentBadgePatch);
+    }
+
+    loadSidebarBadges();
+    window.addEventListener('focus', loadSidebarBadges);
+    window.addEventListener('us:billing-updated', loadSidebarBadges);
     return () => {
       mounted = false;
+      window.removeEventListener('focus', loadSidebarBadges);
+      window.removeEventListener('us:billing-updated', loadSidebarBadges);
     };
-  }, [request]);
+  }, [location.pathname, location.search, request]);
 
   function handleLogout() {
     logout();
@@ -313,45 +440,51 @@ function TechnicianSidebar({ close }) {
   }
 
   return (
-    <aside className="flex h-full flex-col border-r border-[var(--line)] bg-[var(--surface)]">
-      <div className="border-b border-[var(--line)] p-4">
-        <span className="inline-flex rounded-card bg-white px-2 py-1 shadow-sm">
-          <img src="/logo-full.png" alt="Universal Systems" className="h-10 max-w-[185px] object-contain" />
-        </span>
-        <div className="mt-3 flex items-center gap-2 rounded-card bg-[var(--surface-2)] p-3">
-          <div className="grid h-9 w-9 place-items-center rounded-card bg-[var(--brand)] text-sm font-bold text-white">
-            {user?.name?.slice(0, 1) || 'U'}
+    <aside className="enterprise-sidebar">
+      <div className="border-b border-white/10 p-5">
+        <div className="flex items-center gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-card border border-sky-300/25 bg-sky-400/15">
+            <Wrench className="h-5 w-5 text-[var(--brand)]" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-lg font-black leading-tight">Universal Systems</h2>
+            <p className="text-sm font-bold text-sky-100">Technician ERP</p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 rounded-card border border-white/10 bg-white/[0.045] p-3 text-xs text-slate-300">
+          <span className="inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-[var(--brand)]" />Mettur Dam</span>
+          <span className="inline-flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-[var(--brand)]" />{company.phones.join(' / ')}</span>
+          <span className="inline-flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 text-[var(--brand)]" />Assigned service workspace</span>
+        </div>
+      </div>
+
+      <nav className="enterprise-sidebar-nav flex-1 overflow-y-auto px-3 py-4">
+        {technicianGroups.map((group) => (
+          <div className="enterprise-sidebar-group" key={group.title || 'dashboard'}>
+            {group.title ? (
+              <div className="enterprise-sidebar-heading">
+                <span>{group.title}</span>
+              </div>
+            ) : null}
+            <div className="space-y-1">
+              {group.links.map((link) => <SidebarItem key={`${group.title}-${link.label}`} link={link} close={close} />)}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      <div className="enterprise-sidebar-footer border-t border-white/10 p-3">
+        <div className="mb-3 flex items-center gap-3 rounded-card border border-white/10 bg-white/[0.045] p-3">
+          <div className="grid h-9 w-9 place-items-center rounded-card bg-sky-400/15 text-sm font-black text-sky-100">
+            {user?.name?.slice(0, 1) || 'T'}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold">{user?.name}</p>
+            <p className="truncate text-sm font-bold">{user?.name || 'Technician'}</p>
             <p className="truncate text-xs muted">Technician</p>
           </div>
         </div>
-      </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {technicianLinks.map((link) => {
-          const Icon = link.icon;
-          return (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              end={link.to === '/tech/dashboard'}
-              onClick={close}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-card px-3 py-2.5 text-sm font-semibold transition ${
-                  isActive ? 'bg-[var(--surface-2)] text-[var(--brand)]' : 'muted hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
-                }`
-              }
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span>{link.label}</span>
-            </NavLink>
-          );
-        })}
-      </nav>
-      <div className="border-t border-[var(--line)] p-3">
         <button className="btn btn-secondary w-full justify-start" onClick={handleLogout}>
-          <LogOut className="h-4 w-4" />
+          <LogOut className="h-4 w-4 shrink-0" />
           Logout
         </button>
       </div>
@@ -362,96 +495,188 @@ function TechnicianSidebar({ close }) {
 function GlobalSearch({ role }) {
   const { request } = useAuth();
   const navigate = useNavigate();
+  const searchRef = useRef(null);
+  const requestRef = useRef(request);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [resultGroups, setResultGroups] = useState([]);
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const value = query.trim();
+    requestRef.current = request;
+  }, [request]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    const value = debouncedQuery;
     if (value.length < 2 || !canUseGlobalSearch(role)) {
-      setResults([]);
+      setResultGroups([]);
+      setOpen(false);
       setLoading(false);
       return undefined;
     }
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      const needle = value.toLowerCase();
-      const includes = (text) => String(text || '').toLowerCase().includes(needle);
-      try {
-        const [customers, bookings, invoices, inventory] = await Promise.all([
-          request(`/customers?search=${encodeURIComponent(value)}&limit=5`).catch(() => ({ customers: [] })),
-          request(`/bookings?search=${encodeURIComponent(value)}&limit=5`).catch(() => ({ bookings: [] })),
-          request(`/invoices?search=${encodeURIComponent(value)}&limit=5`).catch(() => ({ invoices: [] })),
-          request(`/inventory?search=${encodeURIComponent(value)}&limit=5`).catch(() => ({ parts: [] }))
-        ]);
-        const customerResults = (customers.customers || [])
-          .filter((customer) => includes(customer.name) || includes(customer.phone) || includes(getCustomerDisplayId(customer)))
-          .map((customer) => ({
-          type: 'Customer',
-          title: customer.name,
-          meta: `${getCustomerDisplayId(customer)}${customer.phone ? ` - ${customer.phone}` : ''}`,
-          to: `/admin/customers/${customer.id}`
-        }));
-        const bookingResults = (bookings.bookings || [])
-          .filter((booking) => includes(booking.bookingCode) || includes(booking.customerName) || includes(booking.phone))
-          .map((booking) => ({
-            type: 'Booking',
-            title: booking.bookingCode,
-            meta: `${booking.customerName || 'Customer'} - ${booking.device || 'Service'}`,
+    let active = true;
+    setLoading(true);
+    setOpen(true);
+    const encoded = encodeURIComponent(value);
+    Promise.all([
+      requestRef.current(`/customers?search=${encoded}&limit=5`).catch(() => ({ customers: [] })),
+      requestRef.current(`/bookings?search=${encoded}&limit=5`).catch(() => ({ bookings: [] })),
+      requestRef.current(`/work-orders?search=${encoded}&limit=5`).catch(() => ({ workOrders: [] })),
+      requestRef.current(`/invoices?search=${encoded}&limit=5`).catch(() => ({ invoices: [] })),
+      requestRef.current(`/payments?search=${encoded}&limit=5`).catch(() => ({ payments: [] })),
+      requestRef.current(`/inventory?search=${encoded}&limit=5`).catch(() => ({ parts: [] }))
+    ]).then(([customers, bookings, workOrders, invoices, payments, inventory]) => {
+      if (!active) return;
+      const groups = [
+        {
+          label: 'Customers',
+          items: (customers.customers || []).map((customer) => ({
+            title: customer.name || getCustomerDisplayId(customer) || 'Customer',
+            meta: [getCustomerDisplayId(customer), customer.phone].filter(Boolean).join(' - '),
+            to: `/admin/customers/${customer.id || customer._id}`
+          }))
+        },
+        {
+          label: 'Bookings',
+          items: (bookings.bookings || []).map((booking) => ({
+            title: booking.bookingCode || 'Booking',
+            meta: [booking.customerName, booking.phone, booking.serviceType || booking.device].filter(Boolean).join(' - '),
             to: '/admin/bookings'
-          }));
-        const invoiceResults = (invoices.invoices || [])
-          .filter((invoice) => includes(getInvoiceDisplayId(invoice)) || includes(invoice.invoiceNumber) || includes(invoice.customerId?.name))
-          .map((invoice) => ({
-            type: 'Invoice',
+          }))
+        },
+        {
+          label: 'Work Orders',
+          items: (workOrders.workOrders || workOrders.data || []).map((order) => ({
+            title: getWorkOrderDisplayId(order),
+            meta: [order.customerId?.name || order.customerName, order.serviceType || order.device, order.status].filter(Boolean).join(' - '),
+            to: `/admin/work-orders/${order.id || order._id}`
+          }))
+        },
+        {
+          label: 'Invoices',
+          items: (invoices.invoices || []).map((invoice) => ({
             title: getInvoiceDisplayId(invoice),
-            meta: invoice.customerId?.name || 'Billing',
+            meta: [invoice.customerId?.name || invoice.customerName, invoice.status, currency(invoice.total ?? invoice.totalAmount)].filter(Boolean).join(' - '),
             to: '/admin/invoices'
-          }));
-        const partResults = (inventory.parts || [])
-          .filter((part) => includes(part.partName) || includes(part.category))
-          .map((part) => ({
-            type: 'Part',
-            title: part.partName,
-            meta: `${part.available || 0} available`,
+          }))
+        },
+        {
+          label: 'Payments',
+          items: (payments.payments || []).map((payment) => {
+            const invoiceId = payment.invoiceId?.id || payment.invoiceId?._id || payment.invoiceId;
+            return {
+              title: getPaymentDisplayId(payment),
+              meta: [payment.customerId?.name, payment.method, currency(payment.paidAmount ?? payment.amount)].filter(Boolean).join(' - '),
+              to: invoiceId ? `/admin/payments?invoiceId=${encodeURIComponent(invoiceId)}` : '/admin/payments'
+            };
+          })
+        },
+        {
+          label: 'Products / Parts',
+          items: (inventory.parts || []).map((part) => ({
+            title: part.partName || part.sku || 'Part',
+            meta: [part.sku, part.category, `${Number(part.available || 0)} available`].filter(Boolean).join(' - '),
             to: '/admin/parts'
-          }));
-        setResults([...customerResults, ...bookingResults, ...invoiceResults, ...partResults].slice(0, 8));
-      } finally {
-        setLoading(false);
-      }
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [query, request, role]);
+          }))
+        }
+      ].map((group) => ({ ...group, items: group.items.slice(0, 5) })).filter((group) => group.items.length);
+      setResultGroups(groups);
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [debouncedQuery, role]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handlePointerDown(event) {
+      if (searchRef.current?.contains(event.target)) return;
+      setOpen(false);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [open]);
+
+  function firstResult() {
+    return resultGroups.find((group) => group.items.length)?.items[0] || null;
+  }
 
   function openResult(result) {
+    if (!result?.to) return;
     setQuery('');
-    setResults([]);
+    setDebouncedQuery('');
+    setResultGroups([]);
+    setOpen(false);
     navigate(result.to);
   }
 
   return (
-    <div className="relative w-full max-w-xl">
+    <form
+      ref={searchRef}
+      className="relative w-full max-w-xl"
+      role="search"
+      onSubmit={(event) => {
+        event.preventDefault();
+        openResult(firstResult());
+      }}
+    >
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
       <input
+        type="search"
         className="input h-11 pl-9 pr-10"
         value={query}
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          if (event.target.value.trim().length >= 2) setOpen(true);
+        }}
+        onFocus={() => {
+          if (debouncedQuery.length >= 2) setOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            openResult(firstResult());
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            setOpen(false);
+          }
+        }}
         placeholder="Search customers, phone, invoice, booking, parts"
       />
       {loading ? <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-[var(--brand)]" /> : null}
-      {query.trim().length >= 2 ? (
+      {open && debouncedQuery.length >= 2 ? (
         <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 overflow-hidden rounded-card border border-[var(--line)] bg-[#071426] shadow-2xl">
-          {results.length ? results.map((result) => (
-            <button key={`${result.type}-${result.title}-${result.to}`} className="block w-full px-4 py-3 text-left transition hover:bg-sky-400/10" onClick={() => openResult(result)}>
-              <span className="text-xs font-black uppercase text-[var(--brand)]">{result.type}</span>
-              <span className="mt-1 block font-bold">{result.title}</span>
-              <span className="block text-sm muted">{result.meta}</span>
-            </button>
-          )) : !loading ? <p className="px-4 py-3 text-sm muted">No matching records found.</p> : null}
+          {resultGroups.length ? resultGroups.map((group) => (
+            <div key={group.label} className="border-b border-white/10 last:border-b-0">
+              <p className="px-4 pt-3 text-[10px] font-black uppercase tracking-wider text-sky-200/75">{group.label}</p>
+              {group.items.map((result) => (
+                <button
+                  key={`${group.label}-${result.title}-${result.to}`}
+                  type="button"
+                  className="block w-full px-4 py-3 text-left transition hover:bg-sky-400/10"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => openResult(result)}
+                >
+                  <span className="block truncate font-bold text-slate-100">{result.title}</span>
+                  <span className="mt-0.5 block truncate text-sm muted">{result.meta || group.label}</span>
+                </button>
+              ))}
+            </div>
+          )) : !loading ? <p className="px-4 py-3 text-sm muted">No matching records found</p> : null}
         </div>
       ) : null}
-    </div>
+    </form>
   );
 }
 
@@ -465,6 +690,7 @@ function priorityForNotification(item) {
 function NotificationCenter({ role }) {
   const { request } = useAuth();
   const navigate = useNavigate();
+  const notificationRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -490,6 +716,27 @@ function NotificationCenter({ role }) {
     return () => clearInterval(timer);
   }, [request, role]);
 
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handlePointerDown(event) {
+      if (notificationRef.current?.contains(event.target)) return;
+      setOpen(false);
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
   async function markAllRead() {
     const unread = notifications.filter((item) => !item.read);
     await Promise.all(unread.map((item) => request(`/notifications/${item.id}/read`, { method: 'PATCH' }).catch(() => null)));
@@ -511,8 +758,14 @@ function NotificationCenter({ role }) {
   }
 
   return (
-    <div className="relative">
-      <button className="icon-button enterprise-top-icon relative h-11 w-11" onClick={() => setOpen((value) => !value)} aria-label="Open notifications">
+    <div className="relative" ref={notificationRef}>
+      <button
+        type="button"
+        className="icon-button enterprise-top-icon relative h-11 w-11"
+        onClick={() => setOpen((value) => !value)}
+        aria-label={open ? 'Close notifications' : 'Open notifications'}
+        aria-expanded={open}
+      >
         <Bell className="h-5 w-5" />
         {unreadCount ? <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">{unreadCount}</span> : null}
       </button>
@@ -523,7 +776,7 @@ function NotificationCenter({ role }) {
               <h2 className="text-base font-black">Notification Center</h2>
               <p className="mt-1 text-xs muted">Low stock, bookings, payments, service jobs, and reminders.</p>
             </div>
-            <button className="btn btn-secondary px-3 py-2 text-xs" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button>
+            <button type="button" className="btn btn-secondary px-3 py-2 text-xs" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button>
           </div>
           <div className="max-h-[70vh] overflow-y-auto p-3">
             {loading ? (

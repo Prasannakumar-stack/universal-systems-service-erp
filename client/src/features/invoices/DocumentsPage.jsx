@@ -186,11 +186,11 @@ export function DocumentsPage() {
   const { data, loading, error } = useResource(() => request(`/documents${query}`), [request, query]);
   useEffect(() => {
     setPage(1);
-  }, [type, status, customerSearch, dateFrom, dateTo]);
+  }, [type, status, debouncedSearch, dateFrom, dateTo]);
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
   const documents = (data.documents || data.data || []).filter((document) => {
-    const term = customerSearch.trim().toLowerCase();
+    const term = debouncedSearch.trim().toLowerCase();
     if (!term) return true;
     return `${document.customerId?.name || ''} ${document.customerId?.phone || ''} ${document.workOrderId?.device || ''} ${document.workOrderId?.issue || ''}`.toLowerCase().includes(term);
   });

@@ -32,7 +32,6 @@ import {
   customerFromOrder,
   customerPhone,
   customerTabs,
-  customerTypeLabel,
   customerWhatsAppHref,
   DashboardChart,
   dateInputValue,
@@ -129,6 +128,7 @@ import {
   useParams,
   useRef,
   useResource,
+  useDebouncedValue,
   UserRound,
   Users,
   useState,
@@ -173,6 +173,7 @@ export function CustomerProfilePage() {
   const { push } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   const [historySearch, setHistorySearch] = useState('');
+  const debouncedHistorySearch = useDebouncedValue(historySearch);
   const [historyStatus, setHistoryStatus] = useState('');
   const [historyServiceType, setHistoryServiceType] = useState('');
   const [historyDateFrom, setHistoryDateFrom] = useState('');
@@ -237,7 +238,7 @@ export function CustomerProfilePage() {
     || ''
   );
   const filteredServiceHistory = serviceHistory.filter((order) => {
-    const searchText = historySearch.trim().toLowerCase();
+    const searchText = debouncedHistorySearch.trim().toLowerCase();
     if (searchText) {
       const text = `${getWorkOrderDisplayId(order)} ${order.serviceType || ''} ${order.service || ''} ${order.device || ''} ${order.issue || ''} ${technicianNameForOrder(order)}`.toLowerCase();
       if (!text.includes(searchText)) return false;
@@ -359,11 +360,12 @@ export function CustomerProfilePage() {
     .toUpperCase();
   const customerDisplayId = getCustomerDisplayId(customer) || notAdded;
   const joinedDate = formatDisplayDate(customer.createdAt);
-  const customerTypeValue = customerTypeLabel(customer) || notAdded;
+  const rawCustomerType = String(customer.customerType || '').trim();
+  const customerTypeValue = rawCustomerType || notAdded;
   const formattedLastServiceDate = formatReadableDate(lastServiceDate);
   const amcStatus = customer.amcStatus || noAmcAdded;
   const warrantyStatus = customer.warrantyStatus || (customer.warrantyItems?.length ? `${customer.warrantyItems.length} active item${customer.warrantyItems.length === 1 ? '' : 's'}` : noWarrantyAdded);
-  const showVipBadge = totalSpent > 1000;
+  const showCustomerTypeBadge = Boolean(rawCustomerType);
   const paymentLink = `/admin/payments${pendingInvoice ? `?invoiceId=${recordId(pendingInvoice)}` : ''}`;
   const bookingPrefillLink = useMemo(() => {
     const params = new URLSearchParams({ openBooking: '1' });
@@ -373,7 +375,7 @@ export function CustomerProfilePage() {
     return `/admin/bookings?${params.toString()}`;
   }, [customer.address, customer.name, customer.phone]);
   const hasHistoryFilters = Boolean(historySearch || historyStatus || historyServiceType || historyDateFrom || historyDateTo);
-  const currentCustomerType = customer.customerType || customer.type || customer.category || '';
+  const currentCustomerType = rawCustomerType;
   const profileDetails = [
     { label: 'Phone', value: customer.phone || notAdded, copyValue: customer.phone },
     { label: 'Address', value: customer.address || notAdded },
@@ -544,7 +546,7 @@ export function CustomerProfilePage() {
               <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Customer 360</p>
               <div className="mt-1 flex min-w-0 max-w-5xl flex-wrap items-start gap-3">
                 <h1 className={`line-clamp-2 max-w-full whitespace-normal break-words font-black tracking-tight text-white ${isLongCustomerName ? 'text-2xl leading-tight sm:text-3xl' : 'text-3xl leading-tight sm:text-4xl sm:leading-[1.08]'}`}>{customerNameText}</h1>
-                {showVipBadge ? <span className="inline-flex shrink-0 items-center rounded-full border border-amber-300/40 bg-amber-400/15 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.18)]">VIP Customer</span> : null}
+                {showCustomerTypeBadge ? <span className="inline-flex shrink-0 items-center rounded-full border border-amber-300/40 bg-amber-400/15 px-3 py-1 text-xs font-black uppercase tracking-wide text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.18)]">{rawCustomerType.toUpperCase()}</span> : null}
               </div>
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium text-slate-400">
                 <span className="text-slate-300">{customer.phone || notAdded}</span>
@@ -556,14 +558,8 @@ export function CustomerProfilePage() {
               </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-            {whatsappPhone ? (
-              <button className="btn btn-secondary h-10 px-4" type="button" onClick={openWhatsappPreview}><PhoneCallIcon className="h-4 w-4" />WhatsApp</button>
-            ) : (
-              <button className="btn btn-secondary h-10 px-4" type="button" onClick={notifyPhoneUnavailable}><PhoneCallIcon className="h-4 w-4" />WhatsApp</button>
-            )}
-            <Link className="btn btn-primary h-10 px-4" to={bookingPrefillLink}><Plus className="h-4 w-4" />Create Booking</Link>
-            <button className="btn btn-secondary h-10 px-4" type="button" onClick={notifyComingSoon}><Wrench className="h-4 w-4" />Create Service Job</button>
+          <div className="customer-hero-actions flex flex-wrap items-center gap-2 xl:justify-end">
+            <Link className="btn btn-primary customer-create-booking-btn h-10 px-4" to={bookingPrefillLink}><Plus className="h-4 w-4" />Create Booking</Link>
           </div>
         </div>
       </section>

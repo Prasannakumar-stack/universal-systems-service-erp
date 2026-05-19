@@ -167,7 +167,7 @@ export function AuditLogsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [moduleName, actionName, userSearch, dateFrom, dateTo]);
+  }, [moduleName, actionName, debouncedSearch, dateFrom, dateTo]);
 
   const hasActiveFilters = Boolean(moduleName || actionName || userSearch.trim() || dateFrom || dateTo);
 
@@ -191,10 +191,17 @@ export function AuditLogsPage() {
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
-  const jsonText = (value, emptyText) => (value == null || (typeof value === 'object' && !Object.keys(value).length) ? emptyText : JSON.stringify(value, null, 2));
+  const jsonText = (value, emptyText) => {
+    if (value == null || (typeof value === 'object' && !Object.keys(value).length)) return emptyText;
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return emptyText;
+    }
+  };
   const logs = (data.logs || data.data || []).filter((log) => {
     const userText = `${log.userId?.name || ''} ${log.userId?.username || ''}`.toLowerCase();
-    const matchesUser = !userSearch.trim() || userText.includes(userSearch.trim().toLowerCase());
+    const matchesUser = !debouncedSearch.trim() || userText.includes(debouncedSearch.trim().toLowerCase());
     const created = new Date(log.createdAt);
     const matchesFrom = !dateFrom || created >= new Date(dateFrom);
     const matchesTo = !dateTo || created <= new Date(`${dateTo}T23:59:59`);
@@ -300,6 +307,10 @@ export function AuditLogsPage() {
                   </div>
                 ))}
               </div>
+              <div className="audit-human-summary mt-5">
+                <p className="label">Summary</p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-slate-100">{humanAuditSummary(selectedLog)}</p>
+              </div>
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
                 <div>
                   <p className="label mb-2">Before</p>
@@ -385,4 +396,42 @@ function ModuleBadge({ moduleName }) {
 
 function auditSummaryLine(log) {
   return `${humanActionLabel(log?.action)} by ${log?.userId?.name || log?.userId?.username || 'System'} on ${formatDate(log?.createdAt)}.`;
+}
+
+function auditSafeObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function firstAuditValue(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== '');
+}
+
+function humanAuditSummary(log) {
+  const after = auditSafeObject(log?.after);
+  const before = auditSafeObject(log?.before);
+  const user = log?.userId?.name || log?.userId?.username || 'Admin';
+  const action = humanActionLabel(log?.action);
+  const moduleName = humanModuleLabel(log?.module);
+  const invoiceNumber = firstAuditValue(after.invoiceNumber, before.invoiceNumber, log?.invoiceNumber);
+  const amount = firstAuditValue(after.amount, after.total, after.totalAmount, after.paidAmount, before.amount, log?.amount);
+  const partName = firstAuditValue(after.partName, after.name, before.partName, before.name, log?.partName);
+  const workOrderId = firstAuditValue(after.workOrderId, before.workOrderId, log?.workOrderId, log?.recordId);
+
+  if (log?.action === 'invoice_generated') {
+    const invoiceLabel = invoiceNumber || 'Invoice';
+    const amountText = amount != null ? ` for ${currency(amount)}` : '';
+    return `${invoiceLabel} was generated${amountText} by ${user}.`;
+  }
+
+  if (log?.action === 'service_charge_updated') {
+    return `Service charge was updated by ${user}.`;
+  }
+
+  if (log?.action === 'part_used') {
+    const partText = partName ? `${partName} was` : 'Part was';
+    const workOrderText = workOrderId ? ` in work order ${workOrderId}` : ' in the work order';
+    return `${partText} added/updated${workOrderText} by ${user}.`;
+  }
+
+  return `${user} performed ${action} in ${moduleName} module.`;
 }

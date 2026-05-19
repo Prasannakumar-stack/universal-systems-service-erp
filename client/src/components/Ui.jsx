@@ -28,7 +28,16 @@ export function SearchBox({ value, onChange, placeholder = 'Search' }) {
   return (
     <label className="relative block">
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
-      <input className="input pl-9" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+      <input
+        type="search"
+        className="input pl-9"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.preventDefault();
+        }}
+        placeholder={placeholder}
+      />
     </label>
   );
 }

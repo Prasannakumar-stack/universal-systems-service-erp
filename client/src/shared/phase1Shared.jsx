@@ -129,16 +129,23 @@ export function useResource(load, deps = []) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const hasLoadedRef = useRef(false);
+  const requestIdRef = useRef(0);
 
   const reload = useCallback(async (options = {}) => {
-    if (!options.silent) setLoading(true);
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    if (!options.silent && !hasLoadedRef.current) setLoading(true);
     setError('');
     try {
-      setData(await load());
+      const nextData = await load();
+      if (requestIdRef.current !== requestId) return;
+      setData(nextData);
+      hasLoadedRef.current = true;
     } catch (err) {
-      setError(err.message);
+      if (requestIdRef.current === requestId) setError(err.message);
     } finally {
-      setLoading(false);
+      if (requestIdRef.current === requestId) setLoading(false);
     }
   }, deps);
 

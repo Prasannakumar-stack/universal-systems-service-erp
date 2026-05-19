@@ -170,12 +170,12 @@ export function InventoryPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, category, stockStatus, sortBy]);
+  }, [debouncedSearch, category, stockStatus, sortBy]);
 
   const parts = data?.parts || data?.data || [];
   const categories = useMemo(() => (data?.categories?.length ? data.categories : Array.from(new Set(parts.map((part) => part.category || 'General'))).sort()), [data?.categories, parts]);
   const filteredParts = useMemo(() => {
-    const term = search.trim().toLowerCase();
+    const term = debouncedSearch.trim().toLowerCase();
     const rows = parts.filter((part) => {
       const matchesSearch = !term || `${part.partName} ${part.category} ${part.sku || ''} ${part.brand || ''}`.toLowerCase().includes(term);
       const matchesCategory = !category || part.category === category;
@@ -187,7 +187,7 @@ export function InventoryPage() {
       if (sortBy === 'value') return (Number(b.onHand || 0) * Number(b.costPrice || 0)) - (Number(a.onHand || 0) * Number(a.costPrice || 0));
       return String(a.partName || '').localeCompare(String(b.partName || ''));
     });
-  }, [parts, search, category, stockStatus, sortBy]);
+  }, [parts, debouncedSearch, category, stockStatus, sortBy]);
   const totals = useMemo(() => data?.summary || ({
     totalParts: parts.length,
     lowStock: parts.filter((part) => inventoryStockStatus(part) === 'low').length,

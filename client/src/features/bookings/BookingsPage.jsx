@@ -218,7 +218,7 @@ export function BookingsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, status, serviceType, source]);
+  }, [debouncedSearch, status, serviceType, source]);
 
   useEffect(() => {
     if (customerBookingSeed.open) setFormOpen(true);

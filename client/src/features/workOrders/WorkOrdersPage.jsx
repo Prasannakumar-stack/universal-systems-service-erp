@@ -224,15 +224,15 @@ export function WorkOrdersPage({ role = 'admin' }) {
   const location = useLocation();
   const statusParam = useMemo(() => new URLSearchParams(location.search).get('status') || '', [location.search]);
   const priorityParam = useMemo(() => new URLSearchParams(location.search).get('priority') || '', [location.search]);
+  const technicianIdParam = useMemo(() => new URLSearchParams(location.search).get('technicianId') || '', [location.search]);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState(statusParam);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [technicianId, setTechnicianId] = useState('');
+  const [technicianId, setTechnicianId] = useState(technicianIdParam);
   const [serviceType, setServiceType] = useState('');
   const [source, setSource] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
-  const [techFilter, setTechFilter] = useState('Today');
   const [technicians, setTechnicians] = useState([]);
   const [page, setPage] = useState(1);
   const limit = 10;
@@ -240,13 +240,13 @@ export function WorkOrdersPage({ role = 'admin' }) {
   const query = useMemo(() => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
-    if (role === 'admin' && status) params.set('status', status);
+    if (status) params.set('status', status);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
     if (role === 'admin' && technicianId) params.set('technicianId', technicianId);
     if (serviceType) params.set('serviceType', serviceType);
     if (source) params.set('source', normalizeSourceLabel(source));
-    if (role === 'admin' && priorityFilter) params.set('priority', priorityFilter);
+    if (priorityFilter) params.set('priority', priorityFilter);
     return params.toString() ? `?${params}` : '';
   }, [dateFrom, dateTo, debouncedSearch, limit, page, priorityFilter, role, serviceType, source, status, technicianId]);
   const { data, loading, error, reload } = useResource(() => request(`/work-orders${query}`), [request, query]);
@@ -261,12 +261,16 @@ export function WorkOrdersPage({ role = 'admin' }) {
   }, [priorityParam, role]);
 
   useEffect(() => {
+    if (role === 'admin') setTechnicianId(technicianIdParam);
+  }, [role, technicianIdParam]);
+
+  useEffect(() => {
     if (role === 'admin') request('/users?role=technician&active=true&limit=100').then((result) => setTechnicians(result.users.filter((user) => user.role === 'technician' && user.active))).catch(() => {});
   }, [request, role]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, status, dateFrom, dateTo, technicianId, serviceType, source, priorityFilter]);
+  }, [debouncedSearch, status, dateFrom, dateTo, technicianId, serviceType, source, priorityFilter]);
 
   async function autoAssign(id) {
     try {
@@ -305,7 +309,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
   }
 
   const workOrders = Array.isArray(data?.workOrders) ? data.workOrders : Array.isArray(data?.data) ? data.data : [];
-  const searchTerm = search.trim();
+  const searchTerm = debouncedSearch.trim();
   const filteredWorkOrders = useMemo(() => {
     let rows = searchTerm
       ? workOrders.filter((order) => matchesDisplaySearch(searchTerm, workOrderSearchText(order)))
@@ -323,22 +327,6 @@ export function WorkOrdersPage({ role = 'admin' }) {
 
   if (loading) return <div className="work-orders-page mx-auto max-w-[1920px]"><LoadingBlock /></div>;
   if (error) return <div className="work-orders-page mx-auto max-w-[1920px]"><ErrorBlock message={error} /></div>;
-
-  if (role === 'technician') {
-    return (
-      <>
-        <TechnicianJobsView
-          jobs={workOrders}
-          search={search}
-          setSearch={setSearch}
-          filter={techFilter}
-          setFilter={setTechFilter}
-          quickStatus={quickStatus}
-        />
-        <PaginationControls pagination={pagination} onPageChange={setPage} />
-      </>
-    );
-  }
 
   return (
     <div className="work-orders-page mx-auto max-w-[1920px] space-y-6">
@@ -427,7 +415,9 @@ export function WorkOrdersPage({ role = 'admin' }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--line)]">
-              {visibleWorkOrders.map((order) => (
+              {visibleWorkOrders.map((order) => {
+                const phone = customerPhone(order);
+                return (
                 <tr
                   key={order.id}
                   className="work-orders-table-row transition-colors duration-150 hover:bg-sky-400/[0.05] hover:shadow-[inset_2px_0_0_rgba(56,189,248,0.45)]"
@@ -474,6 +464,16 @@ export function WorkOrdersPage({ role = 'admin' }) {
                   </td>
                   <td className={`${workOrdersTdClass} work-orders-cell-actions w-[170px] min-w-[170px] !whitespace-normal px-4 text-center align-middle`}>
                     <div className="work-orders-actions flex items-center justify-center gap-1.5">
+                      {role === 'technician' ? (
+                        <>
+                          <a className={`btn btn-secondary h-10 w-10 p-0 ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)} aria-label="Call customer">
+                            <PhoneCallIcon className="h-4 w-4" />
+                          </a>
+                          <a className={`btn btn-secondary h-10 w-10 p-0 ${phone ? '' : 'pointer-events-none opacity-50'}`} href={phone ? technicianWhatsAppHref(order) : '#'} target="_blank" rel="noreferrer" aria-label="WhatsApp customer">
+                            <Send className="h-4 w-4" />
+                          </a>
+                        </>
+                      ) : null}
                       <Link className={workOrdersDetailsBtnClass} to={`${base}/${order.id}`}>Details</Link>
                       {role === 'admin' && !order.technicianId ? (
                         <button type="button" className={workOrdersAssignBtnClass} onClick={() => autoAssign(order.id)}>Assign</button>
@@ -481,7 +481,8 @@ export function WorkOrdersPage({ role = 'admin' }) {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

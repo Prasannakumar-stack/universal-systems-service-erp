@@ -70,7 +70,6 @@ import {
   Link,
   Loader2,
   LoadingBlock,
-  monthKey,
   MovementTypeBadge,
   normalizeReportSection,
   NotificationsPanel,
@@ -272,12 +271,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       };
     });
 
-    const revenueByMonth = Object.values(allPayments.reduce((map, payment) => {
-      const key = monthKey(payment.createdAt);
-      if (!map[key]) map[key] = { month: key, revenue: 0 };
-      map[key].revenue += Number(payment.paidAmount || payment.amount || 0);
-      return map;
-    }, {})).slice(-12);
+    const revenueByMonth = buildRevenueByMonth(payments);
 
     const paymentMethodRows = Object.entries(payments.reduce((map, payment) => {
       const method = payment.method || 'Other';
@@ -510,8 +504,6 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
-  const businessHasData = hasBusinessReportData(report);
-  const businessInsights = buildBusinessInsights(report);
   const topService = report.operations.serviceTypeRows[0];
   const technicianSummary = summarizeTechnicians(report.technicians);
   const bestTechnician = report.technicians
@@ -552,25 +544,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       ) : null}
 
       {activeSection === 'main' ? (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[.85fr_1.15fr]">
-          <ReportPanel title="Business Insights" subtitle="Action signals from the current report period">
-            {!businessHasData ? (
-              <EmptyState icon={BarChart} title="No business report data" message="Bookings, jobs, invoices, payments, inventory, customers, and AMC activity will appear here once recorded." />
-            ) : (
-              <div className="grid gap-3">
-                {businessInsights.map((item) => (
-                  <div key={item.title} className={`reports-insight-row reports-insight-${item.tone}`}>
-                    <item.icon className="h-4 w-4" />
-                    <div>
-                      <p className="font-black">{item.title}</p>
-                      <p className="mt-1 text-sm muted">{item.message}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ReportPanel>
-
+        <div className="mt-5">
           <ReportPanel
             title="Operations Summary"
             subtitle="Bookings, jobs, and current service workload"
@@ -586,7 +560,6 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
               <ReportMetricCard icon={CheckCircle2} label="Delivered Jobs" value={report.operations.delivered} helper="Returned to customer" tone="green" compact />
               <ReportMetricCard icon={AlertTriangle} label="Returned Jobs" value={report.operations.returned} helper="Needs review" tone="red" compact />
             </div>
-            <p className="reports-footer-insight mt-4">Average completion time: <b>{report.operations.averageCompletion}</b></p>
           </ReportPanel>
         </div>
       ) : null}
@@ -617,12 +590,11 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
           <ReportPanel
             title="Technician Performance Report"
             subtitle={bestTechnician ? `Best performer: ${bestTechnician.technician.name} at ${bestTechnician.completionRate}` : 'Assigned, completed, and active work by technician'}
-            action={<Link className="btn btn-secondary reports-compact-button" to="/admin/work-orders?view=technicians">Technician Jobs</Link>}
           >
             {!report.technicians.length ? <EmptyState icon={Users} title="No technician data" message="Technician reports will appear after jobs are assigned." /> : (
               <div className="table-wrap reports-table-wrap bg-[var(--surface)]">
                 <table className="data-table reports-technician-table">
-                  <thead><tr><th>Technician</th><th>Assigned</th><th>Completed</th><th>In Progress</th><th>Awaiting Parts</th><th>Completion Rate</th><th>Last Activity</th><th className="text-right">Action</th></tr></thead>
+                  <thead><tr><th>Technician</th><th>Assigned</th><th>Completed</th><th>In Progress</th><th>Awaiting Parts</th><th>Completion Rate</th><th>Last Activity</th><th className="text-center">Action</th></tr></thead>
                   <tbody>
                     {report.technicians.map((row) => {
                       const isBest = bestTechnician && recordId(bestTechnician.technician) === recordId(row.technician);
@@ -638,7 +610,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
                           <td className="reports-number-cell">{row.awaitingParts}</td>
                           <td><CompletionRateBadge rate={row.completionRate} average={row.averageCompletion} /></td>
                           <td>{row.lastActivity ? formatDate(row.lastActivity) : <span className="muted">No activity</span>}</td>
-                          <td className="text-right"><Link className="btn btn-secondary reports-table-button" to={`/admin/work-orders?technicianId=${recordId(row.technician)}`}>View Jobs</Link></td>
+                          <td className="text-center"><Link className="btn btn-secondary reports-table-button" to={`/admin/work-orders?technicianId=${recordId(row.technician)}`}>View Jobs</Link></td>
                         </tr>
                       );
                     })}
@@ -692,7 +664,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
                       <Bar dataKey="revenue" fill="#22c55e" radius={[8, 8, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                ) : <EmptyState icon={BarChart} title="No chart data" message="Revenue trend will appear after payment records are available." />}
+                ) : <EmptyState icon={BarChart} title="No revenue data for selected period" message="Collected revenue will appear here once payments are recorded in this period." />}
               </div>
             </ReportPanel>
 
@@ -803,7 +775,7 @@ function ReportsPremiumRangeBar({ range, setRange, customFrom, setCustomFrom, cu
           <input className="input" type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} />
         </>
       ) : <><div className="hidden lg:block" /><div className="hidden lg:block" /></>}
-      <button type="button" className="btn btn-secondary reports-compact-button" disabled={!hasRangeFilter} onClick={onReset}>Reset Filters</button>
+      <button type="button" className="btn btn-secondary reports-compact-button reports-reset-filter-button" disabled={!hasRangeFilter} onClick={onReset}>Reset Filters</button>
       <button type="button" className="btn btn-secondary reports-compact-button" onClick={onExport}><Download className="h-4 w-4" />Export CSV</button>
       <button type="button" className="btn btn-secondary reports-compact-button" onClick={() => window.print()}><FileText className="h-4 w-4" />Print</button>
     </div>
@@ -853,6 +825,33 @@ function ReportProgressRow({ label, value, total, displayValue = null }) {
       </div>
     </div>
   );
+}
+
+function paymentCollectedAmount(payment = {}) {
+  return Number(payment.paidAmount ?? payment.amount ?? payment.totalPaid ?? payment.value ?? 0) || 0;
+}
+
+function paymentCollectedDate(payment = {}) {
+  return payment.paymentDate || payment.paidAt || payment.createdAt || payment.updatedAt;
+}
+
+function buildRevenueByMonth(payments = []) {
+  const rowsByMonth = payments.reduce((map, payment) => {
+    const amount = paymentCollectedAmount(payment);
+    const date = new Date(paymentCollectedDate(payment));
+    if (!amount || !Number.isFinite(date.getTime())) return map;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    if (!map[key]) {
+      map[key] = {
+        month: date.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
+        monthSort: key,
+        revenue: 0
+      };
+    }
+    map[key].revenue += amount;
+    return map;
+  }, {});
+  return Object.values(rowsByMonth).sort((a, b) => a.monthSort.localeCompare(b.monthSort)).slice(-12);
 }
 
 function CompletionRateBadge({ rate, average }) {

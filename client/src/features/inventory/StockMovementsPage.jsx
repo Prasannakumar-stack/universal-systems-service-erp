@@ -178,7 +178,7 @@ export function StockMovementsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, movementType, partId, dateFrom, dateTo]);
+  }, [debouncedSearch, movementType, partId, dateFrom, dateTo]);
 
   async function submit(event) {
     event.preventDefault();
@@ -205,7 +205,7 @@ export function StockMovementsPage() {
 
   const movements = data.movements || data.data || [];
   const filteredMovements = movements.filter((movement) => {
-    const term = search.trim().toLowerCase();
+    const term = debouncedSearch.trim().toLowerCase();
     if (!term) return true;
     return [
       movement.partId?.partName,
@@ -283,7 +283,7 @@ export function StockMovementsPage() {
       <div className="inventory-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {ledgerKpis.map((item) => <LedgerMetricCard key={item.label} {...item} />)}
       </div>
-      <div className="surface inventory-filter-bar mb-5 grid gap-3 p-4 xl:grid-cols-[minmax(280px,1fr)_150px_220px_155px_155px_auto]">
+      <div className="surface inventory-filter-bar mb-5 grid items-center gap-3 p-4 xl:grid-cols-[minmax(280px,1fr)_150px_220px_155px_155px_auto]">
         <div className="min-w-0">
           <SearchBox value={search} onChange={setSearch} placeholder="Search part, source, user, note" />
         </div>
@@ -295,18 +295,18 @@ export function StockMovementsPage() {
           <option value="">All parts</option>
           {data.parts.map((part) => <option key={part.id} value={part.id}>{part.partName}</option>)}
         </select>
-        <label className="relative block">
+        <label className="stock-date-filter relative block">
           <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
           <input className="input pl-10" type="date" aria-label="Start date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         </label>
-        <label className="relative block">
+        <label className="stock-date-filter relative block">
           <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
           <input className="input pl-10" type="date" aria-label="End date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
         </label>
         <button
           type="button"
-          className="btn btn-secondary h-10 whitespace-nowrap px-4"
-          disabled={!hasLedgerFilters}
+          className="btn btn-secondary stock-reset-filters-button h-10 whitespace-nowrap px-4"
+          data-active={hasLedgerFilters ? 'true' : 'false'}
           onClick={() => {
             setSearch('');
             setMovementType('');

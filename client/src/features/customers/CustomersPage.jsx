@@ -173,7 +173,7 @@ export function CustomersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, dateFrom, dateTo, customerType]);
+  }, [debouncedSearch, dateFrom, dateTo, customerType]);
 
   const customers = data?.customers || [];
   const workOrders = data?.workOrders || [];
@@ -209,7 +209,7 @@ export function CustomersPage() {
   const visibleCustomers = customers.filter((customer) => {
     const metrics = metricsByCustomer.get(recordId(customer)) || { jobs: [], invoices: [] };
     if (customerType && customerTypeLabel(customer) !== customerType) return false;
-    const searchText = search.trim().toLowerCase();
+    const searchText = debouncedSearch.trim().toLowerCase();
     if (!searchText) return true;
     return matchesDisplaySearch(searchText, customerSearchText(customer, metrics));
   });
@@ -221,38 +221,43 @@ export function CustomersPage() {
   return (
     <>
       <PageHeader title="Customers" eyebrow="CRM">Manage customer profiles, service history, devices, invoices, and payments.</PageHeader>
-      <div className="surface mb-5 flex flex-col gap-3 p-4 lg:flex-row lg:items-center">
-        <div className="min-w-0 flex-1">
-          <SearchBox value={search} onChange={setSearch} placeholder="Search customer ID, name, phone, work order, invoice, payment" />
+      <div className="surface customers-filter-panel mb-5 p-4">
+        <div className="customers-filter-row">
+          <div className="customers-search-control min-w-0">
+            <SearchBox value={search} onChange={setSearch} placeholder="Search customer ID, name, phone, work order, invoice, payment" />
+          </div>
+          <div className="customers-date-filter-group">
+            <label className="relative block">
+              <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
+              <input className="input pl-10" type="date" aria-label="Start date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+            </label>
+            <label className="relative block">
+              <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
+              <input className="input pl-10" type="date" aria-label="End date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+            </label>
+            <button
+              className="btn customers-clear-filter-button h-10 shrink-0 border border-white/10 bg-white/[0.045] px-3.5 text-xs font-black text-sky-100 shadow-[0_0_18px_rgba(56,189,248,0.08)] hover:border-sky-300/35 hover:bg-sky-400/10 hover:text-white"
+              type="button"
+              aria-label="Clear filters"
+              title="Clear filters"
+              data-active={hasActiveFilters ? 'true' : 'false'}
+              onClick={() => {
+                setSearch('');
+                setCustomerType('');
+                setDateFrom('');
+                setDateTo('');
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear Filter
+            </button>
+          </div>
         </div>
         {hasCustomerTypes ? (
-          <select className="input lg:w-44 lg:shrink-0" value={customerType} onChange={(event) => setCustomerType(event.target.value)}>
+          <select className="input customers-type-filter-control" value={customerType} onChange={(event) => setCustomerType(event.target.value)}>
             <option value="">All customer types</option>
             {['Individual', 'Business', 'AMC Customer'].map((item) => <option key={item}>{item}</option>)}
           </select>
-        ) : null}
-        <label className="relative block lg:w-40 lg:shrink-0">
-          <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
-          <input className="input pl-10" type="date" aria-label="Start date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        </label>
-        <label className="relative block lg:w-40 lg:shrink-0">
-          <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
-          <input className="input pl-10" type="date" aria-label="End date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-        </label>
-        {hasActiveFilters ? (
-          <button
-            className="btn h-10 shrink-0 border border-white/10 bg-white/[0.045] px-3.5 text-xs font-black text-sky-100 shadow-[0_0_18px_rgba(56,189,248,0.08)] hover:border-sky-300/35 hover:bg-sky-400/10 hover:text-white"
-            type="button"
-            onClick={() => {
-              setSearch('');
-              setCustomerType('');
-              setDateFrom('');
-              setDateTo('');
-            }}
-          >
-            <X className="h-3.5 w-3.5" />
-            Reset Filter
-          </button>
         ) : null}
       </div>
       {!visibleCustomers.length ? <EmptyState title="No customers found" message="Customer records matching your filters will appear here." action={<Link className="btn btn-primary" to="/admin/bookings">Create Booking</Link>} /> : (

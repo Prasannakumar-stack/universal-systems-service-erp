@@ -1,3 +1,4 @@
+import { Mail } from 'lucide-react';
 import {
   AlertTriangle,
   amcContractTypes,
@@ -126,6 +127,7 @@ import {
   useParams,
   useRef,
   useResource,
+  useDebouncedValue,
   UserRound,
   Users,
   useState,
@@ -143,122 +145,250 @@ import {
 
 export function TechnicianPanelPage() {
   const { request } = useAuth();
-  const { data, loading } = useResource(() => request('/work-orders?limit=100').catch(() => ({ workOrders: [] })), [request]);
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const { data, loading, error } = useResource(async () => {
+    const [usersResult, workOrdersResult] = await Promise.all([
+      request('/users?role=technician&limit=100').catch(() => ({ users: [] })),
+      request('/work-orders?limit=100').catch(() => ({ workOrders: [] }))
+    ]);
+    return {
+      users: usersResult.users || [],
+      workOrders: workOrdersResult.workOrders || []
+    };
+  }, [request]);
+  const technicians = useMemo(
+    () => (data?.users || [])
+      .filter((user) => user.role === 'technician')
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+    [data?.users]
+  );
   const workOrders = data?.workOrders || [];
-  const assignedJobs = workOrders.filter((job) => recordId(job.technicianId));
-  const inProgressJobs = workOrders.filter((job) => job.status === 'In Progress');
-  const awaitingPartsJobs = workOrders.filter((job) => job.status === 'Awaiting Parts');
-  const completedJobs = workOrders.filter((job) => ['Completed', 'Delivered'].includes(job.status));
-  const unassignedJobs = workOrders.filter((job) => !recordId(job.technicianId));
-  const recentActivity = [...workOrders]
-    .filter((job) => recordId(job.technicianId) || ['Completed', 'Delivered', 'In Progress', 'Awaiting Parts'].includes(job.status))
-    .sort((a, b) => new Date(b.updatedAt || b.completedAt || b.createdAt || 0) - new Date(a.updatedAt || a.completedAt || a.createdAt || 0))
-    .slice(0, 5);
+  const assignedJobCounts = useMemo(() => workOrders.reduce((map, job) => {
+    const technicianId = recordId(job.technicianId);
+    if (technicianId) map[technicianId] = (map[technicianId] || 0) + 1;
+    return map;
+  }, {}), [workOrders]);
+  const hasActiveFilters = Boolean(search.trim() || statusFilter || roleFilter);
+  const roleOptions = useMemo(() => {
+    const presentRoles = technicians.map(technicianRoleLabel).filter(Boolean);
+    return Array.from(new Set(['Technician', 'Senior Technician', ...presentRoles]));
+  }, [technicians]);
+  const visibleTechnicians = useMemo(() => {
+    const query = debouncedSearch.trim().toLowerCase();
+    return technicians.filter((tech) => {
+      const role = technicianRoleLabel(tech);
+      const status = tech.active ? 'Active' : 'Inactive';
+      const searchText = `${tech.name || ''} ${tech.phone || ''} ${tech.email || ''} ${tech.username || ''} ${recordId(tech) || ''}`.toLowerCase();
+      return (!query || searchText.includes(query))
+        && (!statusFilter || status === statusFilter)
+        && (!roleFilter || role === roleFilter);
+    });
+  }, [debouncedSearch, roleFilter, statusFilter, technicians]);
+  const totalAssignedJobs = technicians.reduce((sum, tech) => sum + (assignedJobCounts[recordId(tech)] || 0), 0);
+  const activeTechnicians = technicians.filter((tech) => tech.active).length;
+  const lowWorkloadTechnicians = technicians.filter((tech) => tech.active && (assignedJobCounts[recordId(tech)] || 0) <= 5).length;
+  const overloadedTechnicians = technicians.filter((tech) => tech.active && (assignedJobCounts[recordId(tech)] || 0) >= 6).length;
   const technicianKpis = [
-    { icon: UserRound, label: 'Assigned Jobs', value: assignedJobs.length, helper: 'Jobs with technicians', to: '/admin/work-orders?view=technicians', tone: 'blue' },
-    { icon: Wrench, label: 'In Progress', value: inProgressJobs.length, helper: 'Technicians working now', to: '/admin/work-orders?status=In%20Progress', tone: 'cyan' },
-    { icon: PackagePlus, label: 'Awaiting Parts', value: awaitingPartsJobs.length, helper: 'Parts needed to continue', to: '/admin/work-orders?status=Awaiting%20Parts', tone: 'amber' },
-    { icon: CheckCircle2, label: 'Completed Jobs', value: completedJobs.length, helper: 'Finished service jobs', to: '/admin/work-orders?status=Completed', tone: 'green' },
-    { icon: AlertTriangle, label: 'Unassigned Jobs', value: unassignedJobs.length, helper: 'Needs technician assignment', to: '/admin/work-orders', tone: 'red' }
+    { icon: Users, label: 'Total Technicians', value: technicians.length, helper: 'All technician accounts', tone: 'blue' },
+    { icon: CheckCircle2, label: 'Active Technicians', value: activeTechnicians, helper: 'Available for login', tone: 'green' },
+    { icon: ShieldCheck, label: 'Available / Low Workload', value: lowWorkloadTechnicians, helper: '0-5 assigned jobs', tone: 'cyan' },
+    { icon: Wrench, label: 'Assigned Jobs', value: totalAssignedJobs, helper: 'Linked to technicians', tone: 'blue' },
+    ...(overloadedTechnicians ? [{ icon: AlertTriangle, label: 'Overloaded Technicians', value: overloadedTechnicians, helper: '6+ assigned jobs', tone: 'amber' }] : [])
   ];
-  const panelLinks = [
-    { to: '/admin/technician-tasks', label: 'Technician Tasks', icon: UserRound, text: 'Open assigned task navigation for technician work.', cta: 'Open Tasks' },
-    { to: '/admin/work-orders?view=technicians', label: 'Assigned Work Orders', icon: BookOpenCheck, text: 'Review assigned service and repair jobs by technician.', cta: 'View Assigned' },
-    { to: '/admin/work-orders?status=Completed', label: 'Completed Jobs', icon: CheckCircle2, text: 'Check service jobs that have reached completion.', cta: 'View Completed' }
-  ];
+
+  function clearFilters() {
+    setSearch('');
+    setStatusFilter('');
+    setRoleFilter('');
+  }
 
   return (
     <div className="admin-control-page technician-panel-page">
-      <section className="admin-control-hero mb-5">
-        <div className="relative z-[1]">
-          <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">Operations</p>
-          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Technician Panel</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 muted">Technician work, assigned jobs, completed jobs, and service task navigation in one place.</p>
+      <section className="admin-control-hero technician-management-hero mb-5">
+        <div className="technician-hero-content">
+          <div className="relative z-[1] min-w-0">
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">Team Management</p>
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Staff / Technicians</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage technicians, availability, workload, and assigned service jobs.</p>
+          </div>
+          <div className="technician-hero-side">
+            <div className="technician-hero-illustration" aria-hidden="true">
+              <span className="technician-illustration-node technician-illustration-node-main"><Users className="h-6 w-6" /></span>
+              <span className="technician-illustration-node technician-illustration-node-a"><UserRound className="h-4 w-4" /></span>
+              <span className="technician-illustration-node technician-illustration-node-b"><UserRound className="h-4 w-4" /></span>
+              <span className="technician-illustration-line technician-illustration-line-a" />
+              <span className="technician-illustration-line technician-illustration-line-b" />
+            </div>
+            <button type="button" className="btn btn-primary technician-hero-add-button" disabled title="Add Technician is managed from Settings">
+              <Plus className="h-4 w-4" />
+              Add Technician
+            </button>
+          </div>
         </div>
       </section>
 
-      <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {technicianKpis.map((item) => <TechnicianHubMetric key={item.label} {...item} />)}
+      <div className="technician-kpi-grid mb-5">
+        {technicianKpis.map((item) => <TechnicianKpiCard key={item.label} {...item} />)}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {panelLinks.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link key={item.label} to={item.to} className="surface technician-nav-card lift-card block p-5">
-              <span className="admin-control-icon">
-                <Icon className="h-5 w-5" />
-              </span>
-              <h2 className="mt-4 text-xl font-black">{item.label}</h2>
-              <p className="mt-2 text-sm leading-6 muted">{item.text}</p>
-              <span className="mt-4 inline-flex min-h-[2.25rem] items-center rounded-card border border-sky-300/20 bg-sky-400/10 px-3 text-sm font-black text-sky-100">{item.cta}</span>
-            </Link>
-          );
-        })}
-      </div>
-
-      <div className="mt-5 grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
-        <section className="surface admin-control-card p-5">
+      <section className="surface admin-control-card p-5">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="admin-control-icon"><ClipboardList className="h-5 w-5" /></div>
+            <div className="admin-control-icon">
+              <Users className="h-5 w-5" />
+            </div>
             <div>
-              <h2 className="text-xl font-black">Technician Workflow</h2>
-              <p className="mt-1 text-sm muted">A simple service flow for technician operations.</p>
+              <h2 className="text-xl font-black">Technician List</h2>
+              <p className="mt-1 text-sm muted">Current technician accounts and assigned service-job counts.</p>
             </div>
           </div>
-          <div className="mt-5 grid gap-3">
-            {['Receive assigned job', 'Diagnose issue', 'Add parts/service updates', 'Complete job', 'Generate final document'].map((step, index) => (
-              <div key={step} className="workflow-step-row">
-                <span>{index + 1}</span>
-                <p>{step}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+          <span className="admin-role-badge">{technicians.length} technicians</span>
+        </div>
 
-        <section className="surface admin-control-card p-5">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-black">Recent Technician Activity</h2>
-              <p className="mt-1 text-sm muted">Latest technician-related work order updates from existing jobs.</p>
+        <div className="technician-filter-row mb-5">
+          <input className="input" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search technician by name, phone or email" />
+          <select className="input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="">All Status</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+          <select className="input" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
+            <option value="">All Roles</option>
+            {roleOptions.map((role) => <option key={role} value={role}>{role}</option>)}
+          </select>
+          <button type="button" className="btn btn-secondary admin-compact-button technician-clear-filter-button" disabled={!hasActiveFilters} onClick={clearFilters}>Clear Filters</button>
+        </div>
+
+        {loading ? (
+          <div className="rounded-card border border-white/10 bg-white/[0.035] p-4 text-sm muted">Loading technicians...</div>
+        ) : error ? (
+          <ErrorBlock message={error} />
+        ) : visibleTechnicians.length ? (
+          <div className="table-wrap admin-table-wrap bg-[var(--surface)]">
+            <table className="data-table technician-management-table technician-table">
+              <thead>
+                <tr>
+                  <th>TECHNICIAN</th>
+                  <th>CONTACT</th>
+                  <th>ROLE</th>
+                  <th>STATUS</th>
+                  <th>WORKLOAD</th>
+                  <th className="text-center">ASSIGNED JOBS</th>
+                  <th className="text-center">ACTION</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--line)]">
+                {visibleTechnicians.map((tech) => {
+                  const techId = recordId(tech);
+                  const assignedJobs = assignedJobCounts[techId] || 0;
+                  const workload = technicianWorkload(assignedJobs);
+                  const jobsPath = `/admin/work-orders?technicianId=${techId}`;
+                  return (
+                    <tr key={techId}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <div className="technician-avatar">
+                            {technicianInitials(tech)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-bold text-slate-100" title={tech.name}>{tech.name || 'Technician'}</p>
+                            <p className="text-xs muted">{tech.username || techId || 'Login not available'}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <p className="technician-contact-line font-bold text-slate-100">
+                          {tech.phone ? <PhoneCallIcon className="h-3.5 w-3.5" /> : null}
+                          <span>{tech.phone || 'No phone added'}</span>
+                        </p>
+                        <p className="technician-contact-line text-xs muted">
+                          {tech.email ? <Mail className="h-3.5 w-3.5" /> : null}
+                          <span>{tech.email || 'No email added'}</span>
+                        </p>
+                      </td>
+                      <td><span className="admin-role-badge">{technicianRoleLabel(tech)}</span></td>
+                      <td><TechnicianStatusPill active={tech.active} /></td>
+                      <td>
+                        <div className="technician-workload-stack">
+                          <span className={`technician-workload-badge technician-workload-${workload.tone}`}>{workload.label}</span>
+                          <span className="technician-workload-helper">{workload.helper}</span>
+                        </div>
+                      </td>
+                      <td className="text-center">
+                        {assignedJobs > 0 ? (
+                          <div className="technician-assigned-stack">
+                            <Link className="technician-assigned-count technician-assigned-link" to={jobsPath}>{assignedJobs}</Link>
+                          </div>
+                        ) : (
+                          <div className="technician-assigned-stack">
+                            <span className="technician-assigned-count">{assignedJobs}</span>
+                            <span className="technician-assigned-muted">No Jobs</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="text-center">
+                        <div className="technician-action-stack">
+                          {assignedJobs > 0 ? (
+                            <Link className="btn btn-secondary admin-table-button" to={jobsPath}>View Jobs</Link>
+                          ) : (
+                            <span className="technician-no-jobs-pill">No Jobs</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="technician-table-footer">
+              Showing {visibleTechnicians.length ? 1 : 0} to {visibleTechnicians.length} of {technicians.length} technicians
             </div>
-            <Link className="btn btn-secondary admin-compact-button" to="/admin/work-orders?view=technicians">View Jobs</Link>
           </div>
-          {loading ? (
-            <div className="rounded-card border border-white/10 bg-white/[0.035] p-4 text-sm muted">Loading technician activity...</div>
-          ) : recentActivity.length ? (
-            <div className="grid gap-3">
-              {recentActivity.map((job) => (
-                <Link key={recordId(job)} className="technician-activity-row" to={`/admin/work-orders/${recordId(job)}`}>
-                  <div className="min-w-0">
-                    <p className="truncate font-black text-slate-100" title={job.customerId?.name || job.customerName || getWorkOrderDisplayId(job)}>{job.customerId?.name || job.customerName || getWorkOrderDisplayId(job)}</p>
-                    <p className="mt-1 text-xs muted">{getWorkOrderDisplayId(job)} - {job.technicianId?.name || 'Unassigned technician'}</p>
-                  </div>
-                  <div className="text-right">
-                    <StatusBadge status={job.status} />
-                    <p className="mt-1 text-xs muted">{formatDate(job.updatedAt || job.completedAt || job.createdAt)}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <EmptyState icon={ClipboardList} title="No technician activity yet" message="Assigned jobs and completed service updates will appear here." />
-          )}
-        </section>
+        ) : (
+          <EmptyState icon={Users} title="No technicians found" message={hasActiveFilters ? 'Try clearing filters or add a technician.' : 'Technician accounts will appear here after they are created.'} action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={clearFilters}>Clear Filters</button> : null} />
+        )}
+      </section>
+    </div>
+  );
+}
+
+function TechnicianKpiCard({ icon: Icon, label, value, helper, tone = 'blue' }) {
+  return (
+    <div className={`technician-kpi-card technician-kpi-${tone}`}>
+      <div className="technician-kpi-icon"><Icon className="h-4 w-4" /></div>
+      <div className="min-w-0">
+        <p className="technician-kpi-label">{label}</p>
+        <p className="technician-kpi-value">{value}</p>
+        <p className="technician-kpi-helper">{helper}</p>
       </div>
     </div>
   );
 }
 
-function TechnicianHubMetric({ icon: Icon, label, value, helper, to, tone = 'blue' }) {
+function technicianInitials(technician = {}) {
+  const words = String(technician.name || technician.username || 'T').trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map((word) => word[0]).join('').toUpperCase() || 'T';
+}
+
+function technicianRoleLabel(technician = {}) {
+  if (technician.technicianTitle || technician.title || technician.designation) return technician.technicianTitle || technician.title || technician.designation;
+  if (technician.role === 'admin') return 'Admin';
+  return 'Technician';
+}
+
+function technicianWorkload(count = 0) {
+  if (count <= 0) return { label: 'Available', helper: '0 jobs', tone: 'available' };
+  if (count >= 6) return { label: 'Busy', helper: '6+ jobs', tone: 'busy' };
+  return { label: 'Normal', helper: '1-5 jobs', tone: 'normal' };
+}
+
+function TechnicianStatusPill({ active }) {
   return (
-    <Link to={to} className={`admin-metric-card admin-metric-${tone}`}>
-      <div className="admin-metric-icon"><Icon className="h-4 w-4" /></div>
-      <div className="min-w-0">
-        <p className="admin-metric-label">{label}</p>
-        <p className="admin-metric-value">{value}</p>
-        <p className="admin-metric-helper">{helper}</p>
-      </div>
-    </Link>
+    <span className={`admin-status-pill ${active ? 'admin-status-active' : 'admin-status-inactive'}`}>
+      {active ? 'Active' : 'Inactive'}
+    </span>
   );
 }

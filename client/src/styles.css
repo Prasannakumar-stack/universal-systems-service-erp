@@ -442,6 +442,15 @@ button:disabled {
     color-scheme: dark;
   }
 
+  .stock-movements-page .stock-date-filter,
+  .stock-movements-page .stock-date-filter .input {
+    width: 100%;
+  }
+
+  .stock-movements-page .inventory-filter-bar .input {
+    min-height: 2.5rem;
+  }
+
   .inventory-page .input:focus,
   .stock-movements-page .input:focus {
     border-color: rgba(117, 196, 255, 0.62);
@@ -562,6 +571,30 @@ button:disabled {
   .inventory-filter-bar {
     border-color: rgba(255, 255, 255, 0.1);
     box-shadow: 0 14px 36px rgba(0, 8, 22, 0.12);
+  }
+
+  .stock-reset-filters-button {
+    border-color: rgba(125, 211, 252, 0.24) !important;
+    background: rgba(56, 189, 248, 0.14) !important;
+    color: #e0f2fe !important;
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.12);
+  }
+
+  .stock-reset-filters-button[data-active="false"] {
+    border-color: rgba(125, 211, 252, 0.18) !important;
+    background: rgba(56, 189, 248, 0.1) !important;
+    color: #bae6fd !important;
+  }
+
+  .stock-reset-filters-button:hover:not(:disabled) {
+    border-color: rgba(125, 211, 252, 0.46) !important;
+    background: rgba(56, 189, 248, 0.2) !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 28px rgba(56, 189, 248, 0.2);
+  }
+
+  .stock-reset-filters-button:disabled {
+    opacity: 0.58;
   }
 
   .inventory-count-pill {
@@ -1816,6 +1849,20 @@ button:disabled {
     white-space: nowrap;
   }
 
+  .reports-reset-filter-button {
+    border-color: rgba(125, 211, 252, 0.26) !important;
+    background: rgba(56, 189, 248, 0.13) !important;
+    color: #e0f2fe !important;
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.12);
+  }
+
+  .reports-reset-filter-button:hover:not(:disabled) {
+    border-color: rgba(125, 211, 252, 0.46) !important;
+    background: rgba(56, 189, 248, 0.2) !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 28px rgba(56, 189, 248, 0.2);
+  }
+
   .reports-kpi-grid {
     align-items: stretch;
   }
@@ -1943,6 +1990,7 @@ button:disabled {
   }
 
   .reports-chart-frame {
+    height: 22rem;
     min-height: 22rem;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1989,6 +2037,11 @@ button:disabled {
     text-align: center;
     font-weight: 900;
     color: #e2e8f0;
+  }
+
+  .reports-technician-table th:last-child,
+  .reports-technician-table td:last-child {
+    text-align: center;
   }
 
   .reports-rate-badge {
@@ -2233,7 +2286,7 @@ button:disabled {
   }
 
   .invoices-table {
-    min-width: 1180px;
+    min-width: 1120px;
   }
 
   .payments-table {
@@ -2255,9 +2308,9 @@ button:disabled {
   }
 
   .invoices-table th:nth-child(1),
-  .invoices-table td:nth-child(1) { width: 11%; }
+  .invoices-table td:nth-child(1) { width: 15%; }
   .invoices-table th:nth-child(2),
-  .invoices-table td:nth-child(2) { width: 15%; }
+  .invoices-table td:nth-child(2) { width: 16%; }
   .invoices-table th:nth-child(3),
   .invoices-table td:nth-child(3) { width: 14%; }
   .invoices-table th:nth-child(4),
@@ -2271,7 +2324,10 @@ button:disabled {
   .invoices-table th:nth-child(8),
   .invoices-table td:nth-child(8) { width: 10%; }
   .invoices-table th:nth-child(9),
-  .invoices-table td:nth-child(9) { width: 24%; }
+  .invoices-table td:nth-child(9) {
+    width: 15%;
+    text-align: center;
+  }
 
   .payments-table th:nth-child(1),
   .payments-table td:nth-child(1) { width: 11%; }
@@ -2309,11 +2365,13 @@ button:disabled {
   }
 
   .billing-id-text {
-    overflow: hidden;
+    overflow-wrap: anywhere;
     border-color: rgba(117, 196, 255, 0.18);
     background: rgba(56, 189, 248, 0.08);
     color: #dbeafe;
-    text-overflow: ellipsis;
+    line-height: 1.25;
+    text-align: left;
+    white-space: normal;
   }
 
   .billing-method-pill {
@@ -2369,7 +2427,7 @@ button:disabled {
   .billing-actions {
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: center;
     gap: 0.42rem;
   }
 
@@ -2584,6 +2642,241 @@ button:disabled {
   .admin-metric-red .admin-metric-icon { color: rgba(244, 63, 94, 0.2); border-color: rgba(251, 113, 133, 0.32); }
   .admin-metric-gray .admin-metric-icon { color: rgba(148, 163, 184, 0.17); border-color: rgba(203, 213, 225, 0.22); }
 
+  .technician-management-hero {
+    overflow: hidden;
+  }
+
+  .technician-management-hero::after {
+    content: "";
+    position: absolute;
+    right: -7rem;
+    bottom: -9rem;
+    width: 28rem;
+    height: 20rem;
+    pointer-events: none;
+    background:
+      radial-gradient(circle, rgba(99, 102, 241, 0.14), transparent 62%),
+      radial-gradient(circle at 65% 35%, rgba(56, 189, 248, 0.16), transparent 58%);
+    filter: blur(6px);
+  }
+
+  .technician-hero-content {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 24rem);
+    align-items: center;
+    gap: 1.25rem;
+  }
+
+  .technician-hero-side {
+    position: relative;
+    display: grid;
+    justify-items: end;
+    gap: 0.9rem;
+    min-height: 8.5rem;
+  }
+
+  .technician-hero-illustration {
+    position: relative;
+    width: min(100%, 20rem);
+    min-height: 7.5rem;
+    border-radius: 8px;
+    border: 1px solid rgba(125, 211, 252, 0.13);
+    background:
+      linear-gradient(135deg, rgba(56, 189, 248, 0.11), rgba(99, 102, 241, 0.1)),
+      rgba(8, 22, 42, 0.48);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 40px rgba(0, 8, 22, 0.18);
+    overflow: hidden;
+  }
+
+  .technician-illustration-node,
+  .technician-illustration-line {
+    position: absolute;
+    display: grid;
+    place-items: center;
+  }
+
+  .technician-illustration-node {
+    border-radius: 999px;
+    border: 1px solid rgba(125, 211, 252, 0.28);
+    background: rgba(8, 22, 42, 0.82);
+    color: #dbeafe;
+    font-size: 0.78rem;
+    font-weight: 950;
+    box-shadow: 0 12px 28px rgba(0, 8, 22, 0.2);
+  }
+
+  .technician-illustration-node-main {
+    top: 1.75rem;
+    left: 50%;
+    width: 3.5rem;
+    height: 3.5rem;
+    transform: translateX(-50%);
+    border-color: rgba(110, 231, 183, 0.3);
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(16, 185, 129, 0.16)), rgba(8, 22, 42, 0.9);
+  }
+
+  .technician-illustration-node-a {
+    left: 2.4rem;
+    bottom: 1.35rem;
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .technician-illustration-node-b {
+    right: 2.4rem;
+    bottom: 1.35rem;
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .technician-illustration-line {
+    height: 1px;
+    width: 5.8rem;
+    background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.36), transparent);
+    transform-origin: center;
+  }
+
+  .technician-illustration-line-a {
+    left: 4.6rem;
+    top: 4.75rem;
+    transform: rotate(-20deg);
+  }
+
+  .technician-illustration-line-b {
+    right: 4.6rem;
+    top: 4.75rem;
+    transform: rotate(20deg);
+  }
+
+  .technician-hero-add-button {
+    position: relative;
+    z-index: 2;
+    min-height: 2.55rem;
+    min-width: 10rem;
+    justify-content: center;
+    box-shadow: 0 14px 32px rgba(31, 140, 255, 0.18);
+  }
+
+  .technician-hero-add-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+    filter: saturate(0.86);
+  }
+
+  .technician-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
+    gap: 1rem;
+  }
+
+  .technician-kpi-card {
+    display: flex;
+    min-height: 8.35rem;
+    min-width: 0;
+    align-items: flex-start;
+    gap: 1rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background:
+      linear-gradient(180deg, rgba(16, 47, 87, 0.72), rgba(8, 27, 52, 0.94)),
+      var(--surface);
+    padding: 1.05rem;
+    box-shadow: 0 18px 48px rgba(0, 8, 22, 0.16);
+  }
+
+  .technician-kpi-card:hover {
+    border-color: rgba(117, 196, 255, 0.28);
+    box-shadow: 0 20px 52px rgba(0, 8, 22, 0.18), 0 0 24px rgba(56, 189, 248, 0.08);
+  }
+
+  .technician-kpi-icon {
+    display: grid;
+    width: 2.65rem;
+    height: 2.65rem;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 8px;
+    border: 1px solid rgba(125, 211, 252, 0.24);
+    background: rgba(56, 189, 248, 0.12);
+    color: #e0f2fe;
+  }
+
+  .technician-kpi-label {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 900;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .technician-kpi-value {
+    margin-top: 0.42rem;
+    color: #f8fafc;
+    font-size: 1.72rem;
+    font-weight: 950;
+    line-height: 1.1;
+  }
+
+  .technician-kpi-helper {
+    margin-top: 0.34rem;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 750;
+    line-height: 1.3;
+  }
+
+  .technician-kpi-green .technician-kpi-icon {
+    border-color: rgba(110, 231, 183, 0.28);
+    background: rgba(16, 185, 129, 0.14);
+    color: #bbf7d0;
+  }
+
+  .technician-kpi-cyan .technician-kpi-icon {
+    border-color: rgba(103, 232, 249, 0.28);
+    background: rgba(6, 182, 212, 0.13);
+    color: #cffafe;
+  }
+
+  .technician-kpi-amber .technician-kpi-icon {
+    border-color: rgba(251, 191, 36, 0.32);
+    background: rgba(245, 158, 11, 0.14);
+    color: #fde68a;
+  }
+
+  .technician-filter-row {
+    display: grid;
+    grid-template-columns: minmax(16rem, 1fr) minmax(10rem, 0.55fr) minmax(11rem, 0.65fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.035);
+    padding: 0.75rem;
+  }
+
+  .technician-filter-row .input,
+  .technician-filter-row .btn {
+    min-height: 2.5rem;
+  }
+
+  .technician-clear-filter-button {
+    min-width: 8.1rem;
+    justify-content: center;
+    border-color: rgba(125, 211, 252, 0.28) !important;
+    background: rgba(56, 189, 248, 0.15) !important;
+    color: #e0f2fe !important;
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.1);
+  }
+
+  .technician-clear-filter-button:hover:not(:disabled) {
+    border-color: rgba(125, 211, 252, 0.48) !important;
+    background: rgba(56, 189, 248, 0.21) !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 26px rgba(56, 189, 248, 0.18);
+  }
+
   .admin-table-wrap {
     width: 100%;
     max-width: 100%;
@@ -2598,6 +2891,11 @@ button:disabled {
 
   .team-access-table {
     min-width: 980px;
+  }
+
+  .technician-management-table {
+    width: 100%;
+    min-width: 0;
   }
 
   .audit-table {
@@ -2618,6 +2916,25 @@ button:disabled {
     background: rgba(56, 189, 248, 0.055);
   }
 
+  .technician-table th,
+  .technician-table td {
+    overflow: hidden;
+  }
+
+  .technician-table .admin-role-badge,
+  .technician-table .admin-status-pill,
+  .technician-workload-badge,
+  .technician-no-jobs-pill {
+    max-width: 100%;
+  }
+
+  .technician-contact-line span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .team-access-table th:nth-child(1),
   .team-access-table td:nth-child(1) { width: 24%; }
   .team-access-table th:nth-child(2),
@@ -2630,6 +2947,148 @@ button:disabled {
   .team-access-table td:nth-child(5) { width: 16%; }
   .team-access-table th:nth-child(6),
   .team-access-table td:nth-child(6) { width: 20%; }
+
+  .technician-management-table th:nth-child(1),
+  .technician-management-table td:nth-child(1) { width: 22%; }
+  .technician-management-table th:nth-child(2),
+  .technician-management-table td:nth-child(2) { width: 20%; }
+  .technician-management-table th:nth-child(3),
+  .technician-management-table td:nth-child(3) { width: 12%; }
+  .technician-management-table th:nth-child(4),
+  .technician-management-table td:nth-child(4) { width: 11%; }
+  .technician-management-table th:nth-child(5),
+  .technician-management-table td:nth-child(5) { width: 13%; }
+  .technician-management-table th:nth-child(6),
+  .technician-management-table td:nth-child(6) {
+    width: 11%;
+    text-align: center;
+  }
+  .technician-management-table th:nth-child(7),
+  .technician-management-table td:nth-child(7) {
+    width: 11%;
+    text-align: center;
+  }
+
+  .technician-avatar {
+    display: grid;
+    width: 2.35rem;
+    height: 2.35rem;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 8px;
+    border: 1px solid rgba(125, 211, 252, 0.26);
+    background:
+      linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(16, 185, 129, 0.1)),
+      rgba(15, 23, 42, 0.55);
+    color: #e0f2fe;
+    font-size: 0.78rem;
+    font-weight: 950;
+  }
+
+  .technician-workload-badge,
+  .technician-no-jobs-pill {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    padding: 0.34rem 0.68rem;
+    font-size: 0.72rem;
+    font-weight: 900;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .technician-workload-available {
+    border-color: rgba(110, 231, 183, 0.3);
+    background: rgba(16, 185, 129, 0.13);
+    color: #bbf7d0;
+  }
+
+  .technician-workload-normal {
+    border-color: rgba(125, 211, 252, 0.28);
+    background: rgba(56, 189, 248, 0.12);
+    color: #dbeafe;
+  }
+
+  .technician-workload-busy {
+    border-color: rgba(251, 191, 36, 0.34);
+    background: rgba(245, 158, 11, 0.15);
+    color: #fde68a;
+  }
+
+  .technician-contact-line {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.4rem;
+    line-height: 1.35;
+  }
+
+  .technician-contact-line svg {
+    flex-shrink: 0;
+    color: #93c5fd;
+  }
+
+  .technician-workload-stack,
+  .technician-assigned-stack {
+    display: grid;
+    justify-items: start;
+    gap: 0.34rem;
+  }
+
+  .technician-workload-helper,
+  .technician-assigned-muted {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 850;
+    line-height: 1.1;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .technician-assigned-stack {
+    justify-items: center;
+  }
+
+  .technician-action-stack {
+    display: flex;
+    justify-content: center;
+  }
+
+  .technician-action-stack .btn,
+  .technician-no-jobs-pill {
+    min-width: 5.4rem;
+  }
+
+  .technician-no-jobs-pill {
+    border-color: rgba(148, 163, 184, 0.18);
+    background: rgba(148, 163, 184, 0.08);
+    color: #94a3b8;
+  }
+
+  .technician-assigned-link {
+    text-decoration: none;
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .technician-assigned-link:hover {
+    border-color: rgba(125, 211, 252, 0.42);
+    background: rgba(56, 189, 248, 0.18);
+    color: #ffffff;
+    box-shadow: 0 0 18px rgba(56, 189, 248, 0.14);
+  }
+
+  .technician-table-footer {
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 0.82rem 0.95rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 850;
+  }
 
   .team-avatar {
     display: grid;
@@ -2660,6 +3119,20 @@ button:disabled {
     border-color: rgba(148, 163, 184, 0.22);
     background: rgba(148, 163, 184, 0.1);
     color: #cbd5e1;
+  }
+
+  .technician-assigned-count {
+    display: inline-flex;
+    min-width: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid rgba(125, 211, 252, 0.22);
+    background: rgba(56, 189, 248, 0.1);
+    padding: 0.32rem 0.7rem;
+    color: #dbeafe;
+    font-size: 0.82rem;
+    font-weight: 900;
   }
 
   .admin-row-actions {
@@ -2703,6 +3176,16 @@ button:disabled {
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.045);
     padding: 0.85rem;
+  }
+
+  .audit-human-summary {
+    border-radius: 8px;
+    border: 1px solid rgba(125, 211, 252, 0.2);
+    background:
+      linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(16, 185, 129, 0.07)),
+      rgba(255, 255, 255, 0.035);
+    padding: 1rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
   .audit-json-box {
@@ -2768,12 +3251,35 @@ button:disabled {
       grid-template-columns: 1fr;
     }
 
+    .technician-hero-content {
+      grid-template-columns: 1fr;
+    }
+
+    .technician-hero-side {
+      justify-items: start;
+      min-height: auto;
+    }
+
+    .technician-hero-illustration {
+      width: 100%;
+      max-width: 22rem;
+    }
+
+    .technician-filter-row {
+      grid-template-columns: 1fr;
+    }
+
+    .technician-management-table {
+      min-width: 880px;
+    }
+
     .admin-row-actions {
       justify-content: flex-start;
     }
 
     .admin-compact-button,
-    .admin-filter-bar .btn {
+    .admin-filter-bar .btn,
+    .technician-filter-row .btn {
       width: 100%;
     }
   }
@@ -2781,6 +3287,19 @@ button:disabled {
   @media (max-width: 640px) {
     .admin-control-hero {
       padding: 1rem;
+    }
+
+    .technician-hero-illustration {
+      min-height: 6.5rem;
+    }
+
+    .technician-illustration-node-main {
+      top: 1.35rem;
+    }
+
+    .technician-illustration-node-a,
+    .technician-illustration-node-b {
+      bottom: 1rem;
     }
 
     .technician-activity-row {
@@ -3514,6 +4033,114 @@ button:disabled {
       linear-gradient(180deg, rgba(16, 47, 87, 0.88), rgba(8, 27, 52, 0.96));
   }
 
+  .customer-hero-actions {
+    width: 100%;
+    align-self: stretch;
+    justify-content: flex-start;
+    gap: 0.625rem;
+    border-radius: 8px;
+    border: 0;
+    background: transparent;
+    padding: 0;
+  }
+
+  .customer-hero-actions .btn {
+    min-height: 2.5rem;
+  }
+
+  .customer-create-booking-btn {
+    border-color: rgba(125, 211, 252, 0.42) !important;
+    background: linear-gradient(180deg, #1f8cff, #0b6bdc) !important;
+    box-shadow: 0 12px 28px rgba(31, 140, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+
+  .customer-create-booking-btn:hover {
+    box-shadow: 0 16px 34px rgba(31, 140, 255, 0.32), 0 0 0 1px rgba(125, 211, 252, 0.24) inset;
+  }
+
+  .customers-date-filter-group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .customers-date-filter-group .input {
+    min-height: 2.5rem;
+  }
+
+  .customers-filter-panel {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .customers-filter-row {
+    display: grid;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .customers-search-control {
+    min-width: 0;
+  }
+
+  .customers-type-filter-control {
+    max-width: 14rem;
+  }
+
+  .customers-date-filter-group .btn {
+    width: fit-content;
+  }
+
+  .customers-clear-filter-button {
+    min-width: 7.25rem;
+    justify-content: center;
+    border-color: rgba(125, 211, 252, 0.24) !important;
+    background: rgba(56, 189, 248, 0.12) !important;
+    color: #e0f2fe !important;
+  }
+
+  .customers-clear-filter-button[data-active="false"] {
+    border-color: rgba(148, 163, 184, 0.22) !important;
+    background: rgba(148, 163, 184, 0.08) !important;
+    color: #cbd5e1 !important;
+  }
+
+  @media (min-width: 640px) {
+    .customers-date-filter-group {
+      grid-template-columns: repeat(2, minmax(9.5rem, 1fr));
+    }
+
+    .customers-date-filter-group .btn {
+      grid-column: auto;
+      width: fit-content;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .customers-filter-row {
+      grid-template-columns: minmax(260px, 1fr) auto;
+    }
+
+    .customers-date-filter-group {
+      grid-template-columns: 10rem 10rem auto;
+      flex-shrink: 0;
+    }
+
+    .customers-date-filter-group .btn {
+      grid-column: auto;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .customer-hero-actions {
+      width: auto;
+      align-self: center;
+      justify-content: flex-end;
+      flex-wrap: nowrap;
+    }
+  }
+
   .amc-module-page .input:focus {
     border-color: rgba(117, 196, 255, 0.62);
     box-shadow: 0 0 0 3px rgba(31, 140, 255, 0.16);
@@ -3710,7 +4337,7 @@ button:disabled {
   }
 
   .amc-contracts-table {
-    min-width: 1480px;
+    min-width: 1360px;
   }
 
   .amc-schedule-table {
@@ -3723,7 +4350,7 @@ button:disabled {
 
   .amc-table-wrap .data-table th,
   .amc-table-wrap .data-table td {
-    padding: 0.78rem 0.85rem;
+    padding: 0.9rem 0.95rem;
     vertical-align: middle;
   }
 
@@ -3732,26 +4359,28 @@ button:disabled {
   }
 
   .amc-table-wrap .data-table tbody tr:hover {
-    background: rgba(56, 189, 248, 0.055);
+    background: rgba(56, 189, 248, 0.06);
+    box-shadow: inset 0 1px 0 rgba(125, 211, 252, 0.06), inset 0 -1px 0 rgba(125, 211, 252, 0.05);
   }
 
   .amc-contracts-table th:nth-child(1),
-  .amc-contracts-table td:nth-child(1) { width: 9%; }
+  .amc-contracts-table td:nth-child(1) { width: 15%; }
   .amc-contracts-table th:nth-child(2),
-  .amc-contracts-table td:nth-child(2) { width: 13%; }
+  .amc-contracts-table td:nth-child(2) { width: 16%; }
   .amc-contracts-table th:nth-child(3),
-  .amc-contracts-table td:nth-child(3) { width: 15%; }
+  .amc-contracts-table td:nth-child(3) { width: 11%; }
   .amc-contracts-table th:nth-child(4),
-  .amc-contracts-table td:nth-child(4) { width: 12%; }
+  .amc-contracts-table td:nth-child(4) { width: 18%; }
   .amc-contracts-table th:nth-child(5),
-  .amc-contracts-table td:nth-child(5) { width: 14%; }
+  .amc-contracts-table td:nth-child(5) { width: 18%; }
   .amc-contracts-table th:nth-child(6),
-  .amc-contracts-table td:nth-child(6) { width: 14%; }
+  .amc-contracts-table td:nth-child(6) {
+    width: 9%;
+    text-align: center;
+  }
   .amc-contracts-table th:nth-child(7),
-  .amc-contracts-table td:nth-child(7) { width: 8%; }
-  .amc-contracts-table th:nth-child(8),
-  .amc-contracts-table td:nth-child(8) {
-    width: 15%;
+  .amc-contracts-table td:nth-child(7) {
+    width: 13%;
     text-align: center;
   }
 
@@ -3787,19 +4416,87 @@ button:disabled {
   .amc-renewals-table th:nth-child(8),
   .amc-renewals-table td:nth-child(8) { width: 12%; }
 
-  .amc-id-text {
-    display: inline-flex;
+  .amc-customer-cell,
+  .amc-plan-cell {
+    display: grid;
+    min-width: 0;
+    align-content: start;
+    gap: 0.34rem;
+  }
+
+  .amc-customer-name,
+  .amc-plan-title {
+    display: block;
     max-width: 100%;
     overflow: hidden;
-    border-radius: 999px;
-    border: 1px solid rgba(117, 196, 255, 0.18);
-    background: rgba(56, 189, 248, 0.08);
-    padding: 0.2rem 0.55rem;
-    color: #dbeafe;
-    font-size: 0.76rem;
+    color: #f8fafc;
+    font-size: 0.9rem;
     font-weight: 900;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .amc-customer-phone,
+  .amc-plan-service {
+    display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: #94a3b8;
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.25;
+  }
+
+  .amc-id-chip {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    overflow: hidden;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(15, 23, 42, 0.44);
+    padding: 0.18rem 0.5rem;
+    color: #94a3b8;
+    font-size: 0.66rem;
+    font-weight: 900;
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .amc-warranty-line {
+    color: #bae6fd;
+    font-size: 0.73rem;
+    font-weight: 850;
+    line-height: 1.25;
+  }
+
+  .amc-period-cell {
+    display: grid;
+    gap: 0.24rem;
+    color: #cbd5e1;
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1.22;
+  }
+
+  .amc-period-cell span:nth-child(2) {
+    color: #64748b;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+  }
+
+  .amc-period-cell b {
+    color: #f8fafc;
+    font-weight: 950;
+  }
+
+  .amc-status-cell {
+    text-align: center;
+  }
+
+  .amc-status-cell .amc-status-pill {
+    margin-inline: auto;
   }
 
   .amc-status-pill,
@@ -3856,7 +4553,11 @@ button:disabled {
     display: grid;
     min-width: 0;
     align-content: start;
-    gap: 0.38rem;
+    gap: 0.42rem;
+    border: 1px solid rgba(148, 163, 184, 0.13);
+    border-radius: 0.7rem;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.66), rgba(15, 23, 42, 0.42));
+    padding: 0.62rem;
     color: #cbd5e1;
     font-size: 0.72rem;
     font-weight: 800;
@@ -3865,28 +4566,26 @@ button:disabled {
   .amc-payment-row {
     display: grid;
     min-width: 0;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.55rem;
+    grid-template-columns: minmax(5.8rem, 1fr) minmax(5.3rem, auto);
+    align-items: start;
+    gap: 0.7rem;
     line-height: 1.25;
   }
 
   .amc-payment-row span {
     min-width: 0;
-    overflow: hidden;
     color: #94a3b8;
-    font-size: 0.66rem;
+    font-size: 0.68rem;
     font-weight: 900;
-    letter-spacing: 0.04em;
-    text-overflow: ellipsis;
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
     text-transform: uppercase;
-    white-space: nowrap;
   }
 
   .amc-payment-stack b,
   .amc-payment-row b {
     color: #f8fafc;
-    font-size: 0.78rem;
+    font-size: 0.79rem;
     font-weight: 950;
     text-align: right;
     white-space: nowrap;
@@ -3921,23 +4620,32 @@ button:disabled {
     box-shadow: inset 3px 0 0 rgba(244, 63, 94, 0.62);
   }
 
-  .amc-actions {
-    display: flex;
-    flex-wrap: wrap;
+  .amc-actions,
+  .amc-action-stack {
+    display: grid;
+    width: 100%;
+    min-width: 0;
     align-items: center;
     justify-content: center;
-    gap: 0.45rem;
-    min-width: 0;
+    gap: 0.48rem;
   }
 
   .amc-action-button {
-    flex: 1 1 7rem;
+    width: 100%;
     justify-content: center;
     max-width: 100%;
-    min-height: 2.2rem;
-    padding: 0.45rem 0.62rem !important;
+    min-height: 2.35rem;
+    padding: 0.48rem 0.7rem !important;
     font-size: 0.75rem;
     white-space: nowrap;
+  }
+
+  .amc-action-stack .btn-primary:hover {
+    box-shadow: 0 12px 26px rgba(14, 165, 233, 0.18), 0 0 0 1px rgba(125, 211, 252, 0.18) inset;
+  }
+
+  .amc-action-stack .btn-secondary:hover {
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.3), 0 0 0 1px rgba(148, 163, 184, 0.15) inset;
   }
 
   .amc-whatsapp-action {
@@ -3959,12 +4667,9 @@ button:disabled {
       width: 100%;
     }
 
-    .amc-actions {
+    .amc-actions,
+    .amc-action-stack {
       justify-content: flex-start;
-    }
-
-    .amc-action-button {
-      flex: 1 1 auto;
     }
   }
 }

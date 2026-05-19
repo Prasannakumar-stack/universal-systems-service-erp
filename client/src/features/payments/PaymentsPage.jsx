@@ -186,7 +186,7 @@ export function PaymentsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, paymentStatus, methodFilter, dateFrom, dateTo]);
+  }, [debouncedSearch, paymentStatus, methodFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     if (!invoiceIdParam) {
@@ -249,6 +249,7 @@ export function PaymentsPage() {
         setForm((current) => ({ ...current, paidAmount: '', transactionId: '' }));
         push('Payment recorded successfully');
         reload({ silent: true });
+        window.dispatchEvent(new Event('us:billing-updated'));
       });
     } catch (err) {
       push(err.message, 'error');
@@ -258,7 +259,7 @@ export function PaymentsPage() {
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
-  const searchTerm = search.trim();
+  const searchTerm = debouncedSearch.trim();
   const visiblePayments = searchTerm
     ? (data.payments || []).filter((payment) => matchesDisplaySearch(searchTerm, paymentSearchText(payment)))
     : (data.payments || []);

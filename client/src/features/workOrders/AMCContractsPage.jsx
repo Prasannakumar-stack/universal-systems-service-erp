@@ -121,6 +121,7 @@ import {
   useParams,
   useRef,
   useResource,
+  useDebouncedValue,
   UserRound,
   Users,
   useState,
@@ -181,6 +182,7 @@ export function AMCContractsPage() {
   const [form, setForm] = useState(defaultAmcForm);
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search);
   const handledRenewalRef = useRef('');
   const { data, loading, error, reload } = useResource(() => request('/amc/contracts'), [request]);
 
@@ -201,7 +203,8 @@ export function AMCContractsPage() {
   const summary = data?.summary || {};
   const visibleContracts = contracts.filter((contract) => {
     const text = `${contract.contractId} ${contract.customerName} ${contract.phone} ${contract.contractType} ${contract.coverageType} ${contract.coveredService} ${contract.coveredDevices}`.toLowerCase();
-    return !search || text.includes(search.toLowerCase());
+    const searchText = debouncedSearch.trim().toLowerCase();
+    return !searchText || text.includes(searchText);
   });
   const hasContractSearch = Boolean(search.trim());
   const contractKpis = [
@@ -530,8 +533,8 @@ export function AMCContractsPage() {
           />
         ) : (
           <div className="table-wrap amc-table-wrap bg-[var(--surface)]">
-            <table className="data-table amc-contracts-table">
-            <thead><tr><th>Contract ID</th><th>Customer</th><th>Plan / Coverage</th><th>Period</th><th>AMC Payment</th><th>Extra Charges</th><th>Status</th><th className="text-center">Action</th></tr></thead>
+            <table className="data-table amc-table amc-contracts-table">
+            <thead><tr><th>Customer</th><th>Plan / Coverage</th><th>Period</th><th>AMC Payment</th><th>Extra Charges</th><th className="text-center">Status</th><th className="text-center">Action</th></tr></thead>
             <tbody>
               {visibleContracts.map((contract) => {
                 const contractStatus = contract.renewalStatus === 'Renewal Due' ? contract.renewalStatus : contract.status;
@@ -541,18 +544,28 @@ export function AMCContractsPage() {
                 const extra = extraChargeSummary(contract);
                 return (
                   <tr key={recordId(contract)}>
-                    <td className="font-bold"><span className="amc-id-text" title={contract.contractId || '-'}>{contract.contractId}</span></td>
                     <td>
-                      <span className="block truncate font-semibold text-slate-100" title={contract.customerName || '-'}>{contract.customerName || '-'}</span>
-                      <span className="mt-1 block text-xs muted">Phone: {contract.phone || '-'}</span>
+                      <div className="amc-customer-cell">
+                        <span className="amc-customer-name" title={contract.customerName || '-'}>{contract.customerName || '-'}</span>
+                        <span className="amc-customer-phone">Phone: {contract.phone || '-'}</span>
+                        <span className="amc-id-chip" title={contract.contractId || '-'}>{contract.contractId || '-'}</span>
+                      </div>
                     </td>
                     <td>
-                      <span className="block truncate font-semibold text-slate-100" title={contract.contractType || '-'}>{contract.contractType || '-'}</span>
-                      <span className="mt-1 block truncate text-xs text-emerald-100" title={normalizeAmcCoverageType(contract.coverageType)}>{normalizeAmcCoverageType(contract.coverageType)}</span>
-                      <span className="mt-1 block truncate text-xs muted" title={contract.coveredService || contract.coveredDevices || '-'}>{contract.coveredService || contract.coveredDevices || '-'}</span>
-                      {contract.warrantyIncluded ? <span className="mt-1 block truncate text-xs text-sky-100">{amcWarrantyLine(contract)}</span> : null}
+                      <div className="amc-plan-cell">
+                        <span className="amc-plan-title" title={contract.contractType || '-'}>{contract.contractType || '-'}</span>
+                        <span className="amc-muted-badge" title={normalizeAmcCoverageType(contract.coverageType)}>{normalizeAmcCoverageType(contract.coverageType)}</span>
+                        <span className="amc-plan-service" title={contract.coveredService || contract.coveredDevices || '-'}>{contract.coveredService || contract.coveredDevices || '-'}</span>
+                        {contract.warrantyIncluded ? <span className="amc-warranty-line">{amcWarrantyLine(contract)}</span> : null}
+                      </div>
                     </td>
-                    <td className="whitespace-nowrap">{formatDate(contract.startDate)} to {formatDate(contract.endDate)}</td>
+                    <td>
+                      <div className="amc-period-cell">
+                        <span>{formatDate(contract.startDate)}</span>
+                        <span>to</span>
+                        <b>{formatDate(contract.endDate)}</b>
+                      </div>
+                    </td>
                     <td>
                       <div className="amc-payment-stack">
                         <AmcPaymentPill status={payment.status} hasInvoice={Boolean(invoiceId)} />
@@ -569,12 +582,12 @@ export function AMCContractsPage() {
                         <span className="amc-payment-row"><span>Extra Pending</span><b>{currency(extra.pending)}</b></span>
                       </div>
                     </td>
-                    <td>
+                    <td className="amc-status-cell">
                       <AmcStatusPill status={contractStatus} />
                       <span className="mt-1 block text-xs muted">{amcRenewalHelper(contract)}</span>
                     </td>
                     <td className="text-center">
-                      <div className="amc-actions justify-center">
+                      <div className="amc-action-stack">
                         <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button>
                         {invoiceId
                           ? <Link className="btn btn-secondary amc-action-button" to={`/admin/payments?invoiceId=${invoiceId}`}><CreditCard className="h-4 w-4" />Go to Payments</Link>

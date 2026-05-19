@@ -4,7 +4,6 @@ import {
   amcFrequencies,
   AmcStatusBadge,
   amcWhatsappHref,
-  apiBase,
   assetBase,
   averageHours,
   Bar,
@@ -39,7 +38,6 @@ import {
   dateInRange,
   deviceCategory,
   deviceTypes,
-  Download,
   downloadCsv,
   DueStatusBadge,
   Edit3,
@@ -50,7 +48,6 @@ import {
   filterByRange,
   findInvoice,
   formatDate,
-  getCustomerDisplayId,
   getInvoiceDisplayId,
   getWorkOrderDisplayId,
   getPdfLabel,
@@ -149,7 +146,7 @@ import {
 } from '../../shared/phase1Shared.jsx';
 
 export function InvoicesPage() {
-  const { request, token } = useAuth();
+  const { request } = useAuth();
   const { push } = useToast();
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
@@ -172,10 +169,10 @@ export function InvoicesPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, status, paymentMethod, dateFrom, dateTo]);
+  }, [debouncedSearch, status, paymentMethod, dateFrom, dateTo]);
 
   const invoices = data?.invoices || data?.data || [];
-  const searchTerm = search.trim();
+  const searchTerm = debouncedSearch.trim();
   const visibleInvoices = searchTerm
     ? invoices.filter((invoice) => matchesDisplaySearch(searchTerm, invoiceSearchText(invoice)))
     : invoices;
@@ -204,31 +201,6 @@ export function InvoicesPage() {
     setPaymentMethod('');
     setDateFrom('');
     setDateTo('');
-  }
-
-  async function downloadWorkPdf(invoice, preview = false) {
-    const workOrderId = recordId(invoice.workOrderId);
-    if (!workOrderId) return;
-    try {
-      const response = await fetch(`${apiBase}/work-orders/${workOrderId}/pdf/work${preview ? '?preview=true' : ''}`, { headers: { Authorization: `Bearer ${token}` } });
-      const blob = await response.blob();
-      if (!response.ok) throw new Error('PDF is available only when the linked service job status allows it.');
-      const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-      if (preview) {
-        window.open(url, '_blank', 'noopener,noreferrer');
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-        return;
-      }
-      const anchor = window.document.createElement('a');
-      anchor.href = url;
-      anchor.download = `${invoice.invoiceNumber || 'invoice'}.pdf`;
-      window.document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      push(err.message, 'error');
-    }
   }
 
   function sendInvoiceWhatsApp(invoice) {
@@ -275,7 +247,6 @@ export function InvoicesPage() {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Invoices</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Invoices are generated from service jobs and linked to payments.</p>
           </div>
-          <Link className="btn btn-primary h-10 px-4" to="/admin/payments"><CreditCard className="h-4 w-4" />Record Payment</Link>
         </div>
       </section>
 
@@ -311,19 +282,19 @@ export function InvoicesPage() {
         <>
         <div className="table-wrap billing-table-wrap bg-[var(--surface)]">
           <table className="data-table invoices-table">
-            <thead><tr><th>Invoice ID</th><th>Customer</th><th>Linked Source</th><th className="text-right">Total</th><th className="text-right">Paid</th><th className="text-right">Balance</th><th className="text-center">Status</th><th>Created Date</th><th className="text-right">Action</th></tr></thead>
+            <thead><tr><th>Invoice ID</th><th>Customer</th><th>Linked Source</th><th className="text-right">Total</th><th className="text-right">Paid</th><th className="text-right">Balance</th><th className="text-center">Status</th><th>Created Date</th><th className="text-center">Action</th></tr></thead>
             <tbody className="divide-y divide-[var(--line)]">
               {visibleInvoices.map((invoice) => {
                 const dueAmount = invoiceDueAmount(invoice);
-                const pdfReady = invoice.workOrderId?.status === 'Completed';
                 const invoiceId = invoice.id || invoice._id;
+                const customerName = invoice.customerId?.name || invoice.customerName || 'Customer';
+                const customerPhone = invoice.customerId?.phone || invoice.customerPhone || 'No phone';
                 return (
                   <tr key={invoice.id || invoice._id}>
-                    <td className="font-bold"><span className="billing-id-text">{getInvoiceDisplayId(invoice)}</span></td>
+                    <td className="font-bold"><span className="billing-id-text" title={getInvoiceDisplayId(invoice)}>{getInvoiceDisplayId(invoice)}</span></td>
                     <td>
-                      <span className="block truncate font-semibold text-slate-100" title={invoice.customerId?.name || '-'}>{invoice.customerId?.name || '-'}</span>
-                      <span className="block text-xs muted">{invoice.customerId?.phone || '-'}</span>
-                      <span className="block text-xs muted">Customer ID: {getCustomerDisplayId(invoice.customerId)}</span>
+                      <span className="block font-semibold text-slate-100" title={customerName}>{customerName}</span>
+                      <span className="mt-1 block text-xs muted">Phone: {customerPhone}</span>
                     </td>
                     <td>{invoiceSourceCell(invoice)}</td>
                     <td className="billing-money-cell text-right">{currency(invoice.total)}</td>
@@ -331,13 +302,10 @@ export function InvoicesPage() {
                     <td className={`billing-money-cell text-right ${dueAmount > 0 ? 'text-amber-100' : 'text-emerald-100'}`}>{currency(dueAmount)}</td>
                     <td className="text-center"><BillingStatusPill status={invoice.status} /></td>
                     <td className="whitespace-nowrap">{formatDate(invoice.createdAt)}</td>
-                    <td className="text-right">
+                    <td className="text-center">
                       <div className="billing-actions">
-                        <Link className={`btn ${dueAmount > 0 ? 'btn-primary' : 'btn-secondary'} billing-action-main`} to={`/admin/payments?invoiceId=${invoiceId}`}>Go to Payments</Link>
-                        <button type="button" className="btn btn-secondary billing-action-button disabled:cursor-not-allowed disabled:opacity-50" title={pdfReady ? 'Preview invoice PDF' : 'PDF available after job completion'} disabled={!pdfReady} onClick={() => downloadWorkPdf(invoice, true)}>Preview</button>
-                        <button type="button" className="btn btn-secondary billing-action-button disabled:cursor-not-allowed disabled:opacity-50" title={pdfReady ? 'Download invoice PDF' : 'PDF available after job completion'} disabled={!pdfReady} onClick={() => downloadWorkPdf(invoice)}><Download className="h-4 w-4" />PDF</button>
+                        <Link className={`btn ${dueAmount > 0 ? 'btn-primary' : 'btn-secondary'} billing-action-main`} to={`/admin/payments?invoiceId=${invoiceId}`}>Go to Payment</Link>
                         <button type="button" className="btn btn-secondary billing-action-button" onClick={() => sendInvoiceWhatsApp(invoice)}><Send className="h-4 w-4" />WhatsApp</button>
-                        {!pdfReady ? <span className="billing-locked-badge">PDF locked</span> : null}
                       </div>
                     </td>
                   </tr>
