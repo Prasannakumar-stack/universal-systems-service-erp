@@ -7,6 +7,7 @@ import { upsertCustomer } from './customerService.js';
 import { createWorkOrder } from './workOrderService.js';
 import { logAudit } from './auditService.js';
 import { amcCoverageSummary, normalizeAmcCoverageType } from './amcCoverageEngine.js';
+import { getTechnicianScope } from './technicianScopeService.js';
 
 const contractTypes = ['Basic AMC', 'Comprehensive AMC', 'CCTV AMC', 'Printer AMC', 'Networking AMC', 'Solar / UPS AMC', 'Custom'];
 const serviceFrequencies = ['Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
@@ -195,8 +196,9 @@ function flattenSchedule(contracts = []) {
   }).sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate));
 }
 
-export async function getAmcSummary() {
-  const contracts = await AMCContract.find().populate('visits.technicianId visits.workOrderId customerId invoiceId').sort({ endDate: 1 });
+export async function getAmcSummary(scope = null) {
+  const filter = scope ? { _id: { $in: scope.amcContractObjectIds } } : {};
+  const contracts = await AMCContract.find(filter).populate('visits.technicianId visits.workOrderId customerId invoiceId').sort({ endDate: 1 });
   const serialized = contracts.map(serializeContract);
   const today = normalizeDay(new Date());
   const weekEnd = new Date(today);
@@ -214,8 +216,10 @@ export async function getAmcSummary() {
   };
 }
 
-export async function listAmcContracts(query = {}) {
+export async function listAmcContracts(query = {}, user = null) {
   const filter = {};
+  const technicianScope = await getTechnicianScope(user);
+  if (technicianScope) filter._id = { $in: technicianScope.amcContractObjectIds };
   const search = clean(query.search);
   if (search) {
     filter.$or = [
@@ -234,7 +238,7 @@ export async function listAmcContracts(query = {}) {
     ...serializeContract(contract),
     extraCharges: extras.get(String(contract._id)) || emptyExtraChargeSummary()
   }));
-  const summary = await getAmcSummary();
+  const summary = await getAmcSummary(technicianScope);
   return { contracts: serialized, summary };
 }
 
@@ -265,6 +269,13 @@ export async function createAmcContract(payload, user) {
     coverVisits: payload.coverVisits
   });
   const warrantyIncluded = booleanValue(payload.warrantyIncluded);
+  const visits = generateVisits({
+    startDate,
+    endDate,
+    serviceFrequency,
+    includedVisits: payload.includedVisits,
+    coveredService
+  }).map((visit) => (user?.role === 'technician' ? { ...visit, technicianId: user._id } : visit));
   const contract = await AMCContract.create({
     contractId: contractCode(),
     customerId: customer._id,
@@ -289,13 +300,7 @@ export async function createAmcContract(payload, user) {
     contractValue: Math.max(0, numberValue(payload.contractValue, 0)),
     includedVisits: Math.max(0, numberValue(payload.includedVisits, 0)),
     notes: clean(payload.notes),
-    visits: generateVisits({
-      startDate,
-      endDate,
-      serviceFrequency,
-      includedVisits: payload.includedVisits,
-      coveredService
-    })
+    visits
   });
 
   try {
@@ -321,16 +326,20 @@ export async function createAmcContract(payload, user) {
   return serializeContract(await contract.populate('customerId visits.technicianId visits.workOrderId invoiceId'));
 }
 
-export async function listAmcSchedule(query = {}) {
-  const contracts = await AMCContract.find().populate('customerId visits.technicianId visits.workOrderId invoiceId').sort({ startDate: -1 });
+export async function listAmcSchedule(query = {}, user = null) {
+  const technicianScope = await getTechnicianScope(user);
+  const filter = technicianScope ? { _id: { $in: technicianScope.amcContractObjectIds } } : {};
+  const contracts = await AMCContract.find(filter).populate('customerId visits.technicianId visits.workOrderId invoiceId').sort({ startDate: -1 });
   let schedule = flattenSchedule(contracts);
   const status = clean(query.status);
   if (status) schedule = schedule.filter((visit) => visit.status === status);
   return { schedule };
 }
 
-export async function listAmcRenewals() {
-  const contracts = await AMCContract.find().populate('customerId visits.technicianId visits.workOrderId invoiceId').sort({ endDate: 1 });
+export async function listAmcRenewals(user = null) {
+  const technicianScope = await getTechnicianScope(user);
+  const filter = technicianScope ? { _id: { $in: technicianScope.amcContractObjectIds } } : {};
+  const contracts = await AMCContract.find(filter).populate('customerId visits.technicianId visits.workOrderId invoiceId').sort({ endDate: 1 });
   const renewals = contracts.map(serializeContract).filter((contract) => ['Renewal Due', 'Expired'].includes(contract.renewalStatus));
   return { renewals };
 }

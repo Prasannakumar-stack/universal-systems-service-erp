@@ -354,16 +354,16 @@ export function AMCContractsPage({ role = 'admin' }) {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">AMC Contracts</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage service contracts, covered assets, renewal status, visits, and AMC-linked repair jobs.</p>
           </div>
-          {!isTechnician ? <button className="btn btn-primary h-10 px-4" type="button" onClick={() => setFormOpen((value) => !value)}><Plus className="h-4 w-4" />New AMC Contract</button> : null}
+          <button className="btn btn-primary h-10 px-4" type="button" onClick={() => setFormOpen((value) => !value)}><Plus className="h-4 w-4" />New AMC Contract</button>
         </div>
       </section>
 
       <div className="surface mb-5 p-3">
         <div className="tabs-list amc-tabs border-b-0">
           <Link className="tab-button tab-button-active" to={`${base}/amc-contracts`}>Contracts</Link>
-          {!isTechnician ? <Link className="tab-button" to="/admin/amc-schedule">Schedule</Link> : null}
-          {!isTechnician ? <Link className="tab-button" to="/admin/amc-renewals">Renewals</Link> : null}
-          {!isTechnician ? <Link className="tab-button" to="/admin/warranties">Warranties</Link> : null}
+          <Link className="tab-button" to={`${base}/amc-schedule`}>Schedule</Link>
+          <Link className="tab-button" to={`${base}/amc-renewals`}>Renewals</Link>
+          <Link className="tab-button" to={`${base}/warranties`}>Warranties</Link>
         </div>
       </div>
 
@@ -371,7 +371,7 @@ export function AMCContractsPage({ role = 'admin' }) {
         {contractKpis.map((item) => <AmcMetricCard key={item.label} {...item} />)}
       </div>
 
-      {formOpen && !isTechnician ? (
+      {formOpen ? (
         <form className="surface amc-form-shell mt-6 p-5" onSubmit={submit}>
           <div className="mb-5 flex items-start justify-between gap-3">
             <div>
@@ -524,7 +524,7 @@ export function AMCContractsPage({ role = 'admin' }) {
       <div className="surface amc-table-card mt-6 p-5">
         <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
           <SearchBox value={search} onChange={setSearch} placeholder="Search contract, customer, phone, service" />
-          {!isTechnician ? <Link className="btn btn-secondary" to="/admin/amc-renewals"><AlertTriangle className="h-4 w-4" />Renewals</Link> : null}
+          <Link className="btn btn-secondary" to={`${base}/amc-renewals`}><AlertTriangle className="h-4 w-4" />Renewals</Link>
         </div>
         {!visibleContracts.length ? (
           <EmptyState
@@ -591,24 +591,11 @@ export function AMCContractsPage({ role = 'admin' }) {
                     </td>
                     <td className="text-center">
                       <div className="amc-action-stack">
-                        {isTechnician ? (
-                          <>
-                            {visitWorkOrderId ? (
-                              <Link className="btn btn-primary amc-action-button" to={`${base}/work-orders/${visitWorkOrderId}`}><Wrench className="h-4 w-4" />Open Visit</Link>
-                            ) : (
-                              <span className="btn btn-secondary amc-action-button pointer-events-none opacity-60">View Details</span>
-                            )}
-                            {invoiceId ? <Link className="btn btn-secondary amc-action-button" to={`${base}/payments?invoiceId=${invoiceId}`}><CreditCard className="h-4 w-4" />Go to Payments</Link> : null}
-                          </>
-                        ) : (
-                          <>
-                            <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button>
-                            {invoiceId
-                              ? <Link className="btn btn-secondary amc-action-button" to={`/admin/payments?invoiceId=${invoiceId}`}><CreditCard className="h-4 w-4" />Go to Payments</Link>
-                              : <button className="btn btn-secondary amc-action-button" type="button" onClick={() => createInvoice(contract)}><ReceiptText className="h-4 w-4" />Create Invoice</button>}
-                            {isRenewalDue ? <button className="btn btn-secondary amc-action-button" type="button" onClick={() => startRenewal(contract)}><AlertTriangle className="h-4 w-4" />Renew</button> : null}
-                          </>
-                        )}
+                        <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button>
+                        {invoiceId
+                          ? <Link className="btn btn-secondary amc-action-button" to={`${base}/payments?invoiceId=${invoiceId}`}><CreditCard className="h-4 w-4" />Go to Payments</Link>
+                          : <button className="btn btn-secondary amc-action-button" type="button" onClick={() => createInvoice(contract)}><ReceiptText className="h-4 w-4" />Create Invoice</button>}
+                        {isRenewalDue ? <button className="btn btn-secondary amc-action-button" type="button" onClick={() => startRenewal(contract)}><AlertTriangle className="h-4 w-4" />Renew</button> : null}
                       </div>
                     </td>
                   </tr>
@@ -682,8 +669,9 @@ function AmcMetricCard({ icon: Icon, label, value, helper, tone = 'blue' }) {
   );
 }
 
-export function WarrantiesPage() {
+export function WarrantiesPage({ role = 'admin' }) {
   const { request } = useAuth();
+  const base = role === 'technician' ? '/tech' : '/admin';
   const { data, loading, error } = useResource(() => request('/amc/contracts'), [request]);
   const warrantyContracts = (data?.contracts || []).filter((contract) => Boolean(contract.warrantyIncluded));
 
@@ -699,15 +687,15 @@ export function WarrantiesPage() {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Warranties</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Track warranty coverage linked to customer devices and service contracts.</p>
           </div>
-          <Link className="btn btn-secondary h-10 px-4" to="/admin/amc-contracts"><FileText className="h-4 w-4" />Contracts</Link>
+          <Link className="btn btn-secondary h-10 px-4" to={`${base}/amc-contracts`}><FileText className="h-4 w-4" />Contracts</Link>
         </div>
       </section>
       <div className="surface mb-5 p-3">
         <div className="tabs-list amc-tabs border-b-0">
-          <Link className="tab-button" to="/admin/amc-contracts">Contracts</Link>
-          <Link className="tab-button" to="/admin/amc-schedule">Schedule</Link>
-          <Link className="tab-button" to="/admin/amc-renewals">Renewals</Link>
-          <Link className="tab-button tab-button-active" to="/admin/warranties">Warranties</Link>
+          <Link className="tab-button" to={`${base}/amc-contracts`}>Contracts</Link>
+          <Link className="tab-button" to={`${base}/amc-schedule`}>Schedule</Link>
+          <Link className="tab-button" to={`${base}/amc-renewals`}>Renewals</Link>
+          <Link className="tab-button tab-button-active" to={`${base}/warranties`}>Warranties</Link>
         </div>
       </div>
       <div className="surface amc-table-card p-5">

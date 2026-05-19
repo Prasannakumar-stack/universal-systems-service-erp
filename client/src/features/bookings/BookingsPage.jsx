@@ -254,7 +254,7 @@ export function BookingsPage({ role = 'admin' }) {
             <p className="text-xs font-black uppercase tracking-widest text-sky-400/90">{isTechnician ? 'Operations' : 'Admin'}</p>
             <h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Bookings</h1>
             <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-400">
-              {isTechnician ? 'Booking intake records with linked service jobs and customer contact actions.' : 'Booking intake is kept separate from repair and service jobs. Convert a booking when service work begins.'}
+              {isTechnician ? 'Booking intake records with linked service jobs.' : 'Booking intake is kept separate from repair and service jobs. Convert a booking when service work begins.'}
             </p>
           </div>
           <div className="relative shrink-0">
@@ -310,7 +310,7 @@ export function BookingsPage({ role = 'admin' }) {
               <col className="booking-col-source booking-source-column" style={{ width: '8%' }} />
               <col className="booking-col-device" style={{ width: '13%' }} />
               <col className="booking-col-issue" style={{ width: '29%' }} />
-              <col className="booking-col-action" style={{ width: '23%', minWidth: '15rem' }} />
+              <col className="booking-col-action" style={{ width: isTechnician ? '12%' : '23%', minWidth: isTechnician ? '8rem' : '15rem' }} />
             </colgroup>
           <thead>
             <tr>
@@ -350,7 +350,7 @@ export function BookingsPage({ role = 'admin' }) {
                     {booking.issue || 'No issue captured'}
                   </span>
                 </td>
-                <td className="bookings-cell-action min-w-[15rem]">
+                <td className={`bookings-cell-action ${isTechnician ? 'min-w-[8rem]' : 'min-w-[15rem]'}`}>
                   {isTechnician ? (
                     <TechnicianBookingActions booking={booking} workOrdersBase={workOrdersBase} />
                   ) : (
@@ -374,26 +374,18 @@ export function BookingsPage({ role = 'admin' }) {
 
 function TechnicianBookingActions({ booking, workOrdersBase }) {
   const workOrderId = recordId(booking.workOrderId);
-  const phone = String(booking.phone || '').trim();
-  const disabled = phone ? '' : 'pointer-events-none opacity-50';
-  const openJobClass = `btn btn-primary booking-action-button booking-open-job-btn ${workOrderId ? '' : 'pointer-events-none opacity-50'}`;
+  const detailsClass = `btn btn-primary booking-action-button booking-open-job-btn ${workOrderId ? '' : 'pointer-events-none opacity-50'}`;
 
   return (
     <div className="booking-action-cell">
-      <div className="flex flex-wrap items-center gap-2">
-        <a className={`btn btn-secondary h-10 w-10 p-0 ${disabled}`} href={callHref(phone)} aria-label="Call customer">
-          <PhoneCallIcon className="h-4 w-4" />
-        </a>
-        <a className={`btn btn-secondary h-10 w-10 p-0 ${disabled}`} href={phone ? customerWhatsAppHref({ phone, name: booking.customerName }) : '#'} target="_blank" rel="noreferrer" aria-label="WhatsApp customer">
-          <Send className="h-4 w-4" />
-        </a>
+      <div className="flex flex-wrap items-center justify-center gap-2">
         {workOrderId ? (
-          <Link className={openJobClass} to={`${workOrdersBase}/${workOrderId}`}>
-            Open Job
+          <Link className={detailsClass} to={`${workOrdersBase}/${workOrderId}`}>
+            Details
           </Link>
         ) : (
-          <span className={openJobClass} aria-disabled="true">
-            Open Job
+          <span className={detailsClass} aria-disabled="true">
+            Details
           </span>
         )}
       </div>

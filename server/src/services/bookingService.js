@@ -49,7 +49,7 @@ export async function createBooking(payload, user = null) {
     problemImage,
     device: clean(payload.device || serviceType || payload.product || 'General Service'),
     issue: clean(payload.issue || payload.problemDescription || payload.problem || 'Service request'),
-    technicianId: payload.technicianId || payload.assignedTo || null
+    technicianId: payload.technicianId || payload.assignedTo || (user?.role === 'technician' ? user._id : null)
   });
 
   await createNotification({

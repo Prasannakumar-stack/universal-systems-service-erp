@@ -11,6 +11,7 @@ import { getAmcSummary } from '../services/amcService.js';
 import { getAdminDashboardMetrics } from '../services/dashboardService.js';
 import { notificationFilterFor } from '../services/notificationService.js';
 import { refreshSmartReminders } from '../services/reminderService.js';
+import { technicianWorkOrderScope } from '../services/technicianScopeService.js';
 
 export async function adminMetrics(req, res) {
   try {
@@ -85,8 +86,9 @@ export async function adminStats(_req, res) {
 }
 
 export async function technicianStats(req, res) {
+  const workOrderScope = technicianWorkOrderScope(req.user) || { technicianId: req.user._id };
   const [jobs, notifications] = await Promise.all([
-    WorkOrder.find({ technicianId: req.user._id }).populate('customerId invoiceId').sort({ createdAt: -1 }),
+    WorkOrder.find(workOrderScope).populate('customerId invoiceId').sort({ createdAt: -1 }),
     Notification.find(notificationFilterFor(req.user)).sort({ createdAt: -1 }).limit(8)
   ]);
   res.json({

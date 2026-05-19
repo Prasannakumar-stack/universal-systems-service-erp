@@ -2,7 +2,7 @@ import { createAmcContract, createWorkOrderFromAmc, listAmcContracts, listAmcRen
 import { required } from '../utils/http.js';
 
 export async function listContracts(req, res) {
-  const data = await listAmcContracts(req.query);
+  const data = await listAmcContracts(req.query, req.user);
   res.json(data);
 }
 
@@ -13,12 +13,12 @@ export async function createContract(req, res) {
 }
 
 export async function listSchedule(req, res) {
-  const data = await listAmcSchedule(req.query);
+  const data = await listAmcSchedule(req.query, req.user);
   res.json(data);
 }
 
 export async function listRenewals(req, res) {
-  const data = await listAmcRenewals();
+  const data = await listAmcRenewals(req.user);
   res.json(data);
 }
 

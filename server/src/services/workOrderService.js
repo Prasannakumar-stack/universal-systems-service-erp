@@ -9,6 +9,7 @@ import { logAudit } from './auditService.js';
 import { AUTO_AMC_PART_CHARGE_MODE, AUTO_AMC_PART_CHARGE_TYPE, MANUAL_AMC_PART_CHARGE_MODE, amcPartChargeType } from './amcCoverageEngine.js';
 import { createNotification } from './notificationService.js';
 import { applyStockMovement, syncPartAvailability } from './stockMovementService.js';
+import { technicianCanAccessWorkOrder, technicianWorkOrderScope } from './technicianScopeService.js';
 
 const populateWorkOrder = [
   { path: 'customerId', select: 'name phone address devices' },
@@ -262,6 +263,8 @@ export async function listWorkOrders(query, user) {
   }
   if (validObjectId(query.technicianId)) filter.technicianId = validObjectId(query.technicianId);
   if (validObjectId(query.customerId)) filter.customerId = validObjectId(query.customerId);
+  const technicianScope = technicianWorkOrderScope(user);
+  if (technicianScope) clauses.push(technicianScope);
   addDateRange(filter, query);
 
   const search = clean(query.search);
@@ -297,6 +300,7 @@ export async function listWorkOrders(query, user) {
 export async function getWorkOrder(id, user) {
   const workOrder = await WorkOrder.findById(id).populate(detailPopulateWorkOrder);
   if (!workOrder) throw appError('Work order not found', 404);
+  if (!technicianCanAccessWorkOrder(workOrder, user)) throw appError('Work order not found', 404);
   return workOrder;
 }
 

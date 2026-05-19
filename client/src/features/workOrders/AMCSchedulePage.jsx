@@ -140,10 +140,11 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 
-export function AMCSchedulePage() {
+export function AMCSchedulePage({ role = 'admin' }) {
   const { request } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
+  const base = role === 'technician' ? '/tech' : '/admin';
   const [status, setStatus] = useState('');
   const { data, loading, error, reload } = useResource(() => request('/amc/schedule'), [request]);
   const schedule = data?.schedule || [];
@@ -174,7 +175,7 @@ export function AMCSchedulePage() {
       });
       push('Repair & Service Job created from AMC visit');
       reload();
-      navigate(`/admin/work-orders/${recordId(result.workOrder)}`);
+      navigate(`${base}/work-orders/${recordId(result.workOrder)}`);
     } catch (err) {
       push(err.message, 'error');
     }
@@ -192,15 +193,15 @@ export function AMCSchedulePage() {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">AMC Schedule</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Track upcoming, due today, overdue, and completed AMC service visits.</p>
           </div>
-          <Link className="btn btn-secondary h-10 px-4" to="/admin/amc-contracts"><FileText className="h-4 w-4" />Contracts</Link>
+          <Link className="btn btn-secondary h-10 px-4" to={`${base}/amc-contracts`}><FileText className="h-4 w-4" />Contracts</Link>
         </div>
       </section>
       <div className="surface mb-5 p-3">
         <div className="tabs-list amc-tabs border-b-0">
-          <Link className="tab-button" to="/admin/amc-contracts">Contracts</Link>
-          <Link className="tab-button tab-button-active" to="/admin/amc-schedule">Schedule</Link>
-          <Link className="tab-button" to="/admin/amc-renewals">Renewals</Link>
-          <Link className="tab-button" to="/admin/warranties">Warranties</Link>
+          <Link className="tab-button" to={`${base}/amc-contracts`}>Contracts</Link>
+          <Link className="tab-button tab-button-active" to={`${base}/amc-schedule`}>Schedule</Link>
+          <Link className="tab-button" to={`${base}/amc-renewals`}>Renewals</Link>
+          <Link className="tab-button" to={`${base}/warranties`}>Warranties</Link>
         </div>
       </div>
 
@@ -214,14 +215,14 @@ export function AMCSchedulePage() {
             <option value="">All statuses</option>
             {['Upcoming', 'Due Today', 'Overdue', 'Completed'].map((item) => <option key={item}>{item}</option>)}
           </select>
-          <Link className="btn btn-secondary" to="/admin/amc-renewals"><AlertTriangle className="h-4 w-4" />Renewals</Link>
+          <Link className="btn btn-secondary" to={`${base}/amc-renewals`}><AlertTriangle className="h-4 w-4" />Renewals</Link>
         </div>
         {!visibleSchedule.length ? (
           <EmptyState
             icon={CalendarClock}
             title={status ? `No ${status.toLowerCase()} visits` : 'No schedule visits found'}
             message={status ? 'Reset the status filter to review the full AMC visit schedule.' : 'Visits will appear after AMC contracts are created.'}
-            action={status ? <button className="btn btn-secondary" type="button" onClick={() => setStatus('')}>Reset Filter</button> : <Link className="btn btn-primary" to="/admin/amc-contracts">Create AMC Contract</Link>}
+            action={status ? <button className="btn btn-secondary" type="button" onClick={() => setStatus('')}>Reset Filter</button> : <Link className="btn btn-primary" to={`${base}/amc-contracts`}>Create AMC Contract</Link>}
           />
         ) : (
           <div className="table-wrap amc-table-wrap bg-[var(--surface)]">
@@ -247,7 +248,7 @@ export function AMCSchedulePage() {
                     <td className="text-right">
                       <div className="amc-actions">
                         {workOrderId ? (
-                          <Link className="btn btn-secondary amc-action-button" to={`/admin/work-orders/${workOrderId}`}>Open Job</Link>
+                          <Link className="btn btn-secondary amc-action-button" to={`${base}/work-orders/${workOrderId}`}>Open Job</Link>
                         ) : (
                           <button className={`btn ${isPrimaryVisit ? 'btn-primary' : 'btn-secondary'} amc-action-button`} type="button" onClick={() => createJob(visit)}><Wrench className="h-4 w-4" />Create Job</button>
                         )}

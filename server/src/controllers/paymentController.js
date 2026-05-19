@@ -3,6 +3,7 @@ import AMCContract from '../models/AMCContract.js';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import { recordPayment } from '../services/paymentService.js';
+import { getTechnicianScope } from '../services/technicianScopeService.js';
 import { clean, required } from '../utils/http.js';
 import { addDateRange, paginatedPayload, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 
@@ -22,6 +23,8 @@ export async function list(req, res) {
     if (validObjectId(req.query.customerId)) filter.customerId = validObjectId(req.query.customerId);
     if (validObjectId(req.query.invoiceId)) filter.invoiceId = validObjectId(req.query.invoiceId);
     addDateRange(filter, req.query);
+    const technicianScope = await getTechnicianScope(req.user);
+    if (technicianScope) clauses.push({ invoiceId: { $in: technicianScope.invoiceObjectIds } });
 
     const regex = searchRegex(req.query.search);
     if (regex) {
@@ -53,6 +56,7 @@ export async function list(req, res) {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const invoiceSummaryFilter = technicianScope ? { _id: { $in: technicianScope.invoiceObjectIds } } : {};
 
     const [total, rows, paymentSummaryRows, invoiceSummaryRows, methods] = await Promise.all([
       Payment.countDocuments(filter),
@@ -84,6 +88,7 @@ export async function list(req, res) {
         }
       ]),
       Invoice.aggregate([
+        { $match: invoiceSummaryFilter },
         {
           $group: {
             _id: null,
@@ -93,7 +98,7 @@ export async function list(req, res) {
           }
         }
       ]),
-      Payment.distinct('method')
+      Payment.distinct('method', technicianScope ? { invoiceId: { $in: technicianScope.invoiceObjectIds } } : {})
     ]);
     const payments = rows.map((payment) => withNestedIds(payment, ['invoiceId', 'customerId']));
     const summary = {

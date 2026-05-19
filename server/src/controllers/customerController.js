@@ -2,6 +2,7 @@ import Customer from '../models/Customer.js';
 import Invoice from '../models/Invoice.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { createCustomer, getCustomerProfile } from '../services/customerService.js';
+import { getTechnicianScope } from '../services/technicianScopeService.js';
 import { clean, required } from '../utils/http.js';
 import { addDateRange, paginatedPayload, paginationMeta, parsePagination, searchRegex, withIds } from '../utils/pagination.js';
 
@@ -18,6 +19,8 @@ export async function list(req, res) {
     const regex = searchRegex(req.query.search);
     if (regex) filter.$or = [{ name: regex }, { phone: regex }, { email: regex }, { address: regex }, { devices: regex }];
     addDateRange(filter, req.query);
+    const technicianScope = await getTechnicianScope(req.user);
+    if (technicianScope) filter._id = { $in: technicianScope.customerObjectIds };
 
     const [total, rows] = await Promise.all([
       Customer.countDocuments(filter),
@@ -26,8 +29,14 @@ export async function list(req, res) {
     const customers = withIds(rows);
     const customerIds = customers.map((customer) => customer._id);
     const [workOrders, invoices] = customerIds.length ? await Promise.all([
-      WorkOrder.find({ customerId: { $in: customerIds } }).select('customerId device status serviceType issue bookingId createdAt').lean(),
-      Invoice.find({ customerId: { $in: customerIds } }).select('customerId invoiceNumber balance paidAmount status createdAt').lean()
+      WorkOrder.find({
+        customerId: { $in: customerIds },
+        ...(technicianScope ? { _id: { $in: technicianScope.workOrderObjectIds } } : {})
+      }).select('customerId device status serviceType issue bookingId createdAt').lean(),
+      Invoice.find({
+        customerId: { $in: customerIds },
+        ...(technicianScope ? { _id: { $in: technicianScope.invoiceObjectIds } } : {})
+      }).select('customerId invoiceNumber balance paidAmount status createdAt').lean()
     ]) : [[], []];
 
     res.json(paginatedPayload('customers', customers, paginationMeta(page, limit, total), {
@@ -41,6 +50,6 @@ export async function list(req, res) {
 }
 
 export async function getById(req, res) {
-  const profile = await getCustomerProfile(req.params.id);
+  const profile = await getCustomerProfile(req.params.id, req.user);
   res.json(profile);
 }

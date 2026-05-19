@@ -141,10 +141,11 @@ import {
 } from '../../shared/phase1Shared.jsx';
 import { normalizeAmcCoverageType } from '../../shared/amcCoverage.js';
 
-export function AMCRenewalsPage() {
+export function AMCRenewalsPage({ role = 'admin' }) {
   const { request } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
+  const base = role === 'technician' ? '/tech' : '/admin';
   const { data, loading, error, reload } = useResource(() => request('/amc/renewals'), [request]);
   const renewals = data?.renewals || [];
   const expiring = renewals.filter((contract) => contract.renewalStatus === 'Renewal Due');
@@ -162,14 +163,14 @@ export function AMCRenewalsPage() {
       });
       push('Repair & Service Job created from AMC');
       reload();
-      navigate(`/admin/work-orders/${recordId(result.workOrder)}`);
+      navigate(`${base}/work-orders/${recordId(result.workOrder)}`);
     } catch (err) {
       push(err.message, 'error');
     }
   }
 
   function renewContract(contract) {
-    navigate('/admin/amc-contracts', { state: { renewContract: contract } });
+    navigate(`${base}/amc-contracts`, { state: { renewContract: contract } });
   }
 
   if (loading) return <LoadingBlock />;
@@ -184,15 +185,15 @@ export function AMCRenewalsPage() {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">AMC Renewals</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Review contracts expiring in 30 days and expired AMC agreements.</p>
           </div>
-          <Link className="btn btn-primary h-10 px-4" to="/admin/amc-contracts"><Plus className="h-4 w-4" />New Contract</Link>
+          <Link className="btn btn-primary h-10 px-4" to={`${base}/amc-contracts`}><Plus className="h-4 w-4" />New Contract</Link>
         </div>
       </section>
       <div className="surface mb-5 p-3">
         <div className="tabs-list amc-tabs border-b-0">
-          <Link className="tab-button" to="/admin/amc-contracts">Contracts</Link>
-          <Link className="tab-button" to="/admin/amc-schedule">Schedule</Link>
-          <Link className="tab-button tab-button-active" to="/admin/amc-renewals">Renewals</Link>
-          <Link className="tab-button" to="/admin/warranties">Warranties</Link>
+          <Link className="tab-button" to={`${base}/amc-contracts`}>Contracts</Link>
+          <Link className="tab-button" to={`${base}/amc-schedule`}>Schedule</Link>
+          <Link className="tab-button tab-button-active" to={`${base}/amc-renewals`}>Renewals</Link>
+          <Link className="tab-button" to={`${base}/warranties`}>Warranties</Link>
         </div>
       </div>
       <div className="amc-kpi-grid grid gap-4 sm:grid-cols-2">
@@ -204,7 +205,7 @@ export function AMCRenewalsPage() {
             icon={Bell}
             title="No AMC renewals due"
             message="Renewal reminders will appear when contracts are near expiry."
-            action={<Link className="btn btn-secondary" to="/admin/amc-contracts">View Contracts</Link>}
+            action={<Link className="btn btn-secondary" to={`${base}/amc-contracts`}>View Contracts</Link>}
           />
         ) : (
           <div className="table-wrap amc-table-wrap bg-[var(--surface)]">

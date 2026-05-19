@@ -4,6 +4,7 @@ import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { createInvoice } from '../services/invoiceService.js';
+import { getTechnicianScope } from '../services/technicianScopeService.js';
 import { clean, required } from '../utils/http.js';
 import { addDateRange, paginatedPayload, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 
@@ -29,6 +30,16 @@ export async function list(req, res) {
       if (paymentStatus === 'partial') filter.status = 'Partial';
     }
     addDateRange(filter, req.query);
+    const technicianScope = await getTechnicianScope(req.user);
+    if (technicianScope) {
+      clauses.push({
+        $or: [
+          { _id: { $in: technicianScope.invoiceObjectIds } },
+          { workOrderId: { $in: technicianScope.workOrderObjectIds } },
+          { amcContractId: { $in: technicianScope.amcContractObjectIds } }
+        ]
+      });
+    }
 
     if (clean(req.query.method)) {
       const invoiceIds = await Payment.distinct('invoiceId', { method: clean(req.query.method) });
@@ -80,7 +91,7 @@ export async function list(req, res) {
           }
         }
       ]),
-      Payment.distinct('method')
+      Payment.distinct('method', technicianScope ? { invoiceId: { $in: technicianScope.invoiceObjectIds } } : {})
     ]);
     const invoices = rows.map((invoice) => withNestedIds(invoice, ['workOrderId', 'amcContractId', 'customerId']));
     const summary = summaryRows[0] || { totalInvoices: 0, pending: 0, partial: 0, paid: 0, totalValue: 0, balance: 0 };

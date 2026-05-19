@@ -5,6 +5,7 @@ import WorkOrder from '../models/WorkOrder.js';
 import { COMPANY, LOGO_FULL_PATH, PDF_DIR } from '../config.js';
 import { appError } from '../utils/http.js';
 import { calculateAmcCoverageBreakdown, amcCoverageSummary } from './amcCoverageEngine.js';
+import { technicianCanAccessWorkOrder } from './technicianScopeService.js';
 
 const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
 const boldFontPath = 'C:\\Windows\\Fonts\\arialbd.ttf';
@@ -67,7 +68,7 @@ async function getPdfWorkOrder(workOrderId, user) {
     })
     .populate('invoiceId', 'invoiceNumber total paidAmount balance status title notes');
   if (!workOrder) throw appError('Work order not found', 404);
-  if (user.role === 'technician' && String(workOrder.technicianId?._id) !== String(user._id)) {
+  if (!technicianCanAccessWorkOrder(workOrder, user)) {
     throw appError('You do not have permission to view this work order', 403);
   }
   return workOrder;

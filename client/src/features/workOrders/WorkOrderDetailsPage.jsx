@@ -410,7 +410,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const [serviceCharge, setServiceCharge] = useState(0);
   const [labourCharge, setLabourCharge] = useState(0);
   const [pdfBusy, setPdfBusy] = useState('');
-  const [activeTab, setActiveTab] = useState(role === 'technician' ? 'overview' : 'parts');
+  const [activeTab, setActiveTab] = useState('parts');
   const [photoFiles, setPhotoFiles] = useState([]);
   const [partAction, setPartAction] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -446,6 +446,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
   useEffect(() => {
     if (role !== 'technician' && activeTab === 'overview') setActiveTab('parts');
+    if (role === 'technician' && ['overview', 'workUpdate', 'timeline'].includes(activeTab)) setActiveTab('parts');
   }, [activeTab, role]);
 
   useEffect(() => {
@@ -1161,8 +1162,6 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     return pdfLockedReason(flow, order);
   };
   const technicianCloneTabs = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'workUpdate', label: 'Checklist / Work Update' },
     { id: 'parts', label: 'Parts' },
     { id: 'partRequests', label: 'Part Requests' },
     { id: 'billing', label: 'Billing' },
@@ -1171,7 +1170,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     { id: 'documents', label: 'Documents' }
   ];
   const visibleWorkOrderTabs = isTechnician ? technicianCloneTabs : workOrderTabs;
-  const contentTabs = ['overview', 'workUpdate', 'parts', 'partRequests', 'billing', 'notes', 'photos'];
+  const contentTabs = isTechnician ? ['parts', 'partRequests', 'billing', 'notes', 'photos'] : ['overview', 'workUpdate', 'parts', 'partRequests', 'billing', 'notes', 'photos'];
   const sideTabs = isTechnician ? ['documents'] : ['documents', 'timeline'];
   const phone = customerPhone(order);
   const completedStatuses = ['Completed', 'Delivered', 'Returned'];
@@ -1689,6 +1688,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             ['Completed Date', showCompletedDate ? completedDateDisplay : 'Not completed yet'],
             ['Customer Name', order.customerId?.name || '-'],
             ['Phone', order.customerId?.phone || '-'],
+            ['Address', order.customerId?.address || '-'],
             ['Service Type', order.serviceType || order.service || '-'],
             ['Device', order.device || '-'],
             ...(isAmcLinked ? [

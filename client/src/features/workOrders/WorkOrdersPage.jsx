@@ -415,9 +415,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--line)]">
-              {visibleWorkOrders.map((order) => {
-                const phone = customerPhone(order);
-                return (
+              {visibleWorkOrders.map((order) => (
                 <tr
                   key={order.id}
                   className="work-orders-table-row transition-colors duration-150 hover:bg-sky-400/[0.05] hover:shadow-[inset_2px_0_0_rgba(56,189,248,0.45)]"
@@ -464,16 +462,6 @@ export function WorkOrdersPage({ role = 'admin' }) {
                   </td>
                   <td className={`${workOrdersTdClass} work-orders-cell-actions w-[170px] min-w-[170px] !whitespace-normal px-4 text-center align-middle`}>
                     <div className="work-orders-actions flex items-center justify-center gap-1.5">
-                      {role === 'technician' ? (
-                        <>
-                          <a className={`btn btn-secondary h-10 w-10 p-0 ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)} aria-label="Call customer">
-                            <PhoneCallIcon className="h-4 w-4" />
-                          </a>
-                          <a className={`btn btn-secondary h-10 w-10 p-0 ${phone ? '' : 'pointer-events-none opacity-50'}`} href={phone ? technicianWhatsAppHref(order) : '#'} target="_blank" rel="noreferrer" aria-label="WhatsApp customer">
-                            <Send className="h-4 w-4" />
-                          </a>
-                        </>
-                      ) : null}
                       <Link className={workOrdersDetailsBtnClass} to={`${base}/${order.id}`}>Details</Link>
                       {role === 'admin' && !order.technicianId ? (
                         <button type="button" className={workOrdersAssignBtnClass} onClick={() => autoAssign(order.id)}>Assign</button>
@@ -481,8 +469,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
                     </div>
                   </td>
                 </tr>
-                );
-              })}
+              ))}
             </tbody>
           </table>
         </div>

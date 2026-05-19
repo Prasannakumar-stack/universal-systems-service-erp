@@ -1,5 +1,6 @@
 import Booking from '../models/Booking.js';
 import { createBooking } from '../services/bookingService.js';
+import { getTechnicianScope } from '../services/technicianScopeService.js';
 import { clean, required } from '../utils/http.js';
 import { addDateRange, paginatedPayload, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 
@@ -33,6 +34,16 @@ export async function list(req, res) {
       clauses.push({ $or: [{ bookingSource: source }, { source }, { channel: source }] });
     }
     addDateRange(filter, req.query);
+    const technicianScope = await getTechnicianScope(req.user);
+    if (technicianScope) {
+      clauses.push({
+        $or: [
+          { technicianId: technicianScope.technicianId },
+          { _id: { $in: technicianScope.bookingObjectIds } },
+          { workOrderId: { $in: technicianScope.workOrderObjectIds } }
+        ]
+      });
+    }
 
     const search = clean(req.query.search);
     const regex = searchRegex(search);

@@ -2,6 +2,7 @@ import Customer from '../models/Customer.js';
 import WorkOrder from '../models/WorkOrder.js';
 import Invoice from '../models/Invoice.js';
 import { appError, clean } from '../utils/http.js';
+import { getTechnicianScope } from './technicianScopeService.js';
 
 export async function upsertCustomer(payload) {
   const phone = clean(payload.phone);
@@ -35,10 +36,20 @@ export async function createCustomer(payload) {
   return upsertCustomer(payload);
 }
 
-export async function getCustomerProfile(id) {
+export async function getCustomerProfile(id, user = null) {
   const customer = await Customer.findById(id);
   if (!customer) throw appError('Customer not found', 404);
-  const serviceHistory = await WorkOrder.find({ customerId: id }).populate('technicianId', 'name').sort({ createdAt: -1 });
-  const invoices = await Invoice.find({ customerId: id }).sort({ createdAt: -1 });
+  const technicianScope = await getTechnicianScope(user);
+  if (technicianScope && !technicianScope.customerIds.includes(String(customer._id))) {
+    throw appError('Customer not found', 404);
+  }
+  const serviceHistory = await WorkOrder.find({
+    customerId: id,
+    ...(technicianScope ? { _id: { $in: technicianScope.workOrderObjectIds } } : {})
+  }).populate('technicianId', 'name').sort({ createdAt: -1 });
+  const invoices = await Invoice.find({
+    customerId: id,
+    ...(technicianScope ? { _id: { $in: technicianScope.invoiceObjectIds } } : {})
+  }).sort({ createdAt: -1 });
   return { customer, serviceHistory, invoices };
 }
