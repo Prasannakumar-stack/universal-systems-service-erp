@@ -173,6 +173,20 @@ const SOURCE_DISPLAY = {
   Website: 'WEBSITE'
 };
 
+function normalizeStatusParam(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  const bySlug = {
+    pending: 'Pending',
+    'in-progress': 'In Progress',
+    'awaiting-parts': 'Awaiting Parts',
+    completed: 'Completed',
+    delivered: 'Delivered',
+    returned: 'Returned'
+  };
+  if (bySlug[raw]) return bySlug[raw];
+  return workOrderDetailStatuses.find((status) => status.toLowerCase() === raw) || '';
+}
+
 function WorkOrderSourceBadge({ source }) {
   const key = normalizeSourceLabel(source);
   const label = SOURCE_DISPLAY[key] || 'WEBSITE';
@@ -222,13 +236,17 @@ export function WorkOrdersPage({ role = 'admin' }) {
   const { request } = useAuth();
   const { push } = useToast();
   const location = useLocation();
-  const statusParam = useMemo(() => new URLSearchParams(location.search).get('status') || '', [location.search]);
+  const routeParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const statusParam = useMemo(() => normalizeStatusParam(routeParams.get('status')), [routeParams]);
   const priorityParam = useMemo(() => new URLSearchParams(location.search).get('priority') || '', [location.search]);
   const technicianIdParam = useMemo(() => new URLSearchParams(location.search).get('technicianId') || '', [location.search]);
+  const filterParam = useMemo(() => routeParams.get('filter') || '', [routeParams]);
+  const notesParam = useMemo(() => routeParams.get('notes') || '', [routeParams]);
+  const todayFilterDate = useMemo(() => filterParam === 'today' ? dateInputValue(new Date()) : '', [filterParam]);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState(statusParam);
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(todayFilterDate);
+  const [dateTo, setDateTo] = useState(todayFilterDate);
   const [technicianId, setTechnicianId] = useState(technicianIdParam);
   const [serviceType, setServiceType] = useState('');
   const [source, setSource] = useState('');
@@ -253,8 +271,14 @@ export function WorkOrdersPage({ role = 'admin' }) {
   const base = role === 'admin' ? '/admin/work-orders' : '/tech/work-orders';
 
   useEffect(() => {
-    if (role === 'admin') setStatus(statusParam);
-  }, [role, statusParam]);
+    setStatus(statusParam);
+  }, [statusParam]);
+
+  useEffect(() => {
+    if (filterParam !== 'today') return;
+    setDateFrom(todayFilterDate);
+    setDateTo(todayFilterDate);
+  }, [filterParam, todayFilterDate]);
 
   useEffect(() => {
     if (role === 'admin') setPriorityFilter(priorityParam);
@@ -320,8 +344,11 @@ export function WorkOrdersPage({ role = 'admin' }) {
     if (source) {
       rows = rows.filter((order) => normalizeSourceLabel(order) === source);
     }
+    if (notesParam === 'pending') {
+      rows = rows.filter((order) => ['Pending', 'In Progress', 'Awaiting Parts'].includes(order.status) && !(order.notes || []).length);
+    }
     return sortWorkOrdersByPriority(rows);
-  }, [priorityFilter, searchTerm, source, workOrders]);
+  }, [notesParam, priorityFilter, searchTerm, source, workOrders]);
   const visibleWorkOrders = filteredWorkOrders;
   const pagination = paginationFrom(data, workOrders.length, limit);
 

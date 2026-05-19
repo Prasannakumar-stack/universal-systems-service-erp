@@ -139,33 +139,126 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { ArrowRight } from 'lucide-react';
+
+function TechnicianKpiCard({ icon: Icon, value, title, subtitle, to, tone = 'blue' }) {
+  const toneClass = {
+    blue: 'dashboard-kpi-blue',
+    green: 'dashboard-kpi-green',
+    yellow: 'dashboard-kpi-yellow',
+    red: 'dashboard-kpi-red'
+  }[tone] || 'dashboard-kpi-blue';
+
+  return (
+    <Link to={to} className={`dashboard-kpi-card lift-card group ${toneClass}`}>
+      <div className="flex h-full items-start justify-between gap-4">
+        <div className="dashboard-kpi-copy min-w-0">
+          <span className="dashboard-kpi-icon mb-4">
+            <Icon className="h-5 w-5" />
+          </span>
+          <p className="dashboard-kpi-value text-3xl font-black text-white">{value}</p>
+          <p className="dashboard-kpi-title mt-2 text-xs font-black uppercase tracking-wide text-slate-300">{title}</p>
+          <p className="dashboard-kpi-helper mt-2 text-sm font-semibold muted">{subtitle}</p>
+        </div>
+        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-slate-500 transition-all group-hover:translate-x-1 group-hover:text-white" />
+      </div>
+    </Link>
+  );
+}
 
 export function TechnicianDashboard() {
   const { request, user } = useAuth();
   const { data, loading, error } = useResource(() => request('/dashboard/technician'), [request]);
+  const lastUpdatedTime = useMemo(() => new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), []);
   if (loading) return <TechnicianLoadingCards />;
   if (error) return <ErrorBlock message={error} />;
 
-  const jobs = data.jobs || [];
+  const jobs = data?.jobs || [];
   const todayJobs = jobs.filter(isTechnicianTodayJob);
   const inProgressJobs = jobs.filter((job) => job.status === 'In Progress');
   const awaitingPartsJobs = jobs.filter((job) => job.status === 'Awaiting Parts');
   const pendingUpdates = jobs.filter((job) => ['Pending', 'In Progress', 'Awaiting Parts'].includes(job.status) && !(job.notes || []).length);
   const amcVisitsDue = jobs.filter((job) => job.amcContractId && ['Pending', 'In Progress', 'Awaiting Parts'].includes(job.status));
+  const kpiCards = [
+    {
+      icon: CalendarClock,
+      value: todayJobs.length,
+      title: "Today's Jobs",
+      subtitle: 'Jobs scheduled for today',
+      to: '/tech/work-orders?filter=today',
+      tone: 'blue'
+    },
+    {
+      icon: Wrench,
+      value: jobs.length,
+      title: 'Assigned Work Orders',
+      subtitle: 'Jobs assigned or created by you',
+      to: '/tech/work-orders',
+      tone: 'blue'
+    },
+    {
+      icon: Wrench,
+      value: inProgressJobs.length,
+      title: 'In Progress',
+      subtitle: 'Jobs currently in progress',
+      to: '/tech/work-orders?status=in-progress',
+      tone: 'green'
+    },
+    {
+      icon: PackagePlus,
+      value: awaitingPartsJobs.length,
+      title: 'Awaiting Parts',
+      subtitle: 'Jobs waiting for parts',
+      to: '/tech/work-orders?status=awaiting-parts',
+      tone: 'yellow'
+    },
+    {
+      icon: AlertTriangle,
+      value: pendingUpdates.length,
+      title: 'Pending Notes / Updates',
+      subtitle: 'Jobs with pending updates',
+      to: '/tech/work-orders?notes=pending',
+      tone: 'yellow'
+    },
+    {
+      icon: ShieldCheck,
+      value: amcVisitsDue.length,
+      title: 'AMC Visits Due',
+      subtitle: 'Upcoming AMC visits',
+      to: '/tech/amc-contracts/schedule',
+      tone: 'green'
+    }
+  ];
 
   return (
-    <>
-      <PageHeader title="Technician Dashboard" eyebrow={`Welcome, ${user?.name || 'Technician'}`}>
+    <div className="technician-dashboard-page">
+      <PageHeader
+        title="Technician Dashboard"
+        eyebrow={`Welcome, ${user?.name || 'Technician'}`}
+        action={(
+          <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold muted">
+            <CalendarClock className="h-4 w-4 text-sky-300" />
+            <span>Last updated: Today, {lastUpdatedTime}</span>
+          </div>
+        )}
+      >
         Today's assigned jobs, active work orders, parts, notes, and AMC visit summaries.
       </PageHeader>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={CalendarClock} label="Today's Jobs" value={todayJobs.length} />
-        <StatCard icon={Wrench} label="Assigned Work Orders" value={jobs.length} />
-        <StatCard icon={Wrench} label="In Progress" value={inProgressJobs.length} />
-        <StatCard icon={PackagePlus} label="Awaiting Parts" value={awaitingPartsJobs.length} tone="yellow" />
-        <StatCard icon={AlertTriangle} label="Pending Notes / Updates" value={pendingUpdates.length} tone="yellow" />
-        <StatCard icon={ShieldCheck} label="AMC Visits Due" value={amcVisitsDue.length} tone="yellow" />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {kpiCards.map((card) => <TechnicianKpiCard key={card.title} {...card} />)}
       </div>
-    </>
+      <section className="dashboard-panel lift-card mt-5 p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-xl font-black text-white">Ready to continue your work?</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 muted">View work orders, update job status, add parts, and generate invoices.</p>
+          </div>
+          <Link className="btn btn-primary h-10 shrink-0 px-4" to="/tech/work-orders">
+            Open Work Orders
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
+    </div>
   );
 }
