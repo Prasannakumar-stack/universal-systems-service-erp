@@ -168,7 +168,7 @@ export async function generateDocumentPdf(id) {
 
   if (document.type === 'service') {
     pdf.fontSize(12).text('Service Report', { underline: true });
-    pdf.fontSize(10).text(`Technician: ${workOrder.technicianId?.name || 'Unassigned'}`).text(`Resolution Status: ${workOrder.status}`);
+    pdf.fontSize(10).text(`Technician: ${workOrder.technicianId?.name || 'Admin'}`).text(`Resolution Status: ${workOrder.status}`);
   }
 
   pdf.end();

@@ -143,6 +143,7 @@ import {
   defaultAmcCoverageType,
   normalizeAmcCoverageType
 } from '../../shared/amcCoverage.js';
+import { ADMIN_ASSIGNMENT_LABEL } from '../../utils/assignment.js';
 
 function defaultAmcForm() {
   const start = new Date();
@@ -160,6 +161,7 @@ function defaultAmcForm() {
     coverVisits: true,
     coveredDevices: '',
     serviceFrequency: 'Quarterly',
+    technicianId: '',
     startDate: dateInputValue(start),
     endDate: dateInputValue(end),
     contractValue: '',
@@ -183,6 +185,7 @@ export function AMCContractsPage({ role = 'admin' }) {
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(defaultAmcForm);
   const [customers, setCustomers] = useState([]);
+  const [technicians, setTechnicians] = useState([]);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const handledRenewalRef = useRef('');
@@ -191,6 +194,16 @@ export function AMCContractsPage({ role = 'admin' }) {
   useEffect(() => {
     request('/customers?limit=100').then((result) => setCustomers(result.customers || [])).catch(() => setCustomers([]));
   }, [request]);
+
+  useEffect(() => {
+    if (isTechnician) {
+      setTechnicians([]);
+      return;
+    }
+    request('/users?role=technician&active=true&limit=100')
+      .then((result) => setTechnicians((result.users || []).filter((user) => user.role === 'technician' && user.active)))
+      .catch(() => setTechnicians([]));
+  }, [isTechnician, request]);
 
   useEffect(() => {
     const renewalContract = location.state?.renewContract;
@@ -268,6 +281,7 @@ export function AMCContractsPage({ role = 'admin' }) {
       coverVisits: coverage.coverVisits,
       coveredDevices: contract?.coveredDevices || '',
       serviceFrequency: contract?.serviceFrequency || 'Quarterly',
+      technicianId: recordId(contract?.visits?.find((visit) => recordId(visit.technicianId))?.technicianId) || '',
       contractValue: contract?.contractValue ?? '',
       includedVisits: contract?.includedVisits ?? '4',
       warrantyIncluded: Boolean(contract?.warrantyIncluded),
@@ -287,6 +301,7 @@ export function AMCContractsPage({ role = 'admin' }) {
     const payload = {
       ...form,
       coverageType: form.coverageType || defaultAmcCoverageType,
+      technicianId: form.technicianId || null,
       warrantyIncluded: Boolean(form.warrantyIncluded),
       warrantyStartDate: form.warrantyIncluded ? form.warrantyStartDate || null : null,
       warrantyEndDate: form.warrantyIncluded ? form.warrantyEndDate || null : null,
@@ -422,6 +437,16 @@ export function AMCContractsPage({ role = 'admin' }) {
                   {amcFrequencies.map((frequency) => <option key={frequency}>{frequency}</option>)}
                 </select>
               </label>
+              {!isTechnician ? (
+                <label>
+                  <span className="label">Assigned Technician</span>
+                  <select className="input" value={form.technicianId} onChange={(event) => setForm((current) => ({ ...current, technicianId: event.target.value }))}>
+                    {/* Admin maps to empty technicianId because AMC visits already support null assignment. */}
+                    <option value="">{ADMIN_ASSIGNMENT_LABEL}</option>
+                    {technicians.map((tech) => <option key={recordId(tech)} value={recordId(tech)}>{tech.name}</option>)}
+                  </select>
+                </label>
+              ) : null}
               <label>
                 <span className="label">Included Visits</span>
                 <input className="input" type="number" min="0" value={form.includedVisits} onChange={(event) => setForm((current) => ({ ...current, includedVisits: event.target.value }))} />

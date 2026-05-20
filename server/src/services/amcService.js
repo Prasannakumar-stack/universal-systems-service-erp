@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import AMCContract from '../models/AMCContract.js';
 import Invoice from '../models/Invoice.js';
+import User from '../models/User.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { clean, appError, numberValue } from '../utils/http.js';
 import { upsertCustomer } from './customerService.js';
@@ -268,6 +269,12 @@ export async function createAmcContract(payload, user) {
     coverService: payload.coverService,
     coverVisits: payload.coverVisits
   });
+  let technicianId = payload.technicianId || null;
+  if (technicianId) {
+    const technician = await User.findOne({ _id: technicianId, role: 'technician', active: true });
+    if (!technician) throw appError('Select a valid active technician');
+    technicianId = technician._id;
+  }
   const warrantyIncluded = booleanValue(payload.warrantyIncluded);
   const visits = generateVisits({
     startDate,
@@ -275,7 +282,7 @@ export async function createAmcContract(payload, user) {
     serviceFrequency,
     includedVisits: payload.includedVisits,
     coveredService
-  }).map((visit) => (user?.role === 'technician' ? { ...visit, technicianId: user._id } : visit));
+  }).map((visit) => (technicianId ? { ...visit, technicianId } : user?.role === 'technician' ? { ...visit, technicianId: user._id } : visit));
   const contract = await AMCContract.create({
     contractId: contractCode(),
     customerId: customer._id,

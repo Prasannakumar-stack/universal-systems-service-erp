@@ -142,9 +142,11 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
-import { Search } from 'lucide-react';
+import { MoreHorizontal, Search, X } from 'lucide-react';
+import { ADMIN_ASSIGNMENT_LABEL, technicianNameOrAdmin } from '../../utils/assignment.js';
 
 const WORK_ORDER_SOURCES = ['Walk-in', 'Call', 'Website'];
+const ADMIN_TECHNICIAN_FILTER_VALUE = 'admin';
 
 function normalizeSourceLabel(source) {
   const raw = String(
@@ -221,8 +223,6 @@ const workOrdersClearBtnClass =
   `inline-flex h-12 w-full min-w-[170px] items-center justify-center rounded-xl border border-sky-400/40 bg-sky-500/15 px-6 text-sm font-semibold text-sky-100 transition hover:border-sky-300/70 hover:bg-sky-500/25 hover:shadow-[0_0_22px_rgba(56,189,248,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 ${workOrdersFocusRing}`;
 const workOrdersDetailsBtnClass =
   `inline-flex h-10 min-h-[38px] min-w-[64px] items-center justify-center rounded-xl border border-sky-400/25 bg-slate-800/80 px-3 text-sm font-semibold text-slate-100 transition hover:border-sky-300/60 hover:bg-sky-500/15 hover:text-white hover:shadow-[0_0_18px_rgba(56,189,248,0.16)] ${workOrdersFocusRing}`;
-const workOrdersAssignBtnClass =
-  `inline-flex h-10 min-h-[38px] min-w-[64px] items-center justify-center rounded-xl bg-sky-500 px-3 text-sm font-semibold text-white shadow-[0_0_18px_rgba(56,189,248,0.25)] transition hover:bg-sky-400 hover:shadow-[0_0_24px_rgba(56,189,248,0.34)] ${workOrdersFocusRing}`;
 
 function WorkOrdersBadgeCell({ children, justify = 'justify-start' }) {
   return (
@@ -252,6 +252,9 @@ export function WorkOrdersPage({ role = 'admin' }) {
   const [source, setSource] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [technicians, setTechnicians] = useState([]);
+  const [assignOrder, setAssignOrder] = useState(null);
+  const [deleteOrder, setDeleteOrder] = useState(null);
+  const [actionMenuId, setActionMenuId] = useState('');
   const [page, setPage] = useState(1);
   const limit = 10;
   const debouncedSearch = useDebouncedValue(search);
@@ -261,7 +264,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
     if (status) params.set('status', status);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
-    if (role === 'admin' && technicianId) params.set('technicianId', technicianId);
+    if (role === 'admin' && technicianId) params.set('technicianId', technicianId === ADMIN_TECHNICIAN_FILTER_VALUE ? ADMIN_TECHNICIAN_FILTER_VALUE : technicianId);
     if (serviceType) params.set('serviceType', serviceType);
     if (source) params.set('source', normalizeSourceLabel(source));
     if (priorityFilter) params.set('priority', priorityFilter);
@@ -301,6 +304,38 @@ export function WorkOrdersPage({ role = 'admin' }) {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/auto-assign`, { method: 'POST' });
         push('Service job auto-assigned');
+        reload({ silent: true });
+      });
+    } catch (err) {
+      push(err.message, 'error');
+    }
+  }
+
+  async function saveAssignment(order, nextTechnicianId) {
+    try {
+      await preserveScroll(async () => {
+        await request(`/work-orders/${recordId(order)}/assignment`, {
+          method: 'PATCH',
+          body: JSON.stringify({ technicianId: nextTechnicianId || null })
+        });
+        push(nextTechnicianId ? 'Work order assigned' : 'Work order assigned to Admin');
+        setActionMenuId('');
+        reload({ silent: true });
+      });
+    } catch (err) {
+      push(err.message, 'error');
+      throw err;
+    }
+  }
+
+  async function confirmDeleteWorkOrder() {
+    if (!deleteOrder) return;
+    try {
+      await preserveScroll(async () => {
+        await request(`/work-orders/${recordId(deleteOrder)}`, { method: 'DELETE' });
+        push('Work order deleted');
+        setDeleteOrder(null);
+        setActionMenuId('');
         reload({ silent: true });
       });
     } catch (err) {
@@ -351,6 +386,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
   }, [notesParam, priorityFilter, searchTerm, source, workOrders]);
   const visibleWorkOrders = filteredWorkOrders;
   const pagination = paginationFrom(data, workOrders.length, limit);
+  const actionColumnWidth = role === 'admin' ? '190px' : '120px';
 
   if (loading) return <div className="work-orders-page mx-auto max-w-[1920px]"><LoadingBlock /></div>;
   if (error) return <div className="work-orders-page mx-auto max-w-[1920px]"><ErrorBlock message={error} /></div>;
@@ -400,6 +436,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
           {role === 'admin' ? (
             <select className={`${workOrdersFilterClass} lg:col-span-3`} value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}>
               <option value="">All technicians</option>
+              <option value={ADMIN_TECHNICIAN_FILTER_VALUE}>{ADMIN_ASSIGNMENT_LABEL}</option>
               {technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}
             </select>
           ) : null}
@@ -418,7 +455,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
       ) : (
         <>
         <div className="work-orders-table-shell work-orders-table-shell--summary table-wrap border border-white/10 bg-[var(--surface)]">
-          <table className="data-table work-orders-table work-orders-table--summary w-full min-w-0 table-fixed">
+          <table className="data-table work-orders-table work-orders-table--summary w-full min-w-0 table-fixed" style={{ '--work-order-action-width': actionColumnWidth }}>
             <colgroup>
               <col className="work-orders-col-summary-customer" style={{ width: '18%' }} />
               <col className="booking-source-column work-orders-col-summary-source" style={{ width: '7%' }} />
@@ -427,7 +464,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
               <col className="work-orders-col-summary-priority" style={{ width: '8%' }} />
               <col className="work-orders-col-summary-status" style={{ width: '9%' }} />
               <col className="work-orders-col-summary-payment" style={{ width: '9%' }} />
-              <col className="work-orders-col-summary-actions" style={{ width: '170px' }} />
+              <col className="work-orders-col-summary-actions" style={{ width: actionColumnWidth }} />
             </colgroup>
             <thead className="work-orders-table-head">
               <tr>
@@ -438,7 +475,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
                 <th className={workOrdersThCenterClass}>Priority</th>
                 <th className={workOrdersThCenterClass}>Status</th>
                 <th className={workOrdersThCenterClass}>Payment</th>
-                <th className={`${workOrdersThCenterClass} w-[170px] min-w-[170px] px-4`}>Actions</th>
+                <th className={`${workOrdersThCenterClass} px-4`}>Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--line)]">
@@ -470,11 +507,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
                     </div>
                   </td>
                   <td className={`${workOrdersTdClass} text-left`}>
-                    {order.technicianId?.name ? (
-                      <span className="block max-w-full truncate text-sm text-slate-200" title={order.technicianId.name}>{order.technicianId.name}</span>
-                    ) : (
-                      <span className="block text-sm font-medium text-slate-300">Unassigned</span>
-                    )}
+                    <span className="block max-w-full truncate text-sm text-slate-200" title={technicianNameOrAdmin(order)}>{technicianNameOrAdmin(order)}</span>
                   </td>
                   <td className={`${workOrdersTdClass} !whitespace-normal text-center`}>
                     <WorkOrdersBadgeCell justify="justify-center"><WorkOrderPriorityBadge priority={jobPriority(order)} /></WorkOrdersBadgeCell>
@@ -487,11 +520,34 @@ export function WorkOrdersPage({ role = 'admin' }) {
                       {order.invoiceId ? <StatusBadge status={order.invoiceId.status} /> : <StatusBadge status="Not Generated" />}
                     </WorkOrdersBadgeCell>
                   </td>
-                  <td className={`${workOrdersTdClass} work-orders-cell-actions w-[170px] min-w-[170px] !whitespace-normal px-4 text-center align-middle`}>
-                    <div className="work-orders-actions flex items-center justify-center gap-1.5">
+                  <td className={`${workOrdersTdClass} work-orders-cell-actions !whitespace-normal px-4 text-center align-middle`}>
+                    <div className="work-orders-actions relative flex items-center justify-center gap-1.5">
                       <Link className={workOrdersDetailsBtnClass} to={`${base}/${order.id}`}>Details</Link>
-                      {role === 'admin' && !order.technicianId ? (
-                        <button type="button" className={workOrdersAssignBtnClass} onClick={() => autoAssign(order.id)}>Assign</button>
+                      {role === 'admin' ? (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            className="work-orders-more-button"
+                            onClick={() => setActionMenuId((current) => current === recordId(order) ? '' : recordId(order))}
+                            aria-label="More work order actions"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                          {actionMenuId === recordId(order) ? (
+                            <div className="work-orders-more-menu">
+                              {!order.technicianId ? (
+                                <button type="button" onClick={() => autoAssign(order.id)}>Auto Assign</button>
+                              ) : null}
+                              <button type="button" onClick={() => { setAssignOrder(order); setActionMenuId(''); }}>
+                                {order.technicianId ? 'Reassign' : 'Assign'}
+                              </button>
+                              <button type="button" className="work-orders-danger-menu-item" onClick={() => { setDeleteOrder(order); setActionMenuId(''); }}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Delete
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   </td>
@@ -503,6 +559,74 @@ export function WorkOrdersPage({ role = 'admin' }) {
         <PaginationControls pagination={pagination} onPageChange={setPage} />
         </>
       )}
+      {assignOrder ? (
+        <WorkOrderAssignmentModal
+          order={assignOrder}
+          technicians={technicians}
+          onClose={() => setAssignOrder(null)}
+          onSave={saveAssignment}
+        />
+      ) : null}
+      {deleteOrder ? (
+        <ConfirmModal
+          title="Delete Work Order"
+          message="Are you sure you want to delete this work order? This action cannot be undone."
+          confirmLabel="Delete"
+          onCancel={() => setDeleteOrder(null)}
+          onConfirm={confirmDeleteWorkOrder}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function WorkOrderAssignmentModal({ order, technicians, onClose, onSave }) {
+  const [technicianId, setTechnicianId] = useState(recordId(order.technicianId) || '');
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setSaving(true);
+    let saved = false;
+    try {
+      await onSave(order, technicianId);
+      saved = true;
+    } catch {
+      // Parent owns the toast so the modal can stay focused on form state.
+    } finally {
+      if (!saved) setSaving(false);
+    }
+    if (saved) onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4">
+      <form className="surface admin-modal w-full max-w-md p-5" onSubmit={submit}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-black">{order.technicianId ? 'Reassign Work Order' : 'Assign Work Order'}</h2>
+            <p className="mt-1 text-sm muted">Choose Admin or an active technician for this work order.</p>
+          </div>
+          <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close assignment modal">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <label className="mt-5 block">
+          <span className="label">Assign to</span>
+          <select className="input" value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}>
+            {/* Admin is stored as an empty technicianId so legacy unassigned jobs remain valid. */}
+            <option value="">{ADMIN_ASSIGNMENT_LABEL}</option>
+            {technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}
+          </select>
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            <Save className="h-4 w-4" />
+            {saving ? 'Saving...' : 'Save Assignment'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

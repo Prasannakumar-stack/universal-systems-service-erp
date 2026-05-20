@@ -18,6 +18,64 @@
   --danger: #fb7185;
   --shadow: 0 22px 70px rgba(1, 12, 28, 0.34);
   --glow: 0 0 0 1px rgba(95, 179, 255, 0.2), 0 20px 65px rgba(31, 140, 255, 0.25);
+  --app-bg: #06162c;
+  --app-bg-2: #09264a;
+  --app-surface: #0b2342;
+  --app-surface-2: #102f57;
+  --app-card: #102f57;
+  --app-card-soft: #153a63;
+  --app-border: rgba(117, 196, 255, 0.18);
+  --app-text: #f5f9ff;
+  --app-text-muted: #aebfd7;
+  --app-heading: #ffffff;
+  --app-input-bg: rgba(255, 255, 255, 0.08);
+  --app-input-border: rgba(117, 196, 255, 0.2);
+  --app-table-head: rgba(255, 255, 255, 0.06);
+  --app-table-row: rgba(8, 27, 52, 0.9);
+  --app-table-row-hover: rgba(56, 189, 248, 0.06);
+  --app-sidebar-bg: #061226;
+  --app-topbar-bg: rgba(4, 16, 35, 0.88);
+  --app-primary: #1f8cff;
+  --app-primary-hover: #49b8ff;
+  --app-shadow-soft: 0 18px 55px rgba(0, 8, 22, 0.18);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #eef5ff;
+  --bg-2: #e7f0fc;
+  --surface: #ffffff;
+  --surface-2: #f4f8ff;
+  --text: #102033;
+  --muted: #53677f;
+  --line: rgba(22, 74, 132, 0.16);
+  --brand: #1478e8;
+  --brand-2: #0f6bd1;
+  --accent: #16a34a;
+  --warning: #f59e0b;
+  --danger: #e11d48;
+  --shadow: 0 18px 44px rgba(21, 66, 112, 0.12);
+  --glow: 0 0 0 1px rgba(47, 157, 244, 0.16), 0 20px 65px rgba(47, 157, 244, 0.14);
+  --app-bg: #eef5ff;
+  --app-bg-2: #e7f0fc;
+  --app-surface: #ffffff;
+  --app-surface-2: #f4f8ff;
+  --app-card: #ffffff;
+  --app-card-soft: #f6faff;
+  --app-border: rgba(22, 74, 132, 0.16);
+  --app-text: #102033;
+  --app-text-muted: #53677f;
+  --app-heading: #071527;
+  --app-input-bg: #ffffff;
+  --app-input-border: rgba(22, 74, 132, 0.22);
+  --app-table-head: #eaf2ff;
+  --app-table-row: #ffffff;
+  --app-table-row-hover: #f1f7ff;
+  --app-sidebar-bg: #ffffff;
+  --app-topbar-bg: rgba(255, 255, 255, 0.92);
+  --app-primary: #1478e8;
+  --app-primary-hover: #0f6bd1;
+  --app-shadow-soft: 0 18px 46px rgba(32, 86, 146, 0.12);
 }
 
 html {
@@ -35,6 +93,13 @@ body {
     linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 48%, #071b34 100%);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, Segoe UI, Arial, sans-serif;
+}
+
+body[data-theme='light'] {
+  background:
+    radial-gradient(circle at 12% 8%, rgba(47, 157, 244, 0.18), transparent 30rem),
+    radial-gradient(circle at 88% 16%, rgba(34, 197, 94, 0.12), transparent 28rem),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 52%, #e9f4ff 100%);
 }
 
 .custom-cursor-enabled,
@@ -3465,6 +3530,24 @@ button:disabled {
     min-width: 10.5rem;
   }
 
+  .bookings-action-header,
+  .bookings-cell-action {
+    text-align: center;
+  }
+
+  .bookings-table--technician.data-table th:last-child,
+  .bookings-table--technician.data-table td:last-child {
+    width: 120px !important;
+    min-width: 120px;
+    max-width: 120px;
+  }
+
+  .bookings-table--admin.data-table th:last-child,
+  .bookings-table--admin.data-table td:last-child {
+    min-width: 15rem;
+    text-align: center;
+  }
+
   .booking-line-clamp {
     display: -webkit-box;
     overflow: hidden;
@@ -3485,6 +3568,7 @@ button:disabled {
     align-items: center;
     justify-content: center;
     min-height: 2.5rem;
+    width: 100%;
   }
 
   .booking-convert-controls {
@@ -3525,6 +3609,12 @@ button:disabled {
   .bookings-table .booking-open-job-btn {
     max-width: 8.5rem;
     white-space: nowrap;
+  }
+
+  .bookings-table .booking-details-btn {
+    width: 5.75rem;
+    min-width: 5.75rem;
+    max-width: 5.75rem;
   }
 
   .bookings-table .booking-convert-btn {
@@ -3645,12 +3735,12 @@ button:disabled {
   .work-orders-col-summary-priority { width: 8%; }
   .work-orders-col-summary-status { width: 9%; }
   .work-orders-col-summary-payment { width: 9%; }
-  .work-orders-col-summary-actions { width: 170px; }
+  .work-orders-col-summary-actions { width: var(--work-order-action-width, 170px); }
 
   .work-orders-table--summary.data-table th:last-child,
   .work-orders-table--summary.data-table td:last-child {
-    width: 170px !important;
-    min-width: 170px;
+    width: var(--work-order-action-width, 170px) !important;
+    min-width: var(--work-order-action-width, 170px);
   }
 
   .work-orders-table--summary.data-table th:nth-child(7),
@@ -3695,7 +3785,72 @@ button:disabled {
   }
 
   .work-orders-cell-actions {
-    min-width: 10rem;
+    min-width: var(--work-order-action-width, 170px);
+  }
+
+  .work-orders-more-button {
+    display: inline-flex;
+    width: 2.35rem;
+    min-width: 2.35rem;
+    height: 2.35rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid rgba(125, 211, 252, 0.24);
+    background: rgba(15, 23, 42, 0.72);
+    color: #dbeafe;
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+  }
+
+  .work-orders-more-button:hover {
+    border-color: rgba(125, 211, 252, 0.62);
+    background: rgba(14, 165, 233, 0.16);
+    color: #ffffff;
+  }
+
+  .work-orders-more-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.35rem);
+    z-index: 35;
+    display: grid;
+    min-width: 9.75rem;
+    overflow: hidden;
+    border-radius: 10px;
+    border: 1px solid rgba(125, 211, 252, 0.22);
+    background: #071426;
+    box-shadow: 0 18px 48px rgba(0, 8, 22, 0.42);
+    padding: 0.25rem;
+    text-align: left;
+  }
+
+  .work-orders-more-menu button {
+    display: flex;
+    min-height: 2.25rem;
+    align-items: center;
+    gap: 0.45rem;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    padding: 0.45rem 0.65rem;
+    color: #e5f3ff;
+    font-size: 0.75rem;
+    font-weight: 800;
+    transition: background 160ms ease, color 160ms ease;
+  }
+
+  .work-orders-more-menu button:hover {
+    background: rgba(56, 189, 248, 0.14);
+    color: #ffffff;
+  }
+
+  .work-orders-more-menu .work-orders-danger-menu-item {
+    color: #fecdd3;
+  }
+
+  .work-orders-more-menu .work-orders-danger-menu-item:hover {
+    background: rgba(244, 63, 94, 0.16);
+    color: #fff1f2;
   }
 
   .work-orders-actions select {
@@ -4663,6 +4818,381 @@ button:disabled {
       justify-content: flex-start;
     }
   }
+}
+
+.theme-light,
+.theme-light body {
+  color: var(--app-text);
+}
+
+.theme-light .min-h-screen,
+.theme-light .enterprise-main {
+  background: transparent !important;
+}
+
+.theme-light .surface,
+.theme-light .admin-control-card,
+.theme-light .admin-filter-bar,
+.theme-light .admin-modal,
+.theme-light .amc-form-shell,
+.theme-light .amc-table-card,
+.theme-light .settings-tabs-card,
+.theme-light .stat-card,
+.theme-light .dashboard-kpi-card,
+.theme-light .dashboard-panel,
+.theme-light .dashboard-priority-panel,
+.theme-light .dashboard-empty-state,
+.theme-light .billing-metric-card,
+.theme-light .billing-table-wrap,
+.theme-light .inventory-summary-card,
+.theme-light .reports-panel,
+.theme-light .toast {
+  background: var(--app-card) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: var(--app-shadow-soft) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .surface:hover {
+  border-color: rgba(20, 120, 232, 0.24);
+  box-shadow: 0 20px 52px rgba(32, 86, 146, 0.14) !important;
+}
+
+.theme-light .empty-state {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 255, 0.96)),
+    repeating-linear-gradient(135deg, rgba(20, 120, 232, 0.06) 0 1px, transparent 1px 16px) !important;
+}
+
+.theme-light .enterprise-sidebar {
+  background: var(--app-sidebar-bg) !important;
+  border-right-color: var(--app-border) !important;
+  box-shadow: 18px 0 42px rgba(32, 86, 146, 0.12) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .enterprise-sidebar > div,
+.theme-light .enterprise-sidebar-footer {
+  border-color: var(--app-border) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 255, 0.98)) !important;
+}
+
+.theme-light .enterprise-sidebar-heading {
+  color: #64748b !important;
+}
+
+.theme-light .enterprise-sidebar-heading::after {
+  background: linear-gradient(90deg, rgba(20, 120, 232, 0.2), rgba(20, 120, 232, 0.02)) !important;
+}
+
+.theme-light .enterprise-sidebar-item {
+  color: #334155 !important;
+}
+
+.theme-light .enterprise-sidebar-item:hover {
+  border-color: rgba(20, 120, 232, 0.16) !important;
+  background: #eff6ff !important;
+  color: #0f3768 !important;
+  box-shadow: 0 8px 22px rgba(20, 120, 232, 0.1) !important;
+}
+
+.theme-light .enterprise-sidebar-item-active {
+  border-color: rgba(20, 120, 232, 0.26) !important;
+  background: linear-gradient(135deg, rgba(20, 120, 232, 0.14), rgba(239, 246, 255, 0.96)) !important;
+  color: #0b4f9f !important;
+  box-shadow: inset 3px 0 0 rgba(20, 120, 232, 0.82), 0 12px 26px rgba(20, 120, 232, 0.12) !important;
+}
+
+.theme-light .enterprise-topbar {
+  background: var(--app-topbar-bg) !important;
+  border-bottom-color: var(--app-border) !important;
+  box-shadow: 0 14px 32px rgba(32, 86, 146, 0.12) !important;
+}
+
+.theme-light .enterprise-top-icon,
+.theme-light .icon-button {
+  border-color: var(--app-border) !important;
+  background: var(--app-card-soft) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .enterprise-top-icon:hover,
+.theme-light .icon-button:hover {
+  background: #eaf2ff !important;
+  color: var(--app-primary) !important;
+}
+
+.theme-light .notification-drawer,
+.theme-light .work-orders-more-menu,
+.theme-light .enterprise-topbar [class*="top-[calc(100%+0.5rem)]"] {
+  background: var(--app-card) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: 0 24px 70px rgba(32, 86, 146, 0.18) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .input,
+.theme-light input,
+.theme-light select,
+.theme-light textarea,
+.theme-light .bookings-filter-control,
+.theme-light .work-orders-filter-control,
+.theme-light .work-orders-date-input,
+.theme-light .reports-premium-range .input,
+.theme-light .reports-range-bar select.input,
+.theme-light .amc-toolbar .input {
+  background: var(--app-input-bg) !important;
+  border-color: var(--app-input-border) !important;
+  color: var(--app-text) !important;
+  color-scheme: light !important;
+}
+
+.theme-light .input::placeholder,
+.theme-light input::placeholder,
+.theme-light textarea::placeholder {
+  color: #7b8ea7 !important;
+}
+
+.theme-light .input:focus,
+.theme-light input:focus,
+.theme-light select:focus,
+.theme-light textarea:focus,
+.theme-light .work-orders-filter-control:focus,
+.theme-light .bookings-filter-control:focus {
+  border-color: rgba(20, 120, 232, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(20, 120, 232, 0.14) !important;
+}
+
+.theme-light select.input option,
+.theme-light select option {
+  background: #ffffff !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .btn-secondary {
+  background: var(--app-card-soft) !important;
+  border-color: var(--app-border) !important;
+  color: var(--app-text) !important;
+  box-shadow: none !important;
+}
+
+.theme-light .btn-secondary:hover {
+  background: #eaf2ff !important;
+  border-color: rgba(20, 120, 232, 0.28) !important;
+  color: #0b4f9f !important;
+}
+
+.theme-light .btn-primary,
+.theme-light .btn-primary *,
+.theme-light .glow-action,
+.theme-light .glow-action * {
+  color: #ffffff !important;
+}
+
+.theme-light .table-wrap,
+.theme-light .bookings-table-shell,
+.theme-light .work-orders-table-shell,
+.theme-light .amc-table-wrap,
+.theme-light .admin-table-wrap,
+.theme-light .reports-table-wrap {
+  background: var(--app-card) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: var(--app-shadow-soft) !important;
+}
+
+.theme-light .data-table,
+.theme-light .bookings-table,
+.theme-light .work-orders-table {
+  color: var(--app-text) !important;
+}
+
+.theme-light .data-table thead,
+.theme-light .bookings-table thead,
+.theme-light .work-orders-table-head th,
+.theme-light .amc-table-wrap .data-table thead {
+  background: var(--app-table-head) !important;
+  color: #334155 !important;
+}
+
+.theme-light .data-table th,
+.theme-light .bookings-table th,
+.theme-light .work-orders-table-head th {
+  color: #475569 !important;
+  border-color: var(--app-border) !important;
+}
+
+.theme-light .data-table td,
+.theme-light .bookings-table td,
+.theme-light .amc-table-wrap .data-table td {
+  background: var(--app-table-row) !important;
+  border-color: rgba(22, 74, 132, 0.11) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .data-table tbody tr:hover td,
+.theme-light .bookings-table-row:hover td,
+.theme-light .work-orders-table-row:hover td,
+.theme-light .amc-table-wrap .data-table tbody tr:hover td {
+  background: var(--app-table-row-hover) !important;
+}
+
+.theme-light .admin-control-hero,
+.theme-light .amc-page-header,
+.theme-light .bookings-page-header,
+.theme-light .work-orders-page-header,
+.theme-light .admin-dashboard-page [class*="bg-[#0b172a"] {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(20, 120, 232, 0.08), transparent 18rem),
+    linear-gradient(135deg, #ffffff, #f4f8ff) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: var(--app-shadow-soft) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .bookings-filter-bar,
+.theme-light .work-orders-filter-bar {
+  background: var(--app-card) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: var(--app-shadow-soft) !important;
+}
+
+.theme-light .amc-metric-card,
+.theme-light .admin-metric-card,
+.theme-light .dashboard-kpi-card,
+.theme-light .dashboard-panel,
+.theme-light .dashboard-row-card,
+.theme-light .dashboard-workload-row,
+.theme-light .dashboard-alert-row,
+.theme-light .dashboard-alert-card,
+.theme-light .dashboard-revenue-summary,
+.theme-light .settings-info-item,
+.theme-light .access-summary-item,
+.theme-light .security-note-item {
+  background: var(--app-card) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: 0 14px 34px rgba(32, 86, 146, 0.1) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .admin-control-icon,
+.theme-light .admin-metric-icon,
+.theme-light .amc-metric-icon,
+.theme-light .amc-form-section-icon {
+  background: #eaf2ff !important;
+  border-color: rgba(20, 120, 232, 0.2) !important;
+  color: var(--app-primary) !important;
+}
+
+.theme-light .amc-metric-icon svg,
+.theme-light .admin-control-icon svg,
+.theme-light .admin-metric-icon svg {
+  color: var(--app-primary) !important;
+}
+
+.theme-light .modal,
+.theme-light .admin-modal,
+.theme-light [role='dialog'] .surface {
+  background: var(--app-card) !important;
+  border-color: var(--app-border) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .fixed.inset-0 {
+  --tw-bg-opacity: 1;
+}
+
+.theme-light .page-header,
+.theme-light .admin-control-page,
+.theme-light .settings-page,
+.theme-light .amc-module-page,
+.theme-light .bookings-page,
+.theme-light .work-orders-page {
+  color: var(--app-text) !important;
+}
+
+.theme-light :where(.enterprise-main, .enterprise-sidebar, .enterprise-topbar) :where(.text-white, .text-slate-50, .text-slate-100, .text-slate-200) {
+  color: var(--app-heading) !important;
+}
+
+.theme-light :where(.enterprise-main, .enterprise-sidebar, .enterprise-topbar) :where(.text-slate-300, .text-slate-400, .text-slate-500, .text-slate-600, .muted) {
+  color: var(--app-text-muted) !important;
+}
+
+.theme-light :where(.enterprise-main, .enterprise-sidebar, .enterprise-topbar) :where(.text-sky-100, .text-sky-200, .text-sky-300, .text-sky-400) {
+  color: #075985 !important;
+}
+
+.theme-light :where(.enterprise-main, .enterprise-sidebar, .enterprise-topbar) :where(.text-emerald-100, .text-emerald-200, .text-emerald-300, .text-emerald-400) {
+  color: #047857 !important;
+}
+
+.theme-light :where(.enterprise-main, .enterprise-sidebar, .enterprise-topbar) :where(.text-amber-100, .text-amber-200, .text-amber-300, .text-amber-400) {
+  color: #92400e !important;
+}
+
+.theme-light :where(.enterprise-main, .enterprise-sidebar, .enterprise-topbar) :where(.text-rose-100, .text-rose-200, .text-rose-300, .text-rose-400) {
+  color: #be123c !important;
+}
+
+.theme-light :where(.enterprise-main, .enterprise-sidebar, .enterprise-topbar) :where(.text-purple-100, .text-purple-200, .text-purple-300, .text-violet-100, .text-violet-200) {
+  color: #6d28d9 !important;
+}
+
+.theme-light :where(.enterprise-main, .enterprise-sidebar, .enterprise-topbar) :where(.text-cyan-100, .text-cyan-200, .text-cyan-300, .text-indigo-100, .text-indigo-200) {
+  color: #0e7490 !important;
+}
+
+.theme-light :where(.enterprise-main, .enterprise-topbar) :where([class*="bg-[#0b172a"], [class*="bg-[#071426"], [class*="bg-[#061426"], [class*="bg-slate-950"], [class*="bg-slate-900"], [class*="bg-slate-800"]) {
+  background: var(--app-card) !important;
+  border-color: var(--app-border) !important;
+}
+
+.theme-light :where(.enterprise-main, .enterprise-topbar) :where([class*="border-white/"], [class*="border-slate-"], [class*="border-blue-"]) {
+  border-color: var(--app-border) !important;
+}
+
+.theme-light .status-badge,
+.theme-light .admin-premium-badge,
+.theme-light .admin-required-mark,
+.theme-light .admin-role-badge,
+.theme-light .admin-status-pill,
+.theme-light .audit-action-badge,
+.theme-light .audit-module-badge,
+.theme-light .amc-status-pill,
+.theme-light .amc-muted-badge,
+.theme-light .amc-payment-pill,
+.theme-light td span[class*='rounded-full'] {
+  border-color: rgba(22, 74, 132, 0.16) !important;
+  color: inherit;
+}
+
+.theme-light .booking-source-badge {
+  border-color: rgba(22, 74, 132, 0.14) !important;
+}
+
+.theme-light .work-orders-more-button {
+  background: var(--app-card-soft) !important;
+  border-color: var(--app-border) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .work-orders-more-menu button {
+  color: var(--app-text) !important;
+}
+
+.theme-light .work-orders-more-menu button:hover {
+  background: #eff6ff !important;
+  color: #0b4f9f !important;
+}
+
+.theme-light .work-orders-danger-menu-item,
+.theme-light .work-orders-danger-menu-item svg {
+  color: #be123c !important;
+}
+
+.theme-light .toast-error {
+  border-color: rgba(225, 29, 72, 0.28) !important;
+  color: #be123c !important;
 }
 
 @media (min-width: 1280px) {

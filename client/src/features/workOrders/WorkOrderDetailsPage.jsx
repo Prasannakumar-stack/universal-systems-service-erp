@@ -144,6 +144,7 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { technicianNameOrAdmin } from '../../utils/assignment.js';
 import {
   autoAmcPartChargeType,
   autoAmcPartChargeMode,
@@ -1397,7 +1398,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               ['Priority', <div key="priority">{renderPrioritySummary()}</div>],
               ['Source', <WorkOrderDetailSourceBadge key="source" source={order} />],
               ['Scheduled', jobScheduleLabel(order)],
-              ['Technician', order.technicianId?.name || 'Assigned technician'],
+              ['Technician', technicianNameOrAdmin(order)],
               ['Created', formatDate(order.createdAt)]
             ].map(([label, value]) => (
               <WorkOrderInfoCard key={label} label={label}>{value}</WorkOrderInfoCard>
@@ -1682,7 +1683,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           {[
             ['Work Order ID', workOrderDisplayId],
             ['Source', <WorkOrderDetailSourceBadge key="source-admin" source={order} />],
-            ['Technician', order.technicianId?.name || 'Unassigned'],
+            ['Technician', technicianNameOrAdmin(order)],
             ['Customer ID', customerDisplayId],
             ['Created Date', formatDate(order.createdAt)],
             ['Completed Date', showCompletedDate ? completedDateDisplay : 'Not completed yet'],

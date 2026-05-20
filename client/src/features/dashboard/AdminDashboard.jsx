@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, Bell, CalendarClock, CheckCircle2, ClipboardList, CreditCard, FileText, Plus, ReceiptText, UserRound, Wrench, Zap, ArrowUpRight } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { technicianNameOrAdmin } from '../../utils/assignment.js';
 import { currency, formatDate, statusTone } from '../../utils/format.js';
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
@@ -584,7 +585,7 @@ export function AdminDashboard() {
                   <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-300">{order.serviceType || 'Service'}{order.device ? ` · ${order.device}` : ''}</p>
                   <MetaRow items={[
                     { value: order.id, className: 'max-w-[92px]' },
-                    { value: `Tech: ${order.technicianId?.name || 'Unassigned'}`, className: 'max-w-[120px]' },
+                    { value: `Tech: ${technicianNameOrAdmin(order)}`, className: 'max-w-[120px]' },
                     { value: formatDate(order.createdAt || order.updatedAt), className: 'max-w-[120px]' }
                   ]} />
                 </div>

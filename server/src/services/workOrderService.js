@@ -1,6 +1,8 @@
 import Booking from '../models/Booking.js';
+import AMCContract from '../models/AMCContract.js';
 import Customer from '../models/Customer.js';
 import InventoryPart from '../models/InventoryPart.js';
+import Invoice from '../models/Invoice.js';
 import User from '../models/User.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { appError, clean, numberValue } from '../utils/http.js';
@@ -261,7 +263,8 @@ export async function listWorkOrders(query, user) {
     const source = searchRegex(query.source);
     clauses.push({ $or: [{ bookingSource: source }, { source }, { channel: source }] });
   }
-  if (validObjectId(query.technicianId)) filter.technicianId = validObjectId(query.technicianId);
+  if (clean(query.technicianId).toLowerCase() === 'admin') filter.technicianId = null;
+  else if (validObjectId(query.technicianId)) filter.technicianId = validObjectId(query.technicianId);
   if (validObjectId(query.customerId)) filter.customerId = validObjectId(query.customerId);
   const technicianScope = technicianWorkOrderScope(user);
   if (technicianScope) clauses.push(technicianScope);
@@ -835,6 +838,109 @@ export async function autoAssignWorkOrder(id, user) {
   });
 
   return getWorkOrder(id, user);
+}
+
+export async function updateAssignment(id, payload, user) {
+  if (user.role !== 'admin') throw appError('Only admins can assign work orders', 403);
+  const workOrder = await WorkOrder.findById(id);
+  if (!workOrder) throw appError('Work order not found', 404);
+
+  const rawTechnicianId = clean(payload.technicianId);
+  const before = { technicianId: workOrder.technicianId || null, status: workOrder.status };
+  let nextTechnician = null;
+
+  if (rawTechnicianId) {
+    const technicianId = validObjectId(rawTechnicianId);
+    if (!technicianId) throw appError('Select a valid active technician');
+    nextTechnician = await User.findOne({ _id: technicianId, role: 'technician', active: true });
+    if (!nextTechnician) throw appError('Select a valid active technician');
+    workOrder.technicianId = nextTechnician._id;
+    if (workOrder.status === 'Pending') workOrder.status = 'In Progress';
+  } else {
+    workOrder.technicianId = null;
+  }
+
+  workOrder.timeline.push({
+    status: workOrder.status,
+    message: nextTechnician ? `Assigned to ${nextTechnician.name}` : 'Assigned to Admin',
+    userId: user._id
+  });
+  await workOrder.save();
+
+  if (nextTechnician) {
+    await createNotification({
+      title: 'Work order assigned',
+      message: `${workOrder.device} work order assigned to you.`,
+      type: 'WORK_ORDER',
+      role: 'technician',
+      userId: nextTechnician._id,
+      sourceId: workOrder._id
+    });
+  }
+
+  await logAudit({
+    userId: user._id,
+    action: 'assigned',
+    module: 'work_order',
+    recordId: workOrder._id,
+    before,
+    after: {
+      technicianId: nextTechnician?._id || null,
+      technicianName: nextTechnician?.name || 'Admin',
+      status: workOrder.status
+    }
+  });
+
+  return getWorkOrder(id, user);
+}
+
+export async function deleteWorkOrder(id, user) {
+  if (user.role !== 'admin') throw appError('Only admins can delete work orders', 403);
+  const workOrder = await WorkOrder.findById(id);
+  if (!workOrder) throw appError('Work order not found', 404);
+
+  const invoiceCount = await Invoice.countDocuments({ workOrderId: workOrder._id });
+  if (workOrder.invoiceId || invoiceCount) {
+    throw appError('Work orders with generated invoices cannot be deleted', 409);
+  }
+  if ((workOrder.partsUsed || []).length || (workOrder.partRequests || []).length) {
+    throw appError('Remove parts and part requests before deleting this work order', 409);
+  }
+
+  const before = {
+    customerId: workOrder.customerId,
+    technicianId: workOrder.technicianId || null,
+    status: workOrder.status,
+    bookingId: workOrder.bookingId || null,
+    amcContractId: workOrder.amcContractId || null,
+    amcVisitId: workOrder.amcVisitId || null
+  };
+
+  await WorkOrder.deleteOne({ _id: workOrder._id });
+
+  if (workOrder.bookingId) {
+    await Booking.updateOne(
+      { _id: workOrder.bookingId },
+      { $set: { status: 'Pending', workOrderId: null } }
+    );
+  }
+
+  if (workOrder.amcContractId && workOrder.amcVisitId) {
+    await AMCContract.updateOne(
+      { _id: workOrder.amcContractId, 'visits._id': workOrder.amcVisitId },
+      { $set: { 'visits.$.status': 'Upcoming', 'visits.$.completedAt': null, 'visits.$.workOrderId': null } }
+    );
+  }
+
+  await logAudit({
+    userId: user._id,
+    action: 'deleted',
+    module: 'work_order',
+    recordId: workOrder._id,
+    before
+  });
+
+  return { id: String(workOrder._id) };
 }
 
 export async function addImages(id, files, user) {

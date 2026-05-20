@@ -143,6 +143,7 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { technicianNameOrAdmin } from '../../utils/assignment.js';
 
 const customerTypeOptions = ['', 'Regular', 'AMC', 'Business', 'VIP', 'Walk-in'];
 const noteTypeOptions = ['Diagnosis note', 'Customer instruction', 'Payment follow-up', 'Warranty note', 'General note'];
@@ -233,14 +234,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
       };
     });
   }, [customer.devices, noWarrantyAdded, notAdded, serviceHistory]);
-  const technicianNameForOrder = (order) => (
-    order.technicianId?.name
-    || order.technician?.name
-    || order.technicianName
-    || order.assignedTechnician?.name
-    || order.assignedTo?.name
-    || ''
-  );
+  const technicianNameForOrder = (order) => technicianNameOrAdmin(order);
   const filteredServiceHistory = serviceHistory.filter((order) => {
     const searchText = debouncedHistorySearch.trim().toLowerCase();
     if (searchText) {
@@ -467,7 +461,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
       getWorkOrderDisplayId(order),
       `${order.serviceType || order.service || notAdded} / ${order.device || notAdded}`,
       order.issue || notAdded,
-      technicianNameForOrder(order) || 'Unassigned',
+      technicianNameForOrder(order),
       order.status || notAdded,
       currency(serviceHistoryAmount(order))
     ]));
@@ -772,7 +766,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
                           </div>
                         </td>
                         <td className="!whitespace-normal"><p className="line-clamp-2 text-sm leading-5 text-slate-200" title={order.issue || notAdded}>{order.issue || notAdded}</p></td>
-                        <td>{technicianName ? <span className="block max-w-[10rem] truncate text-sm font-semibold text-slate-100" title={technicianName}>{technicianName}</span> : <span className="inline-flex rounded-full border border-slate-400/20 bg-slate-500/15 px-2.5 py-1 text-xs font-bold text-slate-200">Unassigned</span>}</td>
+                        <td><span className="block max-w-[10rem] truncate text-sm font-semibold text-slate-100" title={technicianName}>{technicianName}</span></td>
                         <td><StatusBadge status={order.status} /></td>
                         <td className="text-right"><span className="block whitespace-nowrap text-sm font-bold" title={currency(total)}>{currency(total)}</span></td>
                         <td className="text-right"><Link className="btn btn-secondary h-8 px-3 py-1.5 text-xs" to={`${workOrdersBase}/${order.id}`}>Open Job</Link></td>

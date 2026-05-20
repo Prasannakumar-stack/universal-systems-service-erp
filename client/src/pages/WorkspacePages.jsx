@@ -24,6 +24,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { apiBase, pdfTypes, serviceTypes, statuses } from '../utils/constants.js';
 import { currency, formatDate, statusTone } from '../utils/format.js';
+import { ADMIN_ASSIGNMENT_LABEL } from '../utils/assignment.js';
 import { ConfirmModal, EmptyState, PageHeader, SearchBox, StatCard } from '../components/Ui.jsx';
 
 function useResource(load, deps = []) {
@@ -342,7 +343,8 @@ function BookingTable({ bookings, role, technicians = [], onAssign }) {
               <td>
                 {role === 'admin' ? (
                   <select className="input min-w-40 py-2" value={booking.assigned_to || ''} onChange={(event) => onAssign?.(booking.id, event.target.value)}>
-                    <option value="">Unassigned</option>
+                    {/* Admin maps to an empty assignment for compatibility with older bookings. */}
+                    <option value="">{ADMIN_ASSIGNMENT_LABEL}</option>
                     {technicians.map((tech) => (
                       <option key={tech.id} value={tech.id}>
                         {tech.name}
@@ -430,7 +432,8 @@ function ManualBookingModal({ onClose, onSaved }) {
           />
           <input className="input" type="datetime-local" value={form.preferredDateTime} onChange={(event) => update('preferredDateTime', event.target.value)} />
           <select className="input" value={form.assignedTo} onChange={(event) => update('assignedTo', event.target.value)}>
-            <option value="">Unassigned</option>
+            {/* Admin maps to an empty assignment for compatibility with older bookings. */}
+            <option value="">{ADMIN_ASSIGNMENT_LABEL}</option>
             {users.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.name}
@@ -643,7 +646,7 @@ export function BookingDetailPage({ role = 'admin' }) {
                 ['Service Type', booking.service_type],
                 ['Problem', booking.problem_description],
                 ['Preferred Date/Time', booking.preferred_datetime ? formatDate(booking.preferred_datetime) : 'Not specified'],
-                ['Assigned Technician', booking.technician_name || 'Unassigned'],
+                ['Assigned Technician', booking.technician_name || ADMIN_ASSIGNMENT_LABEL],
                 ['Total Cost', currency(booking.total_cost)]
               ].map(([label, value]) => (
                 <div key={label} className="rounded-card bg-[var(--surface-2)] p-3">

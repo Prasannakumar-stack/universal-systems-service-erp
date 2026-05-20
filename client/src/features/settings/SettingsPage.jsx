@@ -139,6 +139,8 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { Palette } from 'lucide-react';
+import { themePreferenceOptions, useThemePreference } from '../../utils/theme.js';
 
 const emptyTechnicianForm = {
   name: '',
@@ -462,12 +464,33 @@ function RequiredMark() {
   return <span className="admin-required-mark">Required</span>;
 }
 
+function ThemePreferenceButtons({ value, onChange }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      {themePreferenceOptions.map((option) => {
+        const active = value === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={`btn justify-center ${active ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function AccountStatusPill({ active }) {
   return <span className={`admin-status-pill ${active ? 'admin-status-active' : 'admin-status-inactive'}`}>{active ? 'Active' : 'Inactive'}</span>;
 }
 
 export function SystemSettingsPage() {
   const { push } = useToast();
+  const { themePreference, resolvedTheme, setThemePreference } = useThemePreference();
   const [activeTab, setActiveTab] = useState('workspace');
   const [preferences, setPreferences] = useState({
     defaultNotifications: true,
@@ -485,6 +508,7 @@ export function SystemSettingsPage() {
       ['Location', company.address],
       ['Phone', company.phones.join(' / ')],
       ['Email', company.email],
+      ['Theme', themePreferenceOptions.find((option) => option.value === themePreference)?.label || 'System Default'],
       ['Default Notifications', preferences.defaultNotifications ? 'Enabled' : 'Disabled'],
       ['Dashboard Preferences', preferences.dashboardFocus ? 'Enabled' : 'Disabled'],
       ['PDF / Document Preferences', preferences.pdfDocuments ? 'Enabled' : 'Disabled']
@@ -497,6 +521,11 @@ export function SystemSettingsPage() {
 
   function savePreferences() {
     push('Preferences saved locally');
+  }
+
+  function updateThemePreference(nextPreference) {
+    setThemePreference(nextPreference);
+    push('Theme preference saved locally');
   }
 
   return (
@@ -589,6 +618,21 @@ export function SystemSettingsPage() {
 
         {activeTab === 'preferences' ? (
           <div className="grid gap-5 lg:grid-cols-3">
+            <div className="surface admin-control-card settings-preference-card p-5">
+              <div className="flex items-start gap-3">
+                <div className="admin-control-icon">
+                  <Palette className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-black">Appearance / Theme</h2>
+                  <p className="mt-2 text-sm leading-6 muted">Choose the local app theme for this device.</p>
+                </div>
+              </div>
+              <div className="mt-5">
+                <ThemePreferenceButtons value={themePreference} onChange={updateThemePreference} />
+                <p className="mt-3 text-xs font-semibold muted">Current theme: {resolvedTheme === 'light' ? 'Light' : 'Dark'}</p>
+              </div>
+            </div>
             {[
               {
                 key: 'defaultNotifications',

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate, requireRole } from '../auth.js';
 import { workOrderUpload } from '../upload.js';
-import { create, deletePart, downloadPdf, getById, list, patchApproval, patchApprovePartRequest, patchDocumentSent, patchMovePartRequestToUsed, patchPart, patchPriority, patchRejectPartRequest, patchServiceCharge, patchStatus, postAutoAssign, postImages, postNote, postPart, postPartRequest, postSendPdfWhatsapp } from '../controllers/workOrderController.js';
+import { create, deletePart, downloadPdf, getById, list, patchApproval, patchApprovePartRequest, patchAssignment, patchDocumentSent, patchMovePartRequestToUsed, patchPart, patchPriority, patchRejectPartRequest, patchServiceCharge, patchStatus, postAutoAssign, postImages, postNote, postPart, postPartRequest, postSendPdfWhatsapp, remove } from '../controllers/workOrderController.js';
 import { asyncHandler } from '../utils/http.js';
 
 const router = Router();
@@ -11,6 +11,8 @@ router.post('/', requireRole('admin'), asyncHandler(create));
 router.get('/', asyncHandler(list));
 router.get('/:id', asyncHandler(getById));
 router.post('/:id/auto-assign', requireRole('admin'), asyncHandler(postAutoAssign));
+router.patch('/:id/assignment', requireRole('admin'), asyncHandler(patchAssignment));
+router.delete('/:id', requireRole('admin'), asyncHandler(remove));
 router.get('/:id/pdf/:type', asyncHandler(downloadPdf));
 router.post('/:id/pdf/:type/send-whatsapp', asyncHandler(postSendPdfWhatsapp));
 router.patch('/:id/documents/:type/sent', asyncHandler(patchDocumentSent));

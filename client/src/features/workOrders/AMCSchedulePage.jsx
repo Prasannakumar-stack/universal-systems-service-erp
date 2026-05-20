@@ -139,6 +139,7 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { ADMIN_ASSIGNMENT_LABEL } from '../../utils/assignment.js';
 
 export function AMCSchedulePage({ role = 'admin' }) {
   const { request } = useAuth();
@@ -242,7 +243,7 @@ export function AMCSchedulePage({ role = 'admin' }) {
                     <td><span className="block truncate" title={visit.serviceType || '-'}>{visit.serviceType || '-'}</span></td>
                     <td className="whitespace-nowrap">{formatDate(visit.scheduledDate)}</td>
                     <td>
-                      {visit.technicianId?.name ? <span className="block truncate font-semibold text-slate-200" title={visit.technicianId.name}>{visit.technicianId.name}</span> : <span className="amc-muted-badge">Unassigned</span>}
+                      {visit.technicianId?.name ? <span className="block truncate font-semibold text-slate-200" title={visit.technicianId.name}>{visit.technicianId.name}</span> : <span className="amc-muted-badge">{ADMIN_ASSIGNMENT_LABEL}</span>}
                     </td>
                     <td><AmcStatusPill status={visit.status} /></td>
                     <td className="text-right">

@@ -46,6 +46,8 @@ import {
   Users,
   Wrench
 } from '../../shared/phase1Shared.jsx';
+import { Palette } from 'lucide-react';
+import { themePreferenceOptions, useThemePreference } from '../../utils/theme.js';
 
 function text(value) {
   return String(value || '').trim();
@@ -712,6 +714,26 @@ function SettingsCard({ icon: Icon, title, description, children, className = ''
   );
 }
 
+function ThemePreferenceButtons({ value, onChange }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      {themePreferenceOptions.map((option) => {
+        const active = value === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={`btn justify-center ${active ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function AccountDetailRow({ label, value }) {
   return (
     <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
@@ -724,6 +746,7 @@ function AccountDetailRow({ label, value }) {
 export function TechnicianSettingsPage() {
   const { request, user, setUser } = useAuth();
   const { push } = useToast();
+  const { themePreference, resolvedTheme, setThemePreference } = useThemePreference();
   const [profileForm, setProfileForm] = useState({ name: user?.name || '', phone: user?.phone || '' });
   const [passwordForm, setPasswordForm] = useState({ password: '', confirmPassword: '' });
   const [preferences, setPreferences] = useState({
@@ -795,6 +818,11 @@ export function TechnicianSettingsPage() {
   function savePreferences(event) {
     event.preventDefault();
     push('Notification preferences saved locally');
+  }
+
+  function updateThemePreference(nextPreference) {
+    setThemePreference(nextPreference);
+    push('Theme preference saved locally');
   }
 
   return (
@@ -900,6 +928,11 @@ export function TechnicianSettingsPage() {
             <AccountDetailRow label="Account Status" value={accountStatus(user)} />
             <AccountDetailRow label="Last Login" value={user?.lastLogin ? formatDate(user.lastLogin) : ''} />
           </div>
+        </SettingsCard>
+
+        <SettingsCard icon={Palette} title="Appearance / Theme" description="Choose the local app theme for this device.">
+          <ThemePreferenceButtons value={themePreference} onChange={updateThemePreference} />
+          <p className="mt-3 text-xs font-semibold muted">Current theme: {resolvedTheme === 'light' ? 'Light' : 'Dark'}</p>
         </SettingsCard>
 
         <SettingsCard icon={Bell} title="Notification Preferences" description="Choose the operational alerts you want highlighted.">

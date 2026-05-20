@@ -139,6 +139,7 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { ADMIN_ASSIGNMENT_LABEL } from '../../utils/assignment.js';
 
 const bookingsFocusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
@@ -303,14 +304,14 @@ export function BookingsPage({ role = 'admin' }) {
       ) : (
         <>
         <div className="bookings-table-shell table-wrap bookings-table-wrap">
-          <table className="data-table bookings-table">
+          <table className={`data-table bookings-table ${isTechnician ? 'bookings-table--technician' : 'bookings-table--admin'}`}>
             <colgroup>
               <col className="booking-col-booking" style={{ width: '11%' }} />
               <col className="booking-col-customer" style={{ width: '16%' }} />
               <col className="booking-col-source booking-source-column" style={{ width: '8%' }} />
               <col className="booking-col-device" style={{ width: '13%' }} />
               <col className="booking-col-issue" style={{ width: '29%' }} />
-              <col className="booking-col-action" style={{ width: isTechnician ? '12%' : '23%', minWidth: isTechnician ? '8rem' : '15rem' }} />
+              <col className="booking-col-action" style={{ width: isTechnician ? '120px' : '23%', minWidth: isTechnician ? '120px' : '15rem' }} />
             </colgroup>
           <thead>
             <tr>
@@ -319,7 +320,7 @@ export function BookingsPage({ role = 'admin' }) {
               <th className="booking-source-column">Source</th>
               <th>Device / Service</th>
               <th>Issue</th>
-              <th>{isTechnician ? 'Actions' : 'Convert / Open'}</th>
+              <th className="bookings-action-header">{isTechnician ? 'Actions' : 'Convert / Open'}</th>
             </tr>
           </thead>
           <tbody>
@@ -350,7 +351,7 @@ export function BookingsPage({ role = 'admin' }) {
                     {booking.issue || 'No issue captured'}
                   </span>
                 </td>
-                <td className={`bookings-cell-action ${isTechnician ? 'min-w-[8rem]' : 'min-w-[15rem]'}`}>
+                <td className={`bookings-cell-action ${isTechnician ? 'min-w-[120px]' : 'min-w-[15rem]'}`}>
                   {isTechnician ? (
                     <TechnicianBookingActions booking={booking} workOrdersBase={workOrdersBase} />
                   ) : (
@@ -374,21 +375,19 @@ export function BookingsPage({ role = 'admin' }) {
 
 function TechnicianBookingActions({ booking, workOrdersBase }) {
   const workOrderId = recordId(booking.workOrderId);
-  const detailsClass = `btn btn-primary booking-action-button booking-open-job-btn ${workOrderId ? '' : 'pointer-events-none opacity-50'}`;
+  const detailsClass = `btn btn-primary booking-action-button booking-details-btn ${workOrderId ? '' : 'pointer-events-none opacity-50'}`;
 
   return (
     <div className="booking-action-cell">
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        {workOrderId ? (
-          <Link className={detailsClass} to={`${workOrdersBase}/${workOrderId}`}>
-            Details
-          </Link>
-        ) : (
-          <span className={detailsClass} aria-disabled="true">
-            Details
-          </span>
-        )}
-      </div>
+      {workOrderId ? (
+        <Link className={detailsClass} to={`${workOrdersBase}/${workOrderId}`}>
+          Details
+        </Link>
+      ) : (
+        <span className={detailsClass} aria-disabled="true">
+          Details
+        </span>
+      )}
     </div>
   );
 }
@@ -423,7 +422,8 @@ function ConvertBooking({ booking, technicians, onConvert, workOrdersBase = '/ad
         value={technicianId}
         onChange={(event) => setTechnicianId(event.target.value)}
       >
-        <option value="">Unassigned</option>
+        {/* Admin maps to an empty technicianId so old unassigned records stay compatible. */}
+        <option value="">{ADMIN_ASSIGNMENT_LABEL}</option>
         {technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}
       </select>
       <button

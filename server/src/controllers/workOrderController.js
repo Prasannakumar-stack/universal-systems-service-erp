@@ -4,6 +4,7 @@ import {
   addPart,
   autoAssignWorkOrder,
   createWorkOrder,
+  deleteWorkOrder,
   getWorkOrder,
   listWorkOrders,
   markDocumentSent,
@@ -14,6 +15,7 @@ import {
   rejectPartRequest,
   movePartRequestToUsed,
   updateApproval,
+  updateAssignment,
   updateServiceCharge,
   updatePriority,
   updateStatus
@@ -106,6 +108,16 @@ export async function postImages(req, res) {
 export async function postAutoAssign(req, res) {
   const workOrder = await autoAssignWorkOrder(req.params.id, req.user);
   res.json({ workOrder, message: 'Work order auto-assigned' });
+}
+
+export async function patchAssignment(req, res) {
+  const workOrder = await updateAssignment(req.params.id, req.body, req.user);
+  res.json({ workOrder, message: 'Work order assignment updated' });
+}
+
+export async function remove(req, res) {
+  const result = await deleteWorkOrder(req.params.id, req.user);
+  res.json({ success: true, ...result, message: 'Work order deleted' });
 }
 
 export async function downloadPdf(req, res) {

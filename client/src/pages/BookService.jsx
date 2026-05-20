@@ -17,6 +17,7 @@ const initial = {
 
 const maxSize = 5 * 1024 * 1024;
 const accepted = ['image/jpeg', 'image/png', 'image/webp'];
+const totalSteps = 3;
 
 export default function BookService() {
   const [step, setStep] = useState(1);
@@ -28,7 +29,7 @@ export default function BookService() {
   const inputRef = useRef(null);
   const { push } = useToast();
 
-  const progress = useMemo(() => Math.round((step / 3) * 100), [step]);
+  const progress = useMemo(() => Math.round((step / totalSteps) * 100), [step]);
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -42,15 +43,16 @@ export default function BookService() {
       }
     }
     if (targetStep === 2) {
-      if (!form.serviceType.trim() || !form.device.trim() || !form.problemDescription.trim()) {
-        push('Service type, device, and problem description are required', 'error');
+      if (!form.serviceType.trim() || !form.device.trim() || !form.problemDescription.trim() || !form.bookingSource.trim()) {
+        push('Service type, device, problem description, and booking source are required', 'error');
         return false;
       }
     }
     return true;
   }
 
-  function next() {
+  function next(event) {
+    event?.preventDefault();
     if (loading) return;
     if (step === 1) {
       if (!validateStep(1)) return;
@@ -60,6 +62,7 @@ export default function BookService() {
     if (step === 2) {
       if (!validateStep(2)) return;
       setStep(3);
+      return;
     }
   }
 
@@ -91,7 +94,7 @@ export default function BookService() {
 
   async function submit(event) {
     event.preventDefault();
-    if (step !== 3) return;
+    if (step !== totalSteps) return;
     if (!validateStep(1) || !validateStep(2)) return;
     const data = new FormData();
     Object.entries(form).forEach(([key, value]) => data.append(key, value));
@@ -275,7 +278,7 @@ export default function BookService() {
             <button type="button" className="btn btn-secondary" onClick={previous} disabled={step === 1 || loading}>
               Back
             </button>
-            {step < 3 ? (
+            {step < totalSteps ? (
               <button type="button" className="btn btn-primary" onClick={next} disabled={loading}>
                 Continue
               </button>
