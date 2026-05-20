@@ -1,4 +1,24 @@
-import { Award, Eye, Gem, Mail, MapPin, Phone, Target, Users, Wrench } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  Award,
+  CalendarClock,
+  CheckCircle2,
+  ClipboardCheck,
+  Eye,
+  Gem,
+  HeartHandshake,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Phone,
+  PhoneCall,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  Users,
+  Wrench
+} from 'lucide-react';
 import { company } from '../utils/constants.js';
 
 const serviceFocus = [
@@ -18,134 +38,273 @@ const principles = [
   { title: 'Values', icon: Gem, text: 'Care, honesty, practical solutions, customer respect, and long-term service relationships.' }
 ];
 
+const heroBadges = [
+  { label: 'Local Service', icon: MapPin },
+  { label: 'Clear Diagnosis', icon: ClipboardCheck },
+  { label: 'Warranty Support', icon: ShieldCheck },
+  { label: 'Fast Follow-up', icon: PhoneCall }
+];
+
+const servicePromise = [
+  'We explain the issue clearly before service.',
+  'We confirm the work before proceeding.',
+  'We use practical solutions and reliable parts.',
+  'We keep billing simple and transparent.',
+  'We support customers after repair.'
+];
+
+const trustReasons = [
+  { title: 'Clear communication', icon: MessageCircle },
+  { title: 'No unnecessary service pressure', icon: ShieldCheck },
+  { title: 'Technician confirmation before work', icon: ClipboardCheck },
+  { title: 'Support after repair', icon: HeartHandshake },
+  { title: 'Local follow-up', icon: Users }
+];
+
+const credibilityItems = [
+  { title: 'Local support', icon: MapPin },
+  { title: 'Experienced technicians', icon: Wrench },
+  { title: 'Clear service records', icon: ClipboardCheck },
+  { title: 'Customer-first process', icon: HeartHandshake }
+];
+
+function useAboutReveal() {
+  useEffect(() => {
+    const items = Array.from(document.querySelectorAll('.about-reveal'));
+    if (!items.length) return undefined;
+
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || !('IntersectionObserver' in window)) {
+      items.forEach((item) => item.classList.add('is-visible'));
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.14, rootMargin: '0px 0px -8% 0px' }
+    );
+
+    items.forEach((item) => observer.observe(item));
+    return () => observer.disconnect();
+  }, []);
+}
+
 export default function About() {
+  useAboutReveal();
+
+  const phoneHref = useMemo(() => `tel:${company.phones[0].replace(/\s/g, '')}`, []);
+  const whatsappHref = useMemo(() => `https://wa.me/${company.whatsapp}`, []);
+  const landlineHref = useMemo(() => `tel:${company.landline.replace(/[^\d]/g, '')}`, []);
+
   return (
-    <div className="bg-[linear-gradient(180deg,rgba(3,15,34,0.18),rgba(7,27,52,0.7))]">
-      <section className="about-hero">
-        <div className="about-container">
-          <div className="about-image">
-            <img src="/images/about-tech.jpg" alt="Technician repairing computer" />
-          </div>
-
-          <div className="about-content">
-            <p className="tag">ABOUT UNIVERSAL SYSTEMS</p>
-
+    <div className="about-page section">
+      <div className="container-page about-page-container">
+        <section className="about-premium-hero about-reveal">
+          <div className="about-hero-glow" aria-hidden="true" />
+          <div className="about-hero-copy">
+            <div className="about-eyebrow-chip">
+              <Sparkles className="h-4 w-4" />
+              About Universal Systems
+            </div>
             <h1>Trusted local computer service in Mettur Dam.</h1>
-
-            <p className="desc">
+            <p>
               Universal Systems helps homes, students, shops, and offices keep their devices running smoothly with reliable repair and support.
             </p>
-
-            <div className="about-points">
-              <span>&#10003; OS installation & driver setup</span>
-              <span>&#10003; Laptop & desktop diagnostics</span>
-              <span>&#10003; Printer & office support</span>
-              <span>&#10003; Data recovery & networking</span>
+            <div className="about-hero-badges" aria-label="Universal Systems trust highlights">
+              {heroBadges.map((badge) => {
+                const Icon = badge.icon;
+                return (
+                  <span className="about-hero-badge" key={badge.label}>
+                    <Icon className="h-4 w-4" />
+                    {badge.label}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="about-trust-pill">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Serving Mettur Dam, Salem Dt and nearby areas.</span>
             </div>
           </div>
-        </div>
-      </section>
 
-      <section className="border-y border-white/10 bg-white/[0.02] py-14 sm:py-16">
-        <div className="container-page">
-          <div className="mb-7 max-w-2xl">
-            <p className="text-sm font-bold uppercase tracking-wide text-sky-400">Mission, Vision, Values</p>
-            <h2 className="mt-3 text-3xl font-semibold text-white sm:text-4xl">A service desk built on trust.</h2>
+          <div className="about-hero-image-panel">
+            <img src="/images/about-tech.jpg" alt="Technician repairing computer" />
           </div>
+        </section>
 
-          <div className="grid gap-5 md:grid-cols-3">
+        <section className="about-promise-grid about-reveal">
+          <div className="about-promise-panel">
+            <p className="about-section-eyebrow">Our local service promise</p>
+            <h2>Clear guidance before work starts.</h2>
+            <p>
+              We keep the service process practical, transparent, and easy to understand, whether the issue is a laptop repair, printer problem, data recovery request, or office support need.
+            </p>
+          </div>
+          <div className="about-promise-list">
+            {servicePromise.map((item) => (
+              <div className="about-promise-row" key={item}>
+                <CheckCircle2 className="h-4 w-4" />
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="about-section about-reveal">
+          <div className="about-section-heading">
+            <p className="about-section-eyebrow">Mission, Vision, Values</p>
+            <h2>A service desk built on trust.</h2>
+          </div>
+          <div className="about-principles-grid">
             {principles.map((item) => {
               const Icon = item.icon;
               return (
-                <div
-                  key={item.title}
-                  className="about-principle-card flex h-full flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-6 transition duration-300 hover:-translate-y-1 hover:border-sky-400/30 hover:bg-white/[0.07] hover:shadow-[0_0_25px_rgba(56,189,248,0.15)]"
-                >
-                  <div className="about-principle-icon mb-5 inline-grid h-12 w-12 place-items-center self-start rounded-xl border border-sky-300/20 bg-sky-400/10 text-sky-300">
-                    <Icon className="h-6 w-6" />
-                  </div>
-                  <h3 className="text-xl font-black text-white">{item.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-slate-400">{item.text}</p>
-                </div>
+                <article className="about-principle-card" key={item.title}>
+                  <span className="about-icon-shell">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </article>
               );
             })}
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="py-14 sm:py-16 lg:py-20">
-        <div className="container-page grid gap-6 lg:grid-cols-[1fr_0.85fr]">
-          <div className="about-info-card rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_22px_70px_rgba(1,12,28,0.24)]">
-            <p className="text-sm font-bold uppercase tracking-wide text-sky-400">Service Focus</p>
-            <h2 className="mt-3 text-3xl font-semibold text-white">Practical support for daily technology.</h2>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <section className="about-credibility-strip about-reveal" aria-label="Universal Systems credibility">
+          {credibilityItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div className="about-credibility-item" key={item.title}>
+                <Icon className="h-4 w-4" />
+                <span>{item.title}</span>
+              </div>
+            );
+          })}
+        </section>
+
+        <section className="about-section about-reveal">
+          <div className="about-section-heading">
+            <p className="about-section-eyebrow">Why customers trust us</p>
+            <h2>Support that respects your time and your device.</h2>
+          </div>
+          <div className="about-trust-grid">
+            {trustReasons.map((item) => {
+              const Icon = item.icon;
+              return (
+                <article className="about-trust-card" key={item.title}>
+                  <Icon className="h-5 w-5" />
+                  <h3>{item.title}</h3>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="about-main-grid about-reveal">
+          <div className="about-info-panel">
+            <p className="about-section-eyebrow">Service Focus</p>
+            <h2>Practical support for daily technology.</h2>
+            <div className="about-service-grid">
               {serviceFocus.map((item) => (
-                <div
-                  key={item}
-                  className="about-service-focus-card flex items-center gap-3 rounded-xl border border-white/10 bg-slate-950/30 p-3 text-sm font-bold text-slate-200 transition duration-300 hover:border-sky-400/30 hover:bg-sky-500/10"
-                >
-                  <Wrench className="h-4 w-4 shrink-0 text-sky-300" />
-                  {item}
+                <div className="about-service-row" key={item}>
+                  <Wrench className="h-4 w-4" />
+                  <span>{item}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="about-info-card about-contact-card rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-[0_22px_70px_rgba(1,12,28,0.24)]">
-            <p className="text-sm font-bold uppercase tracking-wide text-sky-400">Contact Details</p>
-            <h2 className="mt-3 text-3xl font-semibold text-white">Reach the local team.</h2>
-            <div className="mt-6 space-y-5 text-sm">
-              <div className="about-contact-row flex gap-3">
-                <MapPin className="mt-1 h-5 w-5 shrink-0 text-sky-300" />
-                <div>
-                  <p className="font-bold text-sky-200">Address</p>
-                  <p className="mt-1 leading-6 text-slate-400">{company.address}</p>
-                </div>
+          <div className="about-info-panel about-contact-panel">
+            <p className="about-section-eyebrow">Contact Details</p>
+            <h2>Reach the local team.</h2>
+            <div className="about-contact-list">
+              <p className="about-contact-row">
+                <MapPin className="h-4 w-4" />
+                <span>
+                  <strong>Address</strong>
+                  <small>{company.address}</small>
+                </span>
+              </p>
+              <div className="about-contact-row">
+                <Phone className="h-4 w-4" />
+                <span>
+                  <strong>Phone</strong>
+                  <small className="about-inline-links">
+                    {company.phones.map((phone, index) => (
+                      <span key={phone}>
+                        {index > 0 ? ' / ' : ''}
+                        <a href={`tel:${phone.replace(/\s/g, '')}`}>{phone}</a>
+                      </span>
+                    ))}
+                  </small>
+                </span>
               </div>
-              <div className="about-contact-row flex gap-3">
-                <Phone className="mt-1 h-5 w-5 shrink-0 text-sky-300" />
-                <div>
-                  <p className="font-bold text-sky-200">Phone</p>
-                  <a className="about-phone-link mt-1 block text-slate-400" href={`tel:${company.phones[0].replace(/\s/g, '')}`}>
-                    {company.phones.join(' / ')}
-                  </a>
-                  <p className="mt-1 text-slate-400">Landline: {company.landline}</p>
-                </div>
-              </div>
-              <div className="about-contact-row flex gap-3">
-                <Mail className="mt-1 h-5 w-5 shrink-0 text-sky-300" />
-                <div>
-                  <p className="font-bold text-sky-200">Email</p>
-                  <a className="about-email-link mt-1 block text-slate-400" href={`mailto:${company.email}`}>
-                    {company.email}
-                  </a>
-                </div>
-              </div>
+              <a className="about-contact-row" href={landlineHref}>
+                <Phone className="h-4 w-4" />
+                <span>
+                  <strong>Landline</strong>
+                  <small>{company.landline}</small>
+                </span>
+              </a>
+              <a className="about-contact-row" href={`mailto:${company.email}`}>
+                <Mail className="h-4 w-4" />
+                <span>
+                  <strong>Email</strong>
+                  <small>{company.email}</small>
+                </span>
+              </a>
             </div>
 
-            <div className="about-whatsapp-highlight mt-6 flex gap-3 rounded-xl border border-sky-300/15 bg-sky-400/10 p-4">
-              <Users className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
-              <p className="text-sm font-semibold leading-6 text-slate-200">Local staff, direct follow-up, and practical service records.</p>
+            <div className="about-whatsapp-highlight">
+              <Users className="h-5 w-5" />
+              <p>Local staff, direct follow-up, and practical service records.</p>
             </div>
+            <a className="btn btn-secondary about-whatsapp-button" href={whatsappHref} target="_blank" rel="noreferrer">
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp Support
+            </a>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="pb-14 sm:pb-16 lg:pb-20">
-        <div className="container-page">
-          <div className="about-care-card rounded-2xl border border-white/10 bg-gradient-to-r from-sky-500/10 to-blue-600/10 p-6">
-            <div className="flex gap-4">
-              <Award className="mt-1 h-7 w-7 shrink-0 text-sky-300" />
-              <div>
-                <h2 className="text-2xl font-semibold text-white">We care for your career</h2>
-                <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
-                  The tagline reflects the company's role in keeping computers, printers, and office systems available for students, staff, businesses, and professionals who depend on working technology every day.
-                </p>
-              </div>
-            </div>
+        <section className="about-care-card about-reveal">
+          <Award className="h-7 w-7" />
+          <div>
+            <h2>We care for the technology you depend on</h2>
+            <p>
+              The promise reflects our role in keeping computers, printers, and office systems available for students, staff, businesses, and professionals who depend on working technology every day.
+            </p>
           </div>
-        </div>
-      </section>
+        </section>
+
+        <section className="about-final-cta about-reveal">
+          <div>
+            <p className="about-section-eyebrow">
+              <HeartHandshake className="h-4 w-4" />
+              Service support
+            </p>
+            <h2>Ready to get your device checked?</h2>
+            <p>Book a service or message us on WhatsApp. Our team will guide you clearly before any service starts.</p>
+          </div>
+          <div className="about-cta-actions">
+            <Link className="btn btn-primary shine-button about-book-button" to="/book-service">
+              <CalendarClock className="h-4 w-4" />
+              Book Service
+            </Link>
+            <a className="btn btn-secondary about-whatsapp-action" href={whatsappHref} target="_blank" rel="noreferrer">
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp Support
+            </a>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

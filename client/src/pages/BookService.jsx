@@ -1,6 +1,24 @@
 import { useMemo, useRef, useState } from 'react';
-import { Check, FileImage, ImageUp, Loader2, Trash2, UploadCloud } from 'lucide-react';
-import { serviceTypes } from '../utils/constants.js';
+import {
+  AlertTriangle,
+  CalendarClock,
+  Check,
+  CheckCircle2,
+  ClipboardCheck,
+  CreditCard,
+  FileImage,
+  ImageUp,
+  LifeBuoy,
+  Loader2,
+  MessageCircle,
+  PhoneCall,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  UploadCloud,
+  Wrench
+} from 'lucide-react';
+import { company, serviceTypes } from '../utils/constants.js';
 import { createBooking } from '../utils/publicApi.js';
 import { useToast } from '../context/ToastContext.jsx';
 
@@ -18,6 +36,41 @@ const initial = {
 const maxSize = 5 * 1024 * 1024;
 const accepted = ['image/jpeg', 'image/png', 'image/webp'];
 const totalSteps = 3;
+const bookingSteps = ['Customer Details', 'Service Details', 'Review & Upload'];
+
+const trustBadges = [
+  { label: 'No upfront payment', icon: ShieldCheck },
+  { label: 'Fast response', icon: PhoneCall },
+  { label: 'Technician confirmation', icon: ClipboardCheck },
+  { label: 'WhatsApp support', icon: MessageCircle }
+];
+
+const whatNext = [
+  { title: 'We receive your request', icon: ClipboardCheck },
+  { title: 'Our team contacts you on call/WhatsApp', icon: MessageCircle },
+  { title: 'Technician confirms the service', icon: Wrench },
+  { title: 'You pay only after service confirmation', icon: CreditCard }
+];
+
+function getBookingErrorMessage(error) {
+  const message = error?.message?.trim() || '';
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes('failed to fetch') ||
+    normalized.includes('networkerror') ||
+    normalized.includes('load failed') ||
+    normalized.includes('network request failed')
+  ) {
+    return 'Booking could not be submitted. Please check your connection or contact us on WhatsApp.';
+  }
+
+  if (!message || normalized === 'request failed' || normalized.includes('internal server') || normalized.includes('server unavailable')) {
+    return 'Server is not responding right now. You can still contact us on WhatsApp for urgent support.';
+  }
+
+  return message;
+}
 
 export default function BookService() {
   const [step, setStep] = useState(1);
@@ -26,12 +79,15 @@ export default function BookService() {
   const [preview, setPreview] = useState('');
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const inputRef = useRef(null);
   const { push } = useToast();
 
   const progress = useMemo(() => Math.round((step / totalSteps) * 100), [step]);
+  const whatsappHref = useMemo(() => `https://wa.me/${company.whatsapp}`, []);
 
   function update(field, value) {
+    setSubmitError('');
     setForm((current) => ({ ...current, [field]: value }));
   }
 
@@ -56,22 +112,26 @@ export default function BookService() {
     if (loading) return;
     if (step === 1) {
       if (!validateStep(1)) return;
+      setSubmitError('');
       setStep(2);
       return;
     }
     if (step === 2) {
       if (!validateStep(2)) return;
+      setSubmitError('');
       setStep(3);
       return;
     }
   }
 
   function previous() {
+    setSubmitError('');
     setStep((current) => Math.max(1, current - 1));
   }
 
   function chooseFile(file) {
     if (!file) return;
+    setSubmitError('');
     if (!accepted.includes(file.type)) {
       push('Only JPG, JPEG, PNG, and WEBP images are allowed', 'error');
       return;
@@ -94,128 +154,234 @@ export default function BookService() {
 
   async function submit(event) {
     event.preventDefault();
-    if (step !== totalSteps) return;
+    if (loading || step !== totalSteps) return;
     if (!validateStep(1) || !validateStep(2)) return;
     const data = new FormData();
     Object.entries(form).forEach(([key, value]) => data.append(key, value));
     if (image) data.append('problemImage', image);
+    setSubmitError('');
     setLoading(true);
     try {
-      const result = await createBooking(data);
-      push(`Booking saved: ${result.booking.bookingCode || result.booking.booking_code}`);
+      await createBooking(data);
+      push('Booking request submitted successfully. Our team will contact you shortly.');
       setForm(initial);
       removeImage();
       setStep(1);
     } catch (error) {
-      push(error.message, 'error');
+      console.error('Booking submit failed', error);
+      const friendlyMessage = getBookingErrorMessage(error);
+      setSubmitError(friendlyMessage);
+      push(friendlyMessage, 'error');
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <div className="section">
-      <div className="container-page max-w-5xl">
-        <div className="mb-8 text-center">
-          <p className="text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Book Service</p>
-          <h1 className="mt-2 text-4xl font-black tracking-tight">Service booking in three simple steps.</h1>
-          <p className="mx-auto mt-4 max-w-2xl text-base leading-7 muted">
-            Request OS installation, repair, printer service, data recovery, software support, or general maintenance.
-          </p>
-        </div>
+  const reviewRows = [
+    ['Customer', form.customerName],
+    ['Phone', form.phone],
+    ['Address', form.address],
+    ['Service', form.serviceType],
+    ['Device', form.device],
+    ['Problem', form.problemDescription],
+    ['Preferred', form.preferredDateTime || 'Not specified'],
+    ['Image', image ? image.name : 'No image selected']
+  ];
 
-        <form className="surface overflow-hidden" onSubmit={submit}>
-          <div className="border-b border-[var(--line)] p-5">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              {['Customer Details', 'Service Details', 'Review & Upload'].map((label, index) => {
+  return (
+    <div className="booking-page section">
+      <div className="container-page booking-container">
+        <section className="booking-hero">
+          <div className="booking-hero-glow" aria-hidden="true" />
+          <div className="booking-hero-content">
+            <div className="booking-eyebrow-chip">
+              <Sparkles className="h-4 w-4" />
+              Book Service
+            </div>
+            <h1>Service booking in three simple steps.</h1>
+            <p>
+              Request OS installation, repair, printer service, data recovery, software support, or general maintenance.
+            </p>
+            <div className="booking-trust-badges" aria-label="Booking trust highlights">
+              {trustBadges.map((badge) => {
+                const Icon = badge.icon;
+                return (
+                  <span className="booking-trust-badge" key={badge.label}>
+                    <Icon className="h-4 w-4" />
+                    {badge.label}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="booking-trust-pill">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>No upfront payment required. Pay only after service confirmation.</span>
+            </div>
+          </div>
+        </section>
+
+        <form className="booking-form-card" onSubmit={submit}>
+          <div className="booking-stepper-panel">
+            <div className="booking-stepper" aria-label="Booking progress">
+              {bookingSteps.map((label, index) => {
                 const active = step === index + 1;
                 const done = step > index + 1;
+                const stepClass = done ? 'is-done' : active ? 'is-active' : 'is-upcoming';
                 return (
-                  <div key={label} className={`flex items-center gap-2 text-sm font-bold ${active || done ? 'text-[var(--brand)]' : 'muted'}`}>
-                    <span className={`grid h-8 w-8 place-items-center rounded-full ${active || done ? 'bg-[var(--brand)] text-white' : 'bg-[var(--surface-2)]'}`}>
+                  <div key={label} className={`booking-step ${stepClass}`}>
+                    <span className="booking-step-marker">
                       {done ? <Check className="h-4 w-4" /> : index + 1}
                     </span>
-                    {label}
+                    <span className="booking-step-copy">
+                      <span className="booking-step-kicker">Step {index + 1}</span>
+                      <span className="booking-step-label">{label}</span>
+                    </span>
                   </div>
                 );
               })}
             </div>
-            <div className="h-2 rounded-full bg-[var(--surface-2)]">
-              <div className="progress-bar h-2 rounded-full bg-[var(--brand-2)]" style={{ width: `${progress}%` }} />
+            <div className="booking-progress-track" aria-hidden="true">
+              <div className="booking-progress-bar" style={{ width: `${progress}%` }} />
             </div>
           </div>
 
-          <div className="p-5 sm:p-7">
+          <div className="booking-form-body">
             {step === 1 ? (
-              <div className="grid gap-4 fade-in">
-                <label>
-                  <span className="label">Customer name</span>
-                  <input className="input" value={form.customerName} onChange={(event) => update('customerName', event.target.value)} />
-                </label>
-                <label>
-                  <span className="label">Phone number</span>
-                  <input className="input" value={form.phone} onChange={(event) => update('phone', event.target.value)} />
-                </label>
-                <label>
-                  <span className="label">Address</span>
-                  <textarea className="input min-h-28" value={form.address} onChange={(event) => update('address', event.target.value)} />
-                </label>
+              <div className="booking-step-panel fade-in">
+                <div className="booking-field">
+                  <label className="label" htmlFor="booking-customer-name">Customer name</label>
+                  <input
+                    id="booking-customer-name"
+                    className="input"
+                    autoComplete="name"
+                    value={form.customerName}
+                    onChange={(event) => update('customerName', event.target.value)}
+                    placeholder="Enter your full name"
+                  />
+                </div>
+                <div className="booking-field">
+                  <label className="label" htmlFor="booking-phone">Phone number</label>
+                  <input
+                    id="booking-phone"
+                    className="input"
+                    type="tel"
+                    autoComplete="tel"
+                    aria-describedby="booking-phone-help"
+                    value={form.phone}
+                    onChange={(event) => update('phone', event.target.value)}
+                    placeholder="Phone or WhatsApp number"
+                  />
+                  <span id="booking-phone-help" className="booking-helper">Our team will use this number to confirm your booking.</span>
+                </div>
+                <div className="booking-field">
+                  <label className="label" htmlFor="booking-address">Address</label>
+                  <textarea
+                    id="booking-address"
+                    className="input min-h-28"
+                    autoComplete="street-address"
+                    aria-describedby="booking-address-help"
+                    value={form.address}
+                    onChange={(event) => update('address', event.target.value)}
+                    placeholder="House/shop name, street, area, city"
+                  />
+                  <span id="booking-address-help" className="booking-helper">Add enough detail for onsite, pickup, or service coordination.</span>
+                </div>
               </div>
             ) : null}
 
             {step === 2 ? (
-              <div className="grid gap-4 fade-in">
-                <label>
-                  <span className="label">Service type</span>
-                  <select className="input" value={form.serviceType} onChange={(event) => update('serviceType', event.target.value)}>
+              <div className="booking-step-panel fade-in">
+                <div className="booking-field">
+                  <label className="label" htmlFor="booking-service-type">Service type</label>
+                  <select
+                    id="booking-service-type"
+                    className="input"
+                    value={form.serviceType}
+                    onChange={(event) => update('serviceType', event.target.value)}
+                  >
                     {serviceTypes.map((service) => (
                       <option key={service}>{service}</option>
                     ))}
                   </select>
-                </label>
-                <label>
-                  <span className="label">Device</span>
-                  <input className="input" value={form.device} onChange={(event) => update('device', event.target.value)} placeholder="Laptop, desktop, printer, CCTV, UPS..." />
-                </label>
-                <label>
-                  <span className="label">Issue / problem description</span>
-                  <textarea className="input min-h-32" value={form.problemDescription} onChange={(event) => update('problemDescription', event.target.value)} />
-                </label>
-                <label>
-                  <span className="label">Preferred date/time optional</span>
-                  <input className="input" type="datetime-local" value={form.preferredDateTime} onChange={(event) => update('preferredDateTime', event.target.value)} />
-                </label>
+                </div>
+                <div className="booking-field">
+                  <label className="label" htmlFor="booking-device">Device</label>
+                  <input
+                    id="booking-device"
+                    className="input"
+                    value={form.device}
+                    onChange={(event) => update('device', event.target.value)}
+                    placeholder="Laptop, desktop, printer, CCTV, UPS..."
+                  />
+                </div>
+                <div className="booking-field">
+                  <label className="label" htmlFor="booking-problem">Issue / problem description</label>
+                  <textarea
+                    id="booking-problem"
+                    className="input min-h-32"
+                    aria-describedby="booking-problem-help"
+                    value={form.problemDescription}
+                    onChange={(event) => update('problemDescription', event.target.value)}
+                    placeholder="Describe the issue briefly"
+                  />
+                  <span id="booking-problem-help" className="booking-helper">Describe the issue briefly. Our team will confirm details before service.</span>
+                </div>
+                <div className="booking-field">
+                  <span className="booking-label-row">
+                    <label className="label" htmlFor="booking-preferred-date-time">Preferred date/time</label>
+                    <span className="booking-optional">Optional</span>
+                  </span>
+                  <input
+                    id="booking-preferred-date-time"
+                    className="input"
+                    type="datetime-local"
+                    aria-describedby="booking-preferred-help"
+                    value={form.preferredDateTime}
+                    onChange={(event) => update('preferredDateTime', event.target.value)}
+                  />
+                  <span id="booking-preferred-help" className="booking-helper">Choose a preferred slot if you have one. We will confirm availability.</span>
+                </div>
               </div>
             ) : null}
 
             {step === 3 ? (
-              <div className="grid gap-6 fade-in lg:grid-cols-[0.9fr_1.1fr]">
-                <div className="review-card">
-                  <h2 className="text-xl font-black">Review Summary</h2>
-                  <div className="mt-4 grid gap-3 text-sm">
-                    {[
-                      ['Customer', form.customerName],
-                      ['Phone', form.phone],
-                      ['Address', form.address],
-                      ['Service', form.serviceType],
-                      ['Device', form.device],
-                      ['Problem', form.problemDescription],
-                      ['Preferred', form.preferredDateTime || 'Not specified'],
-                      ['Image', image ? image.name : 'No image selected']
-                    ].map(([label, value]) => (
-                      <div key={label}>
-                        <strong className="text-xs font-bold uppercase tracking-wide">{label}</strong>
-                        <p className="mt-1 leading-6">{value}</p>
+              <div className="booking-review-grid fade-in">
+                <div className="booking-review-card">
+                  <div className="booking-card-heading">
+                    <span className="booking-icon-shell">
+                      <ClipboardCheck className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <h2>Review Summary</h2>
+                      <p>Please review your details before submitting.</p>
+                    </div>
+                  </div>
+                  <div className="booking-review-list">
+                    {reviewRows.map(([label, value]) => (
+                      <div className="booking-review-row" key={label}>
+                        <strong>{label}</strong>
+                        <p>{value}</p>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div>
-                  <span className="label">Upload Problem Image / Parts Issue Photo</span>
+                <div className="booking-upload-stack">
+                  <div>
+                    <span className="label">Upload Problem Image / Parts Issue Photo</span>
+                    <p className="booking-helper">Optional: Upload a device/problem photo to help us diagnose faster.</p>
+                  </div>
                   <div
-                    className={`upload-box ${dragging ? 'upload-box-active' : ''}`}
+                    className={`upload-box booking-upload-box ${dragging ? 'upload-box-active' : ''}`}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => inputRef.current?.click()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        inputRef.current?.click();
+                      }
+                    }}
                     onDragOver={(event) => {
                       event.preventDefault();
                       setDragging(true);
@@ -237,7 +403,7 @@ export default function BookService() {
                           </span>
                           <button
                             type="button"
-                            className="btn btn-secondary"
+                            className="btn btn-secondary booking-remove-button"
                             onClick={(event) => {
                               event.stopPropagation();
                               removeImage();
@@ -250,7 +416,7 @@ export default function BookService() {
                       </div>
                     ) : (
                       <div>
-                        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-card bg-[var(--surface-2)] text-[var(--brand)]">
+                        <div className="booking-upload-icon">
                           <UploadCloud className="h-7 w-7" />
                         </div>
                         <p className="font-black">No image selected</p>
@@ -272,24 +438,77 @@ export default function BookService() {
                 </div>
               </div>
             ) : null}
+
+            {submitError ? (
+              <div className="booking-error-panel" role="alert">
+                <AlertTriangle className="h-5 w-5" />
+                <div>
+                  <strong>Booking needs attention</strong>
+                  <p>{submitError}</p>
+                </div>
+                <a className="btn btn-secondary booking-error-whatsapp" href={whatsappHref} target="_blank" rel="noreferrer">
+                  <MessageCircle className="h-4 w-4" />
+                  WhatsApp Support
+                </a>
+              </div>
+            ) : null}
           </div>
 
-          <div className="flex flex-col-reverse gap-3 border-t border-[var(--line)] p-5 sm:flex-row sm:justify-between">
-            <button type="button" className="btn btn-secondary" onClick={previous} disabled={step === 1 || loading}>
+          <div className="booking-form-actions">
+            <button type="button" className="btn btn-secondary booking-secondary-action" onClick={previous} disabled={step === 1 || loading}>
               Back
             </button>
             {step < totalSteps ? (
-              <button type="button" className="btn btn-primary" onClick={next} disabled={loading}>
+              <button type="button" className="btn btn-primary shine-button booking-primary-action" onClick={next} disabled={loading}>
                 Continue
               </button>
             ) : (
-              <button type="submit" className="btn btn-primary" disabled={loading}>
+              <button type="submit" className="btn btn-primary shine-button booking-primary-action" disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookIcon />}
                 {loading ? 'Submitting...' : 'Submit Booking'}
               </button>
             )}
           </div>
         </form>
+
+        <section className="booking-next-card">
+          <div className="booking-card-heading">
+            <span className="booking-icon-shell">
+              <CalendarClock className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="booking-section-eyebrow">What happens next?</p>
+              <h2>Clear confirmation before service starts</h2>
+            </div>
+          </div>
+          <div className="booking-next-grid">
+            {whatNext.map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <div className="booking-next-step" key={item.title}>
+                  <span className="booking-next-number">{index + 1}</span>
+                  <Icon className="h-4 w-4" />
+                  <p>{item.title}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="booking-support-cta">
+          <div>
+            <p className="booking-section-eyebrow">
+              <LifeBuoy className="h-4 w-4" />
+              Need urgent help?
+            </p>
+            <h2>WhatsApp us directly.</h2>
+            <p>Our team can guide you to the right service before you submit the form.</p>
+          </div>
+          <a className="btn btn-secondary booking-whatsapp-action" href={whatsappHref} target="_blank" rel="noreferrer">
+            <MessageCircle className="h-4 w-4" />
+            WhatsApp Support
+          </a>
+        </section>
       </div>
     </div>
   );

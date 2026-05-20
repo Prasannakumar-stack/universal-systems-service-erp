@@ -1,6 +1,6 @@
 export const company = {
   name: 'Universal Systems',
-  tagline: 'We care for your career',
+  tagline: 'We care for the technology you depend on',
   address: 'MIG-H3, Housing Unit, Near 4 Roads, Mathaiyankuttai Post, Mettur Dam - 636452, Salem - Dt, Tamil Nadu, India.',
   phones: ['98427 81971', '70100 24368'],
   landline: '04298 - 243565',
