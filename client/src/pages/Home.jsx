@@ -231,7 +231,7 @@ export default function Home() {
               Premium local technology service
             </div>
             <h1 className="hero-reveal mt-5 max-w-4xl text-4xl font-black leading-[1.02] text-white sm:text-5xl xl:text-7xl">
-              Fast, Reliable & Professional Tech Support You Can Trust
+              Fast, Reliable & Professional Tech Support <span className="hero-trust-emphasis">You Can Trust</span>
             </h1>
             <p className="hero-reveal mt-6 max-w-2xl text-base leading-8 text-slate-300 md:text-lg">
               Computer, laptop, printer, CCTV, and networking service for homes, students, shops, and offices with clear diagnosis, careful repair, and simple booking.
@@ -240,11 +240,16 @@ export default function Home() {
               <Link to="/book-service" className="btn btn-primary btn-xl shine-button w-full sm:w-auto">
                 <BookOpenCheck className="h-5 w-5" />
                 Book a Service
+                <ArrowRight className="btn-arrow h-5 w-5" />
               </Link>
               <a href={whatsappHref} target="_blank" rel="noreferrer" className="btn btn-secondary btn-xl shine-button w-full sm:w-auto">
                 <MessageCircle className="h-5 w-5" />
                 Contact / WhatsApp
               </a>
+            </div>
+            <div className="hero-trust-pill hero-reveal mt-4">
+              <CheckCircle2 className="h-4 w-4 text-cyan-300" />
+              <span>No upfront payment required. Pay only after service confirmation.</span>
             </div>
           </div>
 
@@ -465,6 +470,7 @@ export default function Home() {
                 <Link to="/book-service" className="btn btn-primary btn-xl shine-button w-full sm:w-auto">
                   <BookOpenCheck className="h-5 w-5" />
                   Book a Service
+                  <ArrowRight className="btn-arrow h-5 w-5" />
                 </Link>
                 <a href={phoneHref} className="btn btn-secondary btn-xl shine-button w-full sm:w-auto">
                   <Phone className="h-5 w-5" />

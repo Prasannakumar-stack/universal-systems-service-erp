@@ -1,87 +1,226 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import {
+  ArrowRight,
+  BookOpenCheck,
+  CheckCircle2,
+  ClipboardCheck,
+  CreditCard,
+  MessageCircle,
+  SearchCheck,
+  ShieldCheck,
+  Sparkles,
+  UserCog,
+  Wrench
+} from 'lucide-react';
+import { company } from '../utils/constants.js';
+
+const categoryChips = [
+  'All Services',
+  'Computer & Laptop',
+  'CCTV & Networking',
+  'Printer & Office',
+  'Power & UPS',
+  'Support & Recovery'
+];
 
 const services = [
   {
     title: 'OS Installation & Setup',
     text: 'Windows setup, drivers, updates, essential software, and clean configuration.',
     image: '/images/service-os-installation.png',
-    fallbackImage: '/images/service-laptop.png'
+    fallbackImage: '/images/service-laptop.png',
+    categories: ['Computer & Laptop', 'Support & Recovery']
   },
   {
     title: 'Laptop Repair',
     text: 'Screen, keyboard, charging, heating, slow performance, and upgrade support.',
-    image: '/images/service-laptop-repair.png'
+    image: '/images/service-laptop-repair.png',
+    categories: ['Computer & Laptop']
   },
   {
     title: 'Desktop Repair',
     text: 'Boot issues, SMPS, RAM, SSD, motherboard checks, cleaning, and tune-ups.',
-    image: '/images/service-desktop.png'
+    image: '/images/service-desktop.png',
+    categories: ['Computer & Laptop']
   },
   {
     title: 'Printer Service / Toner Refilling',
     text: 'Printer repair, cartridge support, toner refilling, and print quality fixes.',
-    image: '/images/service-printer.png'
+    image: '/images/service-printer.png',
+    categories: ['Printer & Office']
   },
   {
     title: 'CCTV Installation & Maintenance',
     text: 'Secondary support for camera setup, DVR checks, and maintenance.',
-    image: '/images/service-cctv.png'
+    image: '/images/service-cctv.png',
+    categories: ['CCTV & Networking']
   },
   {
     title: 'Networking Support',
     text: 'Router, LAN, sharing, Wi-Fi, and small office connectivity support.',
-    image: '/images/service-router.png'
+    image: '/images/service-router.png',
+    categories: ['CCTV & Networking']
   },
   {
     title: 'Computer Sales & Service',
     text: 'New and refurbished computer sales, setup, upgrades, and service support.',
-    image: '/images/service-computer-sales.png'
+    image: '/images/service-computer-sales.png',
+    categories: ['Computer & Laptop']
   },
   {
     title: 'UPS Battery Sales & Replacement',
     text: 'UPS battery sales, replacement, backup checks, and device connectivity support.',
-    image: '/images/service-ups-battery.png'
+    image: '/images/service-ups-battery.png',
+    categories: ['Power & UPS']
   },
   {
     title: 'Solar UPS & Inverter Sales & Service',
     text: 'Solar UPS, inverter, and battery solutions for homes, shops, and businesses.',
-    image: '/images/service-solar-ups-inverter.png'
+    image: '/images/service-solar-ups-inverter.png',
+    categories: ['Power & UPS']
   },
   {
     title: 'AMC / On-site Support',
     text: 'Maintenance visits and support planning for shops and offices.',
-    image: '/images/service-amc-onsite.png'
+    image: '/images/service-amc-onsite.png',
+    categories: ['Printer & Office', 'Support & Recovery']
   },
   {
     title: 'Software Support',
     text: 'Virus cleanup, app errors, driver issues, office software, and system optimization.',
-    image: '/images/service-software-support.png'
+    image: '/images/service-software-support.png',
+    categories: ['Support & Recovery']
   },
   {
     title: 'Data Recovery',
     text: 'Recovery support for deleted files, corrupted drives, and damaged storage.',
-    image: '/images/service-data-recovery.png'
+    image: '/images/service-data-recovery.png',
+    categories: ['Support & Recovery']
   }
 ];
 
+const trustBadges = [
+  { label: 'Expert Technicians', icon: UserCog },
+  { label: 'Genuine Parts', icon: ShieldCheck },
+  { label: 'Reliable Support', icon: CheckCircle2 }
+];
+
+const bookingSteps = [
+  { title: 'Choose Service', text: 'Select the service you need', icon: BookOpenCheck },
+  { title: 'Share Issue', text: 'Tell us the issue or requirement', icon: ClipboardCheck },
+  { title: 'Get Diagnosis', text: 'We inspect and provide the best solution', icon: SearchCheck },
+  { title: 'Confirm & Pay', text: 'Confirm the service and pay after completion', icon: CreditCard }
+];
+
+function useServicesReveal(dependency) {
+  useEffect(() => {
+    const items = Array.from(document.querySelectorAll('.services-reveal'));
+    if (!items.length) return undefined;
+
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || !('IntersectionObserver' in window)) {
+      items.forEach((item) => item.classList.add('is-visible'));
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { rootMargin: '0px 0px -70px 0px', threshold: 0.12 }
+    );
+
+    items.forEach((item) => observer.observe(item));
+    return () => observer.disconnect();
+  }, [dependency]);
+}
+
 export default function Services() {
+  const [activeCategory, setActiveCategory] = useState('All Services');
+
+  useServicesReveal(activeCategory);
+
+  const visibleServices = useMemo(() => {
+    if (activeCategory === 'All Services') return services;
+    return services.filter((service) => service.categories.includes(activeCategory));
+  }, [activeCategory]);
+
+  const whatsappHref = useMemo(() => `https://wa.me/${company.whatsapp}`, []);
+
   return (
     <div className="services-page section">
       <div className="container-page">
-        <div className="services-page-header mb-10 max-w-4xl">
-          <p className="services-page-eyebrow">Services</p>
-          <h1>Our Professional IT Services</h1>
-          <p>
-            Choose the support you need. Every card leads into the booking flow, so your request is simple and direct.
-          </p>
-        </div>
+        <section className="services-page-hero services-reveal">
+          <div className="services-page-header">
+            <div className="services-page-eyebrow-chip">
+              <Sparkles className="h-4 w-4" />
+              Services
+            </div>
+            <h1>Our Professional IT Services</h1>
+            <p>
+              Choose the support you need. Every card leads into the booking flow, so your request is simple and direct.
+            </p>
+            <div className="services-hero-badges" aria-label="Universal Systems service trust badges">
+              {trustBadges.map(({ label, icon: Icon }) => (
+                <span key={label} className="services-trust-badge">
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </span>
+              ))}
+            </div>
+            <div className="services-trust-pill">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>No upfront payment required. Pay only after service confirmation.</span>
+            </div>
+          </div>
+
+          <div className="services-hero-visual" aria-label="Service device highlights">
+            <div className="services-hero-device services-hero-device-main">
+              <img src="/images/service-laptop-repair.png" alt="Laptop repair service" />
+            </div>
+            <div className="services-hero-device services-hero-device-small">
+              <img src="/images/service-printer.png" alt="Printer service" />
+            </div>
+            <div className="services-hero-device services-hero-device-small">
+              <img src="/images/service-cctv.png" alt="CCTV installation service" />
+            </div>
+          </div>
+        </section>
+
+        <section className="services-control-panel services-reveal" aria-label="Service categories">
+          <div className="services-category-chips" role="list">
+            {categoryChips.map((category) => (
+              <button
+                key={category}
+                type="button"
+                className={`services-category-chip ${activeCategory === category ? 'is-active' : ''}`}
+                onClick={() => setActiveCategory(category)}
+                aria-pressed={activeCategory === category}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+        </section>
 
         <div className="services-showcase-grid grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {services.map((service) => {
+          {visibleServices.map((service, index) => {
             const imageLayers = service.fallbackImage ? `url("${service.image}"), url("${service.fallbackImage}")` : `url("${service.image}")`;
             return (
-              <article key={service.title} className="services-showcase-card" style={{ '--service-card-image': imageLayers }}>
+              <article
+                key={service.title}
+                className="services-showcase-card services-reveal"
+                style={{
+                  '--service-card-image': imageLayers,
+                  '--reveal-delay': `${Math.min(index, 8) * 55}ms`
+                }}
+              >
                 <div className="services-card-light" aria-hidden="true" />
                 <div className="services-card-visual" aria-hidden="true" />
                 <div className="services-card-copy">
@@ -95,6 +234,44 @@ export default function Services() {
             );
           })}
         </div>
+
+        <section className="services-booking-strip services-reveal" aria-label="How booking works">
+          <div className="services-strip-heading">
+            <p className="services-page-eyebrow">How booking works</p>
+            <h2>Simple service booking, clear handover</h2>
+          </div>
+          <div className="services-process-grid">
+            {bookingSteps.map(({ title, text, icon: Icon }, index) => (
+              <div className="services-process-step" key={title}>
+                <div className="services-process-icon">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <span className="services-process-index">0{index + 1}</span>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="services-help-cta services-reveal">
+          <div>
+            <p className="services-page-eyebrow">Need help choosing?</p>
+            <h2>Not sure which service you need?</h2>
+            <p>Tell us the issue — our team will guide you to the right solution.</p>
+          </div>
+          <div className="services-help-actions">
+            <a href={whatsappHref} target="_blank" rel="noreferrer" className="services-whatsapp-button">
+              <MessageCircle className="h-5 w-5" />
+              WhatsApp Now
+            </a>
+            <Link to="/book-service" className="btn btn-primary btn-xl shine-button">
+              <Wrench className="h-5 w-5" />
+              Book a Service
+              <ArrowRight className="btn-arrow h-5 w-5" />
+            </Link>
+          </div>
+        </section>
       </div>
     </div>
   );

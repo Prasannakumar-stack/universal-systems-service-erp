@@ -30,14 +30,12 @@ function NavItems({ onClick }) {
           key={link.to}
           to={link.to}
           onClick={onClick}
-          className={({ isActive }) =>
-            `rounded-card px-3 py-2 text-sm font-semibold transition ${isActive ? 'bg-[var(--surface-2)] text-[var(--brand)]' : 'muted hover:bg-[var(--surface-2)] hover:text-[var(--text)]'}`
-          }
+          className={({ isActive }) => `public-nav-link ${isActive ? 'is-active' : ''}`}
         >
           {link.label}
         </NavLink>
       ))}
-      <a href="/admin/login" onClick={onClick} className="btn btn-secondary">
+      <a href="/admin/login" onClick={onClick} className="btn btn-secondary nav-admin-link">
         <ShieldCheck className="h-4 w-4" />
         Admin Login
       </a>
@@ -50,9 +48,9 @@ export default function PublicLayout() {
 
   return (
     <div className="min-h-screen">
-      <header className="public-header sticky top-0 z-50 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--surface)_88%,transparent)] backdrop-blur-xl">
+      <header className="public-header sticky top-0 z-50 border-b border-[var(--line)] backdrop-blur-xl">
         <div className="container-page flex h-18 items-center justify-between py-3">
-          <NavLink to="/" className="public-logo-link flex items-center gap-3 rounded-card bg-white px-2 py-1 shadow-sm">
+          <NavLink to="/" className="public-logo-link flex items-center gap-3 rounded-card px-2 py-1">
             <img src="/logo-full.png" alt="Universal Systems" className="h-10 w-auto max-w-[185px] object-contain" />
           </NavLink>
           <nav className="public-nav hidden items-center gap-1 lg:flex">
@@ -62,24 +60,25 @@ export default function PublicLayout() {
             <Menu className="h-5 w-5" />
           </button>
         </div>
-        {open ? (
-          <div className="fixed inset-0 z-[60] bg-black/45 lg:hidden" onClick={() => setOpen(false)}>
-            <div className="ml-auto h-full w-80 max-w-[88vw] bg-[var(--surface)] p-5 shadow-soft" onClick={(event) => event.stopPropagation()}>
-              <div className="mb-6 flex items-center justify-between">
-                <span className="inline-flex rounded-card bg-white px-2 py-1">
-                  <img src="/logo-full.png" alt="Universal Systems" className="h-10 w-auto max-w-[170px]" />
-                </span>
-                <button className="icon-button h-9 w-9" onClick={() => setOpen(false)} aria-label="Close menu">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <nav className="flex flex-col gap-2">
-                <NavItems onClick={() => setOpen(false)} />
-              </nav>
-            </div>
-          </div>
-        ) : null}
       </header>
+
+      {open ? (
+        <div className="public-mobile-scrim fixed inset-0 z-[60] bg-black/55 lg:hidden" onClick={() => setOpen(false)}>
+          <div className="public-mobile-drawer ml-auto h-full w-80 max-w-[88vw] p-5 shadow-soft" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-6 flex items-center justify-between">
+              <span className="public-logo-link public-logo-lockup inline-flex rounded-card px-2 py-1">
+                <img src="/logo-full.png" alt="Universal Systems" className="h-10 w-auto max-w-[170px]" />
+              </span>
+              <button className="icon-button h-9 w-9" onClick={() => setOpen(false)} aria-label="Close menu">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <nav className="flex flex-col gap-2">
+              <NavItems onClick={() => setOpen(false)} />
+            </nav>
+          </div>
+        </div>
+      ) : null}
 
       <main>
         <Outlet />
@@ -98,8 +97,8 @@ export default function PublicLayout() {
 
       <footer className="public-footer border-t border-[var(--line)] bg-[var(--surface)]">
         <div className="container-page grid gap-8 py-10 md:grid-cols-2 xl:grid-cols-[1.35fr_0.85fr_0.9fr_1fr]">
-          <div>
-            <span className="mb-4 inline-flex rounded-card bg-white px-2 py-1 shadow-sm">
+          <div className="footer-brand-block">
+            <span className="footer-logo-shell mb-4 inline-flex rounded-card px-2 py-1">
               <img src="/logo-full.png" alt="Universal Systems" className="h-12 w-auto max-w-[220px]" />
             </span>
             <p className="muted max-w-md text-sm leading-6">
@@ -129,7 +128,7 @@ export default function PublicLayout() {
           </div>
           <div>
             <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Quick Links</h3>
-            <div className="grid gap-2 text-sm">
+            <div className="footer-link-list grid gap-2 text-sm">
               {links.map((link) => (
                 <NavLink key={link.to} to={link.to} className="muted hover:text-[var(--brand-2)]">
                   {link.label}
@@ -142,7 +141,7 @@ export default function PublicLayout() {
           </div>
           <div>
             <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Services</h3>
-            <div className="grid gap-2 text-sm">
+            <div className="footer-link-list grid gap-2 text-sm">
               {footerServices.map((service) => (
                 <NavLink key={service} to="/services" className="muted hover:text-[var(--brand-2)]">
                   {service}
@@ -152,7 +151,7 @@ export default function PublicLayout() {
           </div>
           <div>
             <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Contact</h3>
-            <div className="space-y-3 text-sm">
+            <div className="footer-contact-list space-y-3 text-sm">
               <a className="flex gap-2 hover:text-[var(--brand-2)]" href={`tel:${company.phones[0].replace(/\s/g, '')}`}>
                 <Phone className="h-4 w-4 shrink-0" /> {company.phones.join(' / ')}
               </a>
