@@ -52,6 +52,7 @@ import {
   formatDate,
   customerSearchText,
   getCustomerDisplayId,
+  getWorkOrderDisplayId,
   getPdfLabel,
   matchesDisplaySearch,
   inventoryCategories,
@@ -261,9 +262,26 @@ export function CustomersPage({ role = 'admin' }) {
           </select>
         ) : null}
       </div>
-      {!visibleCustomers.length ? <EmptyState title="No customers found" message="Customer records matching your filters will appear here." action={<Link className="btn btn-primary" to={`${base}/bookings`}>Create Booking</Link>} /> : (
+      {!visibleCustomers.length ? <EmptyState title="No customers found" message="Customer records matching your filters will appear here." action={role === 'technician' ? null : <Link className="btn btn-primary" to={`${base}/bookings`}>Create Booking</Link>} /> : (
         <>
-        <div className="table-wrap bg-[var(--surface)] xl:overflow-x-visible">
+        {role === 'technician' ? (
+          <div className="technician-mobile-card-list customers-mobile-cards">
+            {visibleCustomers.map((customer) => {
+              const metrics = metricsByCustomer.get(recordId(customer)) || { jobs: [], invoices: [] };
+              const devices = [...new Set([...(customer.devices || []), ...metrics.jobs.map((order) => order.device).filter(Boolean)])];
+              return (
+                <TechnicianCustomerMobileCard
+                  key={customer.id}
+                  customer={customer}
+                  metrics={metrics}
+                  devices={devices}
+                  base={base}
+                />
+              );
+            })}
+          </div>
+        ) : null}
+        <div className={`table-wrap bg-[var(--surface)] xl:overflow-x-visible ${role === 'technician' ? 'technician-desktop-table' : ''}`}>
           <table className="data-table min-w-[900px] table-fixed xl:min-w-0">
             <colgroup>
               <col className="w-[27%]" />
@@ -339,5 +357,47 @@ export function CustomersPage({ role = 'admin' }) {
         </>
       )}
     </>
+  );
+}
+
+function TechnicianCustomerMobileCard({ customer, metrics, devices, base }) {
+  const jobs = metrics.jobs || [];
+  const activeJobs = jobs.filter(isActiveJob);
+  const completedJobs = jobs.filter(isCompletedJob);
+  const lastJob = jobs[0] || null;
+  const phone = customer.phone || '';
+
+  return (
+    <article className="technician-mobile-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="technician-mobile-card-eyebrow">{getCustomerDisplayId(customer)}</p>
+          <h2 className="technician-mobile-card-title" title={customer.name || 'Customer'}>{customer.name || 'Customer'}</h2>
+          <p className="technician-mobile-card-muted">Phone: {phone || '-'}</p>
+        </div>
+        <StatusBadge status={`${jobs.length} job${jobs.length === 1 ? '' : 's'}`} />
+      </div>
+      <div className="technician-mobile-card-body">
+        <div>
+          <span>Assigned / Attended Jobs</span>
+          <b>{jobs.length} total, {activeJobs.length} active, {completedJobs.length} completed</b>
+        </div>
+        <div>
+          <span>Last Job / Status</span>
+          <p>{lastJob ? `${getWorkOrderDisplayId(lastJob)} - ${lastJob.status || 'Status not set'}` : 'No assigned job yet'}</p>
+        </div>
+        <div>
+          <span>Device / Service</span>
+          <p>{devices[0] || lastJob?.serviceType || 'Devices from assigned jobs'}</p>
+        </div>
+      </div>
+      <div className="technician-mobile-contact-row">
+        <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
+        <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={phone ? customerWhatsAppHref(customer) : '#'} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+      </div>
+      <div className="technician-mobile-card-footer">
+        <Link className="btn btn-primary" to={`${base}/customers/${customer.id}`}>Details</Link>
+      </div>
+    </article>
   );
 }

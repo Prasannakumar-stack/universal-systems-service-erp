@@ -172,7 +172,10 @@ export function CustomerProfilePage({ role = 'admin' }) {
   const { id } = useParams();
   const { request } = useAuth();
   const { push } = useToast();
-  const base = role === 'technician' ? '/tech' : '/admin';
+  const isTechnician = role === 'technician';
+  const base = isTechnician ? '/tech' : '/admin';
+  const canManageCustomer = role === 'admin';
+  const canRecordPayments = role === 'admin';
   const workOrdersBase = `${base}/work-orders`;
   const paymentsBase = `${base}/payments`;
   const bookingsBase = `${base}/bookings`;
@@ -313,6 +316,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
     return events.filter((event) => event.date).sort((a, b) => new Date(a.date) - new Date(b.date));
   }, [communications, customer.createdAt, serviceHistory, invoices, payments, workOrdersBase]);
   const whatsappPhone = String(customer.phone || '').replace(/\D/g, '');
+  const hasCustomerPhone = Boolean(whatsappPhone);
   const pendingInvoice = invoices.find((invoice) => Number(invoice.balance || 0) > 0);
   const customerNameText = customer.name || 'Unnamed Customer';
   const isLongCustomerName = customerNameText.length > 34;
@@ -533,7 +537,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
   if (error) return <ErrorBlock message={error} />;
 
   return (
-    <div className="customer-360-page mx-auto max-w-[1600px] space-y-5 overflow-x-hidden">
+    <div className={`customer-360-page mx-auto max-w-[1600px] space-y-5 overflow-x-hidden ${isTechnician ? 'customer-360-page--technician' : ''}`}>
       <section className="surface customer-hero overflow-hidden p-5 sm:p-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex min-w-0 items-start gap-4">
@@ -554,11 +558,26 @@ export function CustomerProfilePage({ role = 'admin' }) {
                 <p className="text-xs font-semibold uppercase text-slate-500">{customerDisplayId}</p>
                 {renderCopyButton(customerDisplayId, 'Copy Customer ID')}
               </div>
+              {isTechnician ? (
+                <div className="technician-mobile-contact-row customer-hero-contact-row mt-3">
+                  {hasCustomerPhone ? (
+                    <a className="btn btn-secondary h-10 px-3" href={callHref(customer.phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
+                  ) : (
+                    <button type="button" className="btn btn-secondary h-10 px-3 opacity-60" onClick={notifyPhoneUnavailable}><PhoneCallIcon className="h-4 w-4" />Call</button>
+                  )}
+                  {hasCustomerPhone ? (
+                    <a className="btn btn-secondary h-10 px-3" href={customerWhatsAppHref(customer)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+                  ) : (
+                    <button type="button" className="btn btn-secondary h-10 px-3 opacity-60" onClick={notifyPhoneUnavailable}><Send className="h-4 w-4" />WhatsApp</button>
+                  )}
+                  <button type="button" className="btn btn-secondary h-10 px-3" disabled={!hasCustomerPhone} onClick={() => copyToClipboard(customer.phone)}><ClipboardList className="h-4 w-4" />Copy Phone</button>
+                </div>
+              ) : null}
             </div>
           </div>
-          <div className="customer-hero-actions flex flex-wrap items-center gap-2 xl:justify-end">
+          {canManageCustomer ? <div className="customer-hero-actions flex flex-wrap items-center gap-2 xl:justify-end">
             <Link className="btn btn-primary customer-create-booking-btn h-10 px-4" to={bookingPrefillLink}><Plus className="h-4 w-4" />Create Booking</Link>
-          </div>
+          </div> : null}
         </div>
       </section>
 
@@ -569,13 +588,13 @@ export function CustomerProfilePage({ role = 'admin' }) {
             <h2 className="mt-1 text-xl font-black">Profile Snapshot</h2>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
+            {canManageCustomer ? <button
               type="button"
               className="btn btn-secondary h-9 px-3 text-xs font-black"
               onClick={openEditCustomer}
             >
               <Edit3 className="h-3.5 w-3.5" />Edit
-            </button>
+            </button> : null}
             <StatusBadge status={customerTypeValue} />
             <StatusBadge status={pendingBalance > 0 ? 'Payment Due' : 'Paid'} />
           </div>
@@ -643,7 +662,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
                     <p className="mt-1 text-sm muted">Outstanding balance is {currency(pendingBalance)}.</p>
                   </div>
                 </div>
-                <Link className="btn btn-primary h-10 shrink-0 px-4" to={paymentLink}>Record Payment</Link>
+                {canRecordPayments ? <Link className="btn btn-primary h-10 shrink-0 px-4" to={paymentLink}>Record Payment</Link> : null}
               </div>
             </div>
           ) : null}
@@ -661,7 +680,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
                     <p className="mt-1 truncate text-xs font-semibold text-slate-400">{order.device || notAdded}</p>
                     <p className="mt-1 line-clamp-2 text-sm muted">{order.issue || notAdded}</p>
                   </Link>
-                )) : <EmptyState title="No service jobs yet" message="Create the first booking for this customer." action={<Link className="btn btn-primary" to={bookingPrefillLink}>Create Booking</Link>} />}
+                )) : <EmptyState title="No service jobs yet" message="Assigned or attended jobs for this customer will appear here." action={canManageCustomer ? <Link className="btn btn-primary" to={bookingPrefillLink}>Create Booking</Link> : null} />}
               </div>
             </div>
             <div className={panelClass}>
@@ -734,7 +753,35 @@ export function CustomerProfilePage({ role = 'admin' }) {
               </button>
             ) : null}
           </div>
-          <div className="mt-4 table-wrap bg-transparent lg:overflow-x-visible">
+          {isTechnician && filteredServiceHistory.length ? (
+            <div className="technician-detail-card-grid mt-4">
+              {filteredServiceHistory.map((order) => {
+                const total = serviceHistoryAmount(order);
+                return (
+                  <article key={order.id} className="technician-detail-card">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="technician-mobile-card-eyebrow">{getWorkOrderDisplayId(order)}</p>
+                        <h3 className="technician-mobile-card-title">{order.serviceType || order.service || notAdded}</h3>
+                        <p className="technician-mobile-card-muted">{order.device || notAdded}</p>
+                      </div>
+                      <StatusBadge status={order.status} />
+                    </div>
+                    <p className="text-sm leading-6 text-slate-200">{order.issue || notAdded}</p>
+                    <div className="technician-detail-card-metrics">
+                      <span><small>Date</small><b>{formatDisplayDate(order.createdAt)}</b></span>
+                      <span><small>Technician</small><b>{technicianNameForOrder(order)}</b></span>
+                      <span><small>Amount</small><b>{currency(total)}</b></span>
+                    </div>
+                    <div className="technician-mobile-card-footer">
+                      <Link className="btn btn-secondary" to={`${workOrdersBase}/${order.id}`}>Open Job</Link>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : null}
+          <div className={`mt-4 table-wrap bg-transparent lg:overflow-x-visible ${isTechnician && filteredServiceHistory.length ? 'technician-mobile-hidden-table' : ''}`}>
             {filteredServiceHistory.length ? (
               <table className="data-table min-w-[860px] table-fixed lg:min-w-0">
                 <colgroup>
@@ -775,7 +822,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
                   })}
                 </tbody>
               </table>
-            ) : <EmptyState title="No service jobs found" message="Matching service jobs will appear here." action={<Link className="btn btn-primary" to={bookingPrefillLink}>Create Booking</Link>} />}
+            ) : <EmptyState title="No service jobs found" message="Matching service jobs will appear here." action={canManageCustomer ? <Link className="btn btn-primary" to={bookingPrefillLink}>Create Booking</Link> : null} />}
           </div>
         </div>
       ) : null}
@@ -788,7 +835,32 @@ export function CustomerProfilePage({ role = 'admin' }) {
               <Download className="h-3.5 w-3.5" />Export
             </button>
           </div>
-          <div className="mt-4 table-wrap bg-transparent xl:overflow-x-visible">
+          {isTechnician && invoices.length ? (
+            <div className="technician-detail-card-grid mt-4">
+              {invoices.map((invoice) => (
+                <article key={invoice.id} className="technician-detail-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="technician-mobile-card-eyebrow">{getInvoiceDisplayId(invoice)}</p>
+                      <h3 className="technician-mobile-card-title">{recordId(invoice.workOrderId) ? getWorkOrderDisplayId(invoice.workOrderId) : 'Invoice'}</h3>
+                      <p className="technician-mobile-card-muted">{formatDisplayDate(invoice.createdAt)}</p>
+                    </div>
+                    <StatusBadge status={invoice.status} />
+                  </div>
+                  <div className="technician-detail-card-metrics">
+                    <span><small>Total</small><b>{currency(invoice.total)}</b></span>
+                    <span><small>Paid</small><b>{currency(invoice.paidAmount)}</b></span>
+                    <span><small>Balance</small><b>{currency(invoice.balance)}</b></span>
+                  </div>
+                  <div className="technician-mobile-card-footer">
+                    {recordId(invoice.workOrderId) ? <Link className="btn btn-secondary" to={`${workOrdersBase}/${recordId(invoice.workOrderId)}`}>Open Job</Link> : null}
+                    <span className="technician-mobile-readonly-pill">Read-only billing</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+          <div className={`mt-4 table-wrap bg-transparent xl:overflow-x-visible ${isTechnician && invoices.length ? 'technician-mobile-hidden-table' : ''}`}>
             {invoices.length ? (
               <table className="data-table min-w-[860px] table-fixed xl:min-w-0">
                 <colgroup>
@@ -820,7 +892,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
                       <td>
                         <div className="flex flex-wrap justify-end gap-2">
                           {recordId(invoice.workOrderId) ? <Link className="btn btn-secondary py-2" to={`${workOrdersBase}/${recordId(invoice.workOrderId)}`}>Open Job</Link> : null}
-                          {Number(invoice.balance || 0) > 0 ? <Link className="btn btn-primary py-2" to={`${paymentsBase}?invoiceId=${recordId(invoice)}`}>Record Payment</Link> : null}
+                          {canRecordPayments && Number(invoice.balance || 0) > 0 ? <Link className="btn btn-primary py-2" to={`${paymentsBase}?invoiceId=${recordId(invoice)}`}>Record Payment</Link> : null}
                         </div>
                       </td>
                     </tr>
@@ -836,11 +908,36 @@ export function CustomerProfilePage({ role = 'admin' }) {
         <div className={panelClass}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-black">Payments</h2>
-            <Link className="btn btn-primary h-10 px-4" to={paymentLink}><CreditCard className="h-4 w-4" />Record Payment</Link>
+            {canRecordPayments ? <Link className="btn btn-primary h-10 px-4" to={paymentLink}><CreditCard className="h-4 w-4" />Record Payment</Link> : null}
           </div>
           <div className="mt-4">
             {payments.length ? (
-              <div className="table-wrap bg-transparent xl:overflow-x-visible">
+              <>
+              {isTechnician ? (
+                <div className="technician-detail-card-grid">
+                  {payments.map((payment) => (
+                    <article key={payment.id} className="technician-detail-card">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="technician-mobile-card-eyebrow">{getPaymentDisplayId(payment)}</p>
+                          <h3 className="technician-mobile-card-title">{getInvoiceDisplayId(payment.invoiceId)}</h3>
+                          <p className="technician-mobile-card-muted">{formatDisplayDate(payment.createdAt)}</p>
+                        </div>
+                        <StatusBadge status={payment.status} />
+                      </div>
+                      <div className="technician-detail-card-metrics">
+                        <span><small>Paid</small><b>{currency(payment.paidAmount)}</b></span>
+                        <span><small>Method</small><b>{payment.method || notAdded}</b></span>
+                        <span><small>Balance</small><b>{currency(payment.balance)}</b></span>
+                      </div>
+                      <div className="technician-mobile-card-footer">
+                        <span className="technician-mobile-readonly-pill">Read-only payment</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+              <div className={`table-wrap bg-transparent xl:overflow-x-visible ${isTechnician ? 'technician-mobile-hidden-table' : ''}`}>
                 <table className="data-table min-w-[760px] table-fixed xl:min-w-0">
                   <thead><tr><th>Date</th><th>Payment ID</th><th>Linked Invoice</th><th>Amount Paid</th><th>Method</th><th>Balance After</th><th>Status</th></tr></thead>
                   <tbody className="divide-y divide-[var(--line)]">
@@ -863,12 +960,13 @@ export function CustomerProfilePage({ role = 'admin' }) {
                   </tbody>
                 </table>
               </div>
+              </>
             ) : (
               <EmptyState
                 icon={CreditCard}
                 title="No payments recorded"
                 message="Payments will appear here once this customer pays an invoice or outstanding balance."
-                action={<Link className="btn btn-primary" to={paymentLink}>Record Payment</Link>}
+                action={canRecordPayments ? <Link className="btn btn-primary" to={paymentLink}>Record Payment</Link> : null}
               />
             )}
           </div>
@@ -879,7 +977,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
         <div className={panelClass}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-black">Notes</h2>
-            <button type="button" className="btn btn-secondary" onClick={() => openNoteModal('General note')}>Add Note</button>
+            {canManageCustomer ? <button type="button" className="btn btn-secondary" onClick={() => openNoteModal('General note')}>Add Note</button> : null}
           </div>
           <div className="mt-4 grid gap-3">
             {customerNotes.length ? customerNotes.map((note) => (
@@ -892,7 +990,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
                 icon={FileText}
                 title="No notes yet"
                 message="Use notes to track diagnosis, customer instructions, payment follow-ups, and warranty details."
-                action={(
+                action={canManageCustomer ? (
                   <div className="flex flex-col items-center gap-3">
                     <button type="button" className="btn btn-secondary" onClick={() => openNoteModal('General note')}>Add Note</button>
                     <div className="flex flex-wrap justify-center gap-2">
@@ -908,7 +1006,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
                       ))}
                     </div>
                   </div>
-                )}
+                ) : null}
               />
             )}
           </div>

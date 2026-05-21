@@ -22,6 +22,7 @@ import {
   company,
   completionHours,
   ConfirmModal,
+  copyTextToClipboard,
   CreditCard,
   csvCell,
   currency,
@@ -367,6 +368,11 @@ export function WorkOrdersPage({ role = 'admin' }) {
     }
   }
 
+  async function copyPhone(phone) {
+    if (await copyTextToClipboard(phone)) push('Phone copied');
+    else push('Phone not available', 'error');
+  }
+
   const workOrders = Array.isArray(data?.workOrders) ? data.workOrders : Array.isArray(data?.data) ? data.data : [];
   const searchTerm = debouncedSearch.trim();
   const filteredWorkOrders = useMemo(() => {
@@ -454,7 +460,19 @@ export function WorkOrdersPage({ role = 'admin' }) {
         />
       ) : (
         <>
-        <div className="work-orders-table-shell work-orders-table-shell--summary table-wrap border border-white/10 bg-[var(--surface)]">
+        {role === 'technician' ? (
+          <div className="technician-mobile-card-list work-orders-mobile-cards">
+            {visibleWorkOrders.map((order) => (
+              <TechnicianWorkOrderMobileCard
+                key={recordId(order)}
+                order={order}
+                base={base}
+                onCopyPhone={copyPhone}
+              />
+            ))}
+          </div>
+        ) : null}
+        <div className={`work-orders-table-shell work-orders-table-shell--summary table-wrap border border-white/10 bg-[var(--surface)] ${role === 'technician' ? 'technician-desktop-table' : ''}`}>
           <table className="data-table work-orders-table work-orders-table--summary w-full min-w-0 table-fixed" style={{ '--work-order-action-width': actionColumnWidth }}>
             <colgroup>
               <col className="work-orders-col-summary-customer" style={{ width: '18%' }} />
@@ -577,6 +595,49 @@ export function WorkOrdersPage({ role = 'admin' }) {
         />
       ) : null}
     </div>
+  );
+}
+
+function TechnicianWorkOrderMobileCard({ order, base, onCopyPhone }) {
+  const customer = customerFromOrder(order);
+  const phone = customerPhone(order);
+  const priority = jobPriority(order);
+
+  return (
+    <article className="technician-mobile-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="technician-mobile-card-eyebrow">{getWorkOrderDisplayId(order)}</p>
+          <h2 className="technician-mobile-card-title" title={customer.name || 'Customer'}>{customer.name || 'Customer'}</h2>
+          <p className="technician-mobile-card-muted">Phone: {phone || '-'}</p>
+        </div>
+        <StatusBadge status={order.status} />
+      </div>
+      <div className="technician-mobile-card-body">
+        <div>
+          <span>Service / Device</span>
+          <b>{order.serviceType || order.service || 'Service Job'}{order.device ? ` / ${order.device}` : ''}</b>
+        </div>
+        <div>
+          <span>Problem</span>
+          <p>{order.issue || 'No issue captured'}</p>
+        </div>
+      </div>
+      <div className="technician-mobile-meta-row">
+        <WorkOrderSourceBadge source={order} />
+        <WorkOrderPriorityBadge priority={priority} />
+        <span>{jobScheduleLabel(order)}</span>
+        <span>Created {formatDate(order.createdAt)}</span>
+      </div>
+      <div className="technician-mobile-contact-row">
+        <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
+        <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+        <button type="button" className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} onClick={() => onCopyPhone(phone)}><ClipboardList className="h-4 w-4" />Copy</button>
+      </div>
+      <div className="technician-mobile-card-footer">
+        <Link className="btn btn-primary" to={`${base}/${recordId(order)}`}>Details</Link>
+      </div>
+    </article>
   );
 }
 

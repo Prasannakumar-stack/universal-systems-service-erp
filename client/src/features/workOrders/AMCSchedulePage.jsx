@@ -145,7 +145,8 @@ export function AMCSchedulePage({ role = 'admin' }) {
   const { request } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
-  const base = role === 'technician' ? '/tech' : '/admin';
+  const isTechnician = role === 'technician';
+  const base = isTechnician ? '/tech' : '/admin';
   const [status, setStatus] = useState('');
   const { data, loading, error, reload } = useResource(() => request('/amc/schedule'), [request]);
   const schedule = data?.schedule || [];
@@ -223,10 +224,18 @@ export function AMCSchedulePage({ role = 'admin' }) {
             icon={CalendarClock}
             title={status ? `No ${status.toLowerCase()} visits` : 'No schedule visits found'}
             message={status ? 'Reset the status filter to review the full AMC visit schedule.' : 'Visits will appear after AMC contracts are created.'}
-            action={status ? <button className="btn btn-secondary" type="button" onClick={() => setStatus('')}>Reset Filter</button> : <Link className="btn btn-primary" to={`${base}/amc-contracts`}>Create AMC Contract</Link>}
+            action={status ? <button className="btn btn-secondary" type="button" onClick={() => setStatus('')}>Reset Filter</button> : isTechnician ? null : <Link className="btn btn-primary" to={`${base}/amc-contracts`}>Create AMC Contract</Link>}
           />
         ) : (
-          <div className="table-wrap amc-table-wrap bg-[var(--surface)]">
+          <>
+          {isTechnician ? (
+            <div className="technician-mobile-card-list amc-mobile-cards">
+              {visibleSchedule.map((visit) => (
+                <TechnicianAmcScheduleMobileCard key={visit.id} visit={visit} base={base} />
+              ))}
+            </div>
+          ) : null}
+          <div className={`table-wrap amc-table-wrap bg-[var(--surface)] ${isTechnician ? 'technician-desktop-table' : ''}`}>
             <table className="data-table amc-schedule-table">
             <thead><tr><th>Customer</th><th>Contract</th><th>Service Type</th><th>Scheduled Date</th><th>Technician</th><th>Status</th><th className="text-right">Action</th></tr></thead>
             <tbody>
@@ -250,6 +259,8 @@ export function AMCSchedulePage({ role = 'admin' }) {
                       <div className="amc-actions">
                         {workOrderId ? (
                           <Link className="btn btn-secondary amc-action-button" to={`${base}/work-orders/${workOrderId}`}>Open Job</Link>
+                        ) : isTechnician ? (
+                          <span className="technician-mobile-readonly-pill">Awaiting admin job</span>
                         ) : (
                           <button className={`btn ${isPrimaryVisit ? 'btn-primary' : 'btn-secondary'} amc-action-button`} type="button" onClick={() => createJob(visit)}><Wrench className="h-4 w-4" />Create Job</button>
                         )}
@@ -261,9 +272,44 @@ export function AMCSchedulePage({ role = 'admin' }) {
             </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+function TechnicianAmcScheduleMobileCard({ visit, base }) {
+  const workOrderId = recordId(visit.workOrderId);
+
+  return (
+    <article className="technician-mobile-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="technician-mobile-card-eyebrow">{visit.contractCode || 'AMC Visit'}</p>
+          <h2 className="technician-mobile-card-title" title={visit.customerName || 'Customer'}>{visit.customerName || 'Customer'}</h2>
+          <p className="technician-mobile-card-muted">Phone: {visit.phone || '-'}</p>
+        </div>
+        <AmcStatusPill status={visit.status} />
+      </div>
+      <div className="technician-mobile-card-body">
+        <div>
+          <span>Service Type</span>
+          <b>{visit.serviceType || '-'}</b>
+        </div>
+        <div>
+          <span>Scheduled Date</span>
+          <p>{formatDate(visit.scheduledDate)}</p>
+        </div>
+        <div>
+          <span>Technician</span>
+          <p>{visit.technicianId?.name || ADMIN_ASSIGNMENT_LABEL}</p>
+        </div>
+      </div>
+      <div className="technician-mobile-card-footer">
+        {workOrderId ? <Link className="btn btn-primary" to={`${base}/work-orders/${workOrderId}`}>Open Job</Link> : <span className="technician-mobile-readonly-pill">Awaiting admin job</span>}
+      </div>
+    </article>
   );
 }
 

@@ -564,7 +564,15 @@ export function AMCContractsPage({ role = 'admin' }) {
             action={hasContractSearch ? <button className="btn btn-secondary" type="button" onClick={() => setSearch('')}>Clear Search</button> : canManageAmc ? <button className="btn btn-primary" type="button" onClick={() => setFormOpen(true)}>Create AMC Contract</button> : null}
           />
         ) : (
-          <div className="table-wrap amc-table-wrap bg-[var(--surface)]">
+          <>
+          {isTechnician ? (
+            <div className="technician-mobile-card-list amc-mobile-cards">
+              {visibleContracts.map((contract) => (
+                <TechnicianAmcContractMobileCard key={recordId(contract)} contract={contract} base={base} />
+              ))}
+            </div>
+          ) : null}
+          <div className={`table-wrap amc-table-wrap bg-[var(--surface)] ${isTechnician ? 'technician-desktop-table' : ''}`}>
             <table className="data-table amc-table amc-contracts-table">
             <thead><tr><th>Customer</th><th>Plan / Coverage</th><th>Period</th><th>AMC Payment</th><th>Extra Charges</th><th className="text-center">Status</th><th className="text-center">Action</th></tr></thead>
             <tbody>
@@ -643,9 +651,55 @@ export function AMCContractsPage({ role = 'admin' }) {
             </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+function TechnicianAmcContractMobileCard({ contract, base }) {
+  const contractStatus = contract.renewalStatus === 'Renewal Due' ? contract.renewalStatus : contract.status;
+  const invoiceId = recordId(contract.invoiceId);
+  const visitWorkOrderId = recordId((contract.visits || []).find((visit) => recordId(visit.workOrderId))?.workOrderId);
+  const payment = amcPaymentSummary(contract);
+  const extra = extraChargeSummary(contract);
+
+  return (
+    <article className="technician-mobile-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="technician-mobile-card-eyebrow">{contract.contractId || 'AMC Contract'}</p>
+          <h2 className="technician-mobile-card-title" title={contract.customerName || 'Customer'}>{contract.customerName || 'Customer'}</h2>
+          <p className="technician-mobile-card-muted">Phone: {contract.phone || '-'}</p>
+        </div>
+        <AmcStatusPill status={contractStatus} />
+      </div>
+      <div className="technician-mobile-card-body">
+        <div>
+          <span>Plan / Coverage</span>
+          <b>{contract.contractType || '-'} / {normalizeAmcCoverageType(contract.coverageType)}</b>
+        </div>
+        <div>
+          <span>Covered Devices</span>
+          <p>{contract.coveredService || contract.coveredDevices || '-'}</p>
+        </div>
+        <div>
+          <span>Period</span>
+          <p>{formatDate(contract.startDate)} to {formatDate(contract.endDate)}</p>
+        </div>
+      </div>
+      <div className="technician-detail-card-metrics">
+        <span><b>{currency(payment.pending)}</b><small>AMC Pending</small></span>
+        <span><b>{currency(extra.pending)}</b><small>Extra Pending</small></span>
+        <span><b>{contract.visits?.length || 0}</b><small>Visits</small></span>
+      </div>
+      <div className="technician-mobile-card-footer">
+        {visitWorkOrderId ? <Link className="btn btn-primary" to={`${base}/work-orders/${visitWorkOrderId}`}>View Job</Link> : null}
+        {invoiceId ? <Link className="btn btn-secondary" to={`${base}/payments?invoiceId=${invoiceId}`}>View Payments</Link> : null}
+        {!visitWorkOrderId && !invoiceId ? <span className="technician-mobile-readonly-pill">Read-only</span> : null}
+      </div>
+    </article>
   );
 }
 
@@ -745,7 +799,15 @@ export function WarrantiesPage({ role = 'admin' }) {
             message="Warranty records will appear here when linked to customer devices or AMC contracts."
           />
         ) : (
-          <div className="table-wrap bg-[var(--surface)]">
+          <>
+          {role === 'technician' ? (
+            <div className="technician-mobile-card-list amc-mobile-cards">
+              {warrantyContracts.map((contract) => (
+                <TechnicianWarrantyMobileCard key={recordId(contract)} contract={contract} />
+              ))}
+            </div>
+          ) : null}
+          <div className={`table-wrap bg-[var(--surface)] ${role === 'technician' ? 'technician-desktop-table' : ''}`}>
             <table className="data-table">
               <thead>
                 <tr>
@@ -774,9 +836,41 @@ export function WarrantiesPage({ role = 'admin' }) {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+function TechnicianWarrantyMobileCard({ contract }) {
+  const warrantyStatus = contract.warrantyEndDate && new Date(contract.warrantyEndDate) < new Date() ? 'Expired' : 'Active';
+
+  return (
+    <article className="technician-mobile-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="technician-mobile-card-eyebrow">{contract.contractId || 'AMC Contract'}</p>
+          <h2 className="technician-mobile-card-title" title={contract.customerName || 'Customer'}>{contract.customerName || 'Customer'}</h2>
+          <p className="technician-mobile-card-muted">Phone: {contract.phone || '-'}</p>
+        </div>
+        <AmcStatusPill status={warrantyStatus} />
+      </div>
+      <div className="technician-mobile-card-body">
+        <div>
+          <span>Warranty Period</span>
+          <b>{formatDate(contract.warrantyStartDate)} to {formatDate(contract.warrantyEndDate)}</b>
+        </div>
+        <div>
+          <span>Covered Items</span>
+          <p>{contract.warrantyCoveredItems || contract.coveredDevices || '-'}</p>
+        </div>
+        <div>
+          <span>Terms / Notes</span>
+          <p>{contract.warrantyTerms || '-'}</p>
+        </div>
+      </div>
+    </article>
   );
 }
 

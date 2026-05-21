@@ -25,6 +25,7 @@ import {
   company,
   completionHours,
   ConfirmModal,
+  copyTextToClipboard,
   CreditCard,
   csvCell,
   currency,
@@ -470,6 +471,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     } catch (err) {
       push(err.message, 'error');
     }
+  }
+
+  async function copyPhone() {
+    if (await copyTextToClipboard(phone)) push('Phone copied');
+    else push('Phone not available', 'error');
   }
 
   async function addNote(event) {
@@ -1217,6 +1223,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const visibleWorkOrderTabs = isTechnician ? technicianCloneTabs : workOrderTabs;
   const contentTabs = isTechnician ? ['parts', 'partRequests', 'billing', 'notes', 'photos'] : ['overview', 'workUpdate', 'parts', 'partRequests', 'billing', 'notes', 'photos'];
   const sideTabs = isTechnician ? ['documents'] : ['documents', 'timeline'];
+  const statusOptions = isTechnician ? technicianAllowedStatuses : workOrderDetailStatuses;
   const phone = customerPhone(order);
   const completedStatuses = ['Completed', 'Delivered', 'Returned'];
   const showCompletedDate = completedStatuses.includes(order.status);
@@ -1696,7 +1703,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }
 
   return (
-    <div className="work-order-detail">
+    <div className={`work-order-detail ${isTechnician ? 'work-order-detail--technician' : ''}`}>
       <PageHeader
         title={workOrderDisplayId}
         eyebrow="Repair & Service Job Details"
@@ -1704,13 +1711,14 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           <div className="flex flex-wrap gap-2">
             <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
             <a className={`btn btn-primary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+            <button type="button" className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} onClick={copyPhone}><ClipboardList className="h-4 w-4" />Copy</button>
           </div>
         ) : null}
       >
         {order.customerId?.name || 'Customer'} - {order.device || 'Service job'}
       </PageHeader>
 
-      <div className={`${detailSectionClass} mb-4`}>
+      <div className={`${detailSectionClass} work-order-detail-summary mb-4`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Job Summary</p>
@@ -1756,7 +1764,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         <div className="mt-3">
           <span className={detailLabelClass}>Status Workflow</span>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {workOrderDetailStatuses.map((item) => (
+            {statusOptions.map((item) => (
               <button key={item} type="button" className={detailStatusButtonClass(order.status === item)} onClick={() => saveStatus(item)}>
                 {order.status === item ? <CheckCircle2 className="h-4 w-4" /> : null}
                 {item}
@@ -1765,6 +1773,14 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             {role === 'admin' && !order.technicianId ? <button type="button" className={`${detailStatusButtonClass(false)} border-sky-400/30 text-sky-100`} onClick={autoAssignDetail}>Auto Assign Technician</button> : null}
           </div>
         </div>
+        {isTechnician ? (
+          <div className="technician-detail-quick-actions mt-4">
+            <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call Customer</a>
+            <a className={`btn btn-primary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />Open WhatsApp</a>
+            <button type="button" className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} onClick={copyPhone}><ClipboardList className="h-4 w-4" />Copy Phone</button>
+            <Link className="btn btn-secondary" to={workOrdersBase}>Back to Jobs</Link>
+          </div>
+        ) : null}
       </div>
 
       <div className="surface sticky top-20 z-20 mb-4 border border-white/10 bg-[#071426]/90 p-1.5 shadow-lg backdrop-blur">
@@ -1847,7 +1863,35 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               </div>
             </div>
 
-            <div className="mt-4 table-wrap border border-white/10 bg-[var(--surface)]">
+            {isTechnician && order.partsUsed?.length ? (
+              <div className="technician-detail-card-grid mt-4">
+                {order.partsUsed.map((item) => (
+                  <article key={`mobile-${item._id || item.createdAt}`} className="technician-detail-card">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="technician-mobile-card-eyebrow">Part Used</p>
+                        <h3 className="technician-mobile-card-title">{item.name}</h3>
+                      </div>
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${item.inventoryPartId ? 'bg-sky-500/15 text-sky-100' : 'bg-slate-500/15 text-slate-100'}`}>{partUsedTypeLabel(item)}</span>
+                    </div>
+                    <div className="technician-detail-card-metrics">
+                      <span><b>{item.quantity}</b><small>Qty</small></span>
+                      <span><b>{currency(item.unitPrice)}</b><small>Unit</small></span>
+                      <span><b>{currency(item.total)}</b><small>Total</small></span>
+                    </div>
+                    {isAmcLinked ? (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {amcPartBillingBadges(item, amcContract).map((badge) => (
+                          <span key={badge.label} className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${badge.tone}`}>{badge.label}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : null}
+
+            <div className={`mt-4 table-wrap border border-white/10 bg-[var(--surface)] ${isTechnician && order.partsUsed?.length ? 'technician-mobile-hidden-table' : ''}`}>
               {order.partsUsed?.length ? (
                 <table className="data-table">
                   <thead><tr><th>Part Name</th><th>Type</th>{isAmcLinked ? <th>Charge Type</th> : null}<th>Quantity</th><th>Unit Price</th><th>Total</th>{canManagePartsUsed ? <th>Action</th> : null}</tr></thead>
@@ -1980,7 +2024,29 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
           <div className={activeTab === 'partRequests' ? detailSectionClass : 'hidden'}>
             <h2 className="text-xl font-black">Part Requests</h2>
-            <div className="mt-4 table-wrap border border-white/10 bg-[var(--surface)]">
+            {isTechnician && order.partRequests?.length ? (
+              <div className="technician-detail-card-grid mt-4">
+                {order.partRequests.map((item) => (
+                  <article key={`mobile-request-${item._id || item.createdAt}`} className="technician-detail-card">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="technician-mobile-card-eyebrow">Part Request</p>
+                        <h3 className="technician-mobile-card-title">{item.name}</h3>
+                        <p className="technician-mobile-card-muted">Requested {formatDate(item.createdAt)}</p>
+                      </div>
+                      <PartRequestStatusBadge status={item.status} />
+                    </div>
+                    <div className="technician-detail-card-metrics">
+                      <span><b>{item.quantity}</b><small>Quantity</small></span>
+                      <span><b>{item.userId?.name || item.userId?.username || '-'}</b><small>Requested By</small></span>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 muted">{item.rejectionReason || item.note || 'No request note'}</p>
+                    <p className="mt-2 text-xs muted">Awaiting admin review or fulfilment when action is required.</p>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+            <div className={`mt-4 table-wrap border border-white/10 bg-[var(--surface)] ${isTechnician && order.partRequests?.length ? 'technician-mobile-hidden-table' : ''}`}>
               {order.partRequests?.length ? (
                 <table className="data-table">
                   <thead>
@@ -2043,7 +2109,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     <input className="input py-2" placeholder="Request note / reason" value={partRequest.note} onChange={(event) => setPartRequest((current) => ({ ...current, note: event.target.value }))} />
                   </label>
                 </div>
-                <button type="submit" className="btn btn-secondary w-full sm:w-auto"><PackagePlus className="h-4 w-4" />Request Part Approval</button>
+                <button type="submit" className="btn btn-primary min-h-11 w-full sm:w-auto"><PackagePlus className="h-4 w-4" />Request Part Approval</button>
               </form>
             </div>
           </div>
@@ -2235,19 +2301,23 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
           <div className={activeTab === 'photos' ? detailSectionClass : 'hidden'}>
             <h2 className="text-xl font-black">Photos</h2>
+            <p className="mt-1 text-sm muted">Upload job photos such as device issue, damaged part, or completed work.</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {imageItems.length ? imageItems.map((image, index) => (
-                <a key={image.url || image.filename || index} className="rounded-card border border-[var(--line)] bg-[var(--surface-2)] p-4 transition hover:border-sky-300/60" href={uploadedAssetUrl(image.url)} target="_blank" rel="noreferrer">
-                  <FileText className="mb-3 h-5 w-5 text-[var(--brand)]" />
-                  <p className="font-black">{index === 0 ? 'Customer problem image' : `Service photo ${index}`}</p>
-                  <p className="mt-1 text-sm muted">{image.originalName || image.filename || `Image ${index + 1}`}</p>
+                <a key={image.url || image.filename || index} className="technician-photo-card" href={uploadedAssetUrl(image.url)} target="_blank" rel="noreferrer">
+                  <span className="technician-photo-preview">
+                    <img src={uploadedAssetUrl(image.url)} alt={image.originalName || image.filename || `Job photo ${index + 1}`} loading="lazy" />
+                  </span>
+                  <span className="mt-3 block font-black">{index === 0 ? 'Customer problem image' : `Service photo ${index}`}</span>
+                  <span className="mt-1 block text-sm muted">{image.originalName || image.filename || `Image ${index + 1}`}</span>
                 </a>
               )) : <EmptyState title="No image uploaded" message="Customer problem images and technician photos will appear here." />}
             </div>
             <form className={`${detailPanelClass} mt-4`} onSubmit={uploadPhotos}>
               <h3 className="text-xs font-black uppercase tracking-wide text-sky-100">Upload Technician Photos</h3>
-              <input className="input mt-3" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => setPhotoFiles(Array.from(event.target.files || []))} />
-              <button type="submit" className="btn btn-primary mt-3"><PackagePlus className="h-4 w-4" />Upload Photos</button>
+              <p className="mt-1 text-sm muted">Upload job photos such as device issue, damaged part, or completed work.</p>
+              <input className="input mt-3 min-h-12" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => setPhotoFiles(Array.from(event.target.files || []))} />
+              <button type="submit" className="btn btn-primary mt-3 min-h-11 w-full sm:w-auto"><PackagePlus className="h-4 w-4" />Upload Photos</button>
             </form>
           </div>
         </div>
@@ -2285,7 +2355,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                       {sentViaWhatsapp ? <span className="inline-flex min-h-[1.75rem] items-center rounded-full border border-sky-400/25 bg-sky-500/15 px-2.5 py-1 text-xs font-bold text-sky-100">Sent via WhatsApp</span> : null}
                     </div>
                     <p className="mt-2 text-sm muted">{enabled ? flow.readyText : pdfFlowLockedReason(flow)}</p>
-                    <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    <div className={`mt-4 grid gap-2 ${isTechnician ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
                       <button type="button" className={pdfActionButtonClass(enabled)} disabled={!enabled || Boolean(pdfBusy)} onClick={() => previewWorkflowPdf(flow)}><FileText className="h-4 w-4" />Preview PDF</button>
                       <button type="button" className={pdfActionButtonClass(enabled)} disabled={!enabled || Boolean(pdfBusy)} onClick={() => downloadWorkflowPdf(flow)}>{downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}Download PDF</button>
                       {canSendPdfWhatsapp ? (

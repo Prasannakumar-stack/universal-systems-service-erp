@@ -27,7 +27,6 @@ import {
   ConfirmModal,
   CreditCard,
   csvCell,
-  currency,
   customerCode,
   customerFromOrder,
   customerPhone,
@@ -50,6 +49,8 @@ import {
   filterByRange,
   findInvoice,
   formatDate,
+  getCustomerDisplayId,
+  getInvoiceDisplayId,
   getPdfLabel,
   inventoryCategories,
   InventoryStatusBadge,
@@ -142,6 +143,54 @@ import { calculateAmcCoverageBreakdown } from '../../shared/amcCoverage.js';
 
 const REPORT_PAGE_LIMIT = 50;
 const MAX_REPORT_PAGES = 20;
+const REPORT_NAV_SECTIONS = [
+  { id: 'main', label: 'Overview', to: '/admin/reports' },
+  { id: 'finance', label: 'Finance', to: '/admin/reports/finance' },
+  { id: 'operations', label: 'Operations', to: '/admin/reports?section=operations' },
+  { id: 'technicians', label: 'Technicians', to: '/admin/reports/technicians' },
+  { id: 'inventory', label: 'Inventory', to: '/admin/reports/inventory' },
+  { id: 'payments', label: 'Payments', to: '/admin/reports/payments' },
+  { id: 'amc', label: 'AMC', to: '/admin/reports?section=amc' }
+];
+const REPORT_SECTION_IDS = REPORT_NAV_SECTIONS.map((item) => item.id);
+const WORK_ORDER_REPORT_STATUSES = ['Pending', 'In Progress', 'Awaiting Parts', 'Completed', 'Delivered', 'Returned'];
+const REPORT_CURRENCY_SYMBOL = '\u20b9';
+const reportCurrencyFormatter = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0
+});
+
+function formatReportCurrency(value) {
+  const amount = Number(value || 0);
+  return reportCurrencyFormatter.format(Number.isFinite(amount) ? amount : 0);
+}
+
+function formatCompactReportCurrency(value) {
+  const amount = Number(value || 0);
+  const safeAmount = Number.isFinite(amount) ? amount : 0;
+  const absAmount = Math.abs(safeAmount);
+  const sign = safeAmount < 0 ? '-' : '';
+  if (absAmount >= 10000000) return `${sign}${formatCompactCurrencyUnit(absAmount / 10000000, 'Cr')}`;
+  if (absAmount >= 100000) return `${sign}${formatCompactCurrencyUnit(absAmount / 100000, 'L')}`;
+  if (absAmount >= 1000) return `${sign}${formatCompactCurrencyUnit(absAmount / 1000, 'k')}`;
+  return formatReportCurrency(safeAmount);
+}
+
+function formatCompactCurrencyUnit(value, suffix) {
+  const compact = value >= 10 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, '');
+  return `${REPORT_CURRENCY_SYMBOL}${compact}${suffix}`;
+}
+
+function normalizePremiumReportSection(routeSection = 'main', querySection = '') {
+  const cleanQuery = String(querySection || '').trim();
+  const cleanRoute = String(routeSection || '').trim();
+  if (cleanRoute === 'main' && REPORT_SECTION_IDS.includes(cleanQuery)) return cleanQuery;
+  if (REPORT_SECTION_IDS.includes(cleanRoute)) return cleanRoute;
+  if (cleanRoute === 'payments') return 'payments';
+  return normalizeReportSection(cleanRoute);
+}
 
 function appendPagination(path, page) {
   const joiner = path.includes('?') ? '&' : '?';
@@ -171,9 +220,11 @@ async function fetchReportCollection(request, path, key, label) {
 
 export function ReportsAnalyticsPage({ section = 'main' }) {
   const { request } = useAuth();
+  const location = useLocation();
   const [range, setRange] = useState('This Month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const querySection = useMemo(() => new URLSearchParams(location.search).get('section') || '', [location.search]);
   const loadReports = useCallback(async () => {
     const [bookings, workOrders, invoices, payments, inventory, movements, customers, amcContracts, amcSchedule, users] = await Promise.all([
       fetchReportCollection(request, '/bookings', 'bookings', 'bookings').catch(() => ({ rows: [], capped: false, label: 'bookings' })),
@@ -279,6 +330,10 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       return map;
     }, {})).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 
+    const statusRows = WORK_ORDER_REPORT_STATUSES
+      .map((name) => ({ name, count: workOrders.filter((job) => job.status === name).length }))
+      .filter((row) => row.count > 0);
+
     const technicianRows = (raw.users || []).filter((user) => user.role === 'technician').map((tech) => {
       const jobs = allWorkOrders.filter((job) => recordId(job.technicianId) === recordId(tech));
       const completed = jobs.filter((job) => ['Completed', 'Delivered'].includes(job.status));
@@ -312,10 +367,32 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       return map;
     }, {})).map(([method, total]) => ({ method, total })).sort((a, b) => b.total - a.total);
 
+    const pendingPaymentRows = invoices.map((invoice) => {
+      const balance = invoiceDueAmount(invoice);
+      const total = Number(invoice.total || invoice.totalAmount || 0);
+      const paid = Number(invoice.paidAmount || invoice.paid || 0);
+      return {
+        invoice,
+        invoiceId: recordId(invoice),
+        invoiceNumber: getInvoiceDisplayId(invoice),
+        customer: invoice.customerId?.name || 'Customer',
+        phone: invoice.customerId?.phone || '',
+        customerId: recordId(invoice.customerId),
+        total,
+        paid,
+        balance,
+        status: invoice.status || (balance > 0 ? 'Pending' : 'Paid')
+      };
+    }).filter((row) => row.balance > 0).sort((a, b) => b.balance - a.balance);
+
     const pendingByCustomer = Object.values(invoices.reduce((map, invoice) => {
       const id = recordId(invoice.customerId) || invoice.customerId?.phone || invoice.customerId?.name || 'unknown';
-      if (!map[id]) map[id] = { customer: invoice.customerId?.name || 'Customer', phone: invoice.customerId?.phone || '', customerId: recordId(invoice.customerId), balance: 0 };
-      map[id].balance += invoiceDueAmount(invoice);
+      const balance = invoiceDueAmount(invoice);
+      if (!map[id]) map[id] = { customer: invoice.customerId?.name || 'Customer', phone: invoice.customerId?.phone || '', customerId: recordId(invoice.customerId), total: 0, paid: 0, balance: 0, invoices: 0 };
+      map[id].total += Number(invoice.total || invoice.totalAmount || 0);
+      map[id].paid += Number(invoice.paidAmount || invoice.paid || 0);
+      map[id].balance += balance;
+      if (balance > 0) map[id].invoices += 1;
       return map;
     }, {})).filter((row) => row.balance > 0).sort((a, b) => b.balance - a.balance).slice(0, 12);
 
@@ -331,6 +408,18 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       stockValue: Number(part.onHand || 0) * Number(part.costPrice || part.sellingPrice || 0),
       stockStatus: inventoryStockStatus(part)
     })).sort((a, b) => b.usedQuantity - a.usedQuantity || String(a.partName || '').localeCompare(String(b.partName || '')));
+    const topUsedParts = inventoryRows.filter((part) => Number(part.usedQuantity || 0) > 0).slice(0, 8);
+    const stockAttentionRows = inventoryRows.filter((part) => ['low', 'out'].includes(part.stockStatus)).slice(0, 8);
+
+    const amcStatusRows = ['Active', 'Renewal Due', 'Expired', 'Completed', 'Cancelled']
+      .map((name) => ({
+        name,
+        count: allContracts.filter((contract) => (name === 'Renewal Due' ? contract.renewalStatus === name : contract.status === name)).length
+      }))
+      .filter((row) => row.count > 0);
+    const amcVisitRows = ['Upcoming', 'Due Today', 'Overdue', 'Completed']
+      .map((name) => ({ name, count: allSchedule.filter((visit) => visit.status === name).length }))
+      .filter((row) => row.count > 0);
 
     const customerRows = allCustomers.map((customer) => {
       const customerJobs = allWorkOrders.filter((job) => recordId(job.customerId) === recordId(customer));
@@ -378,7 +467,8 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         delivered: workOrders.filter((job) => job.status === 'Delivered').length,
         returned: workOrders.filter((job) => job.status === 'Returned').length,
         averageCompletion: averageHours(workOrders),
-        serviceTypeRows
+        serviceTypeRows,
+        statusRows
       },
       technicians: technicianRows,
       finance: {
@@ -409,7 +499,8 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         nonAmcRevenue,
         revenueByMonth,
         paymentMethodRows,
-        pendingByCustomer
+        pendingByCustomer,
+        pendingPaymentRows
       },
       inventory: {
         rows: inventoryRows,
@@ -421,7 +512,9 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         added: movements.filter((movement) => movement.type === 'ADD').reduce((sum, movement) => sum + Number(movement.quantity || 0), 0),
         returned: movements.filter((movement) => movement.type === 'RETURN').reduce((sum, movement) => sum + Number(movement.quantity || 0), 0),
         adjusted: movements.filter((movement) => movement.type === 'ADJUST').reduce((sum, movement) => sum + Number(movement.quantity || 0), 0),
-        deadStock: inventoryRows.filter((row) => !row.usedQuantity).length
+        deadStock: inventoryRows.filter((row) => !row.usedQuantity).length,
+        topUsedParts,
+        stockAttentionRows
       },
       amc: {
         contracts: allContracts,
@@ -448,7 +541,9 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         pendingContracts: pendingAmcContracts,
         pendingRenewals,
         amcRelatedRevenue,
-        nonAmcRevenue
+        nonAmcRevenue,
+        statusRows: amcStatusRows,
+        visitRows: amcVisitRows
       },
       customers: {
         rows: customerRows,
@@ -464,7 +559,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
     };
   }, [data, bounds]);
 
-  const activeSection = section === 'payments' ? 'finance' : normalizeReportSection(section);
+  const activeSection = normalizePremiumReportSection(section, querySection);
   const selectedPeriodLabel = range === 'Custom Range' && (customFrom || customTo) ? `${customFrom || 'Start'} to ${customTo || 'Today'}` : range;
   const hasRangeFilter = range !== 'This Month' || Boolean(customFrom || customTo);
 
@@ -493,7 +588,25 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         ['Total bookings', report.operations.totalBookings],
         ['Total service jobs', report.operations.totalJobs],
         ['Average completion', report.operations.averageCompletion],
-        ...report.operations.serviceTypeRows.map((row) => [`Jobs - ${row.name}`, row.count])
+        ...report.operations.serviceTypeRows.map((row) => [`Jobs by service - ${row.name}`, row.count]),
+        ...report.operations.statusRows.map((row) => [`Jobs by status - ${row.name}`, row.count]),
+        ...report.finance.paymentMethodRows.map((row) => [`Payment method - ${row.method}`, row.total])
+      ]);
+      return;
+    }
+    if (activeSection === 'operations') {
+      downloadCsv('operations-report.csv', ['Metric', 'Value'], [
+        ['Total bookings', report.operations.totalBookings],
+        ['Total service jobs', report.operations.totalJobs],
+        ['Pending jobs', report.operations.pending],
+        ['In progress jobs', report.operations.inProgress],
+        ['Awaiting parts jobs', report.operations.awaitingParts],
+        ['Completed jobs', report.operations.completed],
+        ['Delivered jobs', report.operations.delivered],
+        ['Returned jobs', report.operations.returned],
+        ['Average completion', report.operations.averageCompletion],
+        ...report.operations.serviceTypeRows.map((row) => [`Jobs by service - ${row.name}`, row.count]),
+        ...report.operations.statusRows.map((row) => [`Jobs by status - ${row.name}`, row.count])
       ]);
       return;
     }
@@ -529,8 +642,29 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       ]);
       return;
     }
+    if (activeSection === 'payments') {
+      downloadCsv('payments-report.csv', ['Invoice', 'Customer', 'Phone', 'Total', 'Paid', 'Balance', 'Status'], report.finance.pendingPaymentRows.map((row) => [row.invoiceNumber, row.customer, row.phone, row.total, row.paid, row.balance, row.status]));
+      return;
+    }
     if (activeSection === 'inventory') {
       downloadCsv('inventory-report.csv', ['Part', 'Category', 'On Hand', 'Reserved', 'Available', 'Used Quantity', 'Stock Value', 'Status'], report.inventory.rows.map((row) => [row.partName, row.category, row.onHand, row.reserved, row.available, row.usedQuantity, row.stockValue, row.stockStatus]));
+      return;
+    }
+    if (activeSection === 'amc') {
+      downloadCsv('amc-report.csv', ['Metric', 'Value'], [
+        ['Active contracts', report.amc.active],
+        ['Renewals due', report.amc.expiringSoon],
+        ['Expired contracts', report.amc.expired],
+        ['Visits this month', report.amc.visitsThisMonth],
+        ['Completed visits', report.amc.completedVisits],
+        ['Overdue visits', report.amc.overdueVisits],
+        ['Contract value', report.amc.contractValue],
+        ['AMC collected', report.amc.totalAmcRevenue],
+        ['AMC pending', report.amc.pendingAmcPayments],
+        ['Renewal due amount', report.amc.renewalDueAmount],
+        ...report.amc.statusRows.map((row) => [`Contracts - ${row.name}`, row.count]),
+        ...report.amc.visitRows.map((row) => [`Visits - ${row.name}`, row.count])
+      ]);
     }
   }
 
@@ -545,6 +679,10 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
   const financeHasData = report.finance.totalInvoiceValue || report.finance.totalCollected || report.finance.pendingBalance || report.finance.totalAmcRevenue || report.finance.pendingAmcPayments || report.finance.chargeableRepairsRevenue || report.finance.coveredServiceCost || report.finance.fullyPaidAmcContracts || report.finance.partiallyPaidAmcContracts || report.finance.pendingAmcContracts || report.finance.paymentMethodRows.length;
   const hasRevenueChart = report.finance.revenueByMonth.some((row) => Number(row.revenue || 0) > 0);
   const hasPaymentMethodData = report.finance.paymentMethodRows.some((row) => Number(row.total || 0) > 0);
+  const hasStatusData = report.operations.statusRows.some((row) => Number(row.count || 0) > 0);
+  const hasServiceTypeData = report.operations.serviceTypeRows.some((row) => Number(row.count || 0) > 0);
+  const businessInsights = buildBusinessInsights(report);
+  const revenueSplitTotal = Number(report.finance.amcRelatedRevenue || 0) + Number(report.finance.nonAmcRevenue || 0);
   const cappedCollections = data?._reportMeta?.capped || [];
 
   return (
@@ -570,217 +708,282 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       ) : null}
 
       {activeSection === 'main' ? (
-        <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <ReportMetricCard icon={CreditCard} label="Total Revenue" value={currency(report.summary.totalRevenue)} helper="Collected this period" tone="green" to="/admin/reports/finance" />
-          <ReportMetricCard icon={AlertTriangle} label="Pending Payments" value={currency(report.summary.pendingPayments)} helper="Needs follow-up" tone="amber" to="/admin/reports/finance" />
-          <ReportMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.summary.completedJobs} helper="Closed in selected period" tone="green" to="/admin/work-orders?status=Completed" />
-          <ReportMetricCard icon={Wrench} label="Active Repair Jobs" value={report.summary.activeRepairJobs} helper="Currently open" tone="blue" to="/admin/work-orders" />
-          <ReportMetricCard icon={AlertTriangle} label="Low Stock Items" value={report.summary.lowStockItems} helper="Inventory attention" tone="red" to="/admin/reports/inventory" />
-          <ReportMetricCard icon={FileText} label="Active AMC Contracts" value={report.summary.activeAmcContracts} helper="Covered customers" tone="blue" to="/admin/amc-contracts" />
-          <ReportMetricCard icon={Bell} label="AMC Renewals Due" value={report.summary.amcRenewalsDue} helper="Renewal opportunity" tone="amber" to="/admin/amc-renewals" />
-          <ReportMetricCard icon={Users} label="Total Customers" value={report.summary.totalCustomers} helper="Customer base" tone="cyan" to="/admin/customers" />
-        </div>
-      ) : null}
-
-      {activeSection === 'main' ? (
-        <div className="mt-5">
-          <ReportPanel
-            title="Operations Summary"
-            subtitle="Bookings, jobs, and current service workload"
-            action={<Link className="btn btn-secondary reports-compact-button" to="/admin/work-orders">Open Jobs</Link>}
-          >
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <ReportMetricCard icon={BookOpenCheck} label="Total Bookings" value={report.operations.totalBookings} helper="Created this period" tone="blue" compact />
-              <ReportMetricCard icon={Wrench} label="Total Service Jobs" value={report.operations.totalJobs} helper="Jobs in period" tone="blue" compact />
-              <ReportMetricCard icon={CalendarClock} label="Pending Jobs" value={report.operations.pending} helper="Waiting to start" tone="amber" compact />
-              <ReportMetricCard icon={Wrench} label="In Progress Jobs" value={report.operations.inProgress} helper="Being serviced" tone="cyan" compact />
-              <ReportMetricCard icon={PackagePlus} label="Awaiting Parts" value={report.operations.awaitingParts} helper="Parts required" tone="amber" compact />
-              <ReportMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.operations.completed} helper="Work completed" tone="green" compact />
-              <ReportMetricCard icon={CheckCircle2} label="Delivered Jobs" value={report.operations.delivered} helper="Returned to customer" tone="green" compact />
-              <ReportMetricCard icon={AlertTriangle} label="Returned Jobs" value={report.operations.returned} helper="Needs review" tone="red" compact />
-            </div>
-          </ReportPanel>
-        </div>
-      ) : null}
-
-      {activeSection === 'main' ? (
-        <div className="mt-5">
-          <ReportPanel
-            title="Jobs by Service Type"
-            subtitle={topService ? `Top service category: ${topService.name}` : 'Service mix for the selected period'}
-          >
-            <div className="grid gap-3">
-              {report.operations.serviceTypeRows.length ? report.operations.serviceTypeRows.map((row) => (
-                <ReportProgressRow key={row.name} label={row.name} value={row.count} total={report.operations.totalJobs} />
-              )) : <EmptyState icon={BarChart} title="No business report data" message="Service type distribution will appear once jobs exist in this period." />}
-            </div>
-          </ReportPanel>
-        </div>
-      ) : null}
-
-      {activeSection === 'technicians' ? (
-        <div className="mt-6 grid gap-5">
+        <div className="reports-section-stack">
           <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ReportMetricCard icon={Users} label="Total Technicians" value={technicianSummary.totalTechnicians} helper="Technicians in report" tone="blue" />
-            <ReportMetricCard icon={Wrench} label="Assigned Jobs" value={technicianSummary.assignedJobs} helper="Total assigned workload" tone="cyan" />
-            <ReportMetricCard icon={CheckCircle2} label="Completed Jobs" value={technicianSummary.completedJobs} helper="Closed by technicians" tone="green" />
-            <ReportMetricCard icon={BarChart} label="Average Completion Rate" value={technicianSummary.averageCompletionRate} helper="Completed / assigned" tone="blue" />
+            <ReportMetricCard icon={CreditCard} label="Total Collected" value={formatReportCurrency(report.summary.totalRevenue)} helper="Real payments in period" tone="green" to="/admin/reports/finance" />
+            <ReportMetricCard icon={AlertTriangle} label="Pending Payments" value={formatReportCurrency(report.summary.pendingPayments)} helper="Invoice balance due" tone="amber" to="/admin/reports/payments" />
+            <ReportMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.summary.completedJobs} helper="Closed in selected period" tone="green" to="/admin/work-orders?status=Completed" />
+            <ReportMetricCard icon={Wrench} label="Active Repair Jobs" value={report.summary.activeRepairJobs} helper="Currently open jobs" tone="blue" to="/admin/work-orders" />
+            <ReportMetricCard icon={AlertTriangle} label="Low Stock Items" value={report.summary.lowStockItems} helper="Needs purchase planning" tone="red" to="/admin/reports/inventory" />
+            <ReportMetricCard icon={FileText} label="Active AMC Contracts" value={report.summary.activeAmcContracts} helper="Live contracts" tone="blue" to="/admin/amc-contracts" />
+            <ReportMetricCard icon={Users} label="Total Customers" value={report.summary.totalCustomers} helper="Customer base" tone="cyan" to="/admin/customers" />
+            <ReportMetricCard icon={Bell} label="AMC Renewals Due" value={report.summary.amcRenewalsDue} helper="Renewal opportunity" tone="amber" to="/admin/reports?section=amc" />
           </div>
-          <ReportPanel
-            title="Technician Performance Report"
-            subtitle={bestTechnician ? `Best performer: ${bestTechnician.technician.name} at ${bestTechnician.completionRate}` : 'Assigned, completed, and active work by technician'}
-          >
-            {!report.technicians.length ? <EmptyState icon={Users} title="No technician data" message="Technician reports will appear after jobs are assigned." /> : (
-              <div className="table-wrap reports-table-wrap bg-[var(--surface)]">
-                <table className="data-table reports-technician-table">
-                  <thead><tr><th>Technician</th><th>Assigned</th><th>Completed</th><th>In Progress</th><th>Awaiting Parts</th><th>Completion Rate</th><th>Last Activity</th><th className="text-center">Action</th></tr></thead>
-                  <tbody>
-                    {report.technicians.map((row) => {
-                      const isBest = bestTechnician && recordId(bestTechnician.technician) === recordId(row.technician);
-                      return (
-                        <tr key={recordId(row.technician)} className={isBest ? 'reports-highlight-row' : ''}>
-                          <td className="font-bold">
-                            <span className="block truncate text-slate-100" title={row.technician.name}>{row.technician.name}</span>
-                            <span className="block text-xs muted">{row.notesCount} notes - {currency(row.partsValue)} parts</span>
-                          </td>
-                          <td className="reports-number-cell">{row.assigned}</td>
-                          <td className="reports-number-cell text-emerald-100">{row.completed}</td>
-                          <td className="reports-number-cell">{row.inProgress}</td>
-                          <td className="reports-number-cell">{row.awaitingParts}</td>
-                          <td><CompletionRateBadge rate={row.completionRate} average={row.averageCompletion} /></td>
-                          <td>{row.lastActivity ? formatDate(row.lastActivity) : <span className="muted">No activity</span>}</td>
-                          <td className="text-center"><Link className="btn btn-secondary reports-table-button" to={`/admin/work-orders?technicianId=${recordId(row.technician)}`}>View Jobs</Link></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+
+          <div className="reports-bi-grid reports-bi-grid-main">
+            <ReportPanel title="Revenue Overview" subtitle="Collected revenue from existing payment records">
+              <RevenueOverviewChart rows={report.finance.revenueByMonth} hasData={hasRevenueChart} />
+            </ReportPanel>
+            <ReportPanel title="Payment Method Split" subtitle="Collection mix from payment records">
+              <ProgressRows rows={report.finance.paymentMethodRows} total={report.finance.totalCollected} valueKey="total" labelKey="method" emptyIcon={CreditCard} emptyTitle="No payment method data" />
+            </ReportPanel>
+          </div>
+
+          <div className="reports-bi-grid reports-bi-grid-3">
+            <ReportPanel title="Jobs by Service Type" subtitle={topService ? `Top service category: ${topService.name}` : 'Service mix for the selected period'}>
+              <ProgressRows rows={report.operations.serviceTypeRows} total={report.operations.totalJobs} valueKey="count" labelKey="name" emptyIcon={BarChart} emptyTitle="No service type data" />
+            </ReportPanel>
+            <ReportPanel title="Work Order Status" subtitle="Current period status distribution">
+              <ProgressRows rows={report.operations.statusRows} total={report.operations.totalJobs} valueKey="count" labelKey="name" emptyIcon={Wrench} emptyTitle="No work order status data" />
+            </ReportPanel>
+            <ReportPanel title="AMC Snapshot" subtitle="Contract health and visit pressure">
+              <div className="reports-mini-metric-grid">
+                <MiniMetric label="Active" value={report.amc.active} />
+                <MiniMetric label="Renewals Due" value={report.amc.expiringSoon} tone="amber" />
+                <MiniMetric label="Expired" value={report.amc.expired} tone="red" />
+                <MiniMetric label="Visits" value={report.amc.visitsThisMonth} />
               </div>
-            )}
-          </ReportPanel>
+              <div className="mt-3 grid gap-3">
+                <ReportProgressRow label="AMC Collected" value={report.amc.totalAmcRevenue} displayValue={formatReportCurrency(report.amc.totalAmcRevenue)} total={Math.max(report.amc.amcRelatedRevenue, 1)} />
+                <ReportProgressRow label="AMC Pending" value={report.amc.pendingAmcPayments} displayValue={formatReportCurrency(report.amc.pendingAmcPayments)} total={Math.max(report.amc.pendingAmcPayments + report.amc.totalAmcRevenue, 1)} />
+              </div>
+            </ReportPanel>
+          </div>
+
+          <div className="reports-bi-grid reports-bi-grid-main">
+            <ReportPanel title="Technician Performance" subtitle={bestTechnician ? `Best performer: ${bestTechnician.technician.name} at ${bestTechnician.completionRate}` : 'Completion rate from assigned jobs'} action={<Link className="btn btn-secondary reports-compact-button" to="/admin/reports/technicians">Technicians</Link>}>
+              <div className="grid gap-3">
+                {report.technicians.filter((row) => row.assigned > 0).sort((a, b) => Number(b.completionRate.replace('%', '')) - Number(a.completionRate.replace('%', '')) || b.completed - a.completed).slice(0, 5).map((row) => (
+                  <TechnicianSummaryRow key={recordId(row.technician)} row={row} />
+                ))}
+                {!report.technicians.some((row) => row.assigned > 0) ? <EmptyState icon={Users} title="No assigned technician jobs" message="Technician performance appears once jobs are assigned." /> : null}
+              </div>
+            </ReportPanel>
+            <ReportPanel title="Low Stock / Top Used Parts" subtitle="Inventory attention from parts and stock movements" action={<Link className="btn btn-secondary reports-compact-button" to="/admin/reports/inventory">Inventory</Link>}>
+              <div className="grid gap-3">
+                {(report.inventory.stockAttentionRows.length ? report.inventory.stockAttentionRows : report.inventory.topUsedParts).slice(0, 6).map((part) => (
+                  <InventorySummaryRow key={recordId(part)} part={part} />
+                ))}
+                {!report.inventory.stockAttentionRows.length && !report.inventory.topUsedParts.length ? <EmptyState icon={Boxes} title="No inventory attention items" message="Low-stock and used-part insights appear after inventory activity." /> : null}
+              </div>
+            </ReportPanel>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {businessInsights.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.title} className={`reports-insight-row reports-insight-${item.tone}`}>
+                  <Icon className="mt-0.5 h-5 w-5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="font-black text-slate-100">{item.title}</p>
+                    <p className="mt-1 text-sm muted">{item.message}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       ) : null}
 
       {activeSection === 'finance' ? (
-        <div className="mt-6 grid gap-5">
-          <ReportPanel title="Finance Report" subtitle="Invoice value, collections, and pending payment exposure">
-            {!financeHasData ? <EmptyState icon={CreditCard} title="No payment data" message="Invoices, collections, and balances will appear after billing activity is recorded." /> : null}
+        <div className="reports-section-stack">
+          <ReportPanel title="Finance Overview" subtitle="Invoice value, collections, and pending payment exposure">
+            {!financeHasData ? <EmptyState icon={CreditCard} title="No finance data" message="Invoices, collections, and balances will appear after billing activity is recorded." /> : null}
             <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <ReportMetricCard icon={ReceiptText} label="Total Invoice Value" value={currency(report.finance.totalInvoiceValue)} helper="Billed this period" tone="blue" />
-              <ReportMetricCard icon={CreditCard} label="Total Collected" value={currency(report.finance.totalCollected)} helper="Money received" tone="green" />
-              <ReportMetricCard icon={AlertTriangle} label="Pending Balance" value={currency(report.finance.pendingBalance)} helper="Needs follow-up" tone="amber" />
-              <ReportMetricCard icon={ReceiptText} label="Partial Payments" value={report.finance.partialPayments} helper="Part-paid invoices" tone="amber" />
-              <ReportMetricCard icon={CheckCircle2} label="Paid Invoices" value={report.finance.paidInvoices} helper="Fully cleared" tone="green" />
-              <ReportMetricCard icon={AlertTriangle} label="Pending Invoices" value={report.finance.pendingInvoices} helper="Unpaid invoices" tone="amber" />
-              <ReportMetricCard icon={CreditCard} label="Today's Collection" value={currency(report.finance.todayCollection)} helper="Collected today" tone="cyan" />
-              <ReportMetricCard icon={CreditCard} label="Monthly Revenue" value={currency(report.finance.monthlyRevenue)} helper="This month collected" tone="green" />
-              <ReportMetricCard icon={ShieldCheck} label="Total AMC Revenue" value={currency(report.finance.totalAmcRevenue)} helper="AMC collected this period" tone="green" />
-              <ReportMetricCard icon={AlertTriangle} label="Pending AMC Payments" value={currency(report.finance.pendingAmcPayments)} helper="AMC balance due" tone="amber" />
-              <ReportMetricCard icon={FileText} label="Active AMC Contract Value" value={currency(report.finance.activeAmcContractValue)} helper="Live contract value" tone="blue" />
-              <ReportMetricCard icon={Bell} label="Renewal Revenue" value={currency(report.finance.renewalRevenue)} helper="Renewal opportunity" tone="amber" />
-              <ReportMetricCard icon={Wrench} label="Covered Service Cost" value={currency(report.finance.coveredServiceCost)} helper="AMC absorbed work" tone="cyan" />
-              <ReportMetricCard icon={ReceiptText} label="Extra Revenue From AMC Repairs" value={currency(report.finance.chargeableRepairsRevenue)} helper="Chargeable AMC repair collection" tone="green" />
-              <ReportMetricCard icon={ShieldCheck} label="AMC Profit Estimate" value={currency(report.finance.amcProfitEstimate)} helper="AMC revenue minus covered cost" tone={report.finance.amcProfitEstimate >= 0 ? 'green' : 'red'} />
-              <ReportMetricCard icon={CheckCircle2} label="Fully Paid AMC Contracts" value={report.finance.fullyPaidAmcContracts} helper="Contract payments cleared" tone="green" />
-              <ReportMetricCard icon={ReceiptText} label="Partially Paid AMC Contracts" value={report.finance.partiallyPaidAmcContracts} helper="Some AMC amount collected" tone="amber" />
-              <ReportMetricCard icon={AlertTriangle} label="Pending AMC Contracts" value={report.finance.pendingAmcContracts} helper="No AMC payment collected" tone="amber" />
-              <ReportMetricCard icon={Bell} label="Pending Renewals" value={report.finance.pendingRenewals} helper="Renewal due contracts" tone="amber" />
-              <ReportMetricCard icon={ShieldCheck} label="AMC Revenue" value={currency(report.finance.amcRelatedRevenue)} helper="AMC contract plus extra repair revenue" tone="green" />
-              <ReportMetricCard icon={CreditCard} label="Non-AMC Revenue" value={currency(report.finance.nonAmcRevenue)} helper="Other service collections" tone="blue" />
+              <ReportMetricCard icon={ReceiptText} label="Total Invoice Value" value={formatReportCurrency(report.finance.totalInvoiceValue)} helper="Billed this period" tone="blue" compact />
+              <ReportMetricCard icon={CreditCard} label="Total Collected" value={formatReportCurrency(report.finance.totalCollected)} helper="Money received" tone="green" compact />
+              <ReportMetricCard icon={AlertTriangle} label="Pending Balance" value={formatReportCurrency(report.finance.pendingBalance)} helper="Needs follow-up" tone="amber" compact />
+              <ReportMetricCard icon={CreditCard} label="Today's Collection" value={formatReportCurrency(report.finance.todayCollection)} helper="Collected today" tone="cyan" compact />
             </div>
           </ReportPanel>
 
-          <div className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
-            <ReportPanel title="Revenue by Month" subtitle="Collection trend from existing payment records">
-              <div className="reports-chart-frame">
-                {hasRevenueChart ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={report.finance.revenueByMonth}>
-                      <CartesianGrid stroke="rgba(117,196,255,0.12)" vertical={false} />
-                      <XAxis dataKey="month" stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} />
-                      <Tooltip formatter={(value) => currency(value)} contentStyle={{ background: '#071426', border: '1px solid rgba(117,196,255,0.25)', borderRadius: 8 }} />
-                      <Bar dataKey="revenue" fill="#22c55e" radius={[8, 8, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <EmptyState icon={BarChart} title="No revenue data for selected period" message="Collected revenue will appear here once payments are recorded in this period." />}
-              </div>
+          <div className="reports-bi-grid reports-bi-grid-main">
+            <ReportPanel title="Revenue Overview" subtitle="Collection trend from payment records">
+              <RevenueOverviewChart rows={report.finance.revenueByMonth} hasData={hasRevenueChart} />
             </ReportPanel>
-
-            <ReportPanel title="Collection by Payment Method" subtitle="How customers paid in this period">
+            <ReportPanel title="Revenue Mix" subtitle="AMC and non-AMC collection split">
               <div className="grid gap-3">
-                {hasPaymentMethodData ? report.finance.paymentMethodRows.map((row) => (
-                  <ReportProgressRow key={row.method} label={row.method} value={row.total} displayValue={currency(row.total)} total={report.finance.totalCollected || 1} />
-                )) : <EmptyState icon={CreditCard} title="No chart data" message="Payment method split will appear once payments are recorded." />}
+                <ReportProgressRow label="AMC Revenue" value={report.finance.amcRelatedRevenue} displayValue={formatReportCurrency(report.finance.amcRelatedRevenue)} total={Math.max(revenueSplitTotal, 1)} />
+                <ReportProgressRow label="Non-AMC Revenue" value={report.finance.nonAmcRevenue} displayValue={formatReportCurrency(report.finance.nonAmcRevenue)} total={Math.max(revenueSplitTotal, 1)} />
+                <ReportProgressRow label="Pending Balance" value={report.finance.pendingBalance} displayValue={formatReportCurrency(report.finance.pendingBalance)} total={Math.max(report.finance.totalInvoiceValue, 1)} />
               </div>
             </ReportPanel>
           </div>
 
-          <ReportPanel
-            title="Pending Balance by Customer"
-            subtitle="Top pending customers"
-            action={<Link className="btn btn-secondary reports-compact-button" to="/admin/payments">Payments</Link>}
-          >
+          <ReportPanel title="Pending Balance by Customer" subtitle="Top customers with invoice balance due" action={<Link className="btn btn-secondary reports-compact-button" to="/admin/payments">Payments</Link>}>
             <div className="reports-pending-grid">
               {report.finance.pendingByCustomer.length ? report.finance.pendingByCustomer.map((row, index) => (
-                <div key={`${row.customer}-${row.phone}`} className={`reports-pending-card ${index === 0 ? 'reports-pending-card-top' : ''}`}>
-                  <div className="min-w-0">
-                    <p className="truncate font-black text-slate-100" title={row.customer}>{row.customer}</p>
-                    <p className="mt-1 text-sm muted">{row.phone || 'Phone not captured'}</p>
-                  </div>
-                  <p className="reports-pending-amount">{currency(row.balance)}</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {row.customerId ? <Link className="btn btn-secondary reports-table-button" to={`/admin/customers/${row.customerId}`}>Open Customer</Link> : null}
-                    <Link className="btn btn-secondary reports-table-button" to="/admin/payments">Payments</Link>
-                  </div>
-                </div>
+                <PendingCustomerCard key={`${row.customer}-${row.phone}`} row={row} index={index} />
               )) : <EmptyState icon={CheckCircle2} title="No pending balances" message="Payments are clear for this period." />}
             </div>
           </ReportPanel>
         </div>
       ) : null}
 
+      {activeSection === 'operations' ? (
+        <div className="reports-section-stack">
+          <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <ReportMetricCard icon={BookOpenCheck} label="Total Bookings" value={report.operations.totalBookings} helper="Created this period" tone="blue" />
+            <ReportMetricCard icon={Wrench} label="Total Service Jobs" value={report.operations.totalJobs} helper="Jobs in period" tone="blue" />
+            <ReportMetricCard icon={Wrench} label="In Progress" value={report.operations.inProgress} helper="Being serviced" tone="cyan" />
+            <ReportMetricCard icon={PackagePlus} label="Awaiting Parts" value={report.operations.awaitingParts} helper="Parts required" tone="amber" />
+          </div>
+          <div className="reports-bi-grid reports-bi-grid-main">
+            <ReportPanel title="Work Order Status" subtitle="Status distribution in the selected period">
+              <ProgressRows rows={report.operations.statusRows} total={report.operations.totalJobs} valueKey="count" labelKey="name" emptyIcon={Wrench} emptyTitle="No work order status data" />
+            </ReportPanel>
+            <ReportPanel title="Jobs by Service Type" subtitle={topService ? `Top service category: ${topService.name}` : 'Service mix for the selected period'}>
+              <ProgressRows rows={report.operations.serviceTypeRows} total={report.operations.totalJobs} valueKey="count" labelKey="name" emptyIcon={BarChart} emptyTitle="No service type data" />
+            </ReportPanel>
+          </div>
+        </div>
+      ) : null}
+
+      {activeSection === 'technicians' ? (
+        <div className="reports-section-stack">
+          <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <ReportMetricCard icon={Users} label="Total Technicians" value={technicianSummary.totalTechnicians} helper="Technicians in report" tone="blue" />
+            <ReportMetricCard icon={Wrench} label="Assigned Jobs" value={technicianSummary.assignedJobs} helper="Total assigned workload" tone="cyan" />
+            <ReportMetricCard icon={CheckCircle2} label="Completed Jobs" value={technicianSummary.completedJobs} helper="Closed by technicians" tone="green" />
+            <ReportMetricCard icon={BarChart} label="Average Completion Rate" value={technicianSummary.averageCompletionRate} helper="Completed / assigned" tone="blue" />
+          </div>
+          <ReportPanel title="Technician Performance" subtitle={bestTechnician ? `Best performer: ${bestTechnician.technician.name} at ${bestTechnician.completionRate}` : 'Assigned, completed, and active work by technician'}>
+            {!report.technicians.length ? <EmptyState icon={Users} title="No technician data" message="Technician reports will appear after jobs are assigned." /> : (
+              <>
+                <div className="reports-mobile-card-list">
+                  {report.technicians.map((row) => <TechnicianReportCard key={recordId(row.technician)} row={row} />)}
+                </div>
+                <div className="table-wrap reports-table-wrap reports-desktop-table bg-[var(--surface)]">
+                  <table className="data-table reports-technician-table">
+                    <thead><tr><th>Technician</th><th>Assigned</th><th>Completed</th><th>In Progress</th><th>Awaiting Parts</th><th>Completion Rate</th><th>Last Activity</th><th className="text-center">Action</th></tr></thead>
+                    <tbody>
+                      {report.technicians.map((row) => {
+                        const isBest = bestTechnician && recordId(bestTechnician.technician) === recordId(row.technician);
+                        return (
+                          <tr key={recordId(row.technician)} className={isBest ? 'reports-highlight-row' : ''}>
+                            <td className="font-bold">
+                              <span className="block truncate text-slate-100" title={row.technician.name}>{row.technician.name}</span>
+                              <span className="block text-xs muted">{row.notesCount} notes - {formatReportCurrency(row.partsValue)} parts</span>
+                            </td>
+                            <td className="reports-number-cell">{row.assigned}</td>
+                            <td className="reports-number-cell text-emerald-100">{row.completed}</td>
+                            <td className="reports-number-cell">{row.inProgress}</td>
+                            <td className="reports-number-cell">{row.awaitingParts}</td>
+                            <td><CompletionRateBadge rate={row.completionRate} average={row.averageCompletion} /></td>
+                            <td>{row.lastActivity ? formatDate(row.lastActivity) : <span className="muted">No activity</span>}</td>
+                            <td className="text-center"><Link className="btn btn-secondary reports-table-button" to={`/admin/work-orders?technicianId=${recordId(row.technician)}`}>View Jobs</Link></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </ReportPanel>
+        </div>
+      ) : null}
+
       {activeSection === 'inventory' ? (
-        <div className="mt-6 grid gap-5">
-          <ReportPanel
-            title="Inventory Report"
-            subtitle="Stock value, availability, and items needing attention"
-            action={<Link className="btn btn-secondary reports-compact-button" to="/admin/parts">Open Inventory</Link>}
-          >
+        <div className="reports-section-stack">
+          <ReportPanel title="Inventory Overview" subtitle="Stock value, availability, and items needing attention" action={<Link className="btn btn-secondary reports-compact-button" to="/admin/parts">Open Inventory</Link>}>
             <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <ReportMetricCard icon={Boxes} label="Total Parts / Products" value={report.inventory.totalParts} helper="Current tracked items" tone="blue" />
-              <ReportMetricCard icon={CreditCard} label="Total Stock Value" value={currency(report.inventory.stockValue)} helper="On-hand valuation" tone="green" />
-              <ReportMetricCard icon={AlertTriangle} label="Low Stock Items" value={report.inventory.lowStock} helper="Needs purchase planning" tone="amber" />
-              <ReportMetricCard icon={AlertTriangle} label="Out of Stock Items" value={report.inventory.outOfStock} helper="Requires immediate attention" tone="red" />
-              <ReportMetricCard icon={Wrench} label="Stock Used by Jobs" value={report.inventory.usedQuantity} helper="Consumed by work orders" tone="blue" />
-              <ReportMetricCard icon={PackagePlus} label="Stock Added" value={report.inventory.added} helper="Added to inventory" tone="green" />
-              <ReportMetricCard icon={PackagePlus} label="Stock Returned" value={report.inventory.returned} helper="Returned to stock" tone="cyan" />
-              <ReportMetricCard icon={ReceiptText} label="Dead Stock Items" value={report.inventory.deadStock} helper="No usage recorded" tone="amber" />
+              <ReportMetricCard icon={Boxes} label="Total Parts / Products" value={report.inventory.totalParts} helper="Current tracked items" tone="blue" compact />
+              <ReportMetricCard icon={CreditCard} label="Total Stock Value" value={formatReportCurrency(report.inventory.stockValue)} helper="On-hand valuation" tone="green" compact />
+              <ReportMetricCard icon={AlertTriangle} label="Low Stock Items" value={report.inventory.lowStock} helper="Needs purchase planning" tone="amber" compact />
+              <ReportMetricCard icon={AlertTriangle} label="Out of Stock Items" value={report.inventory.outOfStock} helper="Requires attention" tone="red" compact />
             </div>
           </ReportPanel>
 
-          <ReportPanel title="Inventory Table" subtitle="Availability and value by part">
-            {!report.inventory.rows.length ? <EmptyState icon={Boxes} title="No inventory data" message="Inventory reports will appear after parts are added." /> : (
-              <div className="table-wrap reports-table-wrap bg-[var(--surface)]">
-                <table className="data-table reports-inventory-table">
-                  <thead><tr><th>Part</th><th>Category</th><th>On Hand</th><th>Reserved</th><th>Available</th><th>Used Quantity</th><th>Stock Value</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {report.inventory.rows.slice(0, 50).map((part) => (
-                      <tr key={recordId(part)}>
-                        <td className="font-bold"><span className="block truncate text-slate-100" title={part.partName}>{part.partName}</span></td>
-                        <td><span className="reports-soft-badge">{part.category || 'General'}</span></td>
-                        <td className="reports-number-cell">{part.onHand || 0}</td>
-                        <td className="reports-number-cell">{part.reserved || 0}</td>
-                        <td className="reports-number-cell font-black text-sky-100">{part.available || 0}</td>
-                        <td className="reports-number-cell">{part.usedQuantity || 0}</td>
-                        <td className="font-black text-slate-100">{currency(part.stockValue)}</td>
-                        <td><InventoryReportStatusPill status={part.stockStatus} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <div className="reports-bi-grid reports-bi-grid-main">
+            <ReportPanel title="Top Used Parts" subtitle="Usage from stock movement records">
+              <ProgressRows rows={report.inventory.topUsedParts} total={Math.max(...report.inventory.topUsedParts.map((part) => Number(part.usedQuantity || 0)), 1)} valueKey="usedQuantity" labelKey="partName" emptyIcon={Boxes} emptyTitle="No used parts yet" />
+            </ReportPanel>
+            <ReportPanel title="Stock Attention" subtitle="Low and out-of-stock items">
+              <div className="grid gap-3">
+                {report.inventory.stockAttentionRows.length ? report.inventory.stockAttentionRows.map((part) => <InventorySummaryRow key={recordId(part)} part={part} />) : <EmptyState icon={CheckCircle2} title="No low-stock items" message="Inventory availability is healthy for the current data." />}
               </div>
+            </ReportPanel>
+          </div>
+
+          <ReportPanel title="Inventory Detail" subtitle="Availability, usage, value, and stock status by part">
+            {!report.inventory.rows.length ? <EmptyState icon={Boxes} title="No inventory data" message="Inventory reports will appear after parts are added." /> : (
+              <>
+                <div className="reports-mobile-card-list">
+                  {report.inventory.rows.slice(0, 50).map((part) => <InventoryReportCard key={recordId(part)} part={part} />)}
+                </div>
+                <div className="table-wrap reports-table-wrap reports-desktop-table bg-[var(--surface)]">
+                  <table className="data-table reports-inventory-table">
+                    <thead><tr><th>Part</th><th>Category</th><th>On Hand</th><th>Reserved</th><th>Available</th><th>Used Qty</th><th>Stock Value</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {report.inventory.rows.slice(0, 50).map((part) => (
+                        <tr key={recordId(part)}>
+                          <td className="font-bold"><span className="block truncate text-slate-100" title={part.partName}>{part.partName}</span></td>
+                          <td><span className="reports-soft-badge">{part.category || 'General'}</span></td>
+                          <td className="reports-number-cell">{part.onHand || 0}</td>
+                          <td className="reports-number-cell">{part.reserved || 0}</td>
+                          <td className="reports-number-cell font-black text-sky-100">{part.available || 0}</td>
+                          <td className="reports-number-cell">{part.usedQuantity || 0}</td>
+                          <td className="font-black text-slate-100">{formatReportCurrency(part.stockValue)}</td>
+                          <td><InventoryReportStatusPill status={part.stockStatus} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
+          </ReportPanel>
+        </div>
+      ) : null}
+
+      {activeSection === 'payments' ? (
+        <div className="reports-section-stack">
+          <div className="reports-bi-grid reports-bi-grid-main">
+            <ReportPanel title="Payment Method Split" subtitle="How customers paid in the selected period">
+              <ProgressRows rows={report.finance.paymentMethodRows} total={report.finance.totalCollected} valueKey="total" labelKey="method" valueFormat={formatReportCurrency} emptyIcon={CreditCard} emptyTitle="No payment method data" />
+            </ReportPanel>
+            <ReportPanel title="Collection Snapshot" subtitle="Collected amount and pending exposure">
+              <div className="reports-mini-metric-grid">
+                <MiniMetric label="Collected" value={formatReportCurrency(report.finance.totalCollected)} tone="green" />
+                <MiniMetric label="Pending" value={formatReportCurrency(report.finance.pendingBalance)} tone="amber" />
+                <MiniMetric label="Paid Invoices" value={report.finance.paidInvoices} tone="green" />
+                <MiniMetric label="Partial" value={report.finance.partialPayments} tone="amber" />
+              </div>
+            </ReportPanel>
+          </div>
+
+          <ReportPanel title="Pending Payments" subtitle="Invoice balances with customer follow-up actions" action={<Link className="btn btn-secondary reports-compact-button" to="/admin/payments">Open Payments</Link>}>
+            <div className="reports-pending-grid reports-pending-grid-wide">
+              {report.finance.pendingPaymentRows.length ? report.finance.pendingPaymentRows.slice(0, 18).map((row) => <PendingPaymentCard key={row.invoiceId || row.invoiceNumber} row={row} />) : <EmptyState icon={CheckCircle2} title="No pending payments" message="No invoice balance is pending for this period." />}
+            </div>
+          </ReportPanel>
+        </div>
+      ) : null}
+
+      {activeSection === 'amc' ? (
+        <div className="reports-section-stack">
+          <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <ReportMetricCard icon={ShieldCheck} label="Active AMC Contracts" value={report.amc.active} helper="Currently active" tone="blue" />
+            <ReportMetricCard icon={Bell} label="Renewals Due" value={report.amc.expiringSoon} helper="Need follow-up" tone="amber" />
+            <ReportMetricCard icon={AlertTriangle} label="Expired Contracts" value={report.amc.expired} helper="Expired coverage" tone="red" />
+            <ReportMetricCard icon={CreditCard} label="Contract Value" value={formatReportCurrency(report.amc.contractValue)} helper="Recorded AMC value" tone="green" />
+          </div>
+          <div className="reports-bi-grid reports-bi-grid-main">
+            <ReportPanel title="AMC Contract Status" subtitle="Contract status and renewal pressure">
+              <ProgressRows rows={report.amc.statusRows} total={Math.max(report.amc.contracts.length, 1)} valueKey="count" labelKey="name" emptyIcon={ShieldCheck} emptyTitle="No AMC contracts" />
+            </ReportPanel>
+            <ReportPanel title="AMC Visit Status" subtitle="Schedule performance from AMC visits">
+              <ProgressRows rows={report.amc.visitRows} total={Math.max(report.amc.visitRows.reduce((sum, row) => sum + Number(row.count || 0), 0), 1)} valueKey="count" labelKey="name" emptyIcon={CalendarClock} emptyTitle="No AMC visits" />
+            </ReportPanel>
+          </div>
+          <ReportPanel title="AMC Revenue & Coverage" subtitle="Collected, pending, covered service cost, and chargeable AMC repair revenue">
+            <div className="reports-bi-grid reports-bi-grid-3">
+              <ReportProgressRow label="AMC Collected" value={report.amc.totalAmcRevenue} displayValue={formatReportCurrency(report.amc.totalAmcRevenue)} total={Math.max(report.amc.totalAmcRevenue + report.amc.pendingAmcPayments, 1)} />
+              <ReportProgressRow label="AMC Pending" value={report.amc.pendingAmcPayments} displayValue={formatReportCurrency(report.amc.pendingAmcPayments)} total={Math.max(report.amc.totalAmcRevenue + report.amc.pendingAmcPayments, 1)} />
+              <ReportProgressRow label="Covered Service Cost" value={report.amc.coveredServiceCost} displayValue={formatReportCurrency(report.amc.coveredServiceCost)} total={Math.max(report.amc.amcRelatedRevenue, 1)} />
+            </div>
           </ReportPanel>
         </div>
       ) : null}
@@ -792,7 +995,7 @@ function ReportsPremiumNavigation({ active }) {
   return (
     <div className="surface reports-segmented-shell mb-5 p-2">
       <div className="reports-segmented-tabs">
-        {reportSections.map((item) => (
+        {REPORT_NAV_SECTIONS.map((item) => (
           <Link key={item.id} className={`reports-segment ${active === item.id ? 'reports-segment-active' : ''}`} to={item.to}>
             {item.label}
           </Link>
@@ -863,6 +1066,206 @@ function ReportProgressRow({ label, value, total, displayValue = null }) {
         <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-emerald-300" style={{ width: `${width}%` }} />
       </div>
     </div>
+  );
+}
+
+function RevenueOverviewChart({ rows = [], hasData }) {
+  const realPointCount = rows.filter((row) => Number(row?.revenue || 0) > 0).length;
+  return (
+    <div className="reports-chart-frame">
+      {hasData ? (
+        <>
+          <div className="reports-chart-body">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={rows}>
+                <defs>
+                  <linearGradient id="reportsRevenueGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#67e8f9" stopOpacity={0.88} />
+                    <stop offset="58%" stopColor="#2dd4bf" stopOpacity={0.76} />
+                    <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.62} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="rgba(117,196,255,0.12)" vertical={false} />
+                <XAxis dataKey="month" stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} tickFormatter={formatCompactReportCurrency} width={62} allowDecimals={false} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(56, 189, 248, 0.08)' }}
+                  formatter={(value) => formatReportCurrency(value)}
+                  contentStyle={{
+                    background: '#071827',
+                    border: '1px solid rgba(125, 211, 252, 0.25)',
+                    borderRadius: 8,
+                    boxShadow: '0 16px 40px rgba(0, 8, 22, 0.3)',
+                    color: '#f8fbff'
+                  }}
+                  itemStyle={{ color: '#e0f2fe', fontWeight: 800 }}
+                  labelStyle={{ color: '#bae6fd', fontWeight: 900 }}
+                  wrapperStyle={{ outline: 'none' }}
+                />
+                <Bar
+                  dataKey="revenue"
+                  fill="url(#reportsRevenueGradient)"
+                  radius={[8, 8, 0, 0]}
+                  maxBarSize={84}
+                  activeBar={{ fill: 'url(#reportsRevenueGradient)', stroke: 'rgba(125, 211, 252, 0.48)', strokeWidth: 1 }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          {realPointCount === 1 ? (
+            <p className="reports-chart-helper">More monthly points will appear as payments grow.</p>
+          ) : null}
+        </>
+      ) : <EmptyState icon={BarChart} title="No revenue data" message="Collected revenue will appear here once payments are recorded in this period." />}
+    </div>
+  );
+}
+
+function ProgressRows({ rows = [], total = 0, valueKey = 'value', labelKey = 'label', valueFormat = null, emptyIcon = BarChart, emptyTitle = 'No chart data' }) {
+  const usableRows = rows.filter((row) => Number(row?.[valueKey] || 0) > 0);
+  const computedTotal = Number(total || 0) || usableRows.reduce((sum, row) => sum + Number(row[valueKey] || 0), 0);
+  if (!usableRows.length) return <EmptyState icon={emptyIcon} title={emptyTitle} message="This visual will appear when matching records exist for the selected period." />;
+  return (
+    <div className="grid gap-3">
+      {usableRows.map((row) => {
+        const value = Number(row[valueKey] || 0);
+        const label = row[labelKey] || 'Other';
+        return <ReportProgressRow key={label} label={label} value={value} displayValue={valueFormat ? valueFormat(value) : value} total={computedTotal || 1} />;
+      })}
+    </div>
+  );
+}
+
+function MiniMetric({ label, value, tone = 'blue' }) {
+  const isMoneyValue = typeof value === 'string' && value.includes(REPORT_CURRENCY_SYMBOL);
+  return (
+    <div className={`reports-mini-metric reports-mini-metric-${tone}`}>
+      <span>{label}</span>
+      <b className={isMoneyValue ? 'reports-money-value' : undefined}>{value}</b>
+    </div>
+  );
+}
+
+function TechnicianSummaryRow({ row }) {
+  const numericRate = Number(String(row.completionRate || '0').replace('%', '')) || 0;
+  return (
+    <div className="reports-compact-row">
+      <div className="min-w-0">
+        <p className="truncate font-black text-slate-100" title={row.technician?.name || 'Technician'}>{row.technician?.name || 'Technician'}</p>
+        <p className="mt-1 text-xs muted">{row.completed}/{row.assigned} completed - {row.inProgress} in progress - {row.awaitingParts} awaiting parts</p>
+      </div>
+      <div className="min-w-[8rem]">
+        <ReportProgressRow label="Completion" value={numericRate} displayValue={row.completionRate} total={100} />
+      </div>
+    </div>
+  );
+}
+
+function InventorySummaryRow({ part }) {
+  return (
+    <div className="reports-compact-row">
+      <div className="min-w-0">
+        <p className="truncate font-black text-slate-100" title={part.partName || 'Part'}>{part.partName || 'Part'}</p>
+        <p className="mt-1 text-xs muted">{part.category || 'General'} - Used {part.usedQuantity || 0} - Value {formatReportCurrency(part.stockValue)}</p>
+      </div>
+      <div className="reports-compact-row-end">
+        <span className="text-xs font-black text-sky-100">Avail {part.available || 0}</span>
+        <InventoryReportStatusPill status={part.stockStatus} />
+      </div>
+    </div>
+  );
+}
+
+function PendingCustomerCard({ row, index }) {
+  return (
+    <div className={`reports-pending-card ${index === 0 ? 'reports-pending-card-top' : ''}`}>
+      <div className="reports-pending-card-head">
+        <div className="min-w-0">
+          <p className="truncate font-black text-slate-100" title={row.customer}>{row.customer}</p>
+          <p className="mt-1 text-sm muted">{row.phone || 'Phone not captured'}</p>
+        </div>
+      </div>
+      <div className="reports-pending-metric-grid">
+        <MiniMetric label="Total" value={formatReportCurrency(row.total)} />
+        <MiniMetric label="Paid" value={formatReportCurrency(row.paid)} tone="green" />
+        <MiniMetric label="Balance" value={formatReportCurrency(row.balance)} tone="amber" />
+      </div>
+      <div className="reports-pending-actions">
+        {row.customerId ? <Link className="btn btn-secondary reports-table-button" to={`/admin/customers/${row.customerId}`}>Open Customer</Link> : null}
+        <Link className="btn btn-secondary reports-table-button" to="/admin/payments">Payments</Link>
+      </div>
+    </div>
+  );
+}
+
+function PendingPaymentCard({ row }) {
+  const customerDisplayId = getCustomerDisplayId(row.invoice?.customerId);
+  return (
+    <article className="reports-pending-card">
+      <div className="reports-pending-card-head">
+        <div className="min-w-0">
+          <p className="reports-card-eyebrow">{row.invoiceNumber}</p>
+          <h3 className="reports-card-title" title={row.customer}>{row.customer}</h3>
+          <p className="reports-card-muted">{row.phone || 'Phone not captured'}{customerDisplayId ? ` - ${customerDisplayId}` : ''}</p>
+        </div>
+        <StatusBadge status={row.status} />
+      </div>
+      <div className="reports-pending-metric-grid">
+        <MiniMetric label="Total" value={formatReportCurrency(row.total)} />
+        <MiniMetric label="Paid" value={formatReportCurrency(row.paid)} tone="green" />
+        <MiniMetric label="Balance" value={formatReportCurrency(row.balance)} tone="amber" />
+      </div>
+      <div className="reports-pending-actions">
+        {row.customerId ? <Link className="btn btn-secondary reports-table-button" to={`/admin/customers/${row.customerId}`}>Open Customer</Link> : null}
+        <Link className="btn btn-secondary reports-table-button" to="/admin/payments">Payments</Link>
+      </div>
+    </article>
+  );
+}
+
+function TechnicianReportCard({ row }) {
+  return (
+    <article className="reports-mobile-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="reports-card-eyebrow">Technician</p>
+          <h3 className="reports-card-title" title={row.technician?.name || 'Technician'}>{row.technician?.name || 'Technician'}</h3>
+          <p className="reports-card-muted">{row.notesCount} notes - {formatReportCurrency(row.partsValue)} parts</p>
+        </div>
+        <CompletionRateBadge rate={row.completionRate} average={row.averageCompletion} />
+      </div>
+      <div className="reports-mini-metric-grid">
+        <MiniMetric label="Assigned" value={row.assigned} />
+        <MiniMetric label="Completed" value={row.completed} tone="green" />
+        <MiniMetric label="In Progress" value={row.inProgress} />
+        <MiniMetric label="Awaiting Parts" value={row.awaitingParts} tone="amber" />
+      </div>
+      <div className="reports-mobile-card-footer">
+        <span className="text-xs font-semibold muted">{row.lastActivity ? `Last activity ${formatDate(row.lastActivity)}` : 'No activity'}</span>
+        <Link className="btn btn-secondary reports-table-button" to={`/admin/work-orders?technicianId=${recordId(row.technician)}`}>View Jobs</Link>
+      </div>
+    </article>
+  );
+}
+
+function InventoryReportCard({ part }) {
+  return (
+    <article className="reports-mobile-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="reports-card-eyebrow">{part.category || 'General'}</p>
+          <h3 className="reports-card-title" title={part.partName || 'Part'}>{part.partName || 'Part'}</h3>
+          <p className="reports-card-muted">Stock value {formatReportCurrency(part.stockValue)}</p>
+        </div>
+        <InventoryReportStatusPill status={part.stockStatus} />
+      </div>
+      <div className="reports-mini-metric-grid">
+        <MiniMetric label="On Hand" value={part.onHand || 0} />
+        <MiniMetric label="Reserved" value={part.reserved || 0} />
+        <MiniMetric label="Available" value={part.available || 0} tone="green" />
+        <MiniMetric label="Used Qty" value={part.usedQuantity || 0} tone="amber" />
+      </div>
+    </article>
   );
 }
 
@@ -942,7 +1345,7 @@ function hasBusinessReportData(report) {
 function buildBusinessInsights(report) {
   return [
     report.summary.pendingPayments > 0
-      ? { icon: AlertTriangle, tone: 'amber', title: 'Pending payments need follow-up', message: `${currency(report.summary.pendingPayments)} is still pending from customers.` }
+      ? { icon: AlertTriangle, tone: 'amber', title: 'Pending payments need follow-up', message: `${formatReportCurrency(report.summary.pendingPayments)} is still pending from customers.` }
       : { icon: CheckCircle2, tone: 'green', title: 'Pending payments are under control', message: 'No pending payment exposure in this report period.' },
     report.summary.lowStockItems > 0
       ? { icon: AlertTriangle, tone: 'red', title: 'Low stock needs purchase planning', message: `${report.summary.lowStockItems} item${report.summary.lowStockItems === 1 ? '' : 's'} need inventory attention.` }

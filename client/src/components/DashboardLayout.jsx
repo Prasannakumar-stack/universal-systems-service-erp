@@ -836,9 +836,9 @@ function AdminTopBar({ role, openSidebar }) {
   const userRole = user?.role || role;
   const isTechnician = normalizeRole(userRole) === 'technician';
   const quickActions = (isTechnician ? [
-    { to: '/tech/bookings', label: 'Booking', icon: BookOpenCheck, primary: true },
-    { to: '/tech/work-orders', label: 'Service Job', icon: Wrench },
-    { to: '/tech/payments', label: 'Payment', icon: CreditCard }
+    { to: '/tech/bookings', label: 'Bookings', icon: BookOpenCheck, primary: true },
+    { to: '/tech/work-orders', label: 'Work Orders', icon: Wrench },
+    { to: '/tech/payments', label: 'Payments', icon: CreditCard }
   ] : [
     { to: '/admin/bookings', label: 'Booking', icon: BookOpenCheck, roles: operationsRoles, primary: true },
     { to: '/admin/work-orders', label: 'Service Job', icon: Wrench, roles: operationsRoles },
@@ -949,7 +949,7 @@ export default function DashboardLayout({ role }) {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg)]">
+    <div className="technician-shell min-h-screen bg-[var(--bg)]">
       <div className="fixed inset-y-0 left-0 z-40 hidden w-[292px] xl:block">
         <TechnicianSidebar />
       </div>

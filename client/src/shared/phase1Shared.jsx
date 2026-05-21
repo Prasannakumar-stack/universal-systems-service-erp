@@ -424,6 +424,29 @@ export function callHref(phone) {
   return telHref(phone);
 }
 
+export async function copyTextToClipboard(value) {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    const input = document.createElement('textarea');
+    input.value = text;
+    input.setAttribute('readonly', '');
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(input);
+    return copied;
+  } catch {
+    return false;
+  }
+}
+
 export function technicianWhatsAppHref(order) {
   const customer = customerFromOrder(order);
   const message = `Hello ${customer?.name || 'Customer'}, this is Universal Systems technician regarding your service job.`;
@@ -813,10 +836,11 @@ export function TechnicianJobCard({ job, base = '/tech/work-orders', onStatusCha
           <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-bold text-slate-200">{jobScheduleLabel(job)}</span>
         </div>
       </div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        <Link className="btn btn-primary" to={`${base}/${recordId(job)}`}>Open Job</Link>
+      <div className="mt-4 grid gap-2 sm:grid-cols-4">
+        <Link className="btn btn-primary" to={`${base}/${recordId(job)}`}>Details</Link>
         <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
         <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(job)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+        <button type="button" className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} onClick={() => copyTextToClipboard(phone)}><ClipboardList className="h-4 w-4" />Copy</button>
       </div>
       {!compact && onStatusChange ? (
         <div className="mt-4 grid gap-2 border-t border-white/10 pt-4 sm:grid-cols-2">

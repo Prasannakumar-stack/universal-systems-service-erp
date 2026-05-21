@@ -153,7 +153,8 @@ export function PaymentsPage({ role = 'admin' }) {
   const { request } = useAuth();
   const { push } = useToast();
   const location = useLocation();
-  const base = role === 'technician' ? '/tech' : '/admin';
+  const isTechnician = role === 'technician';
+  const base = isTechnician ? '/tech' : '/admin';
   const invoiceIdParam = useMemo(() => new URLSearchParams(location.search).get('invoiceId') || '', [location.search]);
   const invoiceIdParamHandled = useRef('');
   const [form, setForm] = useState({ invoiceId: invoiceIdParam, paidAmount: '', method: 'Cash', transactionId: '' });
@@ -340,7 +341,9 @@ export function PaymentsPage({ role = 'admin' }) {
         <div className="relative z-[1]">
           <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">Billing</p>
           <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Payments</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 muted">Record cash, UPI, and partial payments with invoice balance tracking.</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 muted">
+            {isTechnician ? 'Read-only payment records for assigned service work.' : 'Record cash, UPI, and partial payments with invoice balance tracking.'}
+          </p>
         </div>
       </section>
 
@@ -447,7 +450,14 @@ export function PaymentsPage({ role = 'admin' }) {
         />
       ) : (
         <>
-        <div className="table-wrap billing-table-wrap bg-[var(--surface)]">
+        {isTechnician ? (
+          <div className="technician-mobile-card-list billing-mobile-cards">
+            {visiblePayments.map((payment) => (
+              <TechnicianPaymentMobileCard key={payment.id} payment={payment} base={base} paymentMethodDisplay={paymentMethodDisplay} />
+            ))}
+          </div>
+        ) : null}
+        <div className={`table-wrap billing-table-wrap bg-[var(--surface)] ${isTechnician ? 'technician-desktop-table' : ''}`}>
           <table className="data-table payments-table">
             <thead><tr><th>Date</th><th>Payment ID</th><th>Linked Invoice</th><th>Linked Source</th><th>Customer</th><th className="text-right">Amount Paid</th><th>Method</th><th className="text-right">Balance After</th></tr></thead>
             <tbody className="divide-y divide-[var(--line)]">
@@ -479,6 +489,43 @@ export function PaymentsPage({ role = 'admin' }) {
         </>
       )}
     </div>
+  );
+}
+
+function TechnicianPaymentMobileCard({ payment, base, paymentMethodDisplay }) {
+  const balanceAfter = Number(payment.balance || 0);
+
+  return (
+    <article className="technician-mobile-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="technician-mobile-card-eyebrow">{getPaymentDisplayId(payment)}</p>
+          <h2 className="technician-mobile-card-title" title={payment.customerId?.name || 'Customer'}>{payment.customerId?.name || 'Customer'}</h2>
+          <p className="technician-mobile-card-muted">Phone: {payment.customerId?.phone || '-'}</p>
+        </div>
+        <BillingStatusPill status={payment.status} />
+      </div>
+      <div className="technician-detail-card-metrics">
+        <span><b>{currency(payment.paidAmount)}</b><small>Paid</small></span>
+        <span><b>{currency(payment.balance)}</b><small>Balance</small></span>
+        <span><b>{paymentMethodDisplay(payment)}</b><small>Method</small></span>
+      </div>
+      <div className="technician-mobile-card-body">
+        <div>
+          <span>Linked Invoice</span>
+          <p>{getInvoiceDisplayId(payment.invoiceId)}</p>
+        </div>
+        <div>
+          <span>Date</span>
+          <p>{formatDate(payment.createdAt)}</p>
+        </div>
+      </div>
+      <div className="technician-mobile-card-footer">
+        <Link className="btn btn-primary" to={`${base}/invoices`}>View Invoice</Link>
+        {recordId(payment.invoiceId?.workOrderId) ? <Link className="btn btn-secondary" to={`${base}/work-orders/${recordId(payment.invoiceId.workOrderId)}`}>Open Job</Link> : null}
+        <span className={`technician-mobile-readonly-pill ${balanceAfter > 0 ? 'technician-mobile-readonly-pill--pending' : ''}`}>Read-only</span>
+      </div>
+    </article>
   );
 }
 

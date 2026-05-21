@@ -175,26 +175,26 @@ export function TechnicianDashboard() {
 
   const jobs = data?.jobs || [];
   const todayJobs = jobs.filter(isTechnicianTodayJob);
+  const pendingJobs = jobs.filter((job) => job.status === 'Pending');
   const inProgressJobs = jobs.filter((job) => job.status === 'In Progress');
   const awaitingPartsJobs = jobs.filter((job) => job.status === 'Awaiting Parts');
-  const pendingUpdates = jobs.filter((job) => ['Pending', 'In Progress', 'Awaiting Parts'].includes(job.status) && !(job.notes || []).length);
-  const amcVisitsDue = jobs.filter((job) => job.amcContractId && ['Pending', 'In Progress', 'Awaiting Parts'].includes(job.status));
+  const completedJobs = jobs.filter(isCompletedJob);
   const kpiCards = [
     {
       icon: CalendarClock,
       value: todayJobs.length,
-      title: "Today's Jobs",
+      title: 'Today Jobs',
       subtitle: 'Jobs scheduled for today',
       to: '/tech/work-orders?filter=today',
       tone: 'blue'
     },
     {
-      icon: Wrench,
-      value: jobs.length,
-      title: 'Assigned Work Orders',
-      subtitle: 'Jobs assigned or created by you',
-      to: '/tech/work-orders',
-      tone: 'blue'
+      icon: AlertTriangle,
+      value: pendingJobs.length,
+      title: 'Pending',
+      subtitle: 'Jobs waiting to start',
+      to: '/tech/work-orders?status=pending',
+      tone: 'yellow'
     },
     {
       icon: Wrench,
@@ -213,19 +213,11 @@ export function TechnicianDashboard() {
       tone: 'yellow'
     },
     {
-      icon: AlertTriangle,
-      value: pendingUpdates.length,
-      title: 'Pending Notes / Updates',
-      subtitle: 'Jobs with pending updates',
-      to: '/tech/work-orders?notes=pending',
-      tone: 'yellow'
-    },
-    {
-      icon: ShieldCheck,
-      value: amcVisitsDue.length,
-      title: 'AMC Visits Due',
-      subtitle: 'Upcoming AMC visits',
-      to: '/tech/amc-contracts/schedule',
+      icon: CheckCircle2,
+      value: completedJobs.length,
+      title: 'Completed',
+      subtitle: 'Jobs completed or closed',
+      to: '/tech/work-orders?status=completed',
       tone: 'green'
     }
   ];
@@ -242,16 +234,16 @@ export function TechnicianDashboard() {
           </div>
         )}
       >
-        Today's assigned jobs, active work orders, parts, notes, and AMC visit summaries.
+        Today's assigned jobs and current service status at a glance.
       </PageHeader>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="technician-dashboard-kpi-grid">
         {kpiCards.map((card) => <TechnicianKpiCard key={card.title} {...card} />)}
       </div>
       <section className="dashboard-panel lift-card mt-5 p-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-xl font-black text-white">Ready to continue your work?</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 muted">View work orders, update job status, add parts, and generate invoices.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 muted">Open your assigned jobs, contact customers, add notes, request parts, and upload job photos.</p>
           </div>
           <Link className="btn btn-primary h-10 shrink-0 px-4" to="/tech/work-orders">
             Open Work Orders

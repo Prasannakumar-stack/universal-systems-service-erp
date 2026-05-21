@@ -22,6 +22,7 @@ import {
   company,
   completionHours,
   ConfirmModal,
+  copyTextToClipboard,
   CreditCard,
   csvCell,
   currency,
@@ -47,6 +48,7 @@ import {
   filterByRange,
   findInvoice,
   formatDate,
+  getWorkOrderDisplayId,
   getPdfLabel,
   inventoryCategories,
   InventoryStatusBadge,
@@ -130,6 +132,7 @@ import {
   useState,
   useToast,
   WorkflowTracker,
+  WorkOrderPriorityBadge,
   workOrderDetailStatuses,
   workOrderPdfFlows,
   workOrderTabs,
@@ -216,16 +219,25 @@ export function BookingsPage({ role = 'admin' }) {
   const { data, loading, error, reload } = useResource(() => request(`/bookings${query}`), [request, query]);
 
   useEffect(() => {
+    if (isTechnician) {
+      setTechnicians([]);
+      return;
+    }
     request('/users?role=technician&active=true&limit=100').then((result) => setTechnicians(result.users.filter((user) => user.role === 'technician' && user.active))).catch(() => {});
-  }, [request]);
+  }, [isTechnician, request]);
 
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, status, serviceType, source]);
 
   useEffect(() => {
-    if (customerBookingSeed.open) setFormOpen(true);
-  }, [customerBookingSeed.open]);
+    if (customerBookingSeed.open && !isTechnician) setFormOpen(true);
+  }, [customerBookingSeed.open, isTechnician]);
+
+  async function copyPhone(phone) {
+    if (await copyTextToClipboard(phone)) push('Phone copied');
+    else push('Phone not available', 'error');
+  }
 
   async function convert(bookingId, technicianId) {
     try {
@@ -258,7 +270,7 @@ export function BookingsPage({ role = 'admin' }) {
               {isTechnician ? 'Booking intake records with linked service jobs.' : 'Booking intake is kept separate from repair and service jobs. Convert a booking when service work begins.'}
             </p>
           </div>
-          <div className="relative shrink-0">
+          {!isTechnician ? <div className="relative shrink-0">
             <span className="pointer-events-none absolute inset-0 -m-1 rounded-2xl bg-sky-500/25 blur-md" aria-hidden="true" />
             <button
               type="button"
@@ -268,7 +280,7 @@ export function BookingsPage({ role = 'admin' }) {
               <Plus className="h-4 w-4" />
               Create Booking
             </button>
-          </div>
+          </div> : null}
         </div>
       </header>
 
@@ -294,16 +306,28 @@ export function BookingsPage({ role = 'admin' }) {
         <EmptyState
           title="No bookings found"
           message="Try changing filters or create a new booking."
-          action={(
+          action={!isTechnician ? (
             <button type="button" className={`btn btn-primary ${bookingsFocusRing}`} onClick={() => setFormOpen(true)}>
               <Plus className="h-4 w-4" />
               Create Booking
             </button>
-          )}
+          ) : null}
         />
       ) : (
         <>
-        <div className="bookings-table-shell table-wrap bookings-table-wrap">
+        {isTechnician ? (
+          <div className="technician-mobile-card-list bookings-mobile-cards">
+            {bookings.map((booking) => (
+              <TechnicianBookingMobileCard
+                key={booking.id}
+                booking={booking}
+                workOrdersBase={workOrdersBase}
+                onCopyPhone={copyPhone}
+              />
+            ))}
+          </div>
+        ) : null}
+        <div className={`bookings-table-shell table-wrap bookings-table-wrap ${isTechnician ? 'technician-desktop-table' : ''}`}>
           <table className={`data-table bookings-table ${isTechnician ? 'bookings-table--technician' : 'bookings-table--admin'}`}>
             <colgroup>
               <col className="booking-col-booking" style={{ width: '11%' }} />
@@ -368,7 +392,7 @@ export function BookingsPage({ role = 'admin' }) {
         </div>
         </>
       )}
-      {formOpen ? <BookingModal initialCustomer={customerBookingSeed.open ? customerBookingSeed : null} onClose={() => setFormOpen(false)} onSaved={reload} /> : null}
+      {!isTechnician && formOpen ? <BookingModal initialCustomer={customerBookingSeed.open ? customerBookingSeed : null} onClose={() => setFormOpen(false)} onSaved={reload} /> : null}
     </div>
   );
 }
@@ -389,6 +413,58 @@ function TechnicianBookingActions({ booking, workOrdersBase }) {
         </span>
       )}
     </div>
+  );
+}
+
+function TechnicianBookingMobileCard({ booking, workOrdersBase, onCopyPhone }) {
+  const linkedJob = booking.workOrderId && typeof booking.workOrderId === 'object' ? booking.workOrderId : null;
+  const workOrderId = recordId(booking.workOrderId);
+  const phone = booking.phone || linkedJob?.customerId?.phone || '';
+  const status = linkedJob?.status || booking.status || 'Pending';
+  const priority = jobPriority(linkedJob || booking);
+  const service = linkedJob?.serviceType || linkedJob?.service || booking.serviceType || 'Service Job';
+  const device = linkedJob?.device || booking.device || service;
+  const issue = linkedJob?.issue || booking.issue || 'No issue captured';
+  const displayId = linkedJob ? getWorkOrderDisplayId(linkedJob) : (booking.bookingCode || 'Booking');
+
+  return (
+    <article className="technician-mobile-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="technician-mobile-card-eyebrow">{displayId}</p>
+          <h2 className="technician-mobile-card-title" title={booking.customerName || 'Customer'}>{booking.customerName || 'Customer'}</h2>
+          <p className="technician-mobile-card-muted">Phone: {phone || '-'}</p>
+        </div>
+        <StatusBadge status={status} />
+      </div>
+      <div className="technician-mobile-card-body">
+        <div>
+          <span>Service / Device</span>
+          <b>{service}{device && device !== service ? ` / ${device}` : ''}</b>
+        </div>
+        <div>
+          <span>Problem</span>
+          <p>{issue}</p>
+        </div>
+      </div>
+      <div className="technician-mobile-meta-row">
+        <BookingSourceBadge source={booking} />
+        {priority ? <WorkOrderPriorityBadge priority={priority} /> : null}
+        <span>{formatDate(linkedJob?.createdAt || booking.createdAt)}</span>
+      </div>
+      <div className="technician-mobile-contact-row">
+        <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
+        <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={phone ? customerWhatsAppHref({ name: booking.customerName, phone }) : '#'} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+        <button type="button" className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} onClick={() => onCopyPhone(phone)}><ClipboardList className="h-4 w-4" />Copy</button>
+      </div>
+      <div className="technician-mobile-card-footer">
+        {workOrderId ? (
+          <Link className="btn btn-primary" to={`${workOrdersBase}/${workOrderId}`}>Details</Link>
+        ) : (
+          <span className="btn btn-primary pointer-events-none opacity-50" aria-disabled="true">Details</span>
+        )}
+      </div>
+    </article>
   );
 }
 

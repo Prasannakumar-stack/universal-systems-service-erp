@@ -1780,6 +1780,11 @@ button:disabled {
     overflow-x: hidden;
   }
 
+  .reports-section-stack {
+    display: grid;
+    gap: 1.25rem;
+  }
+
   .reports-page .table-wrap {
     max-width: 100%;
     overflow-x: auto;
@@ -1858,7 +1863,7 @@ button:disabled {
 
   .reports-segmented-tabs {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(7.75rem, 1fr));
     gap: 0.35rem;
   }
 
@@ -1883,6 +1888,14 @@ button:disabled {
     background: rgba(31, 140, 255, 0.13);
     color: #ffffff;
     box-shadow: 0 0 24px rgba(31, 140, 255, 0.12);
+  }
+
+  .reports-segment:focus-visible,
+  .reports-metric-card:focus-visible,
+  .reports-compact-button:focus-visible,
+  .reports-table-button:focus-visible {
+    outline: 2px solid rgba(125, 211, 252, 0.7);
+    outline-offset: 2px;
   }
 
   .reports-premium-range {
@@ -2024,9 +2037,25 @@ button:disabled {
     overflow: hidden;
   }
 
+  .reports-bi-grid {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .reports-bi-grid-main {
+    grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+  }
+
+  .reports-bi-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .reports-insight-row,
   .reports-progress-row,
-  .reports-pending-card {
+  .reports-pending-card,
+  .reports-compact-row,
+  .reports-mobile-card,
+  .reports-mini-metric {
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.09);
     background: rgba(255, 255, 255, 0.045);
@@ -2054,13 +2083,130 @@ button:disabled {
     font-weight: 800;
   }
 
+  .reports-mini-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    gap: 0.65rem;
+  }
+
+  .reports-mini-metric-grid-compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .reports-pending-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .reports-mini-metric {
+    min-width: 0;
+    min-height: 4.35rem;
+    overflow: hidden;
+  }
+
+  .reports-mini-metric span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .reports-mini-metric b {
+    display: block;
+    margin-top: 0.35rem;
+    overflow-wrap: normal;
+    word-break: normal;
+    color: #f8fbff;
+    font-size: 1rem;
+    font-weight: 950;
+    line-height: 1.2;
+  }
+
+  .reports-mini-metric-grid-compact .reports-mini-metric {
+    min-height: 3.95rem;
+    padding: 0.68rem;
+  }
+
+  .reports-money-value,
+  .reports-pending-amount {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .reports-money-value {
+    font-size: 0.94rem;
+    letter-spacing: 0;
+  }
+
+  .reports-mini-metric-green {
+    border-color: rgba(110, 231, 183, 0.22);
+    background: rgba(16, 185, 129, 0.09);
+  }
+
+  .reports-mini-metric-amber {
+    border-color: rgba(251, 191, 36, 0.24);
+    background: rgba(245, 158, 11, 0.1);
+  }
+
+  .reports-mini-metric-red {
+    border-color: rgba(251, 113, 133, 0.26);
+    background: rgba(244, 63, 94, 0.1);
+  }
+
+  .reports-compact-row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+  }
+
+  .reports-compact-row .reports-progress-row {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .reports-compact-row-end {
+    display: flex;
+    flex-shrink: 0;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.45rem;
+  }
+
   .reports-chart-frame {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 0.5rem;
     height: 22rem;
     min-height: 22rem;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.035);
     padding: 0.85rem;
+  }
+
+  .reports-chart-body {
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .reports-chart-helper {
+    border-radius: 8px;
+    border: 1px solid rgba(45, 212, 191, 0.18);
+    background: rgba(20, 184, 166, 0.08);
+    padding: 0.45rem 0.65rem;
+    color: #bae6fd;
+    font-size: 0.78rem;
+    font-weight: 800;
   }
 
   .reports-table-wrap {
@@ -2137,7 +2283,44 @@ button:disabled {
   .reports-pending-grid {
     display: grid;
     gap: 0.85rem;
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 23rem), 1fr));
+    align-items: stretch;
+  }
+
+  .reports-pending-grid-wide {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem), 1fr));
+  }
+
+  .reports-pending-card {
+    display: flex;
+    min-width: 0;
+    height: 100%;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.75rem;
+  }
+
+  .reports-pending-card-head {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .reports-pending-card-head > :first-child {
+    min-width: 0;
+  }
+
+  .reports-pending-card-head > :last-child {
+    flex-shrink: 0;
+  }
+
+  .reports-pending-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: auto;
   }
 
   .reports-pending-card-top {
@@ -2150,6 +2333,61 @@ button:disabled {
     color: #fde68a;
     font-size: 1.18rem;
     font-weight: 900;
+  }
+
+  .reports-mobile-card-list {
+    display: none;
+  }
+
+  .reports-mobile-card {
+    display: grid;
+    gap: 0.9rem;
+    border-color: rgba(117, 196, 255, 0.15);
+    background:
+      linear-gradient(180deg, rgba(16, 47, 87, 0.72), rgba(8, 27, 52, 0.93)),
+      rgba(2, 8, 23, 0.72);
+    box-shadow: 0 18px 42px rgba(0, 8, 22, 0.18);
+  }
+
+  .reports-card-eyebrow {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #7dd3fc;
+    font-size: 0.68rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .reports-card-title {
+    margin-top: 0.2rem;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #f8fbff;
+    font-size: 1.05rem;
+    font-weight: 950;
+    line-height: 1.2;
+  }
+
+  .reports-card-muted {
+    margin-top: 0.25rem;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #94a3b8;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .reports-mobile-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
   }
 
   .reports-soft-badge,
@@ -2202,6 +2440,11 @@ button:disabled {
     .reports-premium-range .btn {
       width: 100%;
     }
+
+    .reports-bi-grid-main,
+    .reports-bi-grid-3 {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (max-width: 640px) {
@@ -2215,6 +2458,47 @@ button:disabled {
 
     .reports-metric-card {
       min-height: 7.75rem;
+    }
+
+    .reports-chart-frame {
+      height: 18rem;
+      min-height: 18rem;
+    }
+
+    .reports-chart-helper {
+      font-size: 0.74rem;
+    }
+
+    .reports-pending-grid,
+    .reports-pending-grid-wide {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .reports-mini-metric-grid-compact {
+      grid-template-columns: repeat(auto-fit, minmax(6.75rem, 1fr));
+    }
+
+    .reports-pending-metric-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .reports-mobile-card-list {
+      display: grid;
+      gap: 0.85rem;
+    }
+
+    .reports-desktop-table {
+      display: none !important;
+    }
+
+    .reports-compact-row,
+    .reports-mobile-card-footer {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .reports-compact-row-end {
+      align-items: stretch;
     }
   }
 
@@ -10261,6 +10545,289 @@ a.contact-detail-row:focus-visible,
   .contact-reveal {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* Technician mobile field-service polish */
+.technician-shell .enterprise-main {
+  overflow-x: hidden;
+}
+
+.technician-dashboard-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.technician-mobile-card-list,
+.technician-detail-card-grid {
+  display: none;
+}
+
+.technician-mobile-card,
+.technician-detail-card,
+.technician-photo-card {
+  border: 1px solid rgba(117, 196, 255, 0.16);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(16, 47, 87, 0.72), rgba(8, 27, 52, 0.92)),
+    rgba(2, 8, 23, 0.72);
+  box-shadow: 0 18px 44px rgba(0, 8, 22, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.technician-mobile-card,
+.technician-detail-card {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.technician-mobile-card-eyebrow {
+  color: #7dd3fc;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.technician-mobile-card-title {
+  margin-top: 0.2rem;
+  overflow-wrap: anywhere;
+  color: #f8fbff;
+  font-size: 1.05rem;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.technician-mobile-card-muted {
+  margin-top: 0.25rem;
+  color: #94a3b8;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.technician-mobile-card-body {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.technician-mobile-card-body > div {
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.7rem;
+}
+
+.technician-mobile-card-body span,
+.technician-detail-card-metrics small {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.technician-mobile-card-body b,
+.technician-mobile-card-body p {
+  margin-top: 0.25rem;
+  overflow-wrap: anywhere;
+  color: #e5f2ff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.technician-mobile-meta-row,
+.technician-mobile-contact-row,
+.technician-mobile-card-footer,
+.technician-detail-quick-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.technician-mobile-meta-row span:not([class]) {
+  display: inline-flex;
+  min-height: 1.8rem;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(148, 163, 184, 0.1);
+  padding: 0.3rem 0.6rem;
+  color: #cbd5e1;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.technician-mobile-contact-row .btn,
+.technician-mobile-card-footer .btn,
+.technician-detail-quick-actions .btn {
+  min-height: 2.75rem;
+  flex: 1 1 7rem;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.technician-detail-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.25rem, 1fr));
+  gap: 0.55rem;
+}
+
+.technician-detail-card-metrics span {
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+  padding: 0.65rem;
+}
+
+.technician-detail-card-metrics b {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #f8fbff;
+  font-size: 0.95rem;
+  font-weight: 950;
+  line-height: 1.25;
+}
+
+.technician-mobile-readonly-pill {
+  display: inline-flex;
+  min-height: 2.35rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(148, 163, 184, 0.1);
+  padding: 0.45rem 0.75rem;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.technician-mobile-readonly-pill--pending {
+  border-color: rgba(251, 191, 36, 0.24);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fde68a;
+}
+
+.work-order-detail--technician .work-order-detail-summary {
+  border-color: rgba(125, 211, 252, 0.22);
+  background:
+    linear-gradient(180deg, rgba(16, 47, 87, 0.78), rgba(8, 27, 52, 0.96)),
+    rgba(2, 8, 23, 0.8);
+}
+
+.work-order-detail--technician .work-order-detail-summary .status-badge {
+  min-height: 2.1rem;
+  align-items: center;
+  padding-inline: 0.8rem;
+  font-size: 0.82rem;
+}
+
+.technician-photo-card {
+  display: block;
+  overflow: hidden;
+  padding: 0.75rem;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.technician-photo-card:hover {
+  border-color: rgba(125, 211, 252, 0.42);
+  background: rgba(14, 165, 233, 0.1);
+  transform: translateY(-1px);
+}
+
+.technician-photo-preview {
+  display: block;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.technician-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@media (max-width: 900px) {
+  .technician-mobile-card-list,
+  .technician-detail-card-grid {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .technician-desktop-table,
+  .technician-mobile-hidden-table {
+    display: none !important;
+  }
+
+  .technician-shell .enterprise-main {
+    padding: 0.9rem !important;
+  }
+
+  .technician-shell .enterprise-topbar > div {
+    gap: 0.65rem;
+    padding: 0.65rem 0.85rem;
+  }
+
+  .technician-shell .enterprise-topbar form[role="search"] {
+    max-width: none;
+  }
+
+  .technician-detail-quick-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .work-order-detail--technician .tabs-list {
+    flex-wrap: nowrap;
+    padding-bottom: 0.25rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .technician-dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+  }
+
+  .technician-dashboard-page .dashboard-kpi-card {
+    min-height: 8.25rem;
+    padding: 0.85rem;
+  }
+
+  .technician-dashboard-page .dashboard-kpi-icon {
+    margin-bottom: 0.65rem;
+  }
+
+  .technician-dashboard-page .dashboard-kpi-value {
+    font-size: 1.7rem;
+    line-height: 1;
+  }
+
+  .technician-dashboard-page .dashboard-kpi-title,
+  .technician-dashboard-page .dashboard-kpi-helper {
+    overflow-wrap: anywhere;
+  }
+
+  .technician-dashboard-page .dashboard-kpi-helper {
+    font-size: 0.72rem;
+    line-height: 1.3;
+  }
+}
+
+@media (max-width: 380px) {
+  .technician-mobile-contact-row,
+  .technician-mobile-card-footer {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 }
 

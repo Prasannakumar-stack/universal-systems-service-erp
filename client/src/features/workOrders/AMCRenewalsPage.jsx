@@ -145,7 +145,8 @@ export function AMCRenewalsPage({ role = 'admin' }) {
   const { request } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
-  const base = role === 'technician' ? '/tech' : '/admin';
+  const isTechnician = role === 'technician';
+  const base = isTechnician ? '/tech' : '/admin';
   const { data, loading, error, reload } = useResource(() => request('/amc/renewals'), [request]);
   const renewals = data?.renewals || [];
   const expiring = renewals.filter((contract) => contract.renewalStatus === 'Renewal Due');
@@ -185,7 +186,7 @@ export function AMCRenewalsPage({ role = 'admin' }) {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">AMC Renewals</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Review contracts expiring in 30 days and expired AMC agreements.</p>
           </div>
-          <Link className="btn btn-primary h-10 px-4" to={`${base}/amc-contracts`}><Plus className="h-4 w-4" />New Contract</Link>
+          {!isTechnician ? <Link className="btn btn-primary h-10 px-4" to={`${base}/amc-contracts`}><Plus className="h-4 w-4" />New Contract</Link> : null}
         </div>
       </section>
       <div className="surface mb-5 p-3">
@@ -208,7 +209,15 @@ export function AMCRenewalsPage({ role = 'admin' }) {
             action={<Link className="btn btn-secondary" to={`${base}/amc-contracts`}>View Contracts</Link>}
           />
         ) : (
-          <div className="table-wrap amc-table-wrap bg-[var(--surface)]">
+          <>
+          {isTechnician ? (
+            <div className="technician-mobile-card-list amc-mobile-cards">
+              {renewals.map((contract) => (
+                <TechnicianAmcRenewalMobileCard key={recordId(contract)} contract={contract} base={base} />
+              ))}
+            </div>
+          ) : null}
+          <div className={`table-wrap amc-table-wrap bg-[var(--surface)] ${isTechnician ? 'technician-desktop-table' : ''}`}>
             <table className="data-table amc-renewals-table">
             <thead><tr><th>Contract ID</th><th>Customer</th><th>Phone</th><th>Contract Type</th><th>End Date</th><th>Renewal Status</th><th>Value</th><th className="text-right">Action</th></tr></thead>
             <tbody>
@@ -226,9 +235,15 @@ export function AMCRenewalsPage({ role = 'admin' }) {
                   <td className="font-black text-slate-100">{currency(contract.contractValue)}</td>
                   <td className="text-right">
                     <div className="amc-actions">
-                      <a className="btn btn-secondary amc-action-button amc-whatsapp-action" href={amcWhatsappHref(contract)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
-                      <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button>
-                      <button className="btn btn-secondary amc-action-button" type="button" onClick={() => renewContract(contract)}><FileText className="h-4 w-4" />Renew</button>
+                      {isTechnician ? (
+                        <Link className="btn btn-secondary amc-action-button" to={`${base}/amc-contracts`}><FileText className="h-4 w-4" />View Contract</Link>
+                      ) : (
+                        <>
+                          <a className="btn btn-secondary amc-action-button amc-whatsapp-action" href={amcWhatsappHref(contract)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+                          <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button>
+                          <button className="btn btn-secondary amc-action-button" type="button" onClick={() => renewContract(contract)}><FileText className="h-4 w-4" />Renew</button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -236,9 +251,43 @@ export function AMCRenewalsPage({ role = 'admin' }) {
             </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+function TechnicianAmcRenewalMobileCard({ contract, base }) {
+  return (
+    <article className="technician-mobile-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="technician-mobile-card-eyebrow">{contract.contractId || 'AMC Contract'}</p>
+          <h2 className="technician-mobile-card-title" title={contract.customerName || 'Customer'}>{contract.customerName || 'Customer'}</h2>
+          <p className="technician-mobile-card-muted">Phone: {contract.phone || '-'}</p>
+        </div>
+        <AmcStatusPill status={contract.renewalStatus} />
+      </div>
+      <div className="technician-mobile-card-body">
+        <div>
+          <span>Contract Type</span>
+          <b>{contract.contractType || '-'}</b>
+        </div>
+        <div>
+          <span>Coverage</span>
+          <p>{normalizeAmcCoverageType(contract.coverageType)}</p>
+        </div>
+        <div>
+          <span>End Date / Value</span>
+          <p>{formatDate(contract.endDate)} / {currency(contract.contractValue)}</p>
+        </div>
+      </div>
+      <div className="technician-mobile-card-footer">
+        <Link className="btn btn-primary" to={`${base}/amc-contracts`}>View Contract</Link>
+        <span className="technician-mobile-readonly-pill">Read-only</span>
+      </div>
+    </article>
   );
 }
 
