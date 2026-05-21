@@ -1,23 +1,7 @@
-export const adminWorkspaceRoles = [
-  'admin',
-  'owner',
-  'service_manager',
-  'accounts_staff',
-  'inventory_staff',
-  'front_desk',
-  'viewer',
-  'auditor'
-];
+export const adminWorkspaceRoles = ['admin'];
 
 export const roleLabels = {
-  admin: 'Admin / Owner',
-  owner: 'Admin / Owner',
-  service_manager: 'Service Manager',
-  accounts_staff: 'Accounts Staff',
-  inventory_staff: 'Inventory Staff',
-  front_desk: 'Front Desk',
-  viewer: 'Viewer / Auditor',
-  auditor: 'Viewer / Auditor',
+  admin: 'Admin',
   technician: 'Technician'
 };
 
@@ -38,4 +22,3 @@ export function canAccessRoles(role = '', allowedRoles = []) {
   const normalized = normalizeRole(role);
   return allowedRoles.map(normalizeRole).includes(normalized);
 }
-

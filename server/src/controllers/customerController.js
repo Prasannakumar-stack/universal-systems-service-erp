@@ -5,6 +5,7 @@ import { createCustomer, getCustomerProfile } from '../services/customerService.
 import { getTechnicianScope } from '../services/technicianScopeService.js';
 import { clean, required } from '../utils/http.js';
 import { addDateRange, paginatedPayload, paginationMeta, parsePagination, searchRegex, withIds } from '../utils/pagination.js';
+import { phoneLookupValues } from '../utils/phone.js';
 
 export async function create(req, res) {
   required(req.body, ['name', 'phone']);
@@ -17,7 +18,10 @@ export async function list(req, res) {
     const filter = {};
     const { page, limit, skip } = parsePagination(req.query);
     const regex = searchRegex(req.query.search);
-    if (regex) filter.$or = [{ name: regex }, { phone: regex }, { email: regex }, { address: regex }, { devices: regex }];
+    if (regex) {
+      const phoneClauses = phoneLookupValues(req.query.search).map((value) => ({ phone: searchRegex(value) }));
+      filter.$or = [{ name: regex }, { phone: regex }, { email: regex }, { address: regex }, { devices: regex }, ...phoneClauses];
+    }
     addDateRange(filter, req.query);
     const technicianScope = await getTechnicianScope(req.user);
     if (technicianScope) filter._id = { $in: technicianScope.customerObjectIds };

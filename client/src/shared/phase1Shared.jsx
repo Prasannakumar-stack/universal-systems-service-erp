@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { apiBase, company, serviceTypes } from '../utils/constants.js';
 import { currency, formatDate, statusTone } from '../utils/format.js';
+import { telHref, whatsappHref } from '../utils/phone.js';
 import {
   customerSearchText,
   getCustomerDisplayId,
@@ -407,10 +408,8 @@ export function customerTypeLabel(customer) {
 }
 
 export function customerWhatsAppHref(customer) {
-  const phone = String(customer?.phone || '').replace(/\D/g, '');
-  const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
   const message = `Hello ${customer?.name || 'Customer'},\nThis is Universal Systems regarding your service request.`;
-  return `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`;
+  return whatsappHref(customer?.phone, message);
 }
 
 export function customerFromOrder(order) {
@@ -422,16 +421,13 @@ export function customerPhone(order) {
 }
 
 export function callHref(phone) {
-  const cleanPhone = String(phone || '').replace(/[^\d+]/g, '');
-  return cleanPhone ? `tel:${cleanPhone}` : '#';
+  return telHref(phone);
 }
 
 export function technicianWhatsAppHref(order) {
   const customer = customerFromOrder(order);
-  const phone = String(customer?.phone || '').replace(/\D/g, '');
-  const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
   const message = `Hello ${customer?.name || 'Customer'}, this is Universal Systems technician regarding your service job.`;
-  return phone ? `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}` : '#';
+  return whatsappHref(customer?.phone, message);
 }
 
 export function jobPriority(order) {
@@ -603,10 +599,8 @@ export function dateInputValue(value) {
 }
 
 export function amcWhatsappHref(contract) {
-  const phone = String(contract?.phone || '').replace(/\D/g, '');
-  const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
   const message = `Hello ${contract?.customerName || 'Customer'},\nThis is Universal Systems regarding your AMC renewal for ${contract?.contractType || 'your service contract'}.`;
-  return `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`;
+  return whatsappHref(contract?.phone, message);
 }
 
 export const reportSections = [

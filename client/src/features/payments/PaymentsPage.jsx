@@ -267,7 +267,8 @@ export function PaymentsPage({ role = 'admin' }) {
 
   const selectedInvoice = findInvoice(data.invoices, form.invoiceId);
   const selectedBalanceDue = invoiceDueAmount(selectedInvoice);
-  const canRecordPayment = Boolean(form.invoiceId && Number(form.paidAmount) > 0);
+  const canRecordPayments = role === 'admin';
+  const canRecordPayment = canRecordPayments && Boolean(form.invoiceId && Number(form.paidAmount) > 0);
   const hasActiveFilters = Boolean(search.trim() || paymentStatus || methodFilter || dateFrom || dateTo);
   const paymentSummaryByInvoice = (data.payments || []).reduce((map, payment) => {
     const id = payment.invoiceId?.id || payment.invoiceId?._id || payment.invoiceId;
@@ -364,72 +365,79 @@ export function PaymentsPage({ role = 'admin' }) {
         <button type="button" className="btn btn-secondary h-10 whitespace-nowrap px-4" disabled={!hasActiveFilters} onClick={resetFilters}>Reset Filters</button>
       </div>
 
-      <form className="surface payment-entry-panel mb-5 grid gap-5 p-5 xl:grid-cols-[1.05fr_.95fr]" onSubmit={submit}>
-        <div>
-          <div className="mb-4">
-            <h2 className="text-xl font-black">Record Payment</h2>
-            <p className="mt-1 text-sm muted">Select an invoice, confirm received amount, and record the payment.</p>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_180px_160px_auto]">
-          <label className="lg:col-span-4">
-            <span className="label">Select Invoice</span>
-            <select className="input" value={form.invoiceId} onChange={(event) => selectInvoice(event.target.value)} required>
-              <option value="">Select invoice</option>
-              {data.invoices.filter((invoice) => invoiceDueAmount(invoice) > 0 || invoice.id === form.invoiceId || invoice._id === form.invoiceId).map((invoice) => {
-                const invoiceId = invoice.id || invoice._id;
-                return <option key={invoiceId} value={invoiceId}>{invoice.invoiceNumber} - {currency(invoiceDueAmount(invoice))} due</option>;
-              })}
-            </select>
-          </label>
-          <label>
-            <span className="label">Payment Amount</span>
-            <input className="input payment-amount-input" type="number" min="1" placeholder="Enter amount received" value={form.paidAmount} onChange={(event) => setForm((current) => ({ ...current, paidAmount: event.target.value }))} required />
-            {selectedInvoice ? <span className="mt-1 block text-xs font-semibold text-amber-100">Balance due: {currency(selectedBalanceDue)}</span> : null}
-          </label>
-          <label>
-            <span className="label">Payment Method</span>
-            <select className="input" value={form.method} onChange={(event) => setForm((current) => ({ ...current, method: event.target.value }))}>
-              <option>Cash</option><option>UPI</option><option disabled>Cash + UPI</option>
-            </select>
-          </label>
-          {form.method === 'UPI' ? <label><span className="label">Transaction ID</span><input className="input" placeholder="Transaction ID (optional)" value={form.transactionId} onChange={(event) => setForm((current) => ({ ...current, transactionId: event.target.value }))} /></label> : <div className="hidden lg:block" />}
-          <button type="submit" className="btn btn-primary h-10 self-end disabled:cursor-not-allowed disabled:opacity-50" disabled={!canRecordPayment}><CreditCard className="h-4 w-4" />Record Payment</button>
-          </div>
-        </div>
-        <div className="selected-invoice-card">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="font-black">Selected Invoice</h2>
-            {selectedInvoice ? <BillingStatusPill status={selectedInvoice.status} /> : null}
-          </div>
-          {selectedInvoice ? (
-            <div className="mt-4 grid gap-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <BillingInfo label="Invoice ID" value={getInvoiceDisplayId(selectedInvoice)} />
-                <BillingInfo label="Linked Source" value={invoiceSourceLabel(selectedInvoice)} />
-              </div>
-              <div className="billing-info-block">
-                <p className="text-xs font-black uppercase text-slate-400">Customer</p>
-                <p className="mt-1 truncate font-black text-slate-100" title={selectedInvoice.customerId?.name || '-'}>{selectedInvoice.customerId?.name || '-'}</p>
-                <p className="text-xs muted">{selectedInvoice.customerId?.phone || '-'}</p>
-                <p className="text-xs muted">Customer ID: {getCustomerDisplayId(selectedInvoice.customerId)}</p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <BillingInfo label="Invoice Total" value={currency(selectedInvoice.total)} strong />
-                <BillingInfo label="Paid Amount" value={currency(selectedInvoice.paidAmount)} tone="green" />
-                <BillingInfo label="Balance Due" value={currency(selectedBalanceDue)} tone={selectedBalanceDue > 0 ? 'amber' : 'green'} />
-              </div>
+      {canRecordPayments ? (
+        <form className="surface payment-entry-panel mb-5 grid gap-5 p-5 xl:grid-cols-[1.05fr_.95fr]" onSubmit={submit}>
+          <div>
+            <div className="mb-4">
+              <h2 className="text-xl font-black">Record Payment</h2>
+              <p className="mt-1 text-sm muted">Select an invoice, confirm received amount, and record the payment.</p>
             </div>
-          ) : (
-            <div className="billing-inline-empty">
-              <ReceiptText className="h-8 w-8 text-[var(--brand)]" />
-              <div>
-                <p className="font-black text-slate-100">No invoice selected</p>
-                <p className="mt-1 text-sm muted">Select an invoice to view balance and record payment.</p>
-              </div>
+            <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_180px_160px_auto]">
+            <label className="lg:col-span-4">
+              <span className="label">Select Invoice</span>
+              <select className="input" value={form.invoiceId} onChange={(event) => selectInvoice(event.target.value)} required>
+                <option value="">Select invoice</option>
+                {data.invoices.filter((invoice) => invoiceDueAmount(invoice) > 0 || invoice.id === form.invoiceId || invoice._id === form.invoiceId).map((invoice) => {
+                  const invoiceId = invoice.id || invoice._id;
+                  return <option key={invoiceId} value={invoiceId}>{invoice.invoiceNumber} - {currency(invoiceDueAmount(invoice))} due</option>;
+                })}
+              </select>
+            </label>
+            <label>
+              <span className="label">Payment Amount</span>
+              <input className="input payment-amount-input" type="number" min="1" placeholder="Enter amount received" value={form.paidAmount} onChange={(event) => setForm((current) => ({ ...current, paidAmount: event.target.value }))} required />
+              {selectedInvoice ? <span className="mt-1 block text-xs font-semibold text-amber-100">Balance due: {currency(selectedBalanceDue)}</span> : null}
+            </label>
+            <label>
+              <span className="label">Payment Method</span>
+              <select className="input" value={form.method} onChange={(event) => setForm((current) => ({ ...current, method: event.target.value }))}>
+                <option>Cash</option><option>UPI</option><option disabled>Cash + UPI</option>
+              </select>
+            </label>
+            {form.method === 'UPI' ? <label><span className="label">Transaction ID</span><input className="input" placeholder="Transaction ID (optional)" value={form.transactionId} onChange={(event) => setForm((current) => ({ ...current, transactionId: event.target.value }))} /></label> : <div className="hidden lg:block" />}
+            <button type="submit" className="btn btn-primary h-10 self-end disabled:cursor-not-allowed disabled:opacity-50" disabled={!canRecordPayment}><CreditCard className="h-4 w-4" />Record Payment</button>
             </div>
-          )}
+          </div>
+          <div className="selected-invoice-card">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="font-black">Selected Invoice</h2>
+              {selectedInvoice ? <BillingStatusPill status={selectedInvoice.status} /> : null}
+            </div>
+            {selectedInvoice ? (
+              <div className="mt-4 grid gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <BillingInfo label="Invoice ID" value={getInvoiceDisplayId(selectedInvoice)} />
+                  <BillingInfo label="Linked Source" value={invoiceSourceLabel(selectedInvoice)} />
+                </div>
+                <div className="billing-info-block">
+                  <p className="text-xs font-black uppercase text-slate-400">Customer</p>
+                  <p className="mt-1 truncate font-black text-slate-100" title={selectedInvoice.customerId?.name || '-'}>{selectedInvoice.customerId?.name || '-'}</p>
+                  <p className="text-xs muted">{selectedInvoice.customerId?.phone || '-'}</p>
+                  <p className="text-xs muted">Customer ID: {getCustomerDisplayId(selectedInvoice.customerId)}</p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <BillingInfo label="Invoice Total" value={currency(selectedInvoice.total)} strong />
+                  <BillingInfo label="Paid Amount" value={currency(selectedInvoice.paidAmount)} tone="green" />
+                  <BillingInfo label="Balance Due" value={currency(selectedBalanceDue)} tone={selectedBalanceDue > 0 ? 'amber' : 'green'} />
+                </div>
+              </div>
+            ) : (
+              <div className="billing-inline-empty">
+                <ReceiptText className="h-8 w-8 text-[var(--brand)]" />
+                <div>
+                  <p className="font-black text-slate-100">No invoice selected</p>
+                  <p className="mt-1 text-sm muted">Select an invoice to view balance and record payment.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </form>
+      ) : (
+        <div className="surface payment-entry-panel mb-5 p-5">
+          <h2 className="text-xl font-black">Payment Records</h2>
+          <p className="mt-1 text-sm muted">Technician access is read-only. Admin will record payment after confirmation.</p>
         </div>
-      </form>
+      )}
       {!visiblePayments.length ? (
         <EmptyState
           icon={CreditCard}

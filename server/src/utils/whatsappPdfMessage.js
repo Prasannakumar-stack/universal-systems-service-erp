@@ -124,8 +124,10 @@ export function buildWhatsappPdfMessage(pdfType, context = {}) {
 }
 
 export function normalizeWhatsappPhone(phone) {
-  const digits = String(phone || '').replace(/\D/g, '');
+  let digits = String(phone || '').replace(/\D/g, '');
   if (!digits) return '';
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.length === 11 && digits.startsWith('0')) return `91${digits.slice(1)}`;
   if (digits.length === 10) return `91${digits}`;
   return digits.startsWith('91') ? digits : digits;
 }

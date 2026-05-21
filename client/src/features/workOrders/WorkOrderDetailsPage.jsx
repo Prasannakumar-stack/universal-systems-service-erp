@@ -431,7 +431,9 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const base = isTechnician ? '/tech' : '/admin';
   const paymentsBase = `${base}/payments`;
   const workOrdersBase = `${base}/work-orders`;
-  const canManageBilling = role === 'admin' || isTechnician;
+  const canManageBilling = role === 'admin';
+  const canManagePartsUsed = role === 'admin';
+  const canSendPdfWhatsapp = role === 'admin';
 
   useEffect(() => {
     if (!data?.workOrder) return;
@@ -507,6 +509,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
 
+    if (!canManagePartsUsed) {
+      push('Only admins can add parts used', 'error');
+      return;
+    }
+
     if (partsLocked) {
       push(partsLockMessage, 'error');
       return;
@@ -562,6 +569,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
     if (!editPartRow) return;
+    if (!canManagePartsUsed) {
+      push('Only admins can edit parts used', 'error');
+      return;
+    }
     if (partsLocked) {
       push(partsLockMessage, 'error');
       return;
@@ -600,6 +611,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function removePart(partId, event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
+
+    if (!canManagePartsUsed) {
+      push('Only admins can remove parts used', 'error');
+      return;
+    }
 
     if (partsLocked) {
       push(partsLockMessage, 'error');
@@ -686,6 +702,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         ? rawMoveOpts
         : {};
     if (!partAction) return;
+    if (role !== 'admin') {
+      push('Only admins can review part requests', 'error');
+      return;
+    }
     const { type, requestId } = partAction;
     try {
       await preserveScroll(async () => {
@@ -790,6 +810,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function generateInvoice(event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
+    if (!canManageBilling) {
+      push('Only admins can generate invoices', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request('/invoices', { method: 'POST', body: JSON.stringify({ workOrderId: id, labourCharge: serviceCharge || labourCharge }) });
@@ -804,6 +828,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function handleExtraInvoiceMismatch(action, event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
+    if (!canManageBilling) {
+      push('Only admins can update invoices', 'error');
+      return;
+    }
     const targetInvoiceId = recordId(baseExtraInvoice || primaryExtraInvoice || order.invoiceId);
     if (!targetInvoiceId) {
       push('Existing extra invoice not found', 'error');
@@ -829,6 +857,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }
 
   async function voidExtraInvoiceAndUnlockParts() {
+    if (!canManageBilling) {
+      push('Only admins can unlock billed parts', 'error');
+      return;
+    }
     const targetInvoiceId = recordId(baseExtraInvoice || primaryExtraInvoice || order.invoiceId);
     if (!targetInvoiceId) {
       push('Existing extra invoice not found', 'error');
@@ -859,6 +891,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function createAmcInvoiceFromWorkOrder(event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
+    if (!canManageBilling) {
+      push('Only admins can create AMC invoices', 'error');
+      return;
+    }
     if (!recordId(amcContract)) return;
     if (amcInvoiceId) {
       navigate(`${paymentsBase}?invoiceId=${encodeURIComponent(amcInvoiceId)}`);
@@ -888,6 +924,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function saveServiceCharge(event) {
     event.preventDefault();
     event.stopPropagation();
+    if (!canManageBilling) {
+      push('Only admins can update service charges', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/service-charge`, {
@@ -971,6 +1011,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }
 
   async function sendWorkflowPdf(flow) {
+    if (!canSendPdfWhatsapp) {
+      push('Only admins can send PDFs through WhatsApp', 'error');
+      return;
+    }
     const phone = order.customerId?.phone || '';
     if (!phone) {
       push('Customer phone number not available', 'error');
@@ -1806,7 +1850,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <div className="mt-4 table-wrap border border-white/10 bg-[var(--surface)]">
               {order.partsUsed?.length ? (
                 <table className="data-table">
-                  <thead><tr><th>Part Name</th><th>Type</th>{isAmcLinked ? <th>Charge Type</th> : null}<th>Quantity</th><th>Unit Price</th><th>Total</th><th>Action</th></tr></thead>
+                  <thead><tr><th>Part Name</th><th>Type</th>{isAmcLinked ? <th>Charge Type</th> : null}<th>Quantity</th><th>Unit Price</th><th>Total</th>{canManagePartsUsed ? <th>Action</th> : null}</tr></thead>
                   <tbody className="divide-y divide-[var(--line)]">
                     {order.partsUsed.map((item) => (
                       <tr key={item._id || item.createdAt} className="transition-colors hover:bg-white/[0.03]">
@@ -1824,35 +1868,37 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                         <td>{item.quantity}</td>
                         <td>{currency(item.unitPrice)}</td>
                         <td className="font-black">{currency(item.total)}</td>
-                        <td>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              className="icon-button h-9 w-9 disabled:cursor-not-allowed disabled:opacity-40"
-                              disabled={partsLocked}
-                              title={partsLocked ? partsLockMessage : 'Edit part'}
-                              onClick={() => setEditPartRow({
-                                ...item,
-                                _id: item._id || item.id,
-                                chargeType: item.chargeTypeMode === manualAmcPartChargeMode ? partChargeType(item, amcContract) : autoAmcPartChargeType,
-                                chargeTypeMode: item.chargeTypeMode || autoAmcPartChargeMode,
-                                note: item.note || ''
-                              })}
-                              aria-label={`Edit ${item.name}`}
-                            >
-                              <Edit3 className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              className="icon-button h-9 w-9 disabled:cursor-not-allowed disabled:opacity-40"
-                              disabled={partsLocked}
-                              onClick={(event) => removePart(item._id, event)}
-                              aria-label={`Delete ${item.name}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
+                        {canManagePartsUsed ? (
+                          <td>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                className="icon-button h-9 w-9 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={partsLocked}
+                                title={partsLocked ? partsLockMessage : 'Edit part'}
+                                onClick={() => setEditPartRow({
+                                  ...item,
+                                  _id: item._id || item.id,
+                                  chargeType: item.chargeTypeMode === manualAmcPartChargeMode ? partChargeType(item, amcContract) : autoAmcPartChargeType,
+                                  chargeTypeMode: item.chargeTypeMode || autoAmcPartChargeMode,
+                                  note: item.note || ''
+                                })}
+                                aria-label={`Edit ${item.name}`}
+                              >
+                                <Edit3 className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                className="icon-button h-9 w-9 disabled:cursor-not-allowed disabled:opacity-40"
+                                disabled={partsLocked}
+                                onClick={(event) => removePart(item._id, event)}
+                                aria-label={`Delete ${item.name}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                   </tbody>
@@ -1872,9 +1918,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               </div>
             </div>
 
-            <div className={`${detailPanelClass} mt-4`}>
-              <h3 className="text-xs font-black uppercase tracking-wide text-sky-100">Add Used Part</h3>
-              <form className="mt-3 grid gap-3" onSubmit={(event) => event.preventDefault()}>
+            {canManagePartsUsed ? (
+              <div className={`${detailPanelClass} mt-4`}>
+                <h3 className="text-xs font-black uppercase tracking-wide text-sky-100">Add Used Part</h3>
+                <form className="mt-3 grid gap-3" onSubmit={(event) => event.preventDefault()}>
                 <div className="grid gap-3 md:grid-cols-2">
                   <label className="grid gap-1.5">
                     <span className="label">Part Type / Source</span>
@@ -1924,8 +1971,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                   </div>
                 </div>
                 {selectedPartOutOfStock || selectedPartInsufficientStock ? <p className="text-xs font-semibold text-rose-100">Not enough available stock</p> : null}
-              </form>
-            </div>
+                </form>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm muted">Parts used are read-only for technician accounts. Submit a part request when stock or admin approval is needed.</p>
+            )}
           </div>
 
           <div className={activeTab === 'partRequests' ? detailSectionClass : 'hidden'}>
@@ -2025,7 +2075,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             </div>
           ) : null}
 
-          <form className={activeTab === 'billing' ? detailBillingSectionClass : 'hidden'} onSubmit={saveServiceCharge}>
+          {canManageBilling ? <form className={activeTab === 'billing' ? detailBillingSectionClass : 'hidden'} onSubmit={saveServiceCharge}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-black">Service Charge</h2>
@@ -2039,7 +2089,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               <button type="submit" className="btn btn-primary h-11 w-full px-5 sm:w-auto"><Save className="h-4 w-4" />Save Charge</button>
             </div>
             {savedServiceCharge !== currentServiceCharge ? <p className="mt-2 text-xs font-semibold text-amber-100">Unsaved service charge will update the saved total after saving.</p> : null}
-          </form>
+          </form> : null}
 
           <div className={activeTab === 'billing' ? detailBillingSectionClass : 'hidden'}>
             <h2 className="text-xl font-black">Billing Summary</h2>
@@ -2238,7 +2288,9 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     <div className="mt-4 grid gap-2 sm:grid-cols-3">
                       <button type="button" className={pdfActionButtonClass(enabled)} disabled={!enabled || Boolean(pdfBusy)} onClick={() => previewWorkflowPdf(flow)}><FileText className="h-4 w-4" />Preview PDF</button>
                       <button type="button" className={pdfActionButtonClass(enabled)} disabled={!enabled || Boolean(pdfBusy)} onClick={() => downloadWorkflowPdf(flow)}>{downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}Download PDF</button>
-                      <button type="button" className={pdfActionButtonClass(enabled, 'primary')} disabled={!enabled || Boolean(pdfBusy)} onClick={() => sendWorkflowPdf(flow)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}Send via WhatsApp</button>
+                      {canSendPdfWhatsapp ? (
+                        <button type="button" className={pdfActionButtonClass(enabled, 'primary')} disabled={!enabled || Boolean(pdfBusy)} onClick={() => sendWorkflowPdf(flow)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}Send via WhatsApp</button>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -2273,7 +2325,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         </div>
       </div> : null}
 
-      {partAction?.type === 'reject' ? (
+      {role === 'admin' && partAction?.type === 'reject' ? (
         <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
           <div className="surface w-full max-w-md p-5">
             <h2 className="text-lg font-black">Reject part request?</h2>
@@ -2289,7 +2341,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         </div>
       ) : null}
 
-      {partAction?.type === 'move' ? (
+      {role === 'admin' && partAction?.type === 'move' ? (
         <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
           <div className="surface w-full max-w-md p-5">
             <h2 className="text-lg font-black">Move to Parts Used</h2>
@@ -2401,7 +2453,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         </div>
       ) : null}
 
-      {partAction?.type === 'approve' ? (
+      {role === 'admin' && partAction?.type === 'approve' ? (
         <ConfirmModal
           title="Approve part request?"
           message={`Approve ${partAction.name} x${partAction.quantity}? Stock is not deducted until the part is moved to Parts Used.`}
@@ -2410,7 +2462,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           onConfirm={runPartRequestAction}
         />
       ) : null}
-      {editPartRow ? (
+      {canManagePartsUsed && editPartRow ? (
         <div className="fixed inset-0 z-[95] grid place-items-center bg-black/50 p-4">
           <form className="surface w-full max-w-md p-5" onSubmit={saveEditedPart}>
             <h2 className="text-lg font-black">Edit part</h2>
@@ -2487,7 +2539,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         </div>
       ) : null}
 
-      {renderPartsDuplicateModals()}
+      {canManagePartsUsed ? renderPartsDuplicateModals() : null}
     </div>
   );
 }

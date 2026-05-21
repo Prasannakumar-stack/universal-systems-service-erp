@@ -181,6 +181,7 @@ export function AMCContractsPage({ role = 'admin' }) {
   const navigate = useNavigate();
   const location = useLocation();
   const isTechnician = role === 'technician';
+  const canManageAmc = role === 'admin';
   const base = isTechnician ? '/tech' : '/admin';
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(defaultAmcForm);
@@ -208,11 +209,12 @@ export function AMCContractsPage({ role = 'admin' }) {
   useEffect(() => {
     const renewalContract = location.state?.renewContract;
     const renewalId = recordId(renewalContract);
+    if (!canManageAmc) return;
     if (!renewalId || handledRenewalRef.current === renewalId) return;
     handledRenewalRef.current = renewalId;
     startRenewal(renewalContract);
     navigate(location.pathname, { replace: true, state: null });
-  }, [location.pathname, location.state, navigate]);
+  }, [canManageAmc, location.pathname, location.state, navigate]);
 
   const contracts = data?.contracts || [];
   const summary = data?.summary || {};
@@ -298,6 +300,7 @@ export function AMCContractsPage({ role = 'admin' }) {
 
   async function submit(event) {
     event.preventDefault();
+    if (!canManageAmc) return;
     const payload = {
       ...form,
       coverageType: form.coverageType || defaultAmcCoverageType,
@@ -320,6 +323,7 @@ export function AMCContractsPage({ role = 'admin' }) {
   }
 
   async function createJob(contract) {
+    if (!canManageAmc) return;
     try {
       const result = await request(`/amc/contracts/${recordId(contract)}/work-orders`, {
         method: 'POST',
@@ -333,6 +337,7 @@ export function AMCContractsPage({ role = 'admin' }) {
   }
 
   async function createInvoice(contract) {
+    if (!canManageAmc) return;
     const existingInvoiceId = recordId(contract.invoiceId);
     if (existingInvoiceId) {
       navigate(`${base}/payments?invoiceId=${existingInvoiceId}`);
@@ -369,7 +374,7 @@ export function AMCContractsPage({ role = 'admin' }) {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">AMC Contracts</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage service contracts, covered assets, renewal status, visits, and AMC-linked repair jobs.</p>
           </div>
-          <button className="btn btn-primary h-10 px-4" type="button" onClick={() => setFormOpen((value) => !value)}><Plus className="h-4 w-4" />New AMC Contract</button>
+          {canManageAmc ? <button className="btn btn-primary h-10 px-4" type="button" onClick={() => setFormOpen((value) => !value)}><Plus className="h-4 w-4" />New AMC Contract</button> : null}
         </div>
       </section>
 
@@ -386,7 +391,7 @@ export function AMCContractsPage({ role = 'admin' }) {
         {contractKpis.map((item) => <AmcMetricCard key={item.label} {...item} />)}
       </div>
 
-      {formOpen ? (
+      {canManageAmc && formOpen ? (
         <form className="surface amc-form-shell mt-6 p-5" onSubmit={submit}>
           <div className="mb-5 flex items-start justify-between gap-3">
             <div>
@@ -556,7 +561,7 @@ export function AMCContractsPage({ role = 'admin' }) {
             icon={FileText}
             title={hasContractSearch ? 'No contracts match your search' : 'No AMC contracts yet'}
             message={hasContractSearch ? 'Clear the search to view all AMC contracts.' : 'Create the first AMC contract to track visits, warranty coverage, and renewal reminders.'}
-            action={hasContractSearch ? <button className="btn btn-secondary" type="button" onClick={() => setSearch('')}>Clear Search</button> : <button className="btn btn-primary" type="button" onClick={() => setFormOpen(true)}>Create AMC Contract</button>}
+            action={hasContractSearch ? <button className="btn btn-secondary" type="button" onClick={() => setSearch('')}>Clear Search</button> : canManageAmc ? <button className="btn btn-primary" type="button" onClick={() => setFormOpen(true)}>Create AMC Contract</button> : null}
           />
         ) : (
           <div className="table-wrap amc-table-wrap bg-[var(--surface)]">
@@ -616,11 +621,20 @@ export function AMCContractsPage({ role = 'admin' }) {
                     </td>
                     <td className="text-center">
                       <div className="amc-action-stack">
-                        <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button>
-                        {invoiceId
-                          ? <Link className="btn btn-secondary amc-action-button" to={`${base}/payments?invoiceId=${invoiceId}`}><CreditCard className="h-4 w-4" />Go to Payments</Link>
-                          : <button className="btn btn-secondary amc-action-button" type="button" onClick={() => createInvoice(contract)}><ReceiptText className="h-4 w-4" />Create Invoice</button>}
-                        {isRenewalDue ? <button className="btn btn-secondary amc-action-button" type="button" onClick={() => startRenewal(contract)}><AlertTriangle className="h-4 w-4" />Renew</button> : null}
+                        {canManageAmc ? (
+                          <>
+                            <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button>
+                            {invoiceId
+                              ? <Link className="btn btn-secondary amc-action-button" to={`${base}/payments?invoiceId=${invoiceId}`}><CreditCard className="h-4 w-4" />Go to Payments</Link>
+                              : <button className="btn btn-secondary amc-action-button" type="button" onClick={() => createInvoice(contract)}><ReceiptText className="h-4 w-4" />Create Invoice</button>}
+                            {isRenewalDue ? <button className="btn btn-secondary amc-action-button" type="button" onClick={() => startRenewal(contract)}><AlertTriangle className="h-4 w-4" />Renew</button> : null}
+                          </>
+                        ) : (
+                          <>
+                            {visitWorkOrderId ? <Link className="btn btn-secondary amc-action-button" to={`${base}/work-orders/${visitWorkOrderId}`}><Wrench className="h-4 w-4" />View Job</Link> : null}
+                            {invoiceId ? <Link className="btn btn-secondary amc-action-button" to={`${base}/payments?invoiceId=${invoiceId}`}><CreditCard className="h-4 w-4" />View Payments</Link> : null}
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

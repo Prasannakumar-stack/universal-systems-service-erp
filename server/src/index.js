@@ -7,6 +7,7 @@ import morgan from 'morgan';
 import { ALLOWED_ORIGINS, CLIENT_ORIGIN, COMPANY, IS_PRODUCTION, PDF_DIR, PORT, ROOT_DIR, UPLOAD_DIR, WHATSAPP_PDF_PUBLIC_BASE_URL } from './config.js';
 import { connectDb } from './db.js';
 import { bookingUpload, handleUploadErrors } from './upload.js';
+import { publicSubmitRateLimit } from './middleware/publicRateLimit.js';
 import { asyncHandler } from './utils/http.js';
 import { create as createBooking } from './controllers/bookingController.js';
 import { create as createCallRequest } from './controllers/callRequestController.js';
@@ -83,8 +84,8 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, company: COMPANY.name, time: new Date().toISOString() });
 });
 
-app.post('/api/public/bookings', bookingUpload.single('problemImage'), handleUploadErrors, asyncHandler(createBooking));
-app.post('/api/public/contact-requests', asyncHandler(createCallRequest));
+app.post('/api/public/bookings', publicSubmitRateLimit, bookingUpload.single('problemImage'), handleUploadErrors, asyncHandler(createBooking));
+app.post('/api/public/contact-requests', publicSubmitRateLimit, asyncHandler(createCallRequest));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/amc', amcRoutes);

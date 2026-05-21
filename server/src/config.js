@@ -42,7 +42,7 @@ export const WHATSAPP_PDF_PUBLIC_BASE_URL = process.env.WHATSAPP_PDF_PUBLIC_BASE
 
 export const COMPANY = {
   name: 'Universal Systems',
-  tagline: 'We care for your career',
+  tagline: 'We care for the technology you depend on',
   address: 'MIG-H3, Housing Unit, Near 4 Roads,\nMathaiyankuttai Post,\nMettur Dam - 636452,\nSalem - Dt, Tamil Nadu, India.',
   phones: ['98427 81971', '70100 24368'],
   landline: '04298 - 243565',

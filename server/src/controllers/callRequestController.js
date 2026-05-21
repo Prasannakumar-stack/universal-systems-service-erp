@@ -1,12 +1,13 @@
 import CallRequest from '../models/CallRequest.js';
 import { createBooking } from '../services/bookingService.js';
 import { appError, clean, required } from '../utils/http.js';
+import { normalizePhoneInput } from '../utils/phone.js';
 
 export async function create(req, res) {
   required(req.body, ['name', 'phone']);
   const request = await CallRequest.create({
     name: clean(req.body.name),
-    phone: clean(req.body.phone),
+    phone: normalizePhoneInput(req.body.phone),
     serviceInterest: clean(req.body.serviceInterest || req.body.service),
     message: clean(req.body.message)
   });

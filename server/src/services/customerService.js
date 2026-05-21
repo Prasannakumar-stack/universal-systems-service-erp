@@ -2,10 +2,12 @@ import Customer from '../models/Customer.js';
 import WorkOrder from '../models/WorkOrder.js';
 import Invoice from '../models/Invoice.js';
 import { appError, clean } from '../utils/http.js';
+import { normalizePhoneInput, phoneLookupValues } from '../utils/phone.js';
 import { getTechnicianScope } from './technicianScopeService.js';
 
 export async function upsertCustomer(payload) {
-  const phone = clean(payload.phone);
+  const rawPhone = clean(payload.phone);
+  const phone = normalizePhoneInput(rawPhone);
   if (!phone) throw appError('Customer phone is required');
 
   const update = {
@@ -15,7 +17,7 @@ export async function upsertCustomer(payload) {
   };
   if (clean(payload.device)) update.$addToSet = { devices: clean(payload.device) };
 
-  const existing = await Customer.findOne({ phone });
+  const existing = await Customer.findOne({ phone: { $in: phoneLookupValues(rawPhone) } });
   if (existing) {
     Object.entries(update).forEach(([key, value]) => {
       if (key !== '$addToSet' && value) existing[key] = value;
@@ -31,7 +33,7 @@ export async function upsertCustomer(payload) {
 }
 
 export async function createCustomer(payload) {
-  const existing = await Customer.findOne({ phone: clean(payload.phone) });
+  const existing = await Customer.findOne({ phone: { $in: phoneLookupValues(payload.phone) } });
   if (existing) throw appError('A customer with this phone already exists', 409);
   return upsertCustomer(payload);
 }

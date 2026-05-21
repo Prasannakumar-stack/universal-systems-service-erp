@@ -140,6 +140,35 @@ import {
 } from '../../shared/phase1Shared.jsx';
 import { calculateAmcCoverageBreakdown } from '../../shared/amcCoverage.js';
 
+const REPORT_PAGE_LIMIT = 50;
+const MAX_REPORT_PAGES = 20;
+
+function appendPagination(path, page) {
+  const joiner = path.includes('?') ? '&' : '?';
+  return `${path}${joiner}page=${page}&limit=${REPORT_PAGE_LIMIT}`;
+}
+
+async function fetchReportCollection(request, path, key, label) {
+  const first = await request(appendPagination(path, 1));
+  const firstRows = first?.[key] || [];
+  const pagination = first?.pagination || {};
+  const totalPages = Number(pagination.totalPages || 1);
+  const pagesToFetch = Math.min(totalPages, MAX_REPORT_PAGES);
+  const rest = pagesToFetch > 1
+    ? await Promise.all(
+      Array.from({ length: pagesToFetch - 1 }, (_, index) =>
+        request(appendPagination(path, index + 2)).catch(() => ({ [key]: [] }))
+      )
+    )
+    : [];
+  return {
+    rows: [...firstRows, ...rest.flatMap((payload) => payload?.[key] || [])],
+    capped: totalPages > MAX_REPORT_PAGES,
+    label,
+    total: Number(pagination.total || firstRows.length)
+  };
+}
+
 export function ReportsAnalyticsPage({ section = 'main' }) {
   const { request } = useAuth();
   const [range, setRange] = useState('This Month');
@@ -147,29 +176,33 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
   const [customTo, setCustomTo] = useState('');
   const loadReports = useCallback(async () => {
     const [bookings, workOrders, invoices, payments, inventory, movements, customers, amcContracts, amcSchedule, users] = await Promise.all([
-      request('/bookings?limit=100').catch(() => ({ bookings: [] })),
-      request('/work-orders?limit=100').catch(() => ({ workOrders: [] })),
-      request('/invoices?limit=100').catch(() => ({ invoices: [] })),
-      request('/payments?limit=100').catch(() => ({ payments: [] })),
-      request('/inventory?limit=100').catch(() => ({ parts: [] })),
-      request('/stock-movements?limit=100').catch(() => ({ movements: [] })),
-      request('/customers?limit=100').catch(() => ({ customers: [] })),
+      fetchReportCollection(request, '/bookings', 'bookings', 'bookings').catch(() => ({ rows: [], capped: false, label: 'bookings' })),
+      fetchReportCollection(request, '/work-orders', 'workOrders', 'work orders').catch(() => ({ rows: [], capped: false, label: 'work orders' })),
+      fetchReportCollection(request, '/invoices', 'invoices', 'invoices').catch(() => ({ rows: [], capped: false, label: 'invoices' })),
+      fetchReportCollection(request, '/payments', 'payments', 'payments').catch(() => ({ rows: [], capped: false, label: 'payments' })),
+      fetchReportCollection(request, '/inventory', 'parts', 'inventory parts').catch(() => ({ rows: [], capped: false, label: 'inventory parts' })),
+      fetchReportCollection(request, '/stock-movements', 'movements', 'stock movements').catch(() => ({ rows: [], capped: false, label: 'stock movements' })),
+      fetchReportCollection(request, '/customers', 'customers', 'customers').catch(() => ({ rows: [], capped: false, label: 'customers' })),
       request('/amc/contracts').catch(() => ({ contracts: [], summary: {} })),
       request('/amc/schedule').catch(() => ({ schedule: [] })),
-      request('/users?limit=100').catch(() => ({ users: [] }))
+      fetchReportCollection(request, '/users', 'users', 'users').catch(() => ({ rows: [], capped: false, label: 'users' }))
     ]);
+    const collections = [bookings, workOrders, invoices, payments, inventory, movements, customers, users];
     return {
-      bookings: bookings.bookings || [],
-      workOrders: workOrders.workOrders || [],
-      invoices: invoices.invoices || [],
-      payments: payments.payments || [],
-      parts: inventory.parts || [],
-      movements: movements.movements || [],
-      customers: customers.customers || [],
+      bookings: bookings.rows || [],
+      workOrders: workOrders.rows || [],
+      invoices: invoices.rows || [],
+      payments: payments.rows || [],
+      parts: inventory.rows || [],
+      movements: movements.rows || [],
+      customers: customers.rows || [],
       amcContracts: amcContracts.contracts || [],
       amcSummary: amcContracts.summary || {},
       amcSchedule: amcSchedule.schedule || [],
-      users: users.users || []
+      users: users.rows || [],
+      _reportMeta: {
+        capped: collections.filter((item) => item.capped).map((item) => item.label)
+      }
     };
   }, [request]);
   const { data, loading, error } = useResource(loadReports, [loadReports]);
@@ -512,6 +545,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
   const financeHasData = report.finance.totalInvoiceValue || report.finance.totalCollected || report.finance.pendingBalance || report.finance.totalAmcRevenue || report.finance.pendingAmcPayments || report.finance.chargeableRepairsRevenue || report.finance.coveredServiceCost || report.finance.fullyPaidAmcContracts || report.finance.partiallyPaidAmcContracts || report.finance.pendingAmcContracts || report.finance.paymentMethodRows.length;
   const hasRevenueChart = report.finance.revenueByMonth.some((row) => Number(row.revenue || 0) > 0);
   const hasPaymentMethodData = report.finance.paymentMethodRows.some((row) => Number(row.total || 0) > 0);
+  const cappedCollections = data?._reportMeta?.capped || [];
 
   return (
     <div className="reports-page reports-premium-page">
@@ -529,6 +563,11 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       </section>
       <ReportsPremiumNavigation active={activeSection} />
       <ReportsPremiumRangeBar range={range} setRange={setRange} customFrom={customFrom} setCustomFrom={setCustomFrom} customTo={customTo} setCustomTo={setCustomTo} hasRangeFilter={hasRangeFilter} onReset={resetRangeFilters} onExport={exportCurrentSection} />
+      {cappedCollections.length ? (
+        <div className="surface mb-5 border border-amber-400/25 bg-amber-500/10 p-4 text-sm font-semibold text-amber-100">
+          Report data is capped for very large datasets. Loaded the first {MAX_REPORT_PAGES * REPORT_PAGE_LIMIT} records for: {cappedCollections.join(', ')}.
+        </div>
+      ) : null}
 
       {activeSection === 'main' ? (
         <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

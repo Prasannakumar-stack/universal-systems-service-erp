@@ -30,13 +30,13 @@ import { currency } from '../utils/format.js';
 import { getCustomerDisplayId, getInvoiceDisplayId, getPaymentDisplayId, getWorkOrderDisplayId } from '../shared/idHelpers.js';
 import { adminWorkspaceRoles, canAccessRoles, normalizeRole, roleLabel } from '../utils/roles.js';
 
-const fullAccessRoles = ['admin', 'owner'];
-const operationsRoles = [...fullAccessRoles, 'service_manager', 'front_desk'];
-const customerRoles = [...operationsRoles, 'accounts_staff'];
-const amcRoles = [...fullAccessRoles, 'service_manager'];
-const inventoryRoles = [...fullAccessRoles, 'service_manager', 'inventory_staff'];
-const billingRoles = [...fullAccessRoles, 'service_manager', 'accounts_staff'];
-const reportRoles = [...fullAccessRoles, 'service_manager', 'accounts_staff', 'inventory_staff', 'viewer', 'auditor'];
+const fullAccessRoles = ['admin'];
+const operationsRoles = fullAccessRoles;
+const customerRoles = fullAccessRoles;
+const amcRoles = fullAccessRoles;
+const inventoryRoles = fullAccessRoles;
+const billingRoles = fullAccessRoles;
+const reportRoles = fullAccessRoles;
 const auditRoles = fullAccessRoles;
 
 const adminGroups = [
@@ -48,7 +48,7 @@ const adminGroups = [
     title: 'Operations',
     links: [
       { to: '/admin/bookings', label: 'Bookings', icon: BookOpenCheck, roles: operationsRoles, badgeKey: 'bookings' },
-      { to: '/admin/work-orders', label: 'Work Orders', icon: Wrench, roles: [...operationsRoles, 'accounts_staff'], badgeKey: 'workOrders' }
+      { to: '/admin/work-orders', label: 'Work Orders', icon: Wrench, roles: operationsRoles, badgeKey: 'workOrders' }
     ]
   },
   {
@@ -85,7 +85,7 @@ const adminGroups = [
   {
     title: 'System',
     links: [
-      { to: '/admin/technician-panel', label: 'Staff / Technicians', icon: UserRound, roles: [...fullAccessRoles, 'service_manager'] },
+      { to: '/admin/technician-panel', label: 'Staff / Technicians', icon: UserRound, roles: fullAccessRoles },
       { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity, roles: auditRoles },
       { to: '/admin/settings', label: 'Settings', icon: Settings, roles: fullAccessRoles }
     ]
@@ -127,10 +127,10 @@ const technicianGroups = [
 
 const adminRouteAccess = [
   { prefix: '/admin/dashboard', roles: adminWorkspaceRoles },
-  { prefix: '/admin/technician-panel', roles: [...fullAccessRoles, 'service_manager'] },
-  { prefix: '/admin/technician-tasks', roles: [...fullAccessRoles, 'service_manager'] },
+  { prefix: '/admin/technician-panel', roles: fullAccessRoles },
+  { prefix: '/admin/technician-tasks', roles: fullAccessRoles },
   { prefix: '/admin/bookings', roles: operationsRoles },
-  { prefix: '/admin/work-orders', roles: [...operationsRoles, 'accounts_staff'] },
+  { prefix: '/admin/work-orders', roles: operationsRoles },
   { prefix: '/admin/customers', roles: customerRoles },
   { prefix: '/admin/amc', roles: amcRoles },
   { prefix: '/admin/warranties', roles: amcRoles },
@@ -140,9 +140,9 @@ const adminRouteAccess = [
   { prefix: '/admin/quotations', roles: billingRoles },
   { prefix: '/admin/invoices', roles: billingRoles },
   { prefix: '/admin/payments', roles: billingRoles },
-  { prefix: '/admin/reports/finance', roles: [...billingRoles, 'viewer', 'auditor'] },
-  { prefix: '/admin/reports/inventory', roles: [...inventoryRoles, 'viewer', 'auditor'] },
-  { prefix: '/admin/reports/technicians', roles: [...fullAccessRoles, 'service_manager', 'viewer', 'auditor'] },
+  { prefix: '/admin/reports/finance', roles: billingRoles },
+  { prefix: '/admin/reports/inventory', roles: inventoryRoles },
+  { prefix: '/admin/reports/technicians', roles: fullAccessRoles },
   { prefix: '/admin/reports', roles: reportRoles },
   { prefix: '/admin/audit-logs', roles: auditRoles },
   { prefix: '/admin/settings', roles: fullAccessRoles }
@@ -164,7 +164,7 @@ function canOpenAdminPath(pathname, role) {
 }
 
 function canUseGlobalSearch(role) {
-  return normalizeRole(role) === 'technician' || canAccessRoles(role, [...fullAccessRoles, 'service_manager']);
+  return normalizeRole(role) === 'technician' || canAccessRoles(role, fullAccessRoles);
 }
 
 function sidebarBadgeClass(tone) {
@@ -841,7 +841,7 @@ function AdminTopBar({ role, openSidebar }) {
     { to: '/tech/payments', label: 'Payment', icon: CreditCard }
   ] : [
     { to: '/admin/bookings', label: 'Booking', icon: BookOpenCheck, roles: operationsRoles, primary: true },
-    { to: '/admin/work-orders', label: 'Service Job', icon: Wrench, roles: [...operationsRoles, 'accounts_staff'] },
+    { to: '/admin/work-orders', label: 'Service Job', icon: Wrench, roles: operationsRoles },
     { to: '/admin/payments', label: 'Payment', icon: CreditCard, roles: billingRoles }
   ]).filter((item) => canSeeLink(item, userRole));
 

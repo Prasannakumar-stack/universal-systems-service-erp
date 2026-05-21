@@ -5,8 +5,11 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 
 export default function Login({ role }) {
-  const [username, setUsername] = useState(role === 'admin' ? 'admin' : 'emp1');
-  const [password, setPassword] = useState(role === 'admin' ? 'admin123' : 'emp123');
+  const showDemoCredentials = import.meta.env.VITE_SHOW_DEMO_CREDENTIALS === 'true';
+  const demoUsername = role === 'admin' ? 'admin' : 'emp1';
+  const demoPassword = role === 'admin' ? 'admin123' : 'emp123';
+  const [username, setUsername] = useState(showDemoCredentials ? demoUsername : '');
+  const [password, setPassword] = useState(showDemoCredentials ? demoPassword : '');
   const [selectedRole, setSelectedRole] = useState(role);
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -68,14 +71,16 @@ export default function Login({ role }) {
           </button>
         </form>
 
-        <div className="mt-5 rounded-card bg-[var(--surface-2)] p-4 text-sm">
-          <p className="font-bold">Default credentials</p>
-          {role === 'admin' ? (
-            <p className="mt-1 muted">admin / admin123</p>
-          ) : (
-            <p className="mt-1 muted">emp1 / emp123 or emp2 / emp123</p>
-          )}
-        </div>
+        {showDemoCredentials ? (
+          <div className="mt-5 rounded-card bg-[var(--surface-2)] p-4 text-sm">
+            <p className="font-bold">Demo credentials</p>
+            {role === 'admin' ? (
+              <p className="mt-1 muted">admin / admin123</p>
+            ) : (
+              <p className="mt-1 muted">emp1 / emp123 or emp2 / emp123</p>
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );
