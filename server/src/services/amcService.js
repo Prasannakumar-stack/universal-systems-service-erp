@@ -3,6 +3,7 @@ import AMCContract from '../models/AMCContract.js';
 import Invoice from '../models/Invoice.js';
 import User from '../models/User.js';
 import WorkOrder from '../models/WorkOrder.js';
+import { assertPermission } from '../permissions.js';
 import { clean, appError, numberValue } from '../utils/http.js';
 import { upsertCustomer } from './customerService.js';
 import { createWorkOrder } from './workOrderService.js';
@@ -244,6 +245,7 @@ export async function listAmcContracts(query = {}, user = null) {
 }
 
 export async function createAmcContract(payload, user) {
+  assertPermission(user, 'create_amc');
   const contractType = clean(payload.contractType);
   const serviceFrequency = clean(payload.serviceFrequency);
   if (!contractTypes.includes(contractType)) throw appError('Select a valid AMC contract type');
@@ -352,6 +354,7 @@ export async function listAmcRenewals(user = null) {
 }
 
 export async function createWorkOrderFromAmc(contractId, payload, user) {
+  assertPermission(user, 'create_amc_job');
   const contract = await AMCContract.findById(contractId);
   if (!contract) throw appError('AMC contract not found', 404);
   const visit = payload.visitId ? contract.visits.id(payload.visitId) : contract.visits.find((item) => item.status !== 'Completed');

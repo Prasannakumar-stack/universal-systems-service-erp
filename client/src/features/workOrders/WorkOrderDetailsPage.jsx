@@ -163,6 +163,7 @@ import {
   partUsedTypeLabel
 } from '../../shared/partWorkflow.jsx';
 import { isPdfSentViaWhatsapp } from '../../shared/whatsappPdfMessage.js';
+import { can, normalizeRole } from '../../utils/roles.js';
 
 const detailFocusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
@@ -403,7 +404,7 @@ function partsLockedInvoiceMessage(invoice) {
 export function WorkOrderDetailsPage({ role = 'admin' }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { request, token } = useAuth();
+  const { request, token, user } = useAuth();
   const { push } = useToast();
   const [note, setNote] = useState('');
   const [part, setPart] = useState({ inventoryPartId: '', partName: '', quantity: 1, unitPrice: 0, chargeType: autoAmcPartChargeType });
@@ -428,13 +429,25 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const { data, loading, error, reload } = useResource(() => request(`/work-orders/${id}`), [request, id]);
   const [liveOrder, setLiveOrder] = useState(null);
   const order = liveOrder || data?.workOrder;
-  const isTechnician = role === 'technician';
+  const effectiveRole = user?.role || role;
+  const isTechnician = normalizeRole(effectiveRole) === 'technician';
   const base = isTechnician ? '/tech' : '/admin';
   const paymentsBase = `${base}/payments`;
   const workOrdersBase = `${base}/work-orders`;
-  const canManageBilling = role === 'admin';
-  const canManagePartsUsed = role === 'admin';
-  const canSendPdfWhatsapp = role === 'admin';
+  const canCreateInvoice = can(effectiveRole, 'create_invoice');
+  const canEditInvoice = can(effectiveRole, 'edit_invoice');
+  const canRecordPayment = can(effectiveRole, 'record_payment');
+  const canViewPayments = can(effectiveRole, 'view_payments');
+  const canEditServiceCharge = can(effectiveRole, 'edit_service_charge');
+  const canManagePartsUsed = can(effectiveRole, 'manage_parts_used');
+  const canCreatePartRequest = can(effectiveRole, 'create_part_request');
+  const canApprovePartRequests = can(effectiveRole, 'approve_part_requests');
+  const canSendPdfWhatsapp = can(effectiveRole, 'send_pdf_whatsapp');
+  const canEditWorkOrder = can(effectiveRole, 'edit_work_order');
+  const canUpdateWorkOrderStatus = can(effectiveRole, 'update_work_order_status');
+  const canAddNotes = can(effectiveRole, 'add_notes');
+  const canUploadPhotos = can(effectiveRole, 'upload_photos');
+  const canAssignTechnician = can(effectiveRole, 'assign_technician');
 
   useEffect(() => {
     if (!data?.workOrder) return;
@@ -449,9 +462,9 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }, [request]);
 
   useEffect(() => {
-    if (role !== 'technician' && activeTab === 'overview') setActiveTab('parts');
-    if (role === 'technician' && ['overview', 'workUpdate', 'timeline'].includes(activeTab)) setActiveTab('parts');
-  }, [activeTab, role]);
+    if (!isTechnician && activeTab === 'overview') setActiveTab('parts');
+    if (isTechnician && ['overview', 'workUpdate', 'timeline'].includes(activeTab)) setActiveTab('parts');
+  }, [activeTab, isTechnician]);
 
   useEffect(() => {
     if (partAction?.type !== 'move') return;
@@ -462,6 +475,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }, [partAction?.requestId, partAction?.type]);
 
   async function saveStatus(nextStatus) {
+    if (!canUpdateWorkOrderStatus) {
+      push('You do not have permission to update job status', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) });
@@ -481,6 +498,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function addNote(event) {
     event.preventDefault();
     event.stopPropagation();
+    if (!canAddNotes) {
+      push('You do not have permission to add notes', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/notes`, { method: 'POST', body: JSON.stringify({ text: note }) });
@@ -642,6 +663,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function requestPart(event) {
     event.preventDefault();
     event.stopPropagation();
+    if (!canCreatePartRequest) {
+      push('You do not have permission to request parts', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/part-requests`, { method: 'POST', body: JSON.stringify(partRequest) });
@@ -655,7 +680,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }
 
   async function savePriority(nextPriority) {
-    if (role !== 'admin') return;
+    if (!canEditWorkOrder) return;
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/priority`, { method: 'PATCH', body: JSON.stringify({ priority: nextPriority }) });
@@ -671,7 +696,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   function renderPrioritySummary() {
     const label = jobPriority(order);
     const helper = 'Priority shows job urgency. Admin decides which jobs should be handled first.';
-    if (role === 'admin') {
+    if (canEditWorkOrder) {
       return (
         <div className="grid gap-1.5">
           <WorkOrderBadgeGroup>
@@ -708,8 +733,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         ? rawMoveOpts
         : {};
     if (!partAction) return;
-    if (role !== 'admin') {
-      push('Only admins can review part requests', 'error');
+    if (!canApprovePartRequests) {
+      push('You do not have permission to review part requests', 'error');
       return;
     }
     const { type, requestId } = partAction;
@@ -730,6 +755,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           });
           push('Part request rejected');
         } else if (type === 'move') {
+          if (!canManagePartsUsed) {
+            push('You do not have permission to move parts to Parts Used', 'error');
+            return;
+          }
           if (partsLocked) {
             push(partsLockMessage, 'error');
             return;
@@ -816,8 +845,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function generateInvoice(event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
-    if (!canManageBilling) {
-      push('Only admins can generate invoices', 'error');
+    if (!canCreateInvoice) {
+      push('You do not have permission to generate invoices', 'error');
       return;
     }
     try {
@@ -834,8 +863,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function handleExtraInvoiceMismatch(action, event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
-    if (!canManageBilling) {
-      push('Only admins can update invoices', 'error');
+    if (!canEditInvoice) {
+      push('You do not have permission to update invoices', 'error');
       return;
     }
     const targetInvoiceId = recordId(baseExtraInvoice || primaryExtraInvoice || order.invoiceId);
@@ -863,8 +892,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }
 
   async function voidExtraInvoiceAndUnlockParts() {
-    if (!canManageBilling) {
-      push('Only admins can unlock billed parts', 'error');
+    if (!canEditInvoice) {
+      push('You do not have permission to unlock billed parts', 'error');
       return;
     }
     const targetInvoiceId = recordId(baseExtraInvoice || primaryExtraInvoice || order.invoiceId);
@@ -897,13 +926,17 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function createAmcInvoiceFromWorkOrder(event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
-    if (!canManageBilling) {
-      push('Only admins can create AMC invoices', 'error');
-      return;
-    }
     if (!recordId(amcContract)) return;
     if (amcInvoiceId) {
+      if (!canViewPayments && !canRecordPayment) {
+        push('You do not have permission to view AMC payments', 'error');
+        return;
+      }
       navigate(`${paymentsBase}?invoiceId=${encodeURIComponent(amcInvoiceId)}`);
+      return;
+    }
+    if (!canCreateInvoice) {
+      push('You do not have permission to create AMC invoices', 'error');
       return;
     }
     try {
@@ -930,8 +963,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function saveServiceCharge(event) {
     event.preventDefault();
     event.stopPropagation();
-    if (!canManageBilling) {
-      push('Only admins can update service charges', 'error');
+    if (!canEditServiceCharge) {
+      push('You do not have permission to update service charges', 'error');
       return;
     }
     try {
@@ -951,6 +984,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function autoAssignDetail(event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
+    if (!canAssignTechnician) {
+      push('You do not have permission to assign technicians', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/auto-assign`, { method: 'POST' });
@@ -1053,6 +1090,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }
 
   async function handleApproval(approvalStatus) {
+    if (!canEditWorkOrder) {
+      push('You do not have permission to update approval', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/approval`, {
@@ -1070,6 +1111,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function uploadPhotos(event) {
     event.preventDefault();
     event.stopPropagation();
+    if (!canUploadPhotos) {
+      push('You do not have permission to upload photos', 'error');
+      return;
+    }
     if (!photoFiles.length) {
       push('Select at least one photo', 'error');
       return;
@@ -1252,7 +1297,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         {paidExtraInvoiceLocksParts ? (
           <p className="mt-1 text-xs font-semibold text-amber-100/85">Payment already exists. Create an adjustment invoice instead.</p>
         ) : null}
-        {role === 'admin' && canVoidUnlockParts ? (
+        {canEditInvoice && canVoidUnlockParts ? (
           <button
             type="button"
             className="btn btn-secondary mt-3 py-2"
@@ -1278,7 +1323,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     if (display === 'Completed' || item.status === 'Completed') {
       return <span className="inline-flex min-h-[1.75rem] cursor-not-allowed items-center rounded-full border border-slate-600/40 bg-slate-800/50 px-2.5 py-1 text-xs font-semibold text-slate-400">Completed</span>;
     }
-    if (role !== 'admin') return <span className="text-xs muted">Awaiting admin review</span>;
+    if (!canApprovePartRequests) return <span className="text-xs muted">Awaiting review</span>;
     if (partRequestIsPending(item.status)) {
       return (
         <div className="flex flex-wrap gap-2">
@@ -1288,6 +1333,9 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       );
     }
     if (partRequestCanMove(item.status)) {
+      if (!canManagePartsUsed) {
+        return <span className="text-xs muted">Awaiting parts update</span>;
+      }
       if (partsLocked) {
         return <span className="text-xs muted">Move locked — invoice exists.</span>;
       }
@@ -1411,7 +1459,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     );
   }
 
-  if (false && role === 'technician') {
+  if (false && isTechnician) {
     return (
       <div className="work-order-detail pb-28 sm:pb-0">
         <PageHeader
@@ -1764,13 +1812,13 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         <div className="mt-3">
           <span className={detailLabelClass}>Status Workflow</span>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {statusOptions.map((item) => (
+            {canUpdateWorkOrderStatus ? statusOptions.map((item) => (
               <button key={item} type="button" className={detailStatusButtonClass(order.status === item)} onClick={() => saveStatus(item)}>
                 {order.status === item ? <CheckCircle2 className="h-4 w-4" /> : null}
                 {item}
               </button>
-            ))}
-            {role === 'admin' && !order.technicianId ? <button type="button" className={`${detailStatusButtonClass(false)} border-sky-400/30 text-sky-100`} onClick={autoAssignDetail}>Auto Assign Technician</button> : null}
+            )) : <StatusBadge status={order.status} />}
+            {canAssignTechnician && !order.technicianId ? <button type="button" className={`${detailStatusButtonClass(false)} border-sky-400/30 text-sky-100`} onClick={autoAssignDetail}>Auto Assign Technician</button> : null}
           </div>
         </div>
         {isTechnician ? (
@@ -1839,19 +1887,19 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               <div>
                 <h2 className="text-xl font-black">Status Update</h2>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {workOrderDetailStatuses.map((status) => (
+                  {canUpdateWorkOrderStatus ? workOrderDetailStatuses.map((status) => (
                     <button key={status} type="button" className={`${detailStatusButtonClass(order.status === status)} justify-start`} onClick={() => saveStatus(status)}>
                       {order.status === status ? <CheckCircle2 className="h-4 w-4" /> : null}
                       {status}
                     </button>
-                  ))}
+                  )) : <StatusBadge status={order.status} />}
                 </div>
               </div>
-              <form onSubmit={addNote}>
+              {canAddNotes ? <form onSubmit={addNote}>
                 <h2 className="text-xl font-black">Checklist / Work Update</h2>
                 <textarea className={`input mt-4 min-h-36 ${detailFocusRing}`} placeholder="Diagnosis / work update / follow-up needed" value={note} onChange={(event) => setNote(event.target.value)} />
                 <button type="submit" className="btn btn-primary mt-3 w-full sm:w-auto">Add Work Update</button>
-              </form>
+              </form> : null}
             </div>
           </div>
 
@@ -2078,7 +2126,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 <EmptyState title="No part requests yet." message="Request parts when stock or admin approval is needed." />
               )}
             </div>
-            <div className={`${detailPanelClass} mt-4`}>
+            {canCreatePartRequest ? <div className={`${detailPanelClass} mt-4`}>
               <h3 className="text-xs font-black uppercase tracking-wide text-sky-100">Request Part Approval</h3>
               <form className="mt-3 grid gap-3" onSubmit={requestPart}>
                 <div className="grid gap-3 md:grid-cols-2">
@@ -2111,7 +2159,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 </div>
                 <button type="submit" className="btn btn-primary min-h-11 w-full sm:w-auto"><PackagePlus className="h-4 w-4" />Request Part Approval</button>
               </form>
-            </div>
+            </div> : null}
           </div>
 
           {isAmcLinked ? (
@@ -2122,7 +2170,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                   <h2 className="mt-1 text-xl font-black">{amcContract?.contractId || 'AMC Contract'}</h2>
                   <p className="mt-1 text-sm muted">{amcContract?.contractType || '-'} - {amcContract?.coveredDevices || amcContract?.coveredService || 'Coverage not specified'}</p>
                 </div>
-                {canManageBilling ? (
+                {(amcInvoiceId ? canViewPayments || canRecordPayment : canCreateInvoice) ? (
                   <button type="button" className="btn btn-secondary h-10 px-4" onClick={createAmcInvoiceFromWorkOrder}>
                     <ReceiptText className="h-4 w-4" />{amcInvoiceId ? 'AMC Payments' : 'Create AMC Contract Invoice'}
                   </button>
@@ -2141,7 +2189,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             </div>
           ) : null}
 
-          {canManageBilling ? <form className={activeTab === 'billing' ? detailBillingSectionClass : 'hidden'} onSubmit={saveServiceCharge}>
+          {canEditServiceCharge ? <form className={activeTab === 'billing' ? detailBillingSectionClass : 'hidden'} onSubmit={saveServiceCharge}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-black">Service Charge</h2>
@@ -2246,7 +2294,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                           <p className="mt-1 font-black">{currency(extraInvoiceDifferenceAmount)}</p>
                         </div>
                       </div>
-                      {canManageBilling ? (
+                      {canEditInvoice ? (
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           {canVoidRegenerateExtraInvoice ? (
                             <button type="button" className="btn btn-secondary py-2" onClick={(event) => handleExtraInvoiceMismatch('void-regenerate', event)}>
@@ -2266,7 +2314,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     </div>
                   ) : null}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {canManageBilling && (!isAmcLinked || extraPayableTotal > 0) ? <button type="button" className="btn btn-secondary py-2" onClick={(event) => {
+                    {(canViewPayments || canRecordPayment) && (!isAmcLinked || extraPayableTotal > 0) ? <button type="button" className="btn btn-secondary py-2" onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
                       const targetInvoiceId = recordId(paymentTargetExtraInvoice);
@@ -2278,7 +2326,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     }}>Go to Payments</button> : null}
                   </div>
                 </div>
-              ) : canManageBilling && (!isAmcLinked || extraPayableTotal > 0) ? (
+              ) : canCreateInvoice && (!isAmcLinked || extraPayableTotal > 0) ? (
                 <>
                   <button type="button" className="btn btn-primary mt-3 disabled:cursor-not-allowed disabled:opacity-50" disabled={isAmcLinked && extraPayableTotal <= 0} onClick={generateInvoice}><ReceiptText className="h-4 w-4" />{isAmcLinked ? 'Generate Extra Charges Invoice' : 'Generate Invoice'}</button>
                 </>
@@ -2290,12 +2338,12 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
           <div className={activeTab === 'notes' ? detailSectionClass : 'hidden'}>
             <h2 className="text-xl font-black">Notes</h2>
-            <form className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]" onSubmit={addNote}>
+            {canAddNotes ? <form className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]" onSubmit={addNote}>
               <textarea className={`input min-h-[92px] ${detailFocusRing}`} placeholder="Add technician note" value={note} onChange={(event) => setNote(event.target.value)} />
               <div className="flex items-end">
                 <button type="submit" className="btn btn-primary min-h-[42px] w-full sm:w-auto">Add Note</button>
               </div>
-            </form>
+            </form> : null}
             <div className="mt-4 grid gap-3">{order.notes?.length ? order.notes.map((item) => <div key={item._id || item.createdAt} className="rounded-xl border border-white/10 bg-slate-950/25 p-4"><p className="text-sm leading-6 text-slate-100">{item.text}</p><p className="mt-2 text-xs muted">{item.userId?.name || item.userId?.username || (item.userId ? 'Recorded user' : 'Team')} - {formatDate(item.createdAt)}</p></div>) : <EmptyState title="No notes yet." message="Add diagnosis, customer instruction, or work completion notes." />}</div>
           </div>
 
@@ -2313,19 +2361,19 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 </a>
               )) : <EmptyState title="No image uploaded" message="Customer problem images and technician photos will appear here." />}
             </div>
-            <form className={`${detailPanelClass} mt-4`} onSubmit={uploadPhotos}>
+            {canUploadPhotos ? <form className={`${detailPanelClass} mt-4`} onSubmit={uploadPhotos}>
               <h3 className="text-xs font-black uppercase tracking-wide text-sky-100">Upload Technician Photos</h3>
               <p className="mt-1 text-sm muted">Upload job photos such as device issue, damaged part, or completed work.</p>
               <input className="input mt-3 min-h-12" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => setPhotoFiles(Array.from(event.target.files || []))} />
               <button type="submit" className="btn btn-primary mt-3 min-h-11 w-full sm:w-auto"><PackagePlus className="h-4 w-4" />Upload Photos</button>
-            </form>
+            </form> : null}
           </div>
         </div>
         <div className={sideTabs.includes(activeTab) ? 'grid content-start gap-4' : 'hidden'}>
           <div className={activeTab === 'documents' ? detailSectionClass : 'hidden'}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-xl font-black">PDF Workflow</h2>
-              {role === 'admin' ? (
+              {canEditWorkOrder ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-bold muted">Approval: {order.approvalStatus || 'pending'}</span>
                   <button type="button" className="rounded-xl border border-emerald-300/30 bg-emerald-500/20 px-3 py-1.5 text-sm font-bold text-emerald-50 transition hover:bg-emerald-500/30" onClick={() => handleApproval('approved')}>Approve</button>
@@ -2395,7 +2443,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         </div>
       </div> : null}
 
-      {role === 'admin' && partAction?.type === 'reject' ? (
+      {canApprovePartRequests && partAction?.type === 'reject' ? (
         <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
           <div className="surface w-full max-w-md p-5">
             <h2 className="text-lg font-black">Reject part request?</h2>
@@ -2411,7 +2459,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         </div>
       ) : null}
 
-      {role === 'admin' && partAction?.type === 'move' ? (
+      {canApprovePartRequests && canManagePartsUsed && partAction?.type === 'move' ? (
         <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
           <div className="surface w-full max-w-md p-5">
             <h2 className="text-lg font-black">Move to Parts Used</h2>
@@ -2523,7 +2571,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         </div>
       ) : null}
 
-      {role === 'admin' && partAction?.type === 'approve' ? (
+      {canApprovePartRequests && partAction?.type === 'approve' ? (
         <ConfirmModal
           title="Approve part request?"
           message={`Approve ${partAction.name} x${partAction.quantity}? Stock is not deducted until the part is moved to Parts Used.`}

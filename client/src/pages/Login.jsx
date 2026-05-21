@@ -3,16 +3,17 @@ import { Link, useNavigate } from 'react-router-dom';
 import { LockKeyhole, LogIn, UserRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
+import { adminWorkspaceRoles, canAccessRoles, normalizeRole } from '../utils/roles.js';
+
+function workspacePath(userRole) {
+  return normalizeRole(userRole) === 'technician' ? '/tech/dashboard' : '/admin/dashboard';
+}
 
 export default function Login({ role }) {
-  const showDemoCredentials = import.meta.env.VITE_SHOW_DEMO_CREDENTIALS === 'true';
-  const demoUsername = role === 'admin' ? 'admin' : 'emp1';
-  const demoPassword = role === 'admin' ? 'admin123' : 'emp123';
-  const [username, setUsername] = useState(showDemoCredentials ? demoUsername : '');
-  const [password, setPassword] = useState(showDemoCredentials ? demoPassword : '');
-  const [selectedRole, setSelectedRole] = useState(role);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
 
@@ -20,14 +21,24 @@ export default function Login({ role }) {
     event.preventDefault();
     setLoading(true);
     try {
-      const user = await login(username, password, selectedRole);
-      if (user.role !== selectedRole) {
-        push(`This login is for ${selectedRole} users`, 'error');
-        navigate(user.role === 'admin' ? '/admin/dashboard' : '/tech/dashboard');
+      const user = await login(username, password);
+      const userRole = normalizeRole(user.role);
+      const isAdminLogin = role === 'admin';
+
+      if (isAdminLogin && !canAccessRoles(userRole, adminWorkspaceRoles)) {
+        logout();
+        push('Please use technician login.', 'error');
         return;
       }
+
+      if (!isAdminLogin && userRole !== 'technician') {
+        logout();
+        push('Please use admin login.', 'error');
+        return;
+      }
+
       push(`Welcome ${user.name}`);
-      navigate(user.role === 'admin' ? '/admin/dashboard' : '/tech/dashboard');
+      navigate(workspacePath(user.role));
     } catch (error) {
       push(error.message, 'error');
     } finally {
@@ -58,29 +69,11 @@ export default function Login({ role }) {
             <span className="label">Password</span>
             <input className="input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
           </label>
-          <label>
-            <span className="label">Role</span>
-            <select className="input" value={selectedRole} onChange={(event) => setSelectedRole(event.target.value)}>
-              <option value="admin">Admin</option>
-              <option value="technician">Technician</option>
-            </select>
-          </label>
           <button className="btn btn-primary w-full" disabled={loading}>
             <LogIn className="h-4 w-4" />
             {loading ? 'Signing in...' : 'Login'}
           </button>
         </form>
-
-        {showDemoCredentials ? (
-          <div className="mt-5 rounded-card bg-[var(--surface-2)] p-4 text-sm">
-            <p className="font-bold">Demo credentials</p>
-            {role === 'admin' ? (
-              <p className="mt-1 muted">admin / admin123</p>
-            ) : (
-              <p className="mt-1 muted">emp1 / emp123 or emp2 / emp123</p>
-            )}
-          </div>
-        ) : null}
       </div>
     </div>
   );

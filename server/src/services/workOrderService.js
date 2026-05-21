@@ -5,6 +5,7 @@ import InventoryPart from '../models/InventoryPart.js';
 import Invoice from '../models/Invoice.js';
 import User from '../models/User.js';
 import WorkOrder from '../models/WorkOrder.js';
+import { assertPermission } from '../permissions.js';
 import { appError, clean, numberValue } from '../utils/http.js';
 import { addDateRange, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 import { logAudit } from './auditService.js';
@@ -178,6 +179,7 @@ function markPartStockDeducted(partRow) {
 }
 
 export async function createWorkOrder(payload, user) {
+  assertPermission(user, 'create_work_order');
   let sourceBooking = null;
   let customerId = payload.customerId;
   let serviceType = clean(payload.serviceType);
@@ -308,6 +310,7 @@ export async function getWorkOrder(id, user) {
 }
 
 export async function updateStatus(id, payload, user) {
+  assertPermission(user, 'update_work_order_status');
   const status = clean(payload.status);
   if (!['Pending', 'In Progress', 'Awaiting Parts', 'Completed', 'Delivered', 'Returned'].includes(status)) throw appError('Invalid status');
   const workOrder = await getWorkOrder(id, user);
@@ -330,6 +333,7 @@ export async function updateStatus(id, payload, user) {
 }
 
 export async function updateServiceCharge(id, payload, user) {
+  assertPermission(user, 'edit_service_charge');
   const workOrder = await getWorkOrder(id, user);
   const serviceCharge = Math.max(0, numberValue(payload.serviceCharge, 0));
   const before = { serviceCharge: workOrder.serviceCharge };
@@ -341,7 +345,7 @@ export async function updateServiceCharge(id, payload, user) {
 }
 
 export async function updatePriority(id, payload, user) {
-  if (user.role !== 'admin') throw appError('Only admins can change job priority', 403);
+  assertPermission(user, 'edit_work_order', 'You do not have permission to change job priority');
   const priority = normalizeWorkOrderPriority(payload.priority);
   const workOrder = await getWorkOrder(id, user);
   const before = { priority: workOrder.priority || 'Normal' };
@@ -365,6 +369,7 @@ export async function updatePriority(id, payload, user) {
 }
 
 export async function addNote(id, payload, user) {
+  assertPermission(user, 'add_notes');
   const text = clean(payload.text || payload.note);
   if (!text) throw appError('Note text is required');
   const workOrder = await getWorkOrder(id, user);
@@ -375,6 +380,7 @@ export async function addNote(id, payload, user) {
 }
 
 export async function addPart(id, payload, user) {
+  assertPermission(user, 'manage_parts_used');
   const workOrder = await getWorkOrder(id, user);
   assertPartsUnlocked(workOrder);
   syncAmcPartChargeTypes(workOrder);
@@ -459,6 +465,7 @@ export async function addPart(id, payload, user) {
 }
 
 export async function updatePart(id, partId, payload, user) {
+  assertPermission(user, 'manage_parts_used');
   const workOrder = await getWorkOrder(id, user);
   assertPartsUnlocked(workOrder);
   syncAmcPartChargeTypes(workOrder);
@@ -525,6 +532,7 @@ export async function updatePart(id, partId, payload, user) {
 }
 
 export async function removePart(id, partId, user) {
+  assertPermission(user, 'manage_parts_used');
   const workOrder = await getWorkOrder(id, user);
   assertPartsUnlocked(workOrder);
   syncAmcPartChargeTypes(workOrder);
@@ -548,6 +556,7 @@ export async function removePart(id, partId, user) {
 }
 
 export async function requestPart(id, payload, user) {
+  assertPermission(user, 'create_part_request');
   const workOrder = await getWorkOrder(id, user);
   const quantity = Math.max(1, numberValue(payload.quantity, 1));
   let name = clean(payload.name || payload.partName);
@@ -585,7 +594,7 @@ export async function requestPart(id, payload, user) {
 }
 
 export async function approvePartRequest(id, requestId, user) {
-  if (user.role !== 'admin') throw appError('Only admins can approve part requests', 403);
+  assertPermission(user, 'approve_part_requests', 'You do not have permission to approve part requests');
   const workOrder = await getWorkOrder(id, user);
   const partRequest = workOrder.partRequests.id(requestId);
   if (!partRequest) throw appError('Part request not found', 404);
@@ -618,7 +627,7 @@ export async function approvePartRequest(id, requestId, user) {
 }
 
 export async function rejectPartRequest(id, requestId, payload, user) {
-  if (user.role !== 'admin') throw appError('Only admins can reject part requests', 403);
+  assertPermission(user, 'approve_part_requests', 'You do not have permission to reject part requests');
   const reason = clean(payload.reason || payload.rejectionReason || payload.note);
   if (!reason) throw appError('Rejection reason is required');
   const workOrder = await getWorkOrder(id, user);
@@ -654,7 +663,8 @@ export async function rejectPartRequest(id, requestId, payload, user) {
 }
 
 export async function movePartRequestToUsed(id, requestId, user, payload = {}) {
-  if (user.role !== 'admin') throw appError('Only admins can move approved parts to Parts Used', 403);
+  assertPermission(user, 'approve_part_requests', 'You do not have permission to move approved parts');
+  assertPermission(user, 'manage_parts_used', 'You do not have permission to move approved parts');
   const workOrder = await getWorkOrder(id, user);
   assertPartsUnlocked(workOrder);
   syncAmcPartChargeTypes(workOrder);
@@ -800,6 +810,7 @@ export async function movePartRequestToUsed(id, requestId, user, payload = {}) {
 }
 
 export async function autoAssignWorkOrder(id, user) {
+  assertPermission(user, 'assign_technician');
   const workOrder = await WorkOrder.findById(id);
   if (!workOrder) throw appError('Work order not found', 404);
   if (workOrder.technicianId) throw appError('Work order already has an assigned technician', 409);
@@ -841,7 +852,7 @@ export async function autoAssignWorkOrder(id, user) {
 }
 
 export async function updateAssignment(id, payload, user) {
-  if (user.role !== 'admin') throw appError('Only admins can assign work orders', 403);
+  assertPermission(user, 'assign_technician', 'You do not have permission to assign work orders');
   const workOrder = await WorkOrder.findById(id);
   if (!workOrder) throw appError('Work order not found', 404);
 
@@ -895,7 +906,7 @@ export async function updateAssignment(id, payload, user) {
 }
 
 export async function deleteWorkOrder(id, user) {
-  if (user.role !== 'admin') throw appError('Only admins can delete work orders', 403);
+  assertPermission(user, 'delete_work_order', 'You do not have permission to delete work orders');
   const workOrder = await WorkOrder.findById(id);
   if (!workOrder) throw appError('Work order not found', 404);
 
@@ -944,6 +955,7 @@ export async function deleteWorkOrder(id, user) {
 }
 
 export async function addImages(id, files, user) {
+  assertPermission(user, 'upload_photos');
   if (!files?.length) throw appError('Select at least one image');
   const workOrder = await getWorkOrder(id, user);
   files.forEach((file) => {
@@ -961,6 +973,7 @@ export async function addImages(id, files, user) {
 }
 
 export async function markDocumentSent(id, type, payload, user) {
+  assertPermission(user, 'mark_document_sent');
   if (!['quotation', 'work', 'service-completed', 'amc-contract', 'amc-service-visit', 'amc-invoice'].includes(type)) throw appError('Invalid document type');
   const workOrder = await getWorkOrder(id, user);
   const sentAt = payload.sentAt ? new Date(payload.sentAt) : new Date();
@@ -994,6 +1007,7 @@ function documentLabel(type) {
 }
 
 export async function updateApproval(id, payload, user) {
+  assertPermission(user, 'edit_work_order');
   const approvalStatus = clean(payload.approvalStatus);
   if (!['approved', 'denied'].includes(approvalStatus)) throw appError('Invalid approval status');
   const workOrder = await getWorkOrder(id, user);

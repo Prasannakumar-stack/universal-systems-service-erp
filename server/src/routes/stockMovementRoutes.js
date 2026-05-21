@@ -1,12 +1,13 @@
 import { Router } from 'express';
-import { authenticate, requireRole } from '../auth.js';
+import { authenticate } from '../auth.js';
+import { requirePermission } from '../permissions.js';
 import { create, list } from '../controllers/stockMovementController.js';
 import { asyncHandler } from '../utils/http.js';
 
 const router = Router();
 
-router.use(authenticate, requireRole('admin'));
-router.get('/', asyncHandler(list));
-router.post('/', asyncHandler(create));
+router.use(authenticate);
+router.get('/', requirePermission('view_stock_movements'), asyncHandler(list));
+router.post('/', requirePermission('edit_stock'), asyncHandler(create));
 
 export default router;

@@ -142,10 +142,13 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { can } from '../../utils/roles.js';
 
 export function StockMovementsPage() {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const location = useLocation();
+  const canEditStock = can(user, 'edit_stock');
+  const canExportReports = can(user, 'export_reports');
   const partIdParam = useMemo(() => new URLSearchParams(location.search).get('partId') || '', [location.search]);
   const [movementType, setMovementType] = useState('');
   const [partId, setPartId] = useState(partIdParam);
@@ -271,7 +274,7 @@ export function StockMovementsPage() {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Stock Movement Ledger</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Every add, use, return, transfer, and adjustment is recorded for audit tracking.</p>
           </div>
-          <button type="button" className="btn btn-secondary h-10 px-4" onClick={exportCsv}><Download className="h-4 w-4" />Export CSV</button>
+          {canExportReports ? <button type="button" className="btn btn-secondary h-10 px-4" onClick={exportCsv}><Download className="h-4 w-4" />Export CSV</button> : null}
         </div>
       </section>
       <div className="surface mb-5 p-3">
@@ -319,7 +322,7 @@ export function StockMovementsPage() {
         </button>
         <p className="inventory-count-pill xl:col-span-6">Showing <b>{filteredMovements.length}</b> movement{filteredMovements.length === 1 ? '' : 's'}</p>
       </div>
-      <form className="surface inventory-manual-form mb-5 grid gap-3 p-5 xl:grid-cols-[minmax(220px,1fr)_140px_120px_160px_minmax(220px,1fr)_auto]" onSubmit={submit}>
+      {canEditStock ? <form className="surface inventory-manual-form mb-5 grid gap-3 p-5 xl:grid-cols-[minmax(220px,1fr)_140px_120px_160px_minmax(220px,1fr)_auto]" onSubmit={submit}>
         <div className="xl:col-span-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -370,7 +373,7 @@ export function StockMovementsPage() {
             ))}
           </div>
         ) : null}
-      </form>
+      </form> : null}
       <p className="mb-3 text-xs font-semibold muted">Stock movements are recorded through the existing stock movement API and mirrored into audit logs.</p>
       {!filteredMovements.length ? (
         <EmptyState

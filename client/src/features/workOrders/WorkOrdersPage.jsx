@@ -145,6 +145,7 @@ import {
 } from '../../shared/phase1Shared.jsx';
 import { MoreHorizontal, Search, X } from 'lucide-react';
 import { ADMIN_ASSIGNMENT_LABEL, technicianNameOrAdmin } from '../../utils/assignment.js';
+import { can, normalizeRole } from '../../utils/roles.js';
 
 const WORK_ORDER_SOURCES = ['Walk-in', 'Call', 'Website'];
 const ADMIN_TECHNICIAN_FILTER_VALUE = 'admin';
@@ -234,9 +235,14 @@ function WorkOrdersBadgeCell({ children, justify = 'justify-start' }) {
 }
 
 export function WorkOrdersPage({ role = 'admin' }) {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const { push } = useToast();
   const location = useLocation();
+  const effectiveRole = user?.role || role;
+  const isTechnician = normalizeRole(effectiveRole) === 'technician';
+  const canAssignTechnician = can(effectiveRole, 'assign_technician');
+  const canDeleteWorkOrder = can(effectiveRole, 'delete_work_order');
+  const canViewCustomer360 = can(effectiveRole, 'view_customer_360');
   const routeParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const statusParam = useMemo(() => normalizeStatusParam(routeParams.get('status')), [routeParams]);
   const priorityParam = useMemo(() => new URLSearchParams(location.search).get('priority') || '', [location.search]);
@@ -265,14 +271,14 @@ export function WorkOrdersPage({ role = 'admin' }) {
     if (status) params.set('status', status);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
-    if (role === 'admin' && technicianId) params.set('technicianId', technicianId === ADMIN_TECHNICIAN_FILTER_VALUE ? ADMIN_TECHNICIAN_FILTER_VALUE : technicianId);
+    if (canAssignTechnician && technicianId) params.set('technicianId', technicianId === ADMIN_TECHNICIAN_FILTER_VALUE ? ADMIN_TECHNICIAN_FILTER_VALUE : technicianId);
     if (serviceType) params.set('serviceType', serviceType);
     if (source) params.set('source', normalizeSourceLabel(source));
     if (priorityFilter) params.set('priority', priorityFilter);
     return params.toString() ? `?${params}` : '';
-  }, [dateFrom, dateTo, debouncedSearch, limit, page, priorityFilter, role, serviceType, source, status, technicianId]);
+  }, [canAssignTechnician, dateFrom, dateTo, debouncedSearch, limit, page, priorityFilter, serviceType, source, status, technicianId]);
   const { data, loading, error, reload } = useResource(() => request(`/work-orders${query}`), [request, query]);
-  const base = role === 'admin' ? '/admin/work-orders' : '/tech/work-orders';
+  const base = isTechnician ? '/tech/work-orders' : '/admin/work-orders';
 
   useEffect(() => {
     setStatus(statusParam);
@@ -285,16 +291,20 @@ export function WorkOrdersPage({ role = 'admin' }) {
   }, [filterParam, todayFilterDate]);
 
   useEffect(() => {
-    if (role === 'admin') setPriorityFilter(priorityParam);
-  }, [priorityParam, role]);
+    if (!isTechnician) setPriorityFilter(priorityParam);
+  }, [isTechnician, priorityParam]);
 
   useEffect(() => {
-    if (role === 'admin') setTechnicianId(technicianIdParam);
-  }, [role, technicianIdParam]);
+    if (canAssignTechnician) setTechnicianId(technicianIdParam);
+  }, [canAssignTechnician, technicianIdParam]);
 
   useEffect(() => {
-    if (role === 'admin') request('/users?role=technician&active=true&limit=100').then((result) => setTechnicians(result.users.filter((user) => user.role === 'technician' && user.active))).catch(() => {});
-  }, [request, role]);
+    if (!canAssignTechnician) {
+      setTechnicians([]);
+      return;
+    }
+    request('/users?role=technician&active=true&limit=100').then((result) => setTechnicians(result.users.filter((user) => user.role === 'technician' && user.active))).catch(() => {});
+  }, [canAssignTechnician, request]);
 
   useEffect(() => {
     setPage(1);
@@ -392,7 +402,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
   }, [notesParam, priorityFilter, searchTerm, source, workOrders]);
   const visibleWorkOrders = filteredWorkOrders;
   const pagination = paginationFrom(data, workOrders.length, limit);
-  const actionColumnWidth = role === 'admin' ? '190px' : '120px';
+  const actionColumnWidth = canAssignTechnician || canDeleteWorkOrder ? '190px' : '120px';
 
   if (loading) return <div className="work-orders-page mx-auto max-w-[1920px]"><LoadingBlock /></div>;
   if (error) return <div className="work-orders-page mx-auto max-w-[1920px]"><ErrorBlock message={error} /></div>;
@@ -439,7 +449,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
           </select>
           <input className={`${workOrdersDateClass} lg:col-span-2`} type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} aria-label="Date from" />
           <input className={`${workOrdersDateClass} lg:col-span-2`} type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} aria-label="Date to" />
-          {role === 'admin' ? (
+          {canAssignTechnician ? (
             <select className={`${workOrdersFilterClass} lg:col-span-3`} value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}>
               <option value="">All technicians</option>
               <option value={ADMIN_TECHNICIAN_FILTER_VALUE}>{ADMIN_ASSIGNMENT_LABEL}</option>
@@ -460,7 +470,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
         />
       ) : (
         <>
-        {role === 'technician' ? (
+        {isTechnician ? (
           <div className="technician-mobile-card-list work-orders-mobile-cards">
             {visibleWorkOrders.map((order) => (
               <TechnicianWorkOrderMobileCard
@@ -472,7 +482,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
             ))}
           </div>
         ) : null}
-        <div className={`work-orders-table-shell work-orders-table-shell--summary table-wrap border border-white/10 bg-[var(--surface)] ${role === 'technician' ? 'technician-desktop-table' : ''}`}>
+        <div className={`work-orders-table-shell work-orders-table-shell--summary table-wrap border border-white/10 bg-[var(--surface)] ${isTechnician ? 'technician-desktop-table' : ''}`}>
           <table className="data-table work-orders-table work-orders-table--summary w-full min-w-0 table-fixed" style={{ '--work-order-action-width': actionColumnWidth }}>
             <colgroup>
               <col className="work-orders-col-summary-customer" style={{ width: '18%' }} />
@@ -504,7 +514,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
                 >
                   <td className={`${workOrdersTdClass} work-orders-cell-customer !whitespace-normal text-left`}>
                     <div className="min-w-0">
-                      {role === 'admin' && order.customerId ? (
+                      {!isTechnician && canViewCustomer360 && order.customerId ? (
                         <Link className={`block truncate font-bold text-slate-100 hover:text-sky-300 ${workOrdersFocusRing}`} title={order.customerId?.name} to={`/admin/customers/${recordId(order.customerId)}`}>{order.customerId?.name || 'Customer'}</Link>
                       ) : (
                         <span className="block truncate font-bold text-slate-100" title={order.customerId?.name}>{order.customerId?.name || 'Customer'}</span>
@@ -541,7 +551,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
                   <td className={`${workOrdersTdClass} work-orders-cell-actions !whitespace-normal px-4 text-center align-middle`}>
                     <div className="work-orders-actions relative flex items-center justify-center gap-1.5">
                       <Link className={workOrdersDetailsBtnClass} to={`${base}/${order.id}`}>Details</Link>
-                      {role === 'admin' ? (
+                      {canAssignTechnician || canDeleteWorkOrder ? (
                         <div className="relative">
                           <button
                             type="button"
@@ -553,16 +563,16 @@ export function WorkOrdersPage({ role = 'admin' }) {
                           </button>
                           {actionMenuId === recordId(order) ? (
                             <div className="work-orders-more-menu">
-                              {!order.technicianId ? (
+                              {canAssignTechnician && !order.technicianId ? (
                                 <button type="button" onClick={() => autoAssign(order.id)}>Auto Assign</button>
                               ) : null}
-                              <button type="button" onClick={() => { setAssignOrder(order); setActionMenuId(''); }}>
+                              {canAssignTechnician ? <button type="button" onClick={() => { setAssignOrder(order); setActionMenuId(''); }}>
                                 {order.technicianId ? 'Reassign' : 'Assign'}
-                              </button>
-                              <button type="button" className="work-orders-danger-menu-item" onClick={() => { setDeleteOrder(order); setActionMenuId(''); }}>
+                              </button> : null}
+                              {canDeleteWorkOrder ? <button type="button" className="work-orders-danger-menu-item" onClick={() => { setDeleteOrder(order); setActionMenuId(''); }}>
                                 <Trash2 className="h-3.5 w-3.5" />
                                 Delete
-                              </button>
+                              </button> : null}
                             </div>
                           ) : null}
                         </div>
@@ -577,7 +587,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
         <PaginationControls pagination={pagination} onPageChange={setPage} />
         </>
       )}
-      {assignOrder ? (
+      {canAssignTechnician && assignOrder ? (
         <WorkOrderAssignmentModal
           order={assignOrder}
           technicians={technicians}
@@ -585,7 +595,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
           onSave={saveAssignment}
         />
       ) : null}
-      {deleteOrder ? (
+      {canDeleteWorkOrder && deleteOrder ? (
         <ConfirmModal
           title="Delete Work Order"
           message="Are you sure you want to delete this work order? This action cannot be undone."

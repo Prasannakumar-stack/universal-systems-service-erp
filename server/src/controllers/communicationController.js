@@ -2,6 +2,7 @@ import Communication from '../models/Communication.js';
 import Customer from '../models/Customer.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { logAudit } from '../services/auditService.js';
+import { getTechnicianScope, technicianCanAccessWorkOrder } from '../services/technicianScopeService.js';
 import { appError, clean, required } from '../utils/http.js';
 
 export async function create(req, res) {
@@ -12,8 +13,13 @@ export async function create(req, res) {
   if (req.body.workOrderId) {
     const workOrder = await WorkOrder.findById(req.body.workOrderId);
     if (!workOrder) throw appError('Work order not found', 404);
-    if (req.user.role === 'technician' && String(workOrder.technicianId) !== String(req.user._id)) {
+    if (req.user.role === 'technician' && !technicianCanAccessWorkOrder(workOrder, req.user)) {
       throw appError('You do not have permission to add communication for this work order', 403);
+    }
+  } else if (req.user.role === 'technician') {
+    const technicianScope = await getTechnicianScope(req.user);
+    if (!technicianScope?.customerIds.includes(String(req.body.customerId))) {
+      throw appError('You do not have permission to add communication for this customer', 403);
     }
   }
   const communication = await Communication.create({
@@ -33,11 +39,17 @@ export async function list(req, res) {
   if (req.query.workOrderId) filter.workOrderId = req.query.workOrderId;
   if (req.query.type) filter.type = req.query.type;
   if (req.user.role === 'technician') {
-    const assigned = await WorkOrder.find({ technicianId: req.user._id }).select('_id');
-    const assignedIds = assigned.map((item) => item._id);
-    filter.workOrderId = filter.workOrderId && assignedIds.some((id) => String(id) === String(filter.workOrderId))
-      ? filter.workOrderId
-      : { $in: assignedIds };
+    const technicianScope = await getTechnicianScope(req.user);
+    if (filter.workOrderId && !technicianScope?.workOrderIds.includes(String(filter.workOrderId))) {
+      return res.json({ communications: [] });
+    }
+    if (filter.customerId && !technicianScope?.customerIds.includes(String(filter.customerId))) {
+      return res.json({ communications: [] });
+    }
+    filter.$or = [
+      { workOrderId: { $in: technicianScope?.workOrderObjectIds || [] } },
+      { customerId: { $in: technicianScope?.customerObjectIds || [] } }
+    ];
   }
   const communications = await Communication.find(filter).populate('customerId workOrderId createdBy', 'name phone device issue username role').sort({ createdAt: -1 });
   res.json({ communications });

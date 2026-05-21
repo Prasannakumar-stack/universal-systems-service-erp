@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import AMCContract from '../models/AMCContract.js';
 import Invoice from '../models/Invoice.js';
 import WorkOrder from '../models/WorkOrder.js';
+import { assertPermission } from '../permissions.js';
 import { appError, clean, numberValue } from '../utils/http.js';
 import { calculateAmcCoverageBreakdown, amcCoverageSummary } from './amcCoverageEngine.js';
 import { logAudit } from './auditService.js';
@@ -330,6 +331,8 @@ async function createAdjustmentExtraInvoice(payload, workOrder, user, labour) {
 }
 
 export async function createInvoice(payload, user = null) {
+  const action = clean(payload.amcExtraAction || payload.extraInvoiceAction);
+  assertPermission(user, payload.invoiceId || action ? 'edit_invoice' : 'create_invoice');
   if (payload.amcContractId && !payload.workOrderId) {
     return createAmcInvoice(payload, user);
   }

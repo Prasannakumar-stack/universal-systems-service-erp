@@ -142,12 +142,17 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { can } from '../../utils/roles.js';
 
 const inventoryUnitTypes = ['Piece', 'Box', 'Meter', 'Pack'];
 
 export function InventoryPage() {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const { push } = useToast();
+  const canCreatePart = can(user, 'create_part');
+  const canEditStock = can(user, 'edit_stock');
+  const canViewStockMovements = can(user, 'view_stock_movements');
+  const canDeletePart = can(user, 'delete_part');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [stockStatus, setStockStatus] = useState('');
@@ -286,13 +291,13 @@ export function InventoryPage() {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Inventory / Stock Management</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Track stock availability, reserved quantity, low stock, value, and movement history.</p>
           </div>
-          <button type="button" className="btn btn-primary h-10 px-4" onClick={() => setEditor({})}><Plus className="h-4 w-4" />Add Part</button>
+          {canCreatePart ? <button type="button" className="btn btn-primary h-10 px-4" onClick={() => setEditor({})}><Plus className="h-4 w-4" />Add Part</button> : null}
         </div>
       </section>
       <div className="surface mb-5 p-3">
         <div className="tabs-list inventory-tabs border-b-0">
           <Link className="tab-button tab-button-active" to="/admin/parts">Products / Parts</Link>
-          <Link className="tab-button" to="/admin/stock-movements">Stock Movements</Link>
+          {canViewStockMovements ? <Link className="tab-button" to="/admin/stock-movements">Stock Movements</Link> : null}
         </div>
       </div>
       <div className="inventory-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
@@ -337,7 +342,7 @@ export function InventoryPage() {
           icon={PackagePlus}
           title={hasActiveFilters ? 'No parts match your filters' : 'No inventory items found'}
           message={hasActiveFilters ? 'Try changing the search or filters.' : 'Add your first part to start tracking stock availability and value.'}
-          action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setCategory(''); setStockStatus(''); setSortBy('name'); }}>Reset Filters</button> : <button type="button" className="btn btn-primary" onClick={() => setEditor({})}>Add Part</button>}
+          action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setCategory(''); setStockStatus(''); setSortBy('name'); }}>Reset Filters</button> : canCreatePart ? <button type="button" className="btn btn-primary" onClick={() => setEditor({})}>Add Part</button> : null}
         />
       ) : (
         <>
@@ -388,10 +393,10 @@ export function InventoryPage() {
                     </td>
                     <td className="text-right">
                       <div className="inventory-actions">
-                        <button type="button" className="btn btn-primary inventory-action-button" onClick={() => setQuickStockPart(part)}><PackagePlus className="h-4 w-4" />Add Stock</button>
-                        <button type="button" className="btn btn-secondary inventory-action-button" onClick={() => setEditor(part)}><Edit3 className="h-3.5 w-3.5" />Edit</button>
-                        <Link className="inventory-movement-link" to={`/admin/stock-movements?partId=${part.id}`}>View Movements</Link>
-                        <button type="button" className="icon-button inventory-delete-button text-rose-100" onClick={() => setDeletePart(part)} aria-label={`Delete ${part.partName}`}><Trash2 className="h-4 w-4" /></button>
+                        {canEditStock ? <button type="button" className="btn btn-primary inventory-action-button" onClick={() => setQuickStockPart(part)}><PackagePlus className="h-4 w-4" />Add Stock</button> : null}
+                        {canEditStock ? <button type="button" className="btn btn-secondary inventory-action-button" onClick={() => setEditor(part)}><Edit3 className="h-3.5 w-3.5" />Edit</button> : null}
+                        {canViewStockMovements ? <Link className="inventory-movement-link" to={`/admin/stock-movements?partId=${part.id}`}>View Movements</Link> : null}
+                        {canDeletePart ? <button type="button" className="icon-button inventory-delete-button text-rose-100" onClick={() => setDeletePart(part)} aria-label={`Delete ${part.partName}`}><Trash2 className="h-4 w-4" /></button> : null}
                       </div>
                     </td>
                   </tr>
@@ -403,9 +408,9 @@ export function InventoryPage() {
         <PaginationControls pagination={pagination} onPageChange={setPage} />
         </>
       )}
-      {editor ? <InventoryPartModal part={editor} onClose={() => setEditor(null)} onSave={savePart} /> : null}
-      {quickStockPart ? <QuickStockModal part={quickStockPart} onClose={() => setQuickStockPart(null)} onSave={addQuickStock} /> : null}
-      {deletePart ? (
+      {(canCreatePart || canEditStock) && editor ? <InventoryPartModal part={editor} onClose={() => setEditor(null)} onSave={savePart} /> : null}
+      {canEditStock && quickStockPart ? <QuickStockModal part={quickStockPart} onClose={() => setQuickStockPart(null)} onSave={addQuickStock} /> : null}
+      {canDeletePart && deletePart ? (
         <ConfirmModal
           title="Delete Inventory Part"
           message={`Delete ${deletePart.partName}? This removes the part from inventory.`}

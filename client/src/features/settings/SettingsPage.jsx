@@ -139,7 +139,9 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
-import { Palette } from 'lucide-react';
+import { Fragment } from 'react';
+import { ChevronRight, LockKeyhole, MinusCircle, Palette, RotateCcw } from 'lucide-react';
+import { ALL_PERMISSIONS, can, hasRole, permissionMatrixGroups, roleDisplayOrder, roleLabel, roleUiMetadata, supportedRoles } from '../../utils/roles.js';
 import { themePreferenceOptions, useThemePreference } from '../../utils/theme.js';
 
 const emptyTechnicianForm = {
@@ -155,9 +157,19 @@ const emptyTechnicianForm = {
 const settingsTabs = [
   { id: 'workspace', label: 'Workspace Profile' },
   { id: 'security', label: 'Security' },
-  { id: 'team', label: 'Team Access' },
+  { id: 'usersRoles', label: 'Users & Roles' },
   { id: 'preferences', label: 'Preferences' }
 ];
+
+const roleIconMap = {
+  admin: ShieldCheck,
+  manager: ClipboardList,
+  receptionist: PhoneCallIcon,
+  accountant: CreditCard,
+  inventory: Boxes,
+  technician: Wrench,
+  viewer: UserRound
+};
 
 function SettingsInfoCard({ title, icon: Icon, children, action = null, className = '' }) {
   return (
@@ -243,6 +255,471 @@ function TeamAccessSection() {
   );
 }
 
+function PermissionStateIcon({ state }) {
+  if (state === 'allowed') {
+    return (
+      <span className="role-permission-state role-permission-state-allowed" title="Allowed" aria-label="Allowed">
+        <CheckCircle2 className="h-4 w-4" />
+      </span>
+    );
+  }
+  if (state === 'denied') {
+    return (
+      <span className="role-permission-state role-permission-state-denied" title="Denied" aria-label="Denied">
+        <X className="h-4 w-4" />
+      </span>
+    );
+  }
+  return (
+    <span className="role-permission-state role-permission-state-not-set" title="Not set" aria-label="Not set">
+      <MinusCircle className="h-4 w-4" />
+    </span>
+  );
+}
+
+function RoleComingNextModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4">
+      <div className="surface admin-modal w-full max-w-md p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Coming next</p>
+            <h2 className="mt-1 text-xl font-black">Custom Role Creation</h2>
+            <p className="mt-2 text-sm leading-6 muted">Custom role creation will be enabled after permission editor backend is added.</p>
+          </div>
+          <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close create role notice">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="mt-5 flex justify-end">
+          <button type="button" className="btn btn-primary" onClick={onClose}>Understood</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoleUserViewModal({ user, onClose }) {
+  if (!user) return null;
+  const displayRole = roleUiMetadata[user.role]?.label || roleLabel(user.role);
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4">
+      <div className="surface admin-modal w-full max-w-lg p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">User Access</p>
+            <h2 className="mt-1 text-xl font-black">{user.name || user.username || 'User'}</h2>
+            <p className="mt-2 text-sm leading-6 muted">System role and account status are protected by backend user APIs.</p>
+          </div>
+          <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close user details">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <SettingsInfoItem icon={UserRound} label="Name" value={user.name || '-'} />
+          <SettingsInfoItem icon={KeyRound} label="Username" value={user.username || '-'} />
+          <SettingsInfoItem icon={ShieldCheck} label="Role" value={displayRole} />
+          <SettingsInfoItem icon={PhoneCallIcon} label="Contact" value={user.email || user.phone || '-'} />
+        </div>
+        <div className="mt-5 flex justify-end">
+          <button type="button" className="btn btn-primary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditUserRoleModal({ user, saving, onClose, onSave }) {
+  const [nextRole, setNextRole] = useState(user?.role || 'viewer');
+  if (!user) return null;
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4">
+      <form className="surface admin-modal w-full max-w-md p-5" onSubmit={(event) => {
+        event.preventDefault();
+        onSave(nextRole);
+      }}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Protected Action</p>
+            <h2 className="mt-1 text-xl font-black">Edit User Role</h2>
+            <p className="mt-2 text-sm leading-6 muted">Role updates use the existing protected user API. Permission definitions remain system-controlled in this phase.</p>
+          </div>
+          <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close edit role modal">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <label className="mt-5 block">
+          <span className="label">System Role</span>
+          <select className="input" value={nextRole} onChange={(event) => setNextRole(event.target.value)}>
+            {supportedRoles.map((role) => (
+              <option key={role} value={role}>{roleUiMetadata[role]?.label || roleLabel(role)}</option>
+            ))}
+          </select>
+        </label>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={saving}>
+            <Save className="h-4 w-4" />
+            {saving ? 'Saving...' : 'Save Role'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function cloneRolePermissionMap(source = {}) {
+  return roleDisplayOrder.reduce((roles, role) => {
+    roles[role] = ALL_PERMISSIONS.reduce((permissions, permission) => {
+      permissions[permission] = Boolean(source?.[role]?.[permission]);
+      return permissions;
+    }, {});
+    return roles;
+  }, {});
+}
+
+function rolePermissionsFromApi(roles = []) {
+  const source = roles.reduce((map, item) => {
+    map[item.role] = item.permissions || {};
+    return map;
+  }, {});
+  return cloneRolePermissionMap(source);
+}
+
+function rolePermissionMapsEqual(left = {}, right = {}) {
+  return roleDisplayOrder.every((role) => ALL_PERMISSIONS.every((permission) => Boolean(left?.[role]?.[permission]) === Boolean(right?.[role]?.[permission])));
+}
+
+function changedPermissionRoles(draft = {}, baseline = {}) {
+  return roleDisplayOrder.filter((role) => ALL_PERMISSIONS.some((permission) => Boolean(draft?.[role]?.[permission]) !== Boolean(baseline?.[role]?.[permission])));
+}
+
+function permissionStateFromDraft(draft, role, permission) {
+  if (!permission || !ALL_PERMISSIONS.includes(permission)) return 'not_set';
+  return draft?.[role]?.[permission] ? 'allowed' : 'denied';
+}
+
+function PermissionMatrixCell({ state, locked, edited, disabled, onToggle }) {
+  return (
+    <button
+      type="button"
+      className={`role-permission-cell role-permission-cell-${state} ${edited ? 'role-permission-cell-edited' : ''} ${locked ? 'role-permission-cell-locked' : ''}`}
+      disabled={disabled}
+      onClick={onToggle}
+      title={locked ? 'Locked permission' : disabled ? 'Permission editing unavailable' : state === 'allowed' ? 'Click to deny' : 'Click to allow'}
+      aria-label={locked ? `Locked ${state}` : state}
+    >
+      <PermissionStateIcon state={state} />
+      {locked ? <LockKeyhole className="role-permission-lock h-3.5 w-3.5" /> : null}
+    </button>
+  );
+}
+
+function UsersRolesSection() {
+  const { request, user } = useAuth();
+  const { push } = useToast();
+  const [permissionSearch, setPermissionSearch] = useState('');
+  const [permissionDraft, setPermissionDraft] = useState(null);
+  const [permissionsSaving, setPermissionsSaving] = useState(false);
+  const [viewUser, setViewUser] = useState(null);
+  const [editRoleUser, setEditRoleUser] = useState(null);
+  const [roleSaving, setRoleSaving] = useState(false);
+  const canEditRolePermissions = hasRole(user, 'admin') && can(user, 'manage_roles');
+  const { data: rolePermissionData, loading: permissionsLoading, error: permissionsError, reload: reloadRolePermissions } = useResource(
+    () => request('/role-permissions'),
+    [request]
+  );
+  const { data: usersData, loading: usersLoading, reload: reloadUsers } = useResource(async () => {
+    try {
+      const usersResult = await request('/users');
+      return { users: usersResult.users || [], unavailable: false };
+    } catch (err) {
+      return { users: [], unavailable: true, message: err.message };
+    }
+  }, [request]);
+  const users = usersData?.users || [];
+  const usersUnavailable = Boolean(usersData?.unavailable);
+  const adminLockedPermissions = rolePermissionData?.adminLockedPermissions || [];
+  const baselinePermissions = useMemo(
+    () => rolePermissionData?.roles ? rolePermissionsFromApi(rolePermissionData.roles) : null,
+    [rolePermissionData]
+  );
+  const dirtyRoles = useMemo(
+    () => permissionDraft && baselinePermissions ? changedPermissionRoles(permissionDraft, baselinePermissions) : [],
+    [permissionDraft, baselinePermissions]
+  );
+  const matrixDirty = dirtyRoles.length > 0;
+  const normalizedSearch = permissionSearch.trim().toLowerCase();
+  const filteredPermissionGroups = useMemo(() => permissionMatrixGroups
+    .map((group) => {
+      if (!normalizedSearch) return group;
+      const groupMatches = group.group.toLowerCase().includes(normalizedSearch);
+      const permissions = groupMatches
+        ? group.permissions
+        : group.permissions.filter((item) => `${item.label} ${item.permission || ''}`.toLowerCase().includes(normalizedSearch));
+      return { ...group, permissions };
+    })
+    .filter((group) => group.permissions.length), [normalizedSearch]);
+
+  useEffect(() => {
+    if (baselinePermissions) setPermissionDraft(cloneRolePermissionMap(baselinePermissions));
+  }, [baselinePermissions]);
+
+  function isLockedCell(role, permission) {
+    if (!permission) return true;
+    if (role === 'admin') return true;
+    return false;
+  }
+
+  function togglePermission(role, permission) {
+    if (!canEditRolePermissions || isLockedCell(role, permission)) return;
+    setPermissionDraft((current) => {
+      const next = cloneRolePermissionMap(current);
+      next[role][permission] = !next[role][permission];
+      return next;
+    });
+  }
+
+  function resetPermissionDraft() {
+    if (!baselinePermissions) return;
+    setPermissionDraft(cloneRolePermissionMap(baselinePermissions));
+  }
+
+  async function saveRolePermissionChanges() {
+    if (!matrixDirty || !permissionDraft) return;
+    setPermissionsSaving(true);
+    try {
+      await Promise.all(dirtyRoles.map((role) => request(`/role-permissions/${role}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ permissions: permissionDraft[role] })
+      })));
+      push('Role permissions saved');
+      await reloadRolePermissions({ silent: true });
+    } catch (err) {
+      push(err.message, 'error');
+    } finally {
+      setPermissionsSaving(false);
+    }
+  }
+
+  async function saveUserRole(nextRole) {
+    if (!editRoleUser) return;
+    setRoleSaving(true);
+    try {
+      await request(`/users/${recordId(editRoleUser)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role: nextRole })
+      });
+      push('User role updated');
+      setEditRoleUser(null);
+      reloadUsers({ silent: true });
+    } catch (err) {
+      push(err.message, 'error');
+    } finally {
+      setRoleSaving(false);
+    }
+  }
+
+  return (
+    <div className="users-roles-section grid gap-5">
+      <section className="surface role-permissions-hero p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0">
+            <div className="role-permissions-breadcrumb">
+              <span>Settings</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+              <span>Users & Roles</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+              <span>Role Permissions</span>
+            </div>
+            <h2 className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">Role Permissions</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage roles and their permissions. Backend API guards protect every restricted action.</p>
+          </div>
+          <div className="role-permissions-actions">
+            <SearchBox value={permissionSearch} onChange={setPermissionSearch} placeholder="Search permissions" />
+            <Link className="btn btn-secondary admin-compact-button" to="/admin/audit-logs">
+              <ReceiptText className="h-4 w-4" />
+              Audit Logs
+            </Link>
+            <button
+              type="button"
+              className="btn btn-primary admin-compact-button"
+              disabled={!canEditRolePermissions || !matrixDirty || permissionsSaving || permissionsLoading || Boolean(permissionsError)}
+              onClick={saveRolePermissionChanges}
+            >
+              <Save className="h-4 w-4" />
+              {permissionsSaving ? 'Saving...' : 'Save Changes'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary admin-compact-button"
+              disabled={!matrixDirty || permissionsSaving}
+              onClick={resetPermissionDraft}
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reset Changes
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 rounded-card border border-sky-300/20 bg-sky-400/10 p-3 text-sm font-semibold text-sky-100">
+          {canEditRolePermissions ? matrixDirty ? `${dirtyRoles.length} role permission set${dirtyRoles.length === 1 ? '' : 's'} changed. Save to apply backend guards.` : 'Permission edits are saved to backend role guards.' : 'Only admin users with Manage Roles can edit permissions.'}
+        </div>
+      </section>
+
+      <section className="surface role-matrix-card role-matrix-card-full p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-black">Permission Matrix</h3>
+            <p className="mt-1 text-sm muted">Backend-backed role permissions by role</p>
+          </div>
+          <div className="role-matrix-legend">
+            <span><PermissionStateIcon state="allowed" />Allowed</span>
+            <span><PermissionStateIcon state="denied" />Denied</span>
+            <span><PermissionStateIcon state="not_set" />Not Set</span>
+            <span><LockKeyhole className="h-4 w-4" />Locked</span>
+          </div>
+        </div>
+        {permissionsError ? (
+          <ErrorBlock message={permissionsError} />
+        ) : permissionsLoading || !permissionDraft ? (
+          <LoadingBlock />
+        ) : (
+          <div className="role-matrix-wrap">
+            <table className="role-permission-matrix role-permission-matrix-editable">
+              <thead>
+                <tr>
+                  <th>Permission</th>
+                  {roleDisplayOrder.map((role) => (
+                    <th key={role}>{roleUiMetadata[role]?.shortLabel || roleLabel(role)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPermissionGroups.length ? filteredPermissionGroups.map((group) => (
+                  <Fragment key={group.group}>
+                    <tr className="role-permission-group-row">
+                      <td colSpan={roleDisplayOrder.length + 1}>{group.group}</td>
+                    </tr>
+                    {group.permissions.map((item) => (
+                      <tr key={`${group.group}-${item.label}`}>
+                        <td>
+                          <span className="role-permission-label">{item.label}</span>
+                          {item.permission ? <span className="role-permission-key">{item.permission}</span> : <span className="role-permission-key">No Phase 1 guard</span>}
+                        </td>
+                        {roleDisplayOrder.map((role) => {
+                          const state = permissionStateFromDraft(permissionDraft, role, item.permission);
+                          const locked = isLockedCell(role, item.permission);
+                          const edited = Boolean(item.permission) && Boolean(permissionDraft?.[role]?.[item.permission]) !== Boolean(baselinePermissions?.[role]?.[item.permission]);
+                          return (
+                            <td key={`${role}-${item.label}`} className={edited ? 'role-matrix-edited-cell' : ''}>
+                              <PermissionMatrixCell
+                                state={state}
+                                locked={locked}
+                                edited={edited}
+                                disabled={!canEditRolePermissions || locked || permissionsSaving}
+                                onToggle={() => togglePermission(role, item.permission)}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </Fragment>
+                )) : (
+                  <tr>
+                    <td colSpan={roleDisplayOrder.length + 1}>
+                      <EmptyState title="No permissions found" message="Try another permission name, group, or key." />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {adminLockedPermissions.length ? (
+          <p className="mt-3 text-xs font-semibold muted">Admin protected permissions: {adminLockedPermissions.map((permission) => permission.replace(/_/g, ' ')).join(', ')}.</p>
+        ) : null}
+      </section>
+
+      <section className="surface role-users-card p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-xl font-black">Users & Role Assignments</h3>
+            <p className="mt-1 text-sm muted">Review existing users without changing Staff / Technicians management.</p>
+          </div>
+          <Link className="btn btn-primary admin-compact-button" to="/admin/technician-panel">
+            <Users className="h-4 w-4" />
+            Manage Staff / Technicians
+          </Link>
+        </div>
+        {usersUnavailable ? (
+          <div className="mt-4 rounded-card border border-amber-400/25 bg-amber-500/10 p-3 text-sm font-semibold text-amber-100">
+            User counts and assignments are unavailable for this session.
+          </div>
+        ) : null}
+        <div className="admin-table-wrap role-users-table-wrap mt-4">
+          <table className="data-table role-users-table">
+            <thead><tr><th>User</th><th>Contact</th><th>Role</th><th>Status</th><th>Last Active</th><th className="text-center">Action</th></tr></thead>
+            <tbody className="divide-y divide-[var(--line)]">
+              {usersLoading ? (
+                <tr><td colSpan="6" className="muted">Loading users...</td></tr>
+              ) : users.length ? users.map((item) => {
+                const itemRole = item.role || 'viewer';
+                const canEditThisRole = canEditRolePermissions && itemRole !== 'admin';
+                return (
+                  <tr key={recordId(item) || item.username}>
+                    <td>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="role-user-avatar">{String(item.name || item.username || '?').slice(0, 1).toUpperCase()}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-bold text-slate-100">{item.name || item.username || 'User'}</span>
+                          <span className="block truncate text-xs muted">{item.username || '-'}</span>
+                        </span>
+                      </div>
+                    </td>
+                    <td>{item.email || item.phone || '-'}</td>
+                    <td><span className="admin-role-badge">{roleUiMetadata[itemRole]?.label || roleLabel(itemRole)}</span></td>
+                    <td><AccountStatusPill active={item.active !== false} /></td>
+                    <td>{item.lastActiveAt ? formatDate(item.lastActiveAt) : item.updatedAt ? formatDate(item.updatedAt) : item.createdAt ? formatDate(item.createdAt) : '-'}</td>
+                    <td>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        <button type="button" className="btn btn-secondary admin-table-button" onClick={() => setViewUser(item)}>View</button>
+                        {canEditThisRole ? <button type="button" className="btn btn-primary admin-table-button" onClick={() => setEditRoleUser(item)}>Edit Role</button> : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }) : (
+                <tr><td colSpan="6"><EmptyState title="No users found" message="Users will appear here when the protected users API is available." /></td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="surface permission-security-panel p-5">
+        <div className="flex items-start gap-3">
+          <div className="admin-control-icon"><ShieldCheck className="h-5 w-5" /></div>
+          <div className="min-w-0">
+            <h3 className="text-xl font-black">Permission system active</h3>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <AccessSummaryItem title="API guards enabled" description="Backend API endpoints are protected by permission guards." />
+              <AccessSummaryItem title="Editable system roles" description="Role edits are saved to backend permission storage." />
+              <AccessSummaryItem title="Technician scope" description="Technician access remains scoped to assigned jobs." />
+              <AccessSummaryItem title="Admin full access" description="Admin keeps full system access." />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <TeamAccessSection />
+
+      {viewUser ? <RoleUserViewModal user={viewUser} onClose={() => setViewUser(null)} /> : null}
+      {editRoleUser ? <EditUserRoleModal user={editRoleUser} saving={roleSaving} onClose={() => setEditRoleUser(null)} onSave={saveUserRole} /> : null}
+    </div>
+  );
+}
+
 export function TechnicianAccountModal({ title, submitLabel, technician = null, editMode = false, onClose, onSubmit }) {
   const { push } = useToast();
   const [form, setForm] = useState(() => technician ? {
@@ -307,7 +784,7 @@ export function TechnicianAccountModal({ title, submitLabel, technician = null, 
             <select className="input" value="Technician" disabled>
               <option>Technician</option>
             </select>
-            <span className="mt-1 block text-xs muted">Only Admin and Technician roles are enabled.</span>
+            <span className="mt-1 block text-xs muted">This Staff / Technicians workflow creates technician login accounts only.</span>
           </label>
           {!editMode ? (
             <>
@@ -605,15 +1082,15 @@ export function SystemSettingsPage() {
               <div className="mt-4 grid gap-3">
                 <AccessSummaryItem title="Admin Sidebar" description="Full access to operations, billing, inventory, AMC, reports, audit logs, and settings." />
                 <AccessSummaryItem title="Audit Trail" description="Important operational changes are recorded in audit logs." />
-                <AccessSummaryItem title="Role Access" description="Admins manage the system. Technicians access assigned jobs." />
+                <AccessSummaryItem title="Role Access" description="System roles define access for admin, managers, operations, billing, inventory, technicians, and viewers." />
                 <AccessSummaryItem title="Technician Login" description="Technician credentials are managed from Staff / Technicians." />
               </div>
             </SettingsInfoCard>
           </div>
         ) : null}
 
-        {activeTab === 'team' ? (
-          <TeamAccessSection />
+        {activeTab === 'usersRoles' ? (
+          <UsersRolesSection />
         ) : null}
 
         {activeTab === 'preferences' ? (

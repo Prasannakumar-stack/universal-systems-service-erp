@@ -143,6 +143,7 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 import { ADMIN_ASSIGNMENT_LABEL } from '../../utils/assignment.js';
+import { can, normalizeRole } from '../../utils/roles.js';
 
 const bookingsFocusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
@@ -185,10 +186,14 @@ function BookingSourceBadge({ source }) {
 }
 
 export function BookingsPage({ role = 'admin' }) {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const { push } = useToast();
   const location = useLocation();
-  const isTechnician = role === 'technician';
+  const effectiveRole = user?.role || role;
+  const isTechnician = normalizeRole(effectiveRole) === 'technician';
+  const canCreateBooking = can(effectiveRole, 'create_booking');
+  const canConvertBooking = can(effectiveRole, 'create_work_order');
+  const canAssignTechnician = can(effectiveRole, 'assign_technician');
   const workOrdersBase = isTechnician ? '/tech/work-orders' : '/admin/work-orders';
   const [formOpen, setFormOpen] = useState(false);
   const [technicians, setTechnicians] = useState([]);
@@ -219,20 +224,20 @@ export function BookingsPage({ role = 'admin' }) {
   const { data, loading, error, reload } = useResource(() => request(`/bookings${query}`), [request, query]);
 
   useEffect(() => {
-    if (isTechnician) {
+    if (!canAssignTechnician) {
       setTechnicians([]);
       return;
     }
     request('/users?role=technician&active=true&limit=100').then((result) => setTechnicians(result.users.filter((user) => user.role === 'technician' && user.active))).catch(() => {});
-  }, [isTechnician, request]);
+  }, [canAssignTechnician, request]);
 
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, status, serviceType, source]);
 
   useEffect(() => {
-    if (customerBookingSeed.open && !isTechnician) setFormOpen(true);
-  }, [customerBookingSeed.open, isTechnician]);
+    if (customerBookingSeed.open && canCreateBooking) setFormOpen(true);
+  }, [canCreateBooking, customerBookingSeed.open]);
 
   async function copyPhone(phone) {
     if (await copyTextToClipboard(phone)) push('Phone copied');
@@ -270,7 +275,7 @@ export function BookingsPage({ role = 'admin' }) {
               {isTechnician ? 'Booking intake records with linked service jobs.' : 'Booking intake is kept separate from repair and service jobs. Convert a booking when service work begins.'}
             </p>
           </div>
-          {!isTechnician ? <div className="relative shrink-0">
+          {canCreateBooking ? <div className="relative shrink-0">
             <span className="pointer-events-none absolute inset-0 -m-1 rounded-2xl bg-sky-500/25 blur-md" aria-hidden="true" />
             <button
               type="button"
@@ -306,7 +311,7 @@ export function BookingsPage({ role = 'admin' }) {
         <EmptyState
           title="No bookings found"
           message="Try changing filters or create a new booking."
-          action={!isTechnician ? (
+          action={canCreateBooking ? (
             <button type="button" className={`btn btn-primary ${bookingsFocusRing}`} onClick={() => setFormOpen(true)}>
               <Plus className="h-4 w-4" />
               Create Booking
@@ -344,7 +349,7 @@ export function BookingsPage({ role = 'admin' }) {
               <th className="booking-source-column">Source</th>
               <th>Device / Service</th>
               <th>Issue</th>
-              <th className="bookings-action-header">{isTechnician ? 'Actions' : 'Convert / Open'}</th>
+              <th className="bookings-action-header">{isTechnician || !canConvertBooking ? 'Actions' : 'Convert / Open'}</th>
             </tr>
           </thead>
           <tbody>
@@ -379,7 +384,7 @@ export function BookingsPage({ role = 'admin' }) {
                   {isTechnician ? (
                     <TechnicianBookingActions booking={booking} workOrdersBase={workOrdersBase} />
                   ) : (
-                    <ConvertBooking booking={booking} technicians={technicians} onConvert={convert} workOrdersBase={workOrdersBase} />
+                    <ConvertBooking booking={booking} technicians={technicians} onConvert={convert} workOrdersBase={workOrdersBase} canConvert={canConvertBooking} canAssignTechnician={canAssignTechnician} />
                   )}
                 </td>
               </tr>
@@ -392,7 +397,7 @@ export function BookingsPage({ role = 'admin' }) {
         </div>
         </>
       )}
-      {!isTechnician && formOpen ? <BookingModal initialCustomer={customerBookingSeed.open ? customerBookingSeed : null} onClose={() => setFormOpen(false)} onSaved={reload} /> : null}
+      {canCreateBooking && formOpen ? <BookingModal initialCustomer={customerBookingSeed.open ? customerBookingSeed : null} onClose={() => setFormOpen(false)} onSaved={reload} /> : null}
     </div>
   );
 }
@@ -468,7 +473,7 @@ function TechnicianBookingMobileCard({ booking, workOrdersBase, onCopyPhone }) {
   );
 }
 
-function ConvertBooking({ booking, technicians, onConvert, workOrdersBase = '/admin/work-orders' }) {
+function ConvertBooking({ booking, technicians, onConvert, workOrdersBase = '/admin/work-orders', canConvert = false, canAssignTechnician = false }) {
   const [technicianId, setTechnicianId] = useState(booking.technicianId?.id || '');
   const focusRing =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
@@ -490,18 +495,23 @@ function ConvertBooking({ booking, technicians, onConvert, workOrdersBase = '/ad
       </div>
     );
   }
+  if (!canConvert) {
+    return <span className="text-xs font-semibold text-slate-500">Pending conversion</span>;
+  }
   return (
     <div className="booking-convert-controls">
-      <select
-        className={`input booking-technician-select bookings-filter-control ${focusRing}`}
-        style={{ minWidth: '8.75rem', maxWidth: '9.75rem' }}
-        value={technicianId}
-        onChange={(event) => setTechnicianId(event.target.value)}
-      >
-        {/* Admin maps to an empty technicianId so old unassigned records stay compatible. */}
-        <option value="">{ADMIN_ASSIGNMENT_LABEL}</option>
-        {technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}
-      </select>
+      {canAssignTechnician ? (
+        <select
+          className={`input booking-technician-select bookings-filter-control ${focusRing}`}
+          style={{ minWidth: '8.75rem', maxWidth: '9.75rem' }}
+          value={technicianId}
+          onChange={(event) => setTechnicianId(event.target.value)}
+        >
+          {/* Admin maps to an empty technicianId so old unassigned records stay compatible. */}
+          <option value="">{ADMIN_ASSIGNMENT_LABEL}</option>
+          {technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}
+        </select>
+      ) : null}
       <button
         type="button"
         className={`btn btn-primary booking-action-button booking-convert-btn ${focusRing}`}

@@ -1,10 +1,11 @@
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import { publicUser } from '../auth.js';
+import { SUPPORTED_ROLES, assertPermission, normalizeRole } from '../permissions.js';
 import { appError, clean, required } from '../utils/http.js';
 import { paginatedPayload, paginationMeta, parsePagination, searchRegex, withId } from '../utils/pagination.js';
 
-const allowedRoles = ['admin', 'technician'];
+const allowedRoles = SUPPORTED_ROLES;
 
 function safeUser(user) {
   return publicUser(user);
@@ -60,7 +61,7 @@ export async function create(req, res) {
     required(req.body, ['username', 'password', 'name', 'role']);
     const username = clean(req.body.username).toLowerCase();
     const email = clean(req.body.email).toLowerCase();
-    const role = clean(req.body.role).toLowerCase();
+    const role = normalizeRole(clean(req.body.role));
     const password = String(req.body.password || '');
     if (!allowedRoles.includes(role)) throw appError('Role is not supported');
     if (password.length < 6) throw appError('Password must be at least 6 characters');
@@ -103,7 +104,8 @@ export async function update(req, res) {
     }
     if (req.body.phone !== undefined) user.phone = clean(req.body.phone);
     if (req.body.role !== undefined) {
-      const role = clean(req.body.role).toLowerCase();
+      assertPermission(req.user, 'manage_roles');
+      const role = normalizeRole(clean(req.body.role));
       if (!allowedRoles.includes(role)) throw appError('Role is not supported');
       if (String(user._id) === String(req.user._id) && role !== 'admin') throw appError('You cannot remove your own admin access');
       user.role = role;

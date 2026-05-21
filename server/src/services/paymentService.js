@@ -1,5 +1,6 @@
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
+import { assertPermission } from '../permissions.js';
 import { appError, clean, numberValue } from '../utils/http.js';
 import { logAudit } from './auditService.js';
 import { createNotification } from './notificationService.js';
@@ -10,7 +11,8 @@ function invoiceStatus(total, paidAmount) {
   return 'Pending';
 }
 
-export async function recordPayment(payload) {
+export async function recordPayment(payload, user = null) {
+  assertPermission(user, 'record_payment');
   const invoice = await Invoice.findById(payload.invoiceId);
   if (!invoice) throw appError('Invoice not found', 404);
   if (invoice.status === 'Void') throw appError('Cannot record payment against a void invoice', 400);

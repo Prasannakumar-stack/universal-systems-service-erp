@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { WHATSAPP_PDF_PUBLIC_BASE_URL } from '../config.js';
+import { assertPermission } from '../permissions.js';
 import { appError } from '../utils/http.js';
 import {
   buildWhatsappPdfMessage,
@@ -11,6 +12,7 @@ import { getWorkOrder, markDocumentSent } from './workOrderService.js';
 import { isWhatsappPdfApiConfigured, sendPdfViaWhatsappApi } from './whatsappPdfService.js';
 
 export async function sendWorkOrderPdfViaWhatsapp({ workOrderId, type, user }) {
+  assertPermission(user, 'send_pdf_whatsapp');
   const pdf = await generateWorkOrderPdf({ workOrderId, type, user });
   const workOrder = pdf.workOrder;
   const customer = workOrder.customerId || {};

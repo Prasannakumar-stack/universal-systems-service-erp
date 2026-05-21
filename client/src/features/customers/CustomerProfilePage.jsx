@@ -144,6 +144,7 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 import { technicianNameOrAdmin } from '../../utils/assignment.js';
+import { can, normalizeRole } from '../../utils/roles.js';
 
 const customerTypeOptions = ['', 'Regular', 'AMC', 'Business', 'VIP', 'Walk-in'];
 const noteTypeOptions = ['Diagnosis note', 'Customer instruction', 'Payment follow-up', 'Warranty note', 'General note'];
@@ -170,12 +171,16 @@ function customerTimelineMeta(event) {
 
 export function CustomerProfilePage({ role = 'admin' }) {
   const { id } = useParams();
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const { push } = useToast();
-  const isTechnician = role === 'technician';
+  const effectiveRole = user?.role || role;
+  const isTechnician = normalizeRole(effectiveRole) === 'technician';
   const base = isTechnician ? '/tech' : '/admin';
-  const canManageCustomer = role === 'admin';
-  const canRecordPayments = role === 'admin';
+  const canManageCustomer = can(effectiveRole, 'edit_customer');
+  const canCreateBooking = can(effectiveRole, 'create_booking');
+  const canRecordPayments = can(effectiveRole, 'record_payment');
+  const canExportReports = can(effectiveRole, 'export_reports');
+  const canAddCustomerNote = can(effectiveRole, 'add_notes') || canManageCustomer;
   const workOrdersBase = `${base}/work-orders`;
   const paymentsBase = `${base}/payments`;
   const bookingsBase = `${base}/bookings`;
@@ -401,6 +406,10 @@ export function CustomerProfilePage({ role = 'admin' }) {
   const notifyComingSoon = () => push('Coming soon', 'info');
   const notifyPhoneUnavailable = () => push('Phone not available', 'info');
   const openEditCustomer = () => {
+    if (!canManageCustomer) {
+      push('You do not have permission to edit customers', 'error');
+      return;
+    }
     setEditForm({
       name: customer.name || '',
       phone: customer.phone || '',
@@ -411,10 +420,18 @@ export function CustomerProfilePage({ role = 'admin' }) {
   };
   const saveEditCustomer = (event) => {
     event.preventDefault();
+    if (!canManageCustomer) {
+      push('You do not have permission to edit customers', 'error');
+      return;
+    }
     const typeChanged = editForm.customerType !== currentCustomerType;
     push(typeChanged ? 'Customer type saving is not connected yet.' : 'Customer edit saving is not connected yet.', 'info');
   };
   const openNoteModal = (type = 'General note') => {
+    if (!canAddCustomerNote) {
+      push('You do not have permission to add customer notes', 'error');
+      return;
+    }
     setNoteModal({
       type,
       text: notePrefillText[type] || ''
@@ -422,6 +439,10 @@ export function CustomerProfilePage({ role = 'admin' }) {
   };
   const saveCustomerNote = async (event) => {
     event.preventDefault();
+    if (!canAddCustomerNote) {
+      push('You do not have permission to add customer notes', 'error');
+      return;
+    }
     const text = String(noteModal?.text || '').trim();
     if (!text) {
       push('Add a note before saving', 'error');
@@ -575,7 +596,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
               ) : null}
             </div>
           </div>
-          {canManageCustomer ? <div className="customer-hero-actions flex flex-wrap items-center gap-2 xl:justify-end">
+          {canCreateBooking ? <div className="customer-hero-actions flex flex-wrap items-center gap-2 xl:justify-end">
             <Link className="btn btn-primary customer-create-booking-btn h-10 px-4" to={bookingPrefillLink}><Plus className="h-4 w-4" />Create Booking</Link>
           </div> : null}
         </div>
@@ -680,7 +701,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
                     <p className="mt-1 truncate text-xs font-semibold text-slate-400">{order.device || notAdded}</p>
                     <p className="mt-1 line-clamp-2 text-sm muted">{order.issue || notAdded}</p>
                   </Link>
-                )) : <EmptyState title="No service jobs yet" message="Assigned or attended jobs for this customer will appear here." action={canManageCustomer ? <Link className="btn btn-primary" to={bookingPrefillLink}>Create Booking</Link> : null} />}
+                )) : <EmptyState title="No service jobs yet" message="Assigned or attended jobs for this customer will appear here." action={canCreateBooking ? <Link className="btn btn-primary" to={bookingPrefillLink}>Create Booking</Link> : null} />}
               </div>
             </div>
             <div className={panelClass}>
@@ -715,9 +736,9 @@ export function CustomerProfilePage({ role = 'admin' }) {
               <h2 className="text-xl font-black">Service History</h2>
               <p className="mt-1 text-sm muted">Full repair and service job history for this customer.</p>
             </div>
-            <button type="button" className="btn btn-secondary h-9 px-3 text-xs font-black" onClick={exportServiceHistory}>
+            {canExportReports ? <button type="button" className="btn btn-secondary h-9 px-3 text-xs font-black" onClick={exportServiceHistory}>
               <Download className="h-3.5 w-3.5" />Export
-            </button>
+            </button> : null}
           </div>
           <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(220px,1fr)_170px_190px_160px_160px_auto]">
             <SearchBox value={historySearch} onChange={setHistorySearch} placeholder="Search jobs, device, issue, technician" />
@@ -822,7 +843,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
                   })}
                 </tbody>
               </table>
-            ) : <EmptyState title="No service jobs found" message="Matching service jobs will appear here." action={canManageCustomer ? <Link className="btn btn-primary" to={bookingPrefillLink}>Create Booking</Link> : null} />}
+            ) : <EmptyState title="No service jobs found" message="Matching service jobs will appear here." action={canCreateBooking ? <Link className="btn btn-primary" to={bookingPrefillLink}>Create Booking</Link> : null} />}
           </div>
         </div>
       ) : null}
@@ -831,9 +852,9 @@ export function CustomerProfilePage({ role = 'admin' }) {
         <div className={panelClass}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-black">Invoices</h2>
-            <button type="button" className="btn btn-secondary h-9 px-3 text-xs font-black" onClick={exportInvoices}>
+            {canExportReports ? <button type="button" className="btn btn-secondary h-9 px-3 text-xs font-black" onClick={exportInvoices}>
               <Download className="h-3.5 w-3.5" />Export
-            </button>
+            </button> : null}
           </div>
           {isTechnician && invoices.length ? (
             <div className="technician-detail-card-grid mt-4">
@@ -977,7 +998,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
         <div className={panelClass}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-black">Notes</h2>
-            {canManageCustomer ? <button type="button" className="btn btn-secondary" onClick={() => openNoteModal('General note')}>Add Note</button> : null}
+            {canAddCustomerNote ? <button type="button" className="btn btn-secondary" onClick={() => openNoteModal('General note')}>Add Note</button> : null}
           </div>
           <div className="mt-4 grid gap-3">
             {customerNotes.length ? customerNotes.map((note) => (
@@ -990,7 +1011,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
                 icon={FileText}
                 title="No notes yet"
                 message="Use notes to track diagnosis, customer instructions, payment follow-ups, and warranty details."
-                action={canManageCustomer ? (
+                action={canAddCustomerNote ? (
                   <div className="flex flex-col items-center gap-3">
                     <button type="button" className="btn btn-secondary" onClick={() => openNoteModal('General note')}>Add Note</button>
                     <div className="flex flex-wrap justify-center gap-2">

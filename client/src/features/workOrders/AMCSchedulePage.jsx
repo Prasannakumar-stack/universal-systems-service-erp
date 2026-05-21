@@ -140,12 +140,16 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 import { ADMIN_ASSIGNMENT_LABEL } from '../../utils/assignment.js';
+import { can, normalizeRole } from '../../utils/roles.js';
 
 export function AMCSchedulePage({ role = 'admin' }) {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
-  const isTechnician = role === 'technician';
+  const effectiveRole = user?.role || role;
+  const isTechnician = normalizeRole(effectiveRole) === 'technician';
+  const canCreateAmc = can(effectiveRole, 'create_amc');
+  const canCreateAmcJob = can(effectiveRole, 'create_amc_job');
   const base = isTechnician ? '/tech' : '/admin';
   const [status, setStatus] = useState('');
   const { data, loading, error, reload } = useResource(() => request('/amc/schedule'), [request]);
@@ -170,6 +174,7 @@ export function AMCSchedulePage({ role = 'admin' }) {
   }));
 
   async function createJob(visit) {
+    if (!canCreateAmcJob) return;
     try {
       const result = await request(`/amc/contracts/${visit.contractId}/work-orders`, {
         method: 'POST',
@@ -224,7 +229,7 @@ export function AMCSchedulePage({ role = 'admin' }) {
             icon={CalendarClock}
             title={status ? `No ${status.toLowerCase()} visits` : 'No schedule visits found'}
             message={status ? 'Reset the status filter to review the full AMC visit schedule.' : 'Visits will appear after AMC contracts are created.'}
-            action={status ? <button className="btn btn-secondary" type="button" onClick={() => setStatus('')}>Reset Filter</button> : isTechnician ? null : <Link className="btn btn-primary" to={`${base}/amc-contracts`}>Create AMC Contract</Link>}
+            action={status ? <button className="btn btn-secondary" type="button" onClick={() => setStatus('')}>Reset Filter</button> : canCreateAmc ? <Link className="btn btn-primary" to={`${base}/amc-contracts`}>Create AMC Contract</Link> : null}
           />
         ) : (
           <>
@@ -259,7 +264,7 @@ export function AMCSchedulePage({ role = 'admin' }) {
                       <div className="amc-actions">
                         {workOrderId ? (
                           <Link className="btn btn-secondary amc-action-button" to={`${base}/work-orders/${workOrderId}`}>Open Job</Link>
-                        ) : isTechnician ? (
+                        ) : !canCreateAmcJob ? (
                           <span className="technician-mobile-readonly-pill">Awaiting admin job</span>
                         ) : (
                           <button className={`btn ${isPrimaryVisit ? 'btn-primary' : 'btn-secondary'} amc-action-button`} type="button" onClick={() => createJob(visit)}><Wrench className="h-4 w-4" />Create Job</button>

@@ -144,6 +144,7 @@ import {
   normalizeAmcCoverageType
 } from '../../shared/amcCoverage.js';
 import { ADMIN_ASSIGNMENT_LABEL } from '../../utils/assignment.js';
+import { can, normalizeRole } from '../../utils/roles.js';
 
 function defaultAmcForm() {
   const start = new Date();
@@ -176,12 +177,17 @@ function defaultAmcForm() {
 }
 
 export function AMCContractsPage({ role = 'admin' }) {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const isTechnician = role === 'technician';
-  const canManageAmc = role === 'admin';
+  const effectiveRole = user?.role || role;
+  const isTechnician = normalizeRole(effectiveRole) === 'technician';
+  const canCreateAmc = can(effectiveRole, 'create_amc');
+  const canRenewAmc = can(effectiveRole, 'renew_amc');
+  const canCreateAmcJob = can(effectiveRole, 'create_amc_job');
+  const canCreateInvoice = can(effectiveRole, 'create_invoice');
+  const canManageAmc = canCreateAmc || canRenewAmc || canCreateAmcJob || canCreateInvoice;
   const base = isTechnician ? '/tech' : '/admin';
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(defaultAmcForm);
@@ -197,24 +203,24 @@ export function AMCContractsPage({ role = 'admin' }) {
   }, [request]);
 
   useEffect(() => {
-    if (isTechnician) {
+    if (!canCreateAmc && !canCreateAmcJob) {
       setTechnicians([]);
       return;
     }
     request('/users?role=technician&active=true&limit=100')
       .then((result) => setTechnicians((result.users || []).filter((user) => user.role === 'technician' && user.active)))
       .catch(() => setTechnicians([]));
-  }, [isTechnician, request]);
+  }, [canCreateAmc, canCreateAmcJob, request]);
 
   useEffect(() => {
     const renewalContract = location.state?.renewContract;
     const renewalId = recordId(renewalContract);
-    if (!canManageAmc) return;
+    if (!canRenewAmc) return;
     if (!renewalId || handledRenewalRef.current === renewalId) return;
     handledRenewalRef.current = renewalId;
     startRenewal(renewalContract);
     navigate(location.pathname, { replace: true, state: null });
-  }, [canManageAmc, location.pathname, location.state, navigate]);
+  }, [canRenewAmc, location.pathname, location.state, navigate]);
 
   const contracts = data?.contracts || [];
   const summary = data?.summary || {};
@@ -268,6 +274,7 @@ export function AMCContractsPage({ role = 'admin' }) {
   }
 
   function startRenewal(contract) {
+    if (!canRenewAmc) return;
     const coverage = amcCoverageFlags(contract);
     const dates = renewalDates(contract);
     setForm({
@@ -300,7 +307,7 @@ export function AMCContractsPage({ role = 'admin' }) {
 
   async function submit(event) {
     event.preventDefault();
-    if (!canManageAmc) return;
+    if (!canCreateAmc) return;
     const payload = {
       ...form,
       coverageType: form.coverageType || defaultAmcCoverageType,
@@ -323,7 +330,7 @@ export function AMCContractsPage({ role = 'admin' }) {
   }
 
   async function createJob(contract) {
-    if (!canManageAmc) return;
+    if (!canCreateAmcJob) return;
     try {
       const result = await request(`/amc/contracts/${recordId(contract)}/work-orders`, {
         method: 'POST',
@@ -337,7 +344,7 @@ export function AMCContractsPage({ role = 'admin' }) {
   }
 
   async function createInvoice(contract) {
-    if (!canManageAmc) return;
+    if (!canCreateInvoice) return;
     const existingInvoiceId = recordId(contract.invoiceId);
     if (existingInvoiceId) {
       navigate(`${base}/payments?invoiceId=${existingInvoiceId}`);
@@ -374,7 +381,7 @@ export function AMCContractsPage({ role = 'admin' }) {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">AMC Contracts</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage service contracts, covered assets, renewal status, visits, and AMC-linked repair jobs.</p>
           </div>
-          {canManageAmc ? <button className="btn btn-primary h-10 px-4" type="button" onClick={() => setFormOpen((value) => !value)}><Plus className="h-4 w-4" />New AMC Contract</button> : null}
+          {canCreateAmc ? <button className="btn btn-primary h-10 px-4" type="button" onClick={() => setFormOpen((value) => !value)}><Plus className="h-4 w-4" />New AMC Contract</button> : null}
         </div>
       </section>
 
@@ -391,7 +398,7 @@ export function AMCContractsPage({ role = 'admin' }) {
         {contractKpis.map((item) => <AmcMetricCard key={item.label} {...item} />)}
       </div>
 
-      {canManageAmc && formOpen ? (
+      {canCreateAmc && formOpen ? (
         <form className="surface amc-form-shell mt-6 p-5" onSubmit={submit}>
           <div className="mb-5 flex items-start justify-between gap-3">
             <div>
@@ -561,7 +568,7 @@ export function AMCContractsPage({ role = 'admin' }) {
             icon={FileText}
             title={hasContractSearch ? 'No contracts match your search' : 'No AMC contracts yet'}
             message={hasContractSearch ? 'Clear the search to view all AMC contracts.' : 'Create the first AMC contract to track visits, warranty coverage, and renewal reminders.'}
-            action={hasContractSearch ? <button className="btn btn-secondary" type="button" onClick={() => setSearch('')}>Clear Search</button> : canManageAmc ? <button className="btn btn-primary" type="button" onClick={() => setFormOpen(true)}>Create AMC Contract</button> : null}
+            action={hasContractSearch ? <button className="btn btn-secondary" type="button" onClick={() => setSearch('')}>Clear Search</button> : canCreateAmc ? <button className="btn btn-primary" type="button" onClick={() => setFormOpen(true)}>Create AMC Contract</button> : null}
           />
         ) : (
           <>
@@ -631,11 +638,11 @@ export function AMCContractsPage({ role = 'admin' }) {
                       <div className="amc-action-stack">
                         {canManageAmc ? (
                           <>
-                            <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button>
+                            {canCreateAmcJob ? <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button> : null}
                             {invoiceId
                               ? <Link className="btn btn-secondary amc-action-button" to={`${base}/payments?invoiceId=${invoiceId}`}><CreditCard className="h-4 w-4" />Go to Payments</Link>
-                              : <button className="btn btn-secondary amc-action-button" type="button" onClick={() => createInvoice(contract)}><ReceiptText className="h-4 w-4" />Create Invoice</button>}
-                            {isRenewalDue ? <button className="btn btn-secondary amc-action-button" type="button" onClick={() => startRenewal(contract)}><AlertTriangle className="h-4 w-4" />Renew</button> : null}
+                              : canCreateInvoice ? <button className="btn btn-secondary amc-action-button" type="button" onClick={() => createInvoice(contract)}><ReceiptText className="h-4 w-4" />Create Invoice</button> : null}
+                            {isRenewalDue && canRenewAmc ? <button className="btn btn-secondary amc-action-button" type="button" onClick={() => startRenewal(contract)}><AlertTriangle className="h-4 w-4" />Renew</button> : null}
                           </>
                         ) : (
                           <>
@@ -763,8 +770,9 @@ function AmcMetricCard({ icon: Icon, label, value, helper, tone = 'blue' }) {
 }
 
 export function WarrantiesPage({ role = 'admin' }) {
-  const { request } = useAuth();
-  const base = role === 'technician' ? '/tech' : '/admin';
+  const { request, user } = useAuth();
+  const isTechnician = normalizeRole(user?.role || role) === 'technician';
+  const base = isTechnician ? '/tech' : '/admin';
   const { data, loading, error } = useResource(() => request('/amc/contracts'), [request]);
   const warrantyContracts = (data?.contracts || []).filter((contract) => Boolean(contract.warrantyIncluded));
 
@@ -800,14 +808,14 @@ export function WarrantiesPage({ role = 'admin' }) {
           />
         ) : (
           <>
-          {role === 'technician' ? (
+          {isTechnician ? (
             <div className="technician-mobile-card-list amc-mobile-cards">
               {warrantyContracts.map((contract) => (
                 <TechnicianWarrantyMobileCard key={recordId(contract)} contract={contract} />
               ))}
             </div>
           ) : null}
-          <div className={`table-wrap bg-[var(--surface)] ${role === 'technician' ? 'technician-desktop-table' : ''}`}>
+          <div className={`table-wrap bg-[var(--surface)] ${isTechnician ? 'technician-desktop-table' : ''}`}>
             <table className="data-table">
               <thead>
                 <tr>

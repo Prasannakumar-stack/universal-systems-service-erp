@@ -4,8 +4,7 @@ const attempts = new Map();
 
 function rateLimitKey(req) {
   const username = String(req.body?.username || '').trim().toLowerCase();
-  const role = String(req.body?.role || '').trim().toLowerCase();
-  return `${req.ip || 'unknown'}:${username}:${role}`;
+  return `${req.ip || 'unknown'}:${username}`;
 }
 
 export function loginRateLimit(req, res, next) {

@@ -7,9 +7,11 @@ import Document from '../models/Document.js';
 import Invoice from '../models/Invoice.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { COMPANY, PDF_DIR } from '../config.js';
+import { assertPermission } from '../permissions.js';
 import { appError, clean, numberValue } from '../utils/http.js';
 import { addDateRange, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 import { logAudit } from './auditService.js';
+import { getTechnicianScope } from './technicianScopeService.js';
 
 const populateDocument = [
   { path: 'customerId', select: 'name phone address devices' },
@@ -28,6 +30,7 @@ function invoiceNumber() {
 }
 
 export async function createDocument(payload, user = null) {
+  assertPermission(user, 'create_invoice');
   const type = clean(payload.type).toLowerCase();
   if (!['invoice', 'quotation', 'service'].includes(type)) throw appError('Invalid document type');
 
@@ -82,13 +85,15 @@ export async function createDocument(payload, user = null) {
     after: { type: document.type, totalAmount: document.totalAmount, workOrderId: document.workOrderId }
   });
 
-  return getDocument(document._id);
+  return getDocument(document._id, user);
 }
 
-export async function listDocuments(query = {}) {
+export async function listDocuments(query = {}, user = null) {
   const filter = {};
   const clauses = [];
   const { page, limit, skip } = parsePagination(query);
+  const technicianScope = await getTechnicianScope(user);
+  if (technicianScope) filter.workOrderId = { $in: technicianScope.workOrderObjectIds };
   if (clean(query.type)) filter.type = clean(query.type);
   if (clean(query.status)) filter.status = clean(query.status);
   if (validObjectId(query.customerId)) filter.customerId = validObjectId(query.customerId);
@@ -119,14 +124,22 @@ export async function listDocuments(query = {}) {
   return { documents, pagination: paginationMeta(page, limit, total) };
 }
 
-export async function getDocument(id) {
+export async function getDocument(id, user = null) {
   const document = await Document.findById(id).populate(populateDocument);
   if (!document) throw appError('Document not found', 404);
+  const technicianScope = await getTechnicianScope(user);
+  if (technicianScope) {
+    const workOrderId = String(document.workOrderId?._id || document.workOrderId || '');
+    const customerId = String(document.customerId?._id || document.customerId || '');
+    if (!technicianScope.workOrderIds.includes(workOrderId) && !technicianScope.customerIds.includes(customerId)) {
+      throw appError('Document not found', 404);
+    }
+  }
   return document;
 }
 
-export async function generateDocumentPdf(id) {
-  const document = await getDocument(id);
+export async function generateDocumentPdf(id, user = null) {
+  const document = await getDocument(id, user);
   fs.mkdirSync(PDF_DIR, { recursive: true });
   const filename = `${document.type}-${document.id}.pdf`;
   const filePath = path.join(PDF_DIR, filename);

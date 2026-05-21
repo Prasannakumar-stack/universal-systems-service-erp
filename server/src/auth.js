@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './config.js';
 import User from './models/User.js';
+import { attachEffectivePermissions, normalizeRole } from './permissions.js';
 
 export function signToken(user) {
   return jwt.sign({ id: user.id, username: user.username, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: '12h' });
@@ -33,6 +34,7 @@ export async function authenticate(req, res, next) {
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await User.findOne({ _id: decoded.id, active: true });
     if (!user) return res.status(401).json({ message: 'Invalid user' });
+    await attachEffectivePermissions(user);
     req.user = user;
     next();
   } catch {
@@ -42,7 +44,8 @@ export async function authenticate(req, res, next) {
 
 export function requireRole(...roles) {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    const allowedRoles = roles.map(normalizeRole);
+    if (!allowedRoles.includes(normalizeRole(req.user?.role))) {
       return res.status(403).json({ message: 'You do not have permission to access this resource' });
     }
     next();

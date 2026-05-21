@@ -9,7 +9,7 @@ import { addDateRange, paginatedPayload, paginationMeta, parsePagination, search
 
 export async function create(req, res) {
   required(req.body, ['invoiceId', 'method']);
-  const payment = await recordPayment({ ...req.body, userId: req.user._id });
+  const payment = await recordPayment({ ...req.body, userId: req.user._id }, req.user);
   res.status(201).json({ payment, message: 'Payment recorded' });
 }
 

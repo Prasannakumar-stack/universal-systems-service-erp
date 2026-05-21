@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { useAuth } from '../../context/AuthContext.jsx';
 import { technicianNameOrAdmin } from '../../utils/assignment.js';
 import { currency, formatDate, statusTone } from '../../utils/format.js';
+import { can } from '../../utils/roles.js';
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
 const panelActionClass = `rounded-lg bg-white/5 px-3 py-1.5 text-xs font-bold text-sky-400 transition-colors hover:bg-white/10 hover:text-sky-300 ${focusRing}`;
@@ -449,7 +450,10 @@ function normalizeDashboardMetrics(payload = {}) {
 }
 
 export function AdminDashboard() {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
+  const canCreateBooking = can(user, 'create_booking');
+  const canCreateWorkOrder = can(user, 'create_work_order');
+  const canRecordPayment = can(user, 'record_payment');
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const loadDashboard = useCallback(async () => {
@@ -510,15 +514,15 @@ export function AdminDashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Link className={`inline-flex items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 py-3 text-sm font-bold text-white shadow-[0_0_20px_rgba(14,165,233,0.3)] transition-all hover:-translate-y-0.5 hover:bg-sky-400 hover:shadow-[0_0_25px_rgba(14,165,233,0.45)] ${focusRing}`} to="/admin/bookings">
+            {canCreateBooking ? <Link className={`inline-flex items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 py-3 text-sm font-bold text-white shadow-[0_0_20px_rgba(14,165,233,0.3)] transition-all hover:-translate-y-0.5 hover:bg-sky-400 hover:shadow-[0_0_25px_rgba(14,165,233,0.45)] ${focusRing}`} to="/admin/bookings">
               <Plus className="h-4 w-4" /> New Booking
-            </Link>
-            <Link className={heroSecondaryActionClass} to="/admin/work-orders">
+            </Link> : null}
+            {canCreateWorkOrder ? <Link className={heroSecondaryActionClass} to="/admin/work-orders">
               <Wrench className="h-4 w-4" /> New Work Order
-            </Link>
-            <Link className={heroSecondaryActionClass} to="/admin/payments">
+            </Link> : null}
+            {canRecordPayment ? <Link className={heroSecondaryActionClass} to="/admin/payments">
               <CreditCard className="h-4 w-4" /> Record Payment
-            </Link>
+            </Link> : null}
           </div>
         </div>
       </div>

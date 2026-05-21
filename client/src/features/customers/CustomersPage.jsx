@@ -145,10 +145,14 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { can, normalizeRole } from '../../utils/roles.js';
 
 export function CustomersPage({ role = 'admin' }) {
-  const { request } = useAuth();
-  const base = role === 'technician' ? '/tech' : '/admin';
+  const { request, user } = useAuth();
+  const effectiveRole = user?.role || role;
+  const isTechnician = normalizeRole(effectiveRole) === 'technician';
+  const base = isTechnician ? '/tech' : '/admin';
+  const canCreateBooking = can(effectiveRole, 'create_booking');
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -262,9 +266,9 @@ export function CustomersPage({ role = 'admin' }) {
           </select>
         ) : null}
       </div>
-      {!visibleCustomers.length ? <EmptyState title="No customers found" message="Customer records matching your filters will appear here." action={role === 'technician' ? null : <Link className="btn btn-primary" to={`${base}/bookings`}>Create Booking</Link>} /> : (
+      {!visibleCustomers.length ? <EmptyState title="No customers found" message="Customer records matching your filters will appear here." action={canCreateBooking ? <Link className="btn btn-primary" to={`${base}/bookings`}>Create Booking</Link> : null} /> : (
         <>
-        {role === 'technician' ? (
+        {isTechnician ? (
           <div className="technician-mobile-card-list customers-mobile-cards">
             {visibleCustomers.map((customer) => {
               const metrics = metricsByCustomer.get(recordId(customer)) || { jobs: [], invoices: [] };
@@ -281,7 +285,7 @@ export function CustomersPage({ role = 'admin' }) {
             })}
           </div>
         ) : null}
-        <div className={`table-wrap bg-[var(--surface)] xl:overflow-x-visible ${role === 'technician' ? 'technician-desktop-table' : ''}`}>
+        <div className={`table-wrap bg-[var(--surface)] xl:overflow-x-visible ${isTechnician ? 'technician-desktop-table' : ''}`}>
           <table className="data-table min-w-[900px] table-fixed xl:min-w-0">
             <colgroup>
               <col className="w-[27%]" />
@@ -292,7 +296,7 @@ export function CustomersPage({ role = 'admin' }) {
               <col className="w-[10%]" />
               <col className="w-[12%]" />
             </colgroup>
-          <thead><tr><th>Customer</th><th>Device / Service</th><th>{role === 'technician' ? 'Assigned / Attended Jobs' : 'Jobs'}</th><th>Balance</th><th>Spent</th><th>Created</th><th className="text-center">Action</th></tr></thead>
+          <thead><tr><th>Customer</th><th>Device / Service</th><th>{isTechnician ? 'Assigned / Attended Jobs' : 'Jobs'}</th><th>Balance</th><th>Spent</th><th>Created</th><th className="text-center">Action</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
             {visibleCustomers.map((customer) => {
               const metrics = metricsByCustomer.get(recordId(customer)) || { jobs: [], invoices: [] };

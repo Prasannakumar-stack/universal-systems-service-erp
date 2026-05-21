@@ -139,6 +139,7 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { can } from '../../utils/roles.js';
 import { calculateAmcCoverageBreakdown } from '../../shared/amcCoverage.js';
 
 const REPORT_PAGE_LIMIT = 50;
@@ -219,8 +220,10 @@ async function fetchReportCollection(request, path, key, label) {
 }
 
 export function ReportsAnalyticsPage({ section = 'main' }) {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const location = useLocation();
+  const canExportReports = can(user, 'export_reports');
+  const canPrintReports = can(user, 'print_reports');
   const [range, setRange] = useState('This Month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -574,6 +577,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
   }, [activeSection]);
 
   function exportCurrentSection() {
+    if (!canExportReports) return;
     if (!report) return;
     if (activeSection === 'main') {
       downloadCsv('business-report.csv', ['Metric', 'Value'], [
@@ -700,7 +704,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         </div>
       </section>
       <ReportsPremiumNavigation active={activeSection} />
-      <ReportsPremiumRangeBar range={range} setRange={setRange} customFrom={customFrom} setCustomFrom={setCustomFrom} customTo={customTo} setCustomTo={setCustomTo} hasRangeFilter={hasRangeFilter} onReset={resetRangeFilters} onExport={exportCurrentSection} />
+      <ReportsPremiumRangeBar range={range} setRange={setRange} customFrom={customFrom} setCustomFrom={setCustomFrom} customTo={customTo} setCustomTo={setCustomTo} hasRangeFilter={hasRangeFilter} onReset={resetRangeFilters} onExport={exportCurrentSection} canExportReports={canExportReports} canPrintReports={canPrintReports} />
       {cappedCollections.length ? (
         <div className="surface mb-5 border border-amber-400/25 bg-amber-500/10 p-4 text-sm font-semibold text-amber-100">
           Report data is capped for very large datasets. Loaded the first {MAX_REPORT_PAGES * REPORT_PAGE_LIMIT} records for: {cappedCollections.join(', ')}.
@@ -1005,7 +1009,7 @@ function ReportsPremiumNavigation({ active }) {
   );
 }
 
-function ReportsPremiumRangeBar({ range, setRange, customFrom, setCustomFrom, customTo, setCustomTo, hasRangeFilter, onReset, onExport }) {
+function ReportsPremiumRangeBar({ range, setRange, customFrom, setCustomFrom, customTo, setCustomTo, hasRangeFilter, onReset, onExport, canExportReports = false, canPrintReports = false }) {
   return (
     <div className="surface reports-premium-range mb-5 grid gap-3 p-4 lg:grid-cols-[minmax(220px,1fr)_170px_170px_auto_auto_auto]">
       <select className="input" value={range} onChange={(event) => setRange(event.target.value)}>
@@ -1018,8 +1022,8 @@ function ReportsPremiumRangeBar({ range, setRange, customFrom, setCustomFrom, cu
         </>
       ) : <><div className="hidden lg:block" /><div className="hidden lg:block" /></>}
       <button type="button" className="btn btn-secondary reports-compact-button reports-reset-filter-button" disabled={!hasRangeFilter} onClick={onReset}>Reset Filters</button>
-      <button type="button" className="btn btn-secondary reports-compact-button" onClick={onExport}><Download className="h-4 w-4" />Export CSV</button>
-      <button type="button" className="btn btn-secondary reports-compact-button" onClick={() => window.print()}><FileText className="h-4 w-4" />Print</button>
+      {canExportReports ? <button type="button" className="btn btn-secondary reports-compact-button" onClick={onExport}><Download className="h-4 w-4" />Export CSV</button> : null}
+      {canPrintReports ? <button type="button" className="btn btn-secondary reports-compact-button" onClick={() => window.print()}><FileText className="h-4 w-4" />Print</button> : null}
     </div>
   );
 }

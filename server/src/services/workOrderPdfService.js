@@ -3,6 +3,7 @@ import path from 'node:path';
 import PDFDocument from 'pdfkit';
 import WorkOrder from '../models/WorkOrder.js';
 import { COMPANY, LOGO_FULL_PATH, PDF_DIR } from '../config.js';
+import { hasPermission } from '../permissions.js';
 import { appError } from '../utils/http.js';
 import { calculateAmcCoverageBreakdown, amcCoverageSummary } from './amcCoverageEngine.js';
 import { technicianCanAccessWorkOrder } from './technicianScopeService.js';
@@ -429,6 +430,9 @@ export function pdfCaption(type, workOrder) {
 }
 
 export async function generateWorkOrderPdf({ workOrderId, type, user }) {
+  if (!hasPermission(user, 'view_documents') && !hasPermission(user, 'download_invoice_pdf')) {
+    throw appError('You do not have permission to access this resource', 403);
+  }
   if (!pdfTypes.includes(type)) throw appError('Invalid PDF type');
   const workOrder = await getPdfWorkOrder(workOrderId, user);
   if (!isAllowed(type, workOrder)) throw appError('Available after status change', 409);

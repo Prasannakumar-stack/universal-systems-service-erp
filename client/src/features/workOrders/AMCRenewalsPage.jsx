@@ -140,12 +140,18 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 import { normalizeAmcCoverageType } from '../../shared/amcCoverage.js';
+import { can, normalizeRole } from '../../utils/roles.js';
 
 export function AMCRenewalsPage({ role = 'admin' }) {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
-  const isTechnician = role === 'technician';
+  const effectiveRole = user?.role || role;
+  const isTechnician = normalizeRole(effectiveRole) === 'technician';
+  const canCreateAmc = can(effectiveRole, 'create_amc');
+  const canRenewAmc = can(effectiveRole, 'renew_amc');
+  const canCreateAmcJob = can(effectiveRole, 'create_amc_job');
+  const canSendPdfWhatsapp = can(effectiveRole, 'send_pdf_whatsapp');
   const base = isTechnician ? '/tech' : '/admin';
   const { data, loading, error, reload } = useResource(() => request('/amc/renewals'), [request]);
   const renewals = data?.renewals || [];
@@ -157,6 +163,7 @@ export function AMCRenewalsPage({ role = 'admin' }) {
   ];
 
   async function createJob(contract) {
+    if (!canCreateAmcJob) return;
     try {
       const result = await request(`/amc/contracts/${recordId(contract)}/work-orders`, {
         method: 'POST',
@@ -171,6 +178,7 @@ export function AMCRenewalsPage({ role = 'admin' }) {
   }
 
   function renewContract(contract) {
+    if (!canRenewAmc) return;
     navigate(`${base}/amc-contracts`, { state: { renewContract: contract } });
   }
 
@@ -186,7 +194,7 @@ export function AMCRenewalsPage({ role = 'admin' }) {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">AMC Renewals</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Review contracts expiring in 30 days and expired AMC agreements.</p>
           </div>
-          {!isTechnician ? <Link className="btn btn-primary h-10 px-4" to={`${base}/amc-contracts`}><Plus className="h-4 w-4" />New Contract</Link> : null}
+          {canCreateAmc ? <Link className="btn btn-primary h-10 px-4" to={`${base}/amc-contracts`}><Plus className="h-4 w-4" />New Contract</Link> : null}
         </div>
       </section>
       <div className="surface mb-5 p-3">
@@ -235,13 +243,13 @@ export function AMCRenewalsPage({ role = 'admin' }) {
                   <td className="font-black text-slate-100">{currency(contract.contractValue)}</td>
                   <td className="text-right">
                     <div className="amc-actions">
-                      {isTechnician ? (
+                      {!canCreateAmcJob && !canRenewAmc && !canSendPdfWhatsapp ? (
                         <Link className="btn btn-secondary amc-action-button" to={`${base}/amc-contracts`}><FileText className="h-4 w-4" />View Contract</Link>
                       ) : (
                         <>
-                          <a className="btn btn-secondary amc-action-button amc-whatsapp-action" href={amcWhatsappHref(contract)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
-                          <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button>
-                          <button className="btn btn-secondary amc-action-button" type="button" onClick={() => renewContract(contract)}><FileText className="h-4 w-4" />Renew</button>
+                          {canSendPdfWhatsapp ? <a className="btn btn-secondary amc-action-button amc-whatsapp-action" href={amcWhatsappHref(contract)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a> : null}
+                          {canCreateAmcJob ? <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button> : null}
+                          {canRenewAmc ? <button className="btn btn-secondary amc-action-button" type="button" onClick={() => renewContract(contract)}><FileText className="h-4 w-4" />Renew</button> : null}
                         </>
                       )}
                     </div>

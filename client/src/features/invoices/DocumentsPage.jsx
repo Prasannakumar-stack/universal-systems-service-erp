@@ -142,6 +142,7 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { can } from '../../utils/roles.js';
 import {
   buildWhatsappPdfMessage,
   buildWhatsappWebUrl,
@@ -164,8 +165,10 @@ function documentStatusLabel(status) {
 }
 
 export function DocumentsPage() {
-  const { request, token } = useAuth();
+  const { request, token, user } = useAuth();
   const { push } = useToast();
+  const canCreateDocument = can(user, 'create_invoice');
+  const canSendPdfWhatsapp = can(user, 'send_pdf_whatsapp');
   const [type, setType] = useState('');
   const [status, setStatus] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
@@ -215,6 +218,10 @@ export function DocumentsPage() {
   }
 
   function sendWhatsApp(document) {
+    if (!canSendPdfWhatsapp) {
+      push('You do not have permission to send PDFs via WhatsApp', 'error');
+      return;
+    }
     const phone = String(document.customerId?.phone || '').replace(/\D/g, '');
     if (!phone) {
       push('Customer phone number not available', 'error');
@@ -235,7 +242,7 @@ export function DocumentsPage() {
 
   return (
     <>
-      <PageHeader title="Documents & PDFs" eyebrow="Billing & PDF" action={<Link className="btn btn-primary" to="/admin/documents/new"><Plus className="h-4 w-4" />Create Document</Link>}>
+      <PageHeader title="Documents & PDFs" eyebrow="Billing & PDF" action={canCreateDocument ? <Link className="btn btn-primary" to="/admin/documents/new"><Plus className="h-4 w-4" />Create Document</Link> : null}>
         Generate quotations, invoices, AMC agreements, and service completion PDFs from work order data.
       </PageHeader>
       <div className="surface mb-5 grid gap-3 p-4 xl:grid-cols-[180px_180px_1fr_160px_160px]">
@@ -258,7 +265,7 @@ export function DocumentsPage() {
         <input className="input" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
       </div>
-      {!documents.length ? <EmptyState title="No documents generated yet" message="Create quotation or invoice from a work order." action={<Link className="btn btn-primary" to="/admin/documents/new">Create Document</Link>} /> : (
+      {!documents.length ? <EmptyState title="No documents generated yet" message="Create quotation or invoice from a work order." action={canCreateDocument ? <Link className="btn btn-primary" to="/admin/documents/new">Create Document</Link> : null} /> : (
         <>
         <Table>
           <thead><tr><th>Date</th><th>Type</th><th>Customer</th><th>Service Job</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
@@ -275,7 +282,7 @@ export function DocumentsPage() {
                   <div className="flex flex-wrap gap-2">
                     <Link className="btn btn-secondary py-2" to={`/admin/documents/${document.id}`}>Preview</Link>
                     <button type="button" className="btn btn-secondary py-2" onClick={() => downloadDocumentPdf(document)}><Download className="h-4 w-4" />Download</button>
-                    <button type="button" className="btn btn-primary py-2" onClick={() => sendWhatsApp(document)}><Send className="h-4 w-4" />WhatsApp</button>
+                    {canSendPdfWhatsapp ? <button type="button" className="btn btn-primary py-2" onClick={() => sendWhatsApp(document)}><Send className="h-4 w-4" />WhatsApp</button> : null}
                   </div>
                 </td>
               </tr>
@@ -290,15 +297,20 @@ export function DocumentsPage() {
 }
 
 export function CreateDocumentPage() {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
+  const canCreateDocument = can(user, 'create_invoice');
   const [form, setForm] = useState({ type: 'invoice', workOrderId: '' });
   const { data, loading, error } = useResource(() => request('/work-orders?limit=100'), [request]);
 
   async function submit(event) {
     event.preventDefault();
     event.stopPropagation();
+    if (!canCreateDocument) {
+      push('You do not have permission to create documents', 'error');
+      return;
+    }
     try {
       const result = await request('/documents', { method: 'POST', body: JSON.stringify(form) });
       push('Document created');
@@ -310,6 +322,7 @@ export function CreateDocumentPage() {
 
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
+  if (!canCreateDocument) return <ErrorBlock message="You do not have permission to create documents." />;
 
   return (
     <>
@@ -349,8 +362,11 @@ export function CreateDocumentPage() {
 
 export function DocumentPreviewPage() {
   const { id } = useParams();
-  const { request, token } = useAuth();
+  const { request, token, user } = useAuth();
   const { push } = useToast();
+  const canRecordPayment = can(user, 'record_payment');
+  const canViewPayments = can(user, 'view_payments');
+  const canSendPdfWhatsapp = can(user, 'send_pdf_whatsapp');
   const [payment, setPayment] = useState({ paidAmount: '', method: 'Cash' });
   const { data, loading, error, reload } = useResource(() => request(`/documents/${id}`), [request, id]);
   const document = data?.document;
@@ -397,6 +413,10 @@ export function DocumentPreviewPage() {
   function sendDocumentWhatsApp(event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
+    if (!canSendPdfWhatsapp) {
+      push('You do not have permission to send PDFs via WhatsApp', 'error');
+      return;
+    }
     const phone = String(document.customerId?.phone || '').replace(/\D/g, '');
     if (!phone) {
       push('Customer phone number not available', 'error');
@@ -418,6 +438,10 @@ export function DocumentPreviewPage() {
   async function recordPayment(event) {
     event.preventDefault();
     event.stopPropagation();
+    if (!canRecordPayment) {
+      push('You do not have permission to record payments', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request('/payments', { method: 'POST', body: JSON.stringify({ invoiceId: recordId(document.invoiceId), paidAmount: payment.paidAmount, method: payment.method }) });
@@ -490,8 +514,8 @@ export function DocumentPreviewPage() {
                 <p className="text-sm muted">Balance: {currency(document.invoiceId.balance)}</p>
                 <StatusBadge status={document.invoiceId.status} />
               </div>
-              <Link className="btn btn-secondary mt-4 w-full" to={`/admin/payments?invoiceId=${recordId(document.invoiceId)}`}>Go to Payments</Link>
-              {document.invoiceId.balance > 0 ? (
+              {canViewPayments || canRecordPayment ? <Link className="btn btn-secondary mt-4 w-full" to={`/admin/payments?invoiceId=${recordId(document.invoiceId)}`}>Go to Payments</Link> : null}
+              {canRecordPayment && document.invoiceId.balance > 0 ? (
                 <form className="mt-4 grid gap-3" onSubmit={recordPayment}>
                   <input className="input" type="number" min="1" max={document.invoiceId.balance} placeholder="Paid amount" value={payment.paidAmount} onChange={(event) => setPayment((current) => ({ ...current, paidAmount: event.target.value }))} required />
                   <select className="input" value={payment.method} onChange={(event) => setPayment((current) => ({ ...current, method: event.target.value }))}>
@@ -509,7 +533,7 @@ export function DocumentPreviewPage() {
             <div className="mt-4 grid gap-2">
               <button type="button" className="btn btn-secondary w-full" onClick={previewPdf}><FileText className="h-4 w-4" />Preview PDF</button>
               <button type="button" className="btn btn-secondary w-full" onClick={downloadPdf}><Download className="h-4 w-4" />Download PDF</button>
-              <button type="button" className="btn btn-primary w-full" onClick={sendDocumentWhatsApp}><Send className="h-4 w-4" />Send via WhatsApp</button>
+              {canSendPdfWhatsapp ? <button type="button" className="btn btn-primary w-full" onClick={sendDocumentWhatsApp}><Send className="h-4 w-4" />Send via WhatsApp</button> : null}
             </div>
           </div>
           <div className="surface p-5">

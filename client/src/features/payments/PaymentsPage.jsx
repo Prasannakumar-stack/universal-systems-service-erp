@@ -148,12 +148,15 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { can, normalizeRole } from '../../utils/roles.js';
 
 export function PaymentsPage({ role = 'admin' }) {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const { push } = useToast();
   const location = useLocation();
-  const isTechnician = role === 'technician';
+  const effectiveRole = user?.role || role;
+  const isTechnician = normalizeRole(effectiveRole) === 'technician';
+  const canRecordPayments = can(effectiveRole, 'record_payment');
   const base = isTechnician ? '/tech' : '/admin';
   const invoiceIdParam = useMemo(() => new URLSearchParams(location.search).get('invoiceId') || '', [location.search]);
   const invoiceIdParamHandled = useRef('');
@@ -268,7 +271,6 @@ export function PaymentsPage({ role = 'admin' }) {
 
   const selectedInvoice = findInvoice(data.invoices, form.invoiceId);
   const selectedBalanceDue = invoiceDueAmount(selectedInvoice);
-  const canRecordPayments = role === 'admin';
   const canRecordPayment = canRecordPayments && Boolean(form.invoiceId && Number(form.paidAmount) > 0);
   const hasActiveFilters = Boolean(search.trim() || paymentStatus || methodFilter || dateFrom || dateTo);
   const paymentSummaryByInvoice = (data.payments || []).reduce((map, payment) => {
@@ -438,7 +440,7 @@ export function PaymentsPage({ role = 'admin' }) {
       ) : (
         <div className="surface payment-entry-panel mb-5 p-5">
           <h2 className="text-xl font-black">Payment Records</h2>
-          <p className="mt-1 text-sm muted">Technician access is read-only. Admin will record payment after confirmation.</p>
+          <p className="mt-1 text-sm muted">This role has read-only payment access. An authorized billing user can record payment after confirmation.</p>
         </div>
       )}
       {!visiblePayments.length ? (

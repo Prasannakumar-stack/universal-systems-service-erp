@@ -1,15 +1,16 @@
 import { Router } from 'express';
-import { authenticate, requireRole } from '../auth.js';
+import { authenticate } from '../auth.js';
+import { requirePermission } from '../permissions.js';
 import { createContract, listContracts, listRenewals, listSchedule, postWorkOrder } from '../controllers/amcController.js';
 import { asyncHandler } from '../utils/http.js';
 
 const router = Router();
 
 router.use(authenticate);
-router.get('/contracts', requireRole('admin', 'technician'), asyncHandler(listContracts));
-router.post('/contracts', requireRole('admin'), asyncHandler(createContract));
-router.get('/schedule', requireRole('admin', 'technician'), asyncHandler(listSchedule));
-router.get('/renewals', requireRole('admin', 'technician'), asyncHandler(listRenewals));
-router.post('/contracts/:id/work-orders', requireRole('admin'), asyncHandler(postWorkOrder));
+router.get('/contracts', requirePermission('view_amc'), asyncHandler(listContracts));
+router.post('/contracts', requirePermission('create_amc'), asyncHandler(createContract));
+router.get('/schedule', requirePermission('view_amc'), asyncHandler(listSchedule));
+router.get('/renewals', requirePermission('view_amc'), asyncHandler(listRenewals));
+router.post('/contracts/:id/work-orders', requirePermission('create_amc_job'), asyncHandler(postWorkOrder));
 
 export default router;

@@ -39,23 +39,26 @@ export function AuthProvider({ children }) {
     [token]
   );
 
-  const login = useCallback(async (username, password, role) => {
-    const requestedRole = role || (window.location.pathname.startsWith('/admin') ? 'admin' : 'technician');
+  const login = useCallback(async (username, password) => {
     const data = await parseResponse(
       await fetch(`${apiBase}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, role: requestedRole })
+        body: JSON.stringify({ username, password })
       })
     );
     if (data.success !== true) {
       throw new Error(data.message || 'Invalid credentials');
     }
+    const user = data.user ? { ...data.user, role: data.user.role || data.role } : null;
+    if (!user) {
+      throw new Error('Invalid credentials');
+    }
     localStorage.setItem('us_token', data.token);
-    localStorage.setItem('us_user', JSON.stringify(data.user));
+    localStorage.setItem('us_user', JSON.stringify(user));
     setToken(data.token);
-    setUser(data.user);
-    return data.user;
+    setUser(user);
+    return user;
   }, []);
 
   useEffect(() => {

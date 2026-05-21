@@ -28,66 +28,59 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { company } from '../utils/constants.js';
 import { currency } from '../utils/format.js';
 import { getCustomerDisplayId, getInvoiceDisplayId, getPaymentDisplayId, getWorkOrderDisplayId } from '../shared/idHelpers.js';
-import { adminWorkspaceRoles, canAccessRoles, normalizeRole, roleLabel } from '../utils/roles.js';
+import { adminWorkspaceRoles, can, canAny, canAccessRoles, normalizeRole, roleLabel } from '../utils/roles.js';
 
 const fullAccessRoles = ['admin'];
-const operationsRoles = fullAccessRoles;
-const customerRoles = fullAccessRoles;
-const amcRoles = fullAccessRoles;
-const inventoryRoles = fullAccessRoles;
-const billingRoles = fullAccessRoles;
-const reportRoles = fullAccessRoles;
-const auditRoles = fullAccessRoles;
 
 const adminGroups = [
   {
     title: '',
-    links: [{ to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: adminWorkspaceRoles }]
+    links: [{ to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'view_business_dashboard' }]
   },
   {
     title: 'Operations',
     links: [
-      { to: '/admin/bookings', label: 'Bookings', icon: BookOpenCheck, roles: operationsRoles, badgeKey: 'bookings' },
-      { to: '/admin/work-orders', label: 'Work Orders', icon: Wrench, roles: operationsRoles, badgeKey: 'workOrders' }
+      { to: '/admin/bookings', label: 'Bookings', icon: BookOpenCheck, permission: 'view_bookings', badgeKey: 'bookings' },
+      { to: '/admin/work-orders', label: 'Work Orders', icon: Wrench, permission: 'view_work_orders', badgeKey: 'workOrders' }
     ]
   },
   {
     title: 'Customers',
     links: [
-      { to: '/admin/customers', label: 'Customers', icon: Users, roles: customerRoles }
+      { to: '/admin/customers', label: 'Customers', icon: Users, permission: 'view_customers' }
     ]
   },
   {
     title: 'Inventory',
     links: [
-      { to: '/admin/parts', label: 'Products / Parts', icon: Boxes, roles: inventoryRoles, badgeKey: 'lowStock' }
+      { to: '/admin/parts', label: 'Products / Parts', icon: Boxes, permission: 'view_inventory', badgeKey: 'lowStock' }
     ]
   },
   {
     title: 'Sales & Billing',
     links: [
-      { to: '/admin/invoices', label: 'Invoices', icon: ReceiptText, roles: billingRoles },
-      { to: '/admin/payments', label: 'Payments', icon: CreditCard, roles: billingRoles, badgeKey: 'pendingPayments' }
+      { to: '/admin/invoices', label: 'Invoices', icon: ReceiptText, permission: 'view_invoices' },
+      { to: '/admin/payments', label: 'Payments', icon: CreditCard, permission: 'view_payments', badgeKey: 'pendingPayments' }
     ]
   },
   {
     title: 'AMC & Warranty',
     links: [
-      { to: '/admin/amc-contracts', label: 'AMC Contracts', icon: FileCheck2, roles: amcRoles, badgeKey: 'amcRenewals' }
+      { to: '/admin/amc-contracts', label: 'AMC Contracts', icon: FileCheck2, permission: 'view_amc', badgeKey: 'amcRenewals' }
     ]
   },
   {
     title: 'Reports',
     links: [
-      { to: '/admin/reports', label: 'Reports', icon: Activity, roles: reportRoles }
+      { to: '/admin/reports', label: 'Reports', icon: Activity, permission: 'view_reports' }
     ]
   },
   {
     title: 'System',
     links: [
-      { to: '/admin/technician-panel', label: 'Staff / Technicians', icon: UserRound, roles: fullAccessRoles },
-      { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity, roles: auditRoles },
-      { to: '/admin/settings', label: 'Settings', icon: Settings, roles: fullAccessRoles }
+      { to: '/admin/technician-panel', label: 'Staff / Technicians', icon: UserRound, permission: 'manage_users' },
+      { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity, permission: 'view_audit_logs' },
+      { to: '/admin/settings', label: 'Settings', icon: Settings, permission: 'view_settings' }
     ]
   }
 ];
@@ -126,29 +119,30 @@ const technicianGroups = [
 ];
 
 const adminRouteAccess = [
-  { prefix: '/admin/dashboard', roles: adminWorkspaceRoles },
-  { prefix: '/admin/technician-panel', roles: fullAccessRoles },
-  { prefix: '/admin/technician-tasks', roles: fullAccessRoles },
-  { prefix: '/admin/bookings', roles: operationsRoles },
-  { prefix: '/admin/work-orders', roles: operationsRoles },
-  { prefix: '/admin/customers', roles: customerRoles },
-  { prefix: '/admin/amc', roles: amcRoles },
-  { prefix: '/admin/warranties', roles: amcRoles },
-  { prefix: '/admin/parts', roles: inventoryRoles },
-  { prefix: '/admin/stock', roles: inventoryRoles },
-  { prefix: '/admin/documents', roles: billingRoles },
-  { prefix: '/admin/quotations', roles: billingRoles },
-  { prefix: '/admin/invoices', roles: billingRoles },
-  { prefix: '/admin/payments', roles: billingRoles },
-  { prefix: '/admin/reports/finance', roles: billingRoles },
-  { prefix: '/admin/reports/inventory', roles: inventoryRoles },
-  { prefix: '/admin/reports/technicians', roles: fullAccessRoles },
-  { prefix: '/admin/reports', roles: reportRoles },
-  { prefix: '/admin/audit-logs', roles: auditRoles },
-  { prefix: '/admin/settings', roles: fullAccessRoles }
+  { prefix: '/admin/dashboard', permission: 'view_business_dashboard' },
+  { prefix: '/admin/technician-panel', permission: 'manage_users' },
+  { prefix: '/admin/technician-tasks', permission: 'assign_technician' },
+  { prefix: '/admin/bookings', permission: 'view_bookings' },
+  { prefix: '/admin/work-orders', permission: 'view_work_orders' },
+  { prefix: '/admin/customers', permission: 'view_customers' },
+  { prefix: '/admin/amc', permission: 'view_amc' },
+  { prefix: '/admin/warranties', permission: 'view_amc' },
+  { prefix: '/admin/parts', permission: 'view_inventory' },
+  { prefix: '/admin/stock', permission: 'view_stock_movements' },
+  { prefix: '/admin/documents', permission: 'view_documents' },
+  { prefix: '/admin/quotations', permission: 'view_documents' },
+  { prefix: '/admin/invoices', permission: 'view_invoices' },
+  { prefix: '/admin/payments', permission: 'view_payments' },
+  { prefix: '/admin/reports/finance', permission: 'view_reports' },
+  { prefix: '/admin/reports/inventory', permission: 'view_reports' },
+  { prefix: '/admin/reports/technicians', permission: 'view_reports' },
+  { prefix: '/admin/reports', permission: 'view_reports' },
+  { prefix: '/admin/audit-logs', permission: 'view_audit_logs' },
+  { prefix: '/admin/settings', permission: 'view_settings' }
 ];
 
 function canSeeLink(link, role) {
+  if (link.permission) return can(role, link.permission);
   return !link.roles || canAccessRoles(role, link.roles);
 }
 
@@ -160,11 +154,12 @@ function visibleAdminGroups(role) {
 
 function canOpenAdminPath(pathname, role) {
   const match = adminRouteAccess.find((item) => pathname.startsWith(item.prefix));
+  if (match?.permission) return can(role, match.permission);
   return match ? canAccessRoles(role, match.roles) : canAccessRoles(role, fullAccessRoles);
 }
 
 function canUseGlobalSearch(role) {
-  return normalizeRole(role) === 'technician' || canAccessRoles(role, fullAccessRoles);
+  return normalizeRole(role) === 'technician' || canAny(role, ['view_customers', 'view_bookings', 'view_work_orders', 'view_invoices', 'view_payments', 'view_inventory']);
 }
 
 function sidebarBadgeClass(tone) {
@@ -429,7 +424,7 @@ function AdminSidebar({ close }) {
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">{user?.name || 'Admin User'}</p>
-            <p className="truncate text-xs muted">{roleLabel(user?.role || 'admin')}</p>
+            <span className="admin-role-badge mt-1 inline-flex">{roleLabel(user?.role || 'admin')}</span>
           </div>
         </div>
         <button className="btn btn-secondary w-full justify-start" onClick={handleLogout}>
@@ -491,7 +486,7 @@ function TechnicianSidebar({ close }) {
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">{user?.name || 'Technician'}</p>
-            <p className="truncate text-xs muted">Technician</p>
+            <span className="admin-role-badge mt-1 inline-flex">{roleLabel(user?.role || 'technician')}</span>
           </div>
         </div>
         <button className="btn btn-secondary w-full justify-start" onClick={handleLogout}>
@@ -840,9 +835,9 @@ function AdminTopBar({ role, openSidebar }) {
     { to: '/tech/work-orders', label: 'Work Orders', icon: Wrench },
     { to: '/tech/payments', label: 'Payments', icon: CreditCard }
   ] : [
-    { to: '/admin/bookings', label: 'Booking', icon: BookOpenCheck, roles: operationsRoles, primary: true },
-    { to: '/admin/work-orders', label: 'Service Job', icon: Wrench, roles: operationsRoles },
-    { to: '/admin/payments', label: 'Payment', icon: CreditCard, roles: billingRoles }
+    { to: '/admin/bookings', label: 'Booking', icon: BookOpenCheck, permission: 'create_booking', primary: true },
+    { to: '/admin/work-orders', label: 'Service Job', icon: Wrench, permission: 'create_work_order' },
+    { to: '/admin/payments', label: 'Payment', icon: CreditCard, permission: 'record_payment' }
   ]).filter((item) => canSeeLink(item, userRole));
 
   return (
@@ -889,7 +884,7 @@ function AdminTopBar({ role, openSidebar }) {
             <div className="grid h-8 w-8 place-items-center rounded-card bg-sky-400/15 text-xs font-black text-sky-100">{user?.name?.slice(0, 1) || 'A'}</div>
             <div className="min-w-0">
               <p className="max-w-36 truncate text-sm font-bold">{user?.name || 'Admin User'}</p>
-              <p className="text-xs muted">{roleLabel(userRole)}</p>
+              <span className="admin-role-badge mt-1 inline-flex">{roleLabel(userRole)}</span>
             </div>
           </div>
           <a href="/" className="btn btn-secondary sm:shrink-0">

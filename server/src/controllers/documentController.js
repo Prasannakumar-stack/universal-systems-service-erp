@@ -9,7 +9,7 @@ export async function create(req, res) {
 
 export async function list(_req, res) {
   try {
-    const { documents, pagination } = await listDocuments(_req.query);
+    const { documents, pagination } = await listDocuments(_req.query, _req.user);
     res.json({ success: true, data: documents, documents, pagination });
   } catch (error) {
     console.error('Document list failed', error);
@@ -18,11 +18,11 @@ export async function list(_req, res) {
 }
 
 export async function getById(req, res) {
-  const document = await getDocument(req.params.id);
+  const document = await getDocument(req.params.id, req.user);
   res.json({ document });
 }
 
 export async function downloadPdf(req, res) {
-  const pdf = await generateDocumentPdf(req.params.id);
+  const pdf = await generateDocumentPdf(req.params.id, req.user);
   res.download(pdf.filePath, pdf.filename);
 }

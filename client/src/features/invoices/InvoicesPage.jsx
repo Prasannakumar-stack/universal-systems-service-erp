@@ -144,11 +144,14 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { can, normalizeRole } from '../../utils/roles.js';
 
 export function InvoicesPage({ role = 'admin' }) {
-  const { request } = useAuth();
+  const { request, user } = useAuth();
   const { push } = useToast();
-  const isTechnician = role === 'technician';
+  const effectiveRole = user?.role || role;
+  const isTechnician = normalizeRole(effectiveRole) === 'technician';
+  const canSendPdfWhatsapp = can(effectiveRole, 'send_pdf_whatsapp');
   const base = isTechnician ? '/tech' : '/admin';
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
@@ -314,7 +317,7 @@ export function InvoicesPage({ role = 'admin' }) {
                     <td className="text-center">
                       <div className="billing-actions">
                         <Link className={`btn ${dueAmount > 0 && !isTechnician ? 'btn-primary' : 'btn-secondary'} billing-action-main`} to={`${base}/payments?invoiceId=${invoiceId}`}>{isTechnician ? 'View Payments' : 'Go to Payment'}</Link>
-                        {!isTechnician ? <button type="button" className="btn btn-secondary billing-action-button" onClick={() => sendInvoiceWhatsApp(invoice)}><Send className="h-4 w-4" />WhatsApp</button> : null}
+                        {canSendPdfWhatsapp ? <button type="button" className="btn btn-secondary billing-action-button" onClick={() => sendInvoiceWhatsApp(invoice)}><Send className="h-4 w-4" />WhatsApp</button> : null}
                       </div>
                     </td>
                   </tr>
