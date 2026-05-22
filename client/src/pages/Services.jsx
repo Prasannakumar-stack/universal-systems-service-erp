@@ -156,8 +156,14 @@ export default function Services() {
   return (
     <div className="services-page section">
       <div className="container-page">
-        <section className="services-page-hero services-reveal">
-          <div className="services-page-header">
+        <section className="services-page-hero services-reveal page-hero hero-with-bg">
+          <img
+            className="page-hero-bg-image"
+            src="/Service%20page%20image.png"
+            alt="Universal Systems hero"
+          />
+          <div className="page-hero-overlay" aria-hidden="true" />
+          <div className="page-hero-content services-page-header">
             <div className="services-page-eyebrow-chip">
               <Sparkles className="h-4 w-4" />
               Services
@@ -177,18 +183,6 @@ export default function Services() {
             <div className="services-trust-pill">
               <CheckCircle2 className="h-4 w-4" />
               <span>No upfront payment required. Pay only after service confirmation.</span>
-            </div>
-          </div>
-
-          <div className="services-hero-visual" aria-label="Service device highlights">
-            <div className="services-hero-device services-hero-device-main">
-              <img src="/images/service-laptop-repair.png" alt="Laptop repair service" />
-            </div>
-            <div className="services-hero-device services-hero-device-small">
-              <img src="/images/service-printer.png" alt="Printer service" />
-            </div>
-            <div className="services-hero-device services-hero-device-small">
-              <img src="/images/service-cctv.png" alt="CCTV installation service" />
             </div>
           </div>
         </section>

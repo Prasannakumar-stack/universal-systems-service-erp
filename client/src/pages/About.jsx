@@ -106,9 +106,15 @@ export default function About() {
   return (
     <div className="about-page section">
       <div className="container-page about-page-container">
-        <section className="about-premium-hero about-reveal">
+        <section className="about-premium-hero about-reveal page-hero hero-with-bg">
+          <img
+            className="page-hero-bg-image"
+            src="/About%20page%20image.png"
+            alt="Universal Systems hero"
+          />
+          <div className="page-hero-overlay" aria-hidden="true" />
           <div className="about-hero-glow" aria-hidden="true" />
-          <div className="about-hero-copy">
+          <div className="page-hero-content about-hero-copy">
             <div className="about-eyebrow-chip">
               <Sparkles className="h-4 w-4" />
               About Universal Systems
@@ -132,10 +138,6 @@ export default function About() {
               <CheckCircle2 className="h-4 w-4" />
               <span>Serving Mettur Dam, Salem Dt and nearby areas.</span>
             </div>
-          </div>
-
-          <div className="about-hero-image-panel">
-            <img src="/images/about-tech.jpg" alt="Technician repairing computer" />
           </div>
         </section>
 

@@ -133,8 +133,8 @@ export default function App() {
           <Route path="settings" element={lazyElement(<TechnicianSettingsPage />)} />
         </Route>
         <Route path="/technician" element={<DashboardLayout role="technician" />}>
-          <Route index element={<Navigate to="/tech/dashboard" replace />} />
-          <Route path="dashboard" element={<Navigate to="/tech/dashboard" replace />} />
+          <Route index element={<Navigate to="/technician/dashboard" replace />} />
+          <Route path="dashboard" element={lazyElement(<TechnicianDashboard />)} />
           <Route path="bookings" element={<Navigate to="/tech/bookings" replace />} />
           <Route path="work-orders" element={<Navigate to="/tech/work-orders" replace />} />
           <Route path="customers" element={<Navigate to="/tech/customers" replace />} />

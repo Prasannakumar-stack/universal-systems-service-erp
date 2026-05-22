@@ -1,15 +1,142 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Bell, CalendarClock, CheckCircle2, ClipboardList, CreditCard, FileText, Plus, ReceiptText, UserRound, Wrench, Zap, ArrowUpRight } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { AlertTriangle, Bell, Boxes, CalendarClock, CheckCircle2, ClipboardList, CreditCard, FileText, Plus, ReceiptText, UserRound, Wrench, ArrowUpRight } from 'lucide-react';
+import { Area, Bar, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { technicianNameOrAdmin } from '../../utils/assignment.js';
-import { currency, formatDate, statusTone } from '../../utils/format.js';
+import { formatDate, statusTone } from '../../utils/format.js';
 import { can } from '../../utils/roles.js';
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
 const panelActionClass = `rounded-lg bg-white/5 px-3 py-1.5 text-xs font-bold text-sky-400 transition-colors hover:bg-white/10 hover:text-sky-300 ${focusRing}`;
 const heroSecondaryActionClass = `inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition-all hover:-translate-y-0.5 hover:bg-white/10 ${focusRing}`;
+const dashboardCurrencyFormatter = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0
+});
+const dashboardPeriods = [
+  { id: 'today', label: 'Today' },
+  { id: '7d', label: '7 Days' },
+  { id: 'month', label: 'This Month' }
+];
+const quickActionItems = [
+  { label: 'New Booking', to: '/admin/bookings', icon: CalendarClock, color: '#38bdf8', rgb: '56, 189, 248' },
+  { label: 'New Work Order', to: '/admin/work-orders', icon: Wrench, color: '#22d3ee', rgb: '34, 211, 238' },
+  { label: 'Add Customer', to: '/admin/customers', icon: UserRound, color: '#34d399', rgb: '52, 211, 153' },
+  { label: 'Add Product', to: '/admin/parts', icon: Boxes, color: '#a78bfa', rgb: '167, 139, 250' },
+  { label: 'Create Invoice', to: '/admin/invoices', icon: ReceiptText, color: '#fb923c', rgb: '251, 146, 60' },
+  { label: 'Reports', to: '/admin/reports', icon: FileText, color: '#60a5fa', rgb: '96, 165, 250' }
+];
+
+function dashboardCurrency(value) {
+  const amount = Number(value || 0);
+  return dashboardCurrencyFormatter.format(Number.isFinite(amount) ? amount : 0);
+}
+
+function dashboardAxisCurrency(value) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return '';
+  if (amount >= 100000) {
+    const lakhs = amount / 100000;
+    return `${Number.isInteger(lakhs) ? lakhs : lakhs.toFixed(1)}L`;
+  }
+  if (amount >= 1000) {
+    const thousands = amount / 1000;
+    return `${Number.isInteger(thousands) ? thousands : thousands.toFixed(1)}k`;
+  }
+  return String(Math.round(amount));
+}
+
+function dashboardRevenueTotal(rows) {
+  return (rows || []).reduce((sum, row) => {
+    const value = Number(row?.revenue || 0);
+    return sum + (Number.isFinite(value) ? value : 0);
+  }, 0);
+}
+
+function startOfDay(date = new Date()) {
+  const value = new Date(date);
+  value.setHours(0, 0, 0, 0);
+  return value;
+}
+
+function dashboardPeriodRange(period) {
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const start = startOfDay(end);
+  if (period === '7d') start.setDate(start.getDate() - 6);
+  if (period === 'month') start.setDate(1);
+  return { start, end };
+}
+
+function parseDashboardDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const raw = String(value).trim();
+  const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const parsed = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function dashboardRecordDate(record, fields) {
+  for (const field of fields) {
+    const parsed = parseDashboardDate(record?.[field]);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function filterDashboardRecords(records, fields, period) {
+  const { start, end } = dashboardPeriodRange(period);
+  return (records || []).filter((record) => {
+    const recordDate = dashboardRecordDate(record, fields);
+    if (!recordDate) return true;
+    return recordDate >= start && recordDate <= end;
+  });
+}
+
+function filterDashboardRevenueRows(rows, period) {
+  const chartRows = rows || [];
+  if (!chartRows.length) return [];
+  const originalTotal = dashboardRevenueTotal(chartRows);
+  const datedRows = chartRows.map((row) => ({
+    row,
+    date: dashboardRecordDate(row, ['key', 'date', 'createdAt'])
+  }));
+  if (datedRows.some((item) => !item.date)) return chartRows;
+
+  const { start, end } = dashboardPeriodRange(period);
+  const filteredRows = datedRows
+    .filter((item) => item.date >= start && item.date <= end)
+    .map((item) => item.row);
+
+  if (!filteredRows.length) return chartRows;
+  if (dashboardRevenueTotal(filteredRows) > 0) return filteredRows;
+  return originalTotal > 0 ? chartRows : filteredRows;
+}
+
+function DashboardPeriodFilter({ value, onChange }) {
+  return (
+    <div className="dashboard-period-filter" role="group" aria-label="Dashboard period">
+      {dashboardPeriods.map((period) => (
+        <button
+          key={period.id}
+          type="button"
+          className={`dashboard-period-pill ${focusRing}`}
+          data-active={value === period.id}
+          aria-pressed={value === period.id}
+          onClick={() => onChange(period.id)}
+        >
+          {period.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function useResource(load, deps = []) {
   const [data, setData] = useState(null);
@@ -272,62 +399,175 @@ function TechnicianWorkloadBars({ technicians = [] }) {
   );
 }
 
-function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0 }) {
-  const totalRevenue = chartData.reduce((sum, item) => sum + Number(item.revenue || 0), 0);
-  const bestDay = chartData.reduce((best, item) => Number(item.revenue || 0) > Number(best.revenue || 0) ? item : best, chartData[0] || { label: '-', revenue: 0 });
-  const hasData = totalRevenue > 0;
-  const monthlyRevenueLabel = currency(monthlyRevenue);
-  const totalRevenueLabel = currency(totalRevenue);
-  const bestDayRevenueLabel = currency(bestDay.revenue || 0);
-
+function QuickActionsCard() {
   return (
-    <DashboardPanel title="Revenue Overview" icon={Zap} action={<Link className={`rounded-lg bg-white/5 px-3 py-1.5 text-xs font-bold text-emerald-400 transition-colors hover:bg-white/10 hover:text-emerald-300 ${focusRing}`} to="/admin/reports/finance">Report</Link>} className="col-span-1 self-start xl:col-span-2">
-      <div className={`${hasData ? 'mb-4 sm:mb-6' : 'mb-3'} grid gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 sm:grid-cols-3 sm:gap-4 sm:p-5`}>
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">This Month</p>
-          <p className="mt-1 truncate text-xl font-black text-emerald-400 sm:text-2xl" title={monthlyRevenueLabel}>{monthlyRevenueLabel}</p>
-        </div>
-        <div className="min-w-0 border-t border-white/10 pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">7-Day Total</p>
-          <p className="mt-1 truncate text-xl font-black text-white sm:text-2xl" title={totalRevenueLabel}>{totalRevenueLabel}</p>
-        </div>
-        <div className="min-w-0 border-t border-white/10 pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Best Day ({bestDay.label})</p>
-          <p className="mt-1 truncate text-xl font-black text-sky-400 sm:text-2xl" title={bestDayRevenueLabel}>{bestDayRevenueLabel}</p>
-        </div>
+    <DashboardPanel title="Quick Actions" icon={Plus} className="dashboard-quick-actions-card">
+      <div className="dashboard-quick-actions-grid">
+        {quickActionItems.map((action) => {
+          const Icon = action.icon;
+          return (
+            <Link
+              key={action.label}
+              to={action.to}
+              className={`dashboard-quick-action-tile ${focusRing}`}
+              style={{ '--quick-action-color': action.color, '--quick-action-rgb': action.rgb }}
+            >
+              <span className="dashboard-quick-action-icon">
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="dashboard-quick-action-label">{action.label}</span>
+              <ArrowUpRight className="dashboard-quick-action-arrow h-3.5 w-3.5" />
+            </Link>
+          );
+        })}
       </div>
-      {hasData ? (
-        <div className="h-[240px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-              <XAxis dataKey="label" stroke="#64748b" fontSize={11} fontWeight={600} tickLine={false} axisLine={false} />
-              <YAxis stroke="#64748b" fontSize={11} fontWeight={600} tickLine={false} axisLine={false} tickFormatter={(val) => val > 0 ? `₹${val}` : ''} />
-              <Tooltip
-                formatter={(value) => currency(value)}
-                contentStyle={{ background: '#0b172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', color: '#fff', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.2)' }}
-                cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-              />
-              <Bar dataKey="revenue" fill="url(#colorRevenue)" radius={[8, 8, 0, 0]} />
-              <defs>
-                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={1}/>
-                  <stop offset="100%" stopColor="#0284c7" stopOpacity={0.6}/>
-                </linearGradient>
-              </defs>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      ) : (
-        <div className="flex items-center justify-center">
-          <DashboardEmpty title="No revenue activity this week" message="Revenue trends will appear after payments are recorded." compact />
-        </div>
-      )}
     </DashboardPanel>
   );
 }
 
-function ActivityFeedPanel({ notifications = [], reminders = [] }) {
+function normalizeRevenueRows(rows = []) {
+  return rows.map((item, index) => {
+    const revenue = Number(item?.revenue || 0);
+    const key = item?.key || item?.date || item?.createdAt || `revenue-${index}`;
+    return {
+      ...item,
+      key,
+      label: item?.label || key || `Day ${index + 1}`,
+      revenue: Number.isFinite(revenue) ? revenue : 0
+    };
+  });
+}
+
+function revenueTrendPercent(rows = []) {
+  const comparableRows = rows.filter((item) => Number(item.revenue || 0) > 0);
+  if (comparableRows.length < 2) return null;
+  const first = Number(comparableRows[0].revenue || 0);
+  const last = Number(comparableRows[comparableRows.length - 1].revenue || 0);
+  if (!first || !Number.isFinite(first) || !Number.isFinite(last)) return null;
+  return ((last - first) / first) * 100;
+}
+
+function RevenueTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const revenueItem = payload.find((item) => item.dataKey === 'revenue') || payload[0];
+  const revenue = Number(revenueItem?.value || 0);
+
+  return (
+    <div
+      style={{
+        background: '#061523',
+        border: '1px solid rgba(103,232,249,0.22)',
+        borderRadius: '14px',
+        color: '#f8fafc',
+        padding: '0.7rem 0.8rem',
+        boxShadow: '0 24px 60px rgba(0, 0, 0, 0.45)'
+      }}
+    >
+      <p style={{ margin: 0, color: '#e2e8f0', fontSize: '0.78rem', fontWeight: 900 }}>{label}</p>
+      <p style={{ margin: '0.35rem 0 0', color: '#67e8f9', fontSize: '0.82rem', fontWeight: 900 }}>
+        Revenue: {dashboardCurrency(revenue)}
+      </p>
+    </div>
+  );
+}
+
+function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0 }) {
+  const safeChartData = Array.isArray(chartData) ? chartData : [];
+  const totalRevenue = dashboardRevenueTotal(safeChartData);
+  const hasRevenue = safeChartData.length > 0 && totalRevenue > 0;
+  const maxRevenue = Math.max(1, ...safeChartData.map((item) => Number(item.revenue || 0)));
+  const bestDay = safeChartData.reduce(
+    (best, item) => Number(item.revenue || 0) > Number(best.revenue || 0) ? item : best,
+    safeChartData[0] || { label: '-', revenue: 0 }
+  );
+  const trend = revenueTrendPercent(safeChartData);
+  const hasTrend = Number.isFinite(trend);
+  const trendTone = !hasTrend ? 'neutral' : trend >= 0 ? 'positive' : 'negative';
+  const trendLabel = hasTrend ? `${trend >= 0 ? '+' : ''}${trend.toFixed(Math.abs(trend) >= 10 ? 0 : 1)}%` : 'Trend pending';
+
+  return (
+    <section className="dashboard-revenue-modern-card xl:col-span-2">
+      <div className="dashboard-revenue-card-body relative z-10 flex flex-col gap-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="dashboard-revenue-icon">
+                <ReceiptText className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-200/75">Finance pulse</p>
+                <h2 className="mt-1 text-2xl font-black tracking-tight text-white">Revenue Overview</h2>
+              </div>
+            </div>
+            <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-slate-400">Collected revenue trend from recorded payments in the selected dashboard period.</p>
+          </div>
+          <Link className={`dashboard-revenue-report-link ${focusRing}`} to="/admin/reports/finance">
+            Report
+            <ArrowUpRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        <div className="dashboard-revenue-summary-grid">
+          <div className="dashboard-revenue-summary-item dashboard-revenue-summary-primary">
+            <p>This Month</p>
+            <strong title={dashboardCurrency(monthlyRevenue)}>{dashboardCurrency(monthlyRevenue)}</strong>
+          </div>
+          <div className="dashboard-revenue-summary-item">
+            <p>Chart Total</p>
+            <strong title={dashboardCurrency(totalRevenue)}>{dashboardCurrency(totalRevenue)}</strong>
+          </div>
+          <div className="dashboard-revenue-summary-item">
+            <p>Best Day</p>
+            <strong title={`${bestDay.label}: ${dashboardCurrency(bestDay.revenue)}`}>{dashboardCurrency(bestDay.revenue)}</strong>
+            <span>{bestDay.label}</span>
+          </div>
+          <div className="dashboard-revenue-summary-item">
+            <p>Trend</p>
+            <strong className={`dashboard-revenue-trend dashboard-revenue-trend-${trendTone}`}>{trendLabel}</strong>
+            <span>{hasTrend ? 'first to latest revenue day' : 'needs two revenue days'}</span>
+          </div>
+        </div>
+
+        <div className="dashboard-revenue-chart-shell">
+          {hasRevenue ? (
+            <div className="dashboard-revenue-chart-inner">
+              <div className="dashboard-revenue-css-bars" aria-hidden="true">
+                {safeChartData.map((item) => {
+                  const revenue = Number(item.revenue || 0);
+                  const height = revenue > 0 ? Math.max(8, Math.round((revenue / maxRevenue) * 100)) : 0;
+                  return (
+                    <span key={item.key || item.label} className="dashboard-revenue-css-bar-track">
+                      <span className="dashboard-revenue-css-bar" style={{ '--revenue-height': `${height}%` }} />
+                    </span>
+                  );
+                })}
+              </div>
+              <ResponsiveContainer width="100%" height={252}>
+                <ComposedChart data={safeChartData} margin={{ top: 16, right: 12, left: 0, bottom: 6 }}>
+                  <CartesianGrid stroke="rgba(148,163,184,0.12)" vertical={false} />
+                  <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} fontWeight={700} tickLine={false} axisLine={false} />
+                  <YAxis width={48} stroke="#94a3b8" fontSize={11} fontWeight={700} tickLine={false} axisLine={false} tickFormatter={dashboardAxisCurrency} />
+                  <Tooltip
+                    content={<RevenueTooltip />}
+                    cursor={{ fill: 'rgba(103,232,249,0.07)' }}
+                  />
+                  <Area type="monotone" dataKey="revenue" fill="#34d399" fillOpacity={0.14} stroke="#34d399" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#67e8f9', stroke: '#022c22', strokeWidth: 2 }} isAnimationActive={false} />
+                  <Bar dataKey="revenue" fill="#22d3ee" stroke="#67e8f9" strokeWidth={1} radius={[10, 10, 4, 4]} barSize={26} maxBarSize={42} minPointSize={2} isAnimationActive={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="dashboard-revenue-empty-shell">
+              <DashboardEmpty title="No revenue trend available yet." message="Revenue trends will appear after payments are recorded." compact />
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ActivityFeedPanel({ notifications = [], reminders = [], className = '' }) {
   const rawItems = [
     ...notifications.map((item) => ({ ...item, feedType: 'Notification', feedDate: item.createdAt })),
     ...reminders.map((item) => ({ ...item, feedType: 'Reminder', feedDate: item.createdAt }))
@@ -349,7 +589,7 @@ function ActivityFeedPanel({ notifications = [], reminders = [] }) {
   const items = uniqueItems.slice(0, 5);
 
   return (
-    <DashboardPanel title="Activity Feed" icon={Bell} action={<Link className={panelActionClass} to="/admin/dashboard">Live</Link>}>
+    <DashboardPanel title="Activity Feed" icon={Bell} action={<Link className={panelActionClass} to="/admin/audit-logs">View All</Link>} className={className}>
       <div className="relative max-h-[330px] space-y-5 overflow-y-auto pl-8 pr-4 [scrollbar-color:rgba(148,163,184,0.28)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-600/30 [&::-webkit-scrollbar-track]:bg-transparent">
         <span className="pointer-events-none absolute bottom-0 left-[7px] top-0 w-px bg-white/10" />
         {items.length ? items.map((item, idx) => (
@@ -369,7 +609,7 @@ function ActivityFeedPanel({ notifications = [], reminders = [] }) {
               <p className="mt-1 text-xs font-medium text-slate-400 line-clamp-2">{item.message}</p>
             </div>
           </div>
-        )) : <DashboardEmpty title="No activity" message="Events will appear here." />}
+        )) : <DashboardEmpty title="No activity in selected period" message="Events will appear here as work changes." />}
       </div>
     </DashboardPanel>
   );
@@ -455,6 +695,7 @@ export function AdminDashboard() {
   const canCreateWorkOrder = can(user, 'create_work_order');
   const canRecordPayment = can(user, 'record_payment');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [dashboardPeriod, setDashboardPeriod] = useState('7d');
 
   const loadDashboard = useCallback(async () => {
     return normalizeDashboardMetrics(await request('/dashboard/metrics'));
@@ -462,15 +703,35 @@ export function AdminDashboard() {
 
   const { data, loading, error, reload } = useResource(loadDashboard, [loadDashboard]);
   const dashboardData = data || emptyDashboardData;
-  const chartData = dashboardData.revenueOverview || [];
   const completedToday = Number(dashboardData.metrics?.completedToday || 0);
   const monthlyRevenue = Number(dashboardData.metrics?.monthlyRevenue || 0);
+  const revenueRows = useMemo(
+    () => normalizeRevenueRows(dashboardData.revenueOverview || []),
+    [dashboardData.revenueOverview]
+  );
+  const filteredRevenueRows = useMemo(
+    () => filterDashboardRevenueRows(revenueRows, dashboardPeriod),
+    [revenueRows, dashboardPeriod]
+  );
+  const recentBookings = useMemo(
+    () => filterDashboardRecords(dashboardData.recentBookings || [], ['createdAt', 'updatedAt'], dashboardPeriod),
+    [dashboardData.recentBookings, dashboardPeriod]
+  );
   const pendingPaymentInvoices = dashboardData.pendingPaymentsList || [];
   const activeWorkOrders = dashboardData.repairQueue || [];
+  const periodNotifications = useMemo(
+    () => filterDashboardRecords(dashboardData.notifications || [], ['feedDate', 'createdAt'], dashboardPeriod),
+    [dashboardData.notifications, dashboardPeriod]
+  );
+  const periodReminders = useMemo(
+    () => filterDashboardRecords(dashboardData.reminders || [], ['feedDate', 'createdAt'], dashboardPeriod),
+    [dashboardData.reminders, dashboardPeriod]
+  );
   const amcRenewalsDue = Number(dashboardData.stats?.amcRenewalsDue || 0) || (dashboardData.reminders || []).filter((item) => `${item.title || ''} ${item.message || ''}`.toLowerCase().includes('amc')).length;
 
   const alerts = useMemo(() => {
     if (!dashboardData) return [];
+    // High overdue/pending numbers can come from local demo data; keep that note internal.
     return [
       { level: 'critical', title: 'Out of stock items', count: Number(dashboardData.alerts?.outOfStockItems || 0), message: 'Stock is at zero and needs immediate refill.', to: '/admin/parts', action: 'View Stock' },
       { level: 'critical', title: 'Overdue jobs', count: Number(dashboardData.alerts?.overdueJobs || 0), message: 'Jobs have not moved in more than 24 hours.', to: '/admin/work-orders', action: 'View Jobs' },
@@ -491,7 +752,7 @@ export function AdminDashboard() {
   if (loading) return <div className="mx-auto max-w-[1920px] p-4 lg:p-8"><LoadingBlock /></div>;
 
   return (
-    <div className="mx-auto max-w-[1920px] p-4 space-y-6 pb-12 sm:p-6 lg:p-8">
+    <div className="admin-dashboard-page mx-auto max-w-[1920px] overflow-x-hidden p-4 space-y-6 pb-12 sm:p-6 lg:p-8">
       {/* Premium Header */}
       <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0b172a]/80 p-6 shadow-2xl backdrop-blur-xl lg:p-10">
         <div className="absolute inset-0 bg-gradient-to-br from-sky-500/10 via-transparent to-emerald-500/5" />
@@ -513,16 +774,19 @@ export function AdminDashboard() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {canCreateBooking ? <Link className={`inline-flex items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 py-3 text-sm font-bold text-white shadow-[0_0_20px_rgba(14,165,233,0.3)] transition-all hover:-translate-y-0.5 hover:bg-sky-400 hover:shadow-[0_0_25px_rgba(14,165,233,0.45)] ${focusRing}`} to="/admin/bookings">
-              <Plus className="h-4 w-4" /> New Booking
-            </Link> : null}
-            {canCreateWorkOrder ? <Link className={heroSecondaryActionClass} to="/admin/work-orders">
-              <Wrench className="h-4 w-4" /> New Work Order
-            </Link> : null}
-            {canRecordPayment ? <Link className={heroSecondaryActionClass} to="/admin/payments">
-              <CreditCard className="h-4 w-4" /> Record Payment
-            </Link> : null}
+          <div className="dashboard-header-controls flex flex-col items-start gap-3 sm:items-end">
+            <DashboardPeriodFilter value={dashboardPeriod} onChange={setDashboardPeriod} />
+            <div className="flex flex-wrap items-center gap-3">
+              {canCreateBooking ? <Link className={`inline-flex items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 py-3 text-sm font-bold text-white shadow-[0_0_20px_rgba(14,165,233,0.3)] transition-all hover:-translate-y-0.5 hover:bg-sky-400 hover:shadow-[0_0_25px_rgba(14,165,233,0.45)] ${focusRing}`} to="/admin/bookings">
+                <Plus className="h-4 w-4" /> New Booking
+              </Link> : null}
+              {canCreateWorkOrder ? <Link className={heroSecondaryActionClass} to="/admin/work-orders">
+                <Wrench className="h-4 w-4" /> New Work Order
+              </Link> : null}
+              {canRecordPayment ? <Link className={heroSecondaryActionClass} to="/admin/payments">
+                <CreditCard className="h-4 w-4" /> Record Payment
+              </Link> : null}
+            </div>
           </div>
         </div>
       </div>
@@ -546,17 +810,17 @@ export function AdminDashboard() {
         <SmartMetricCard icon={CreditCard} label="Pending Payments" value={dashboardData.stats.pendingPayments || dashboardData.metrics.pendingPayments || 0} helper={`${dashboardData.stats.paymentsOverdue || 0} overdue`} tone="yellow" glow to="/admin/payments" />
         <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={dashboardData.metrics.lowStockItems || 0} helper={`${dashboardData.alerts.outOfStockItems || 0} out of stock`} tone="red" glow to="/admin/parts" />
         <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={dashboardData.stats.activeAmcContracts || 0} helper={`${amcRenewalsDue} renewals due`} tone="green" to="/admin/amc-contracts" />
-        <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={currency(monthlyRevenue)} helper="Collected this month" tone="green" to="/admin/reports/finance" />
+        <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={dashboardCurrency(monthlyRevenue)} helper="Collected this month" tone="green" to="/admin/reports/finance" />
       </div>
 
       {/* Priority Alerts */}
       <PriorityAlerts alerts={alerts} />
 
       {/* Main Grid: Lists & Charts */}
-      <div className="grid gap-6 lg:gap-8 xl:grid-cols-3">
+      <div className="grid gap-x-6 gap-y-5 lg:gap-x-8 lg:gap-y-6 xl:grid-cols-3">
         <DashboardPanel title="Recent Bookings" icon={CalendarClock} action={<Link className={panelActionClass} to="/admin/bookings">View All</Link>}>
           <div className="grid gap-3">
-            {dashboardData.recentBookings?.length ? dashboardData.recentBookings.slice(0, 6).map((booking) => {
+            {recentBookings.length ? recentBookings.slice(0, 6).map((booking) => {
               const source = booking.source || booking.bookingSource || booking.channel || 'Walk-in';
               return (
                 <div key={booking.id} className="group flex min-w-0 items-start justify-between gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-300 hover:bg-white/10 hover:shadow-lg">
@@ -576,7 +840,7 @@ export function AdminDashboard() {
                   </div>
                 </div>
               );
-            }) : <DashboardEmpty title="No new bookings" message="New bookings will appear here once created." />}
+            }) : <DashboardEmpty title="No bookings in selected period" message="New bookings will appear here once created." />}
           </div>
         </DashboardPanel>
 
@@ -611,7 +875,7 @@ export function AdminDashboard() {
                   <p className="mt-1.5 truncate text-xs font-medium text-slate-400" title={invoice.customerId?.name || invoice.customerName || 'Customer'}>{invoice.customerId?.name || invoice.customerName || 'Customer'}</p>
                 </div>
                 <div className="flex min-w-0 shrink-0 flex-col items-end gap-2">
-                  <span className="max-w-[120px] truncate text-right text-lg font-black tracking-tight text-amber-400" title={currency(invoiceDueAmount(invoice))}>{currency(invoiceDueAmount(invoice))}</span>
+                  <span className="max-w-[120px] truncate text-right text-lg font-black tracking-tight text-amber-400" title={dashboardCurrency(invoiceDueAmount(invoice))}>{dashboardCurrency(invoiceDueAmount(invoice))}</span>
                   <StatusBadge status={invoice.status || 'Pending'} />
                 </div>
               </Link>
@@ -619,11 +883,11 @@ export function AdminDashboard() {
           </div>
         </DashboardPanel>
 
-        <RevenueOverviewCard chartData={chartData} monthlyRevenue={monthlyRevenue} />
-        <div className="flex flex-col gap-6 lg:gap-8 xl:col-span-1">
-          <TechnicianWorkloadBars technicians={dashboardData.technicianWorkload || []} />
-          <ActivityFeedPanel notifications={dashboardData.notifications || []} reminders={dashboardData.reminders || []} />
-        </div>
+        <RevenueOverviewCard chartData={filteredRevenueRows} monthlyRevenue={monthlyRevenue} />
+
+        <TechnicianWorkloadBars technicians={dashboardData.technicianWorkload || []} />
+        <ActivityFeedPanel notifications={periodNotifications} reminders={periodReminders} className="xl:col-span-2" />
+        <QuickActionsCard />
       </div>
     </div>
   );

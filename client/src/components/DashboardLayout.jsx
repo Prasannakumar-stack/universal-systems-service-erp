@@ -88,7 +88,7 @@ const adminGroups = [
 const technicianGroups = [
   {
     title: '',
-    links: [{ to: '/tech/dashboard', label: 'Dashboard', icon: LayoutDashboard }]
+    links: [{ to: '/technician/dashboard', label: 'Dashboard', icon: LayoutDashboard }]
   },
   {
     title: 'Operations',
@@ -329,7 +329,7 @@ function SidebarItem({ link, close, badge }) {
   return (
     <NavLink
       to={link.to}
-      end={link.to === '/admin/dashboard' || link.to === '/tech/dashboard'}
+      end={link.to === '/admin/dashboard' || link.to === '/tech/dashboard' || link.to === '/technician/dashboard'}
       onClick={close}
       className={({ isActive }) => `enterprise-sidebar-item ${isSidebarLinkActive(link.to, location, isActive) ? 'enterprise-sidebar-item-active' : ''}`}
     >
@@ -343,7 +343,7 @@ function SidebarItem({ link, close, badge }) {
 function isSidebarLinkActive(to, location, isActive) {
   const [path, search = ''] = to.split('?');
   if (search) return location.pathname === path && location.search === `?${search}`;
-  if (to === '/admin/dashboard' || to === '/tech/dashboard') return location.pathname === path;
+  if (to === '/admin/dashboard' || to === '/tech/dashboard' || to === '/technician/dashboard') return location.pathname === path;
   if (to === '/admin/documents') return location.pathname.startsWith(path) && !new URLSearchParams(location.search).has('type');
   return isActive;
 }

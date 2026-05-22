@@ -224,8 +224,15 @@ export default function Home() {
     <div className="premium-home">
       <section className="premium-hero hero-section relative isolate overflow-hidden">
         <div className="hero-scanline" aria-hidden="true" />
-        <div className="premium-hero-grid container-page relative z-10">
-          <div className="hero-sequence hero-content max-w-3xl">
+        <div className="premium-hero-grid page-hero hero-with-bg container-page relative z-10">
+          <img
+            className="page-hero-bg-image"
+            src="/Home%20Page%20image.png"
+            alt="Universal Systems hero"
+          />
+          <div className="page-hero-overlay" aria-hidden="true" />
+
+          <div className="page-hero-content hero-sequence hero-content max-w-3xl">
             <div className="premium-eyebrow-chip hero-reveal">
               <Sparkles className="h-4 w-4" />
               Premium local technology service
@@ -251,19 +258,19 @@ export default function Home() {
               <CheckCircle2 className="h-4 w-4 text-cyan-300" />
               <span>No upfront payment required. Pay only after service confirmation.</span>
             </div>
-          </div>
 
-          <div className="hero-stats-bar hero-reveal" aria-label="Universal Systems trust highlights">
-            {heroStats.map((stat) => {
-              const Icon = stat.icon;
-              return (
-                <div className="hero-stat" key={stat.label}>
-                  <Icon className="h-5 w-5" />
-                  <span className="hero-stat-value">{stat.value}</span>
-                  <span className="hero-stat-label">{stat.label}</span>
-                </div>
-              );
-            })}
+            <div className="hero-stats-bar hero-reveal" aria-label="Universal Systems trust highlights">
+              {heroStats.map((stat) => {
+                const Icon = stat.icon;
+                return (
+                  <div className="hero-stat" key={stat.label}>
+                    <Icon className="h-5 w-5" />
+                    <span className="hero-stat-value">{stat.value}</span>
+                    <span className="hero-stat-label">{stat.label}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>

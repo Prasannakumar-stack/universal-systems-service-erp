@@ -153,9 +153,15 @@ export default function Contact() {
   return (
     <div className="contact-page section">
       <div className="container-page contact-container">
-        <section className="contact-hero contact-reveal">
+        <section className="contact-hero contact-reveal page-hero hero-with-bg">
+          <img
+            className="page-hero-bg-image"
+            src="/Contact%20Page%20image.png"
+            alt="Universal Systems hero"
+          />
+          <div className="page-hero-overlay" aria-hidden="true" />
           <div className="contact-hero-glow" aria-hidden="true" />
-          <div className="contact-hero-content">
+          <div className="page-hero-content contact-hero-content">
             <div className="contact-eyebrow-chip">
               <Sparkles className="h-4 w-4" />
               Contact

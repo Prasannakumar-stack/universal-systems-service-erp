@@ -191,9 +191,15 @@ export default function BookService() {
   return (
     <div className="booking-page section">
       <div className="container-page booking-container">
-        <section className="booking-hero">
+        <section className="booking-hero page-hero hero-with-bg">
+          <img
+            className="page-hero-bg-image"
+            src="/Book%20Service%20Page%20image.png"
+            alt="Universal Systems hero"
+          />
+          <div className="page-hero-overlay" aria-hidden="true" />
           <div className="booking-hero-glow" aria-hidden="true" />
-          <div className="booking-hero-content">
+          <div className="page-hero-content booking-hero-content">
             <div className="booking-eyebrow-chip">
               <Sparkles className="h-4 w-4" />
               Book Service
