@@ -2,6 +2,16 @@ export function currency(value) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(value || 0));
 }
 
+const wholeCurrencyFormatter = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  maximumFractionDigits: 0
+});
+
+export function wholeCurrency(value) {
+  return wholeCurrencyFormatter.format(Number(value || 0));
+}
+
 export function formatDate(value) {
   if (!value) return 'Not added yet';
   const date = new Date(value);

@@ -6102,7 +6102,18 @@ button:disabled {
 .theme-light .billing-metric-card,
 .theme-light .billing-table-wrap,
 .theme-light .inventory-summary-card,
+.theme-light .inventory-kpi-card,
+.theme-light .reports-metric-card,
 .theme-light .reports-panel,
+.theme-light .reports-pending-card,
+.theme-light .reports-mobile-card,
+.theme-light .reports-mini-metric,
+.theme-light .reports-insight-card,
+.theme-light .technician-kpi-card,
+.theme-light .technician-mobile-card,
+.theme-light .technician-detail-card,
+.theme-light .selected-invoice-card,
+.theme-light .payment-entry-panel,
 .theme-light .toast {
   background: var(--app-card) !important;
   border-color: var(--app-border) !important;
@@ -6160,6 +6171,34 @@ button:disabled {
   box-shadow: inset 3px 0 0 rgba(20, 120, 232, 0.82), 0 12px 26px rgba(20, 120, 232, 0.12) !important;
 }
 
+.theme-light .enterprise-sidebar-badge {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58), 0 6px 14px rgba(32, 86, 146, 0.1) !important;
+}
+
+.theme-light .enterprise-sidebar-badge-blue {
+  border-color: rgba(14, 116, 194, 0.28) !important;
+  background: #dff2ff !important;
+  color: #075985 !important;
+}
+
+.theme-light .enterprise-sidebar-badge-orange {
+  border-color: rgba(180, 83, 9, 0.32) !important;
+  background: #fff1d6 !important;
+  color: #92400e !important;
+}
+
+.theme-light .enterprise-sidebar-badge-red {
+  border-color: rgba(190, 18, 60, 0.28) !important;
+  background: #ffe4e9 !important;
+  color: #be123c !important;
+}
+
+.theme-light .enterprise-sidebar-badge-green {
+  border-color: rgba(4, 120, 87, 0.26) !important;
+  background: #dcfce7 !important;
+  color: #047857 !important;
+}
+
 .theme-light .enterprise-topbar {
   background: var(--app-topbar-bg) !important;
   border-bottom-color: var(--app-border) !important;
@@ -6177,6 +6216,12 @@ button:disabled {
 .theme-light .icon-button:hover {
   background: #eaf2ff !important;
   color: var(--app-primary) !important;
+}
+
+.theme-light .enterprise-top-icon > span {
+  background: #e11d48 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 2px #ffffff, 0 8px 18px rgba(190, 18, 60, 0.28) !important;
 }
 
 .theme-light .notification-drawer,
@@ -6294,6 +6339,11 @@ button:disabled {
 }
 
 .theme-light .admin-control-hero,
+.theme-light .erp-page-header,
+.theme-light .billing-hero,
+.theme-light .reports-hero,
+.theme-light .role-permissions-hero,
+.theme-light .customer-hero,
 .theme-light .amc-page-header,
 .theme-light .bookings-page-header,
 .theme-light .work-orders-page-header,
@@ -6306,6 +6356,34 @@ button:disabled {
   color: var(--app-text) !important;
 }
 
+.theme-light :where(
+  .admin-control-hero,
+  .erp-page-header,
+  .billing-hero,
+  .reports-hero,
+  .role-permissions-hero,
+  .customer-hero,
+  .amc-page-header,
+  .bookings-page-header,
+  .work-orders-page-header
+)::before {
+  background: radial-gradient(circle, rgba(20, 120, 232, 0.1), transparent 64%) !important;
+}
+
+.theme-light :where(
+  .admin-control-hero,
+  .erp-page-header,
+  .billing-hero,
+  .reports-hero,
+  .role-permissions-hero,
+  .customer-hero,
+  .amc-page-header,
+  .bookings-page-header,
+  .work-orders-page-header
+) :where(h1, h2, h3, .font-black, .text-slate-50, .text-slate-100, .text-white) {
+  color: var(--app-heading) !important;
+}
+
 .theme-light .bookings-filter-bar,
 .theme-light .work-orders-filter-bar {
   background: var(--app-card) !important;
@@ -6315,6 +6393,13 @@ button:disabled {
 
 .theme-light .amc-metric-card,
 .theme-light .admin-metric-card,
+.theme-light .billing-metric-card,
+.theme-light .inventory-kpi-card,
+.theme-light .reports-metric-card,
+.theme-light .technician-kpi-card,
+.theme-light .dashboard-revenue-modern-card,
+.theme-light .dashboard-quick-actions-card,
+.theme-light .dashboard-quick-action-tile,
 .theme-light .dashboard-kpi-card,
 .theme-light .dashboard-panel,
 .theme-light .dashboard-row-card,
@@ -6331,9 +6416,82 @@ button:disabled {
   color: var(--app-text) !important;
 }
 
+.theme-light .dashboard-revenue-modern-card::before,
+.theme-light .dashboard-quick-actions-card::before {
+  background:
+    linear-gradient(90deg, rgba(20, 120, 232, 0.08), transparent 44%, rgba(16, 185, 129, 0.06)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), transparent 42%) !important;
+}
+
+.theme-light .dashboard-revenue-icon,
+.theme-light .dashboard-quick-action-icon {
+  background: #eaf2ff !important;
+  border-color: rgba(20, 120, 232, 0.2) !important;
+  color: var(--app-primary) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+.theme-light .dashboard-revenue-report-link {
+  background: #f0fdf4 !important;
+  border-color: rgba(4, 120, 87, 0.18) !important;
+  color: #047857 !important;
+}
+
+.theme-light .dashboard-revenue-summary-item {
+  background: #f7fbff !important;
+  border-color: rgba(22, 74, 132, 0.12) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
+}
+
+.theme-light .dashboard-revenue-summary-primary {
+  background: #ecfdf5 !important;
+  border-color: rgba(4, 120, 87, 0.16) !important;
+}
+
+.theme-light .dashboard-revenue-summary-item p,
+.theme-light .dashboard-revenue-summary-item span {
+  color: var(--app-text-muted) !important;
+}
+
+.theme-light .dashboard-revenue-summary-item strong,
+.theme-light .dashboard-revenue-summary-primary strong,
+.theme-light .dashboard-quick-action-label,
+.theme-light .dashboard-quick-action-tile b,
+.theme-light .dashboard-quick-action-tile strong {
+  color: var(--app-heading) !important;
+}
+
+.theme-light .dashboard-revenue-chart-shell {
+  background:
+    linear-gradient(180deg, rgba(248, 251, 255, 0.98), rgba(239, 246, 255, 0.96)) !important;
+  border-color: rgba(22, 74, 132, 0.14) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76) !important;
+}
+
+.theme-light .dashboard-revenue-chart-inner .recharts-cartesian-axis-tick-value,
+.theme-light .dashboard-revenue-chart-inner .recharts-text {
+  fill: #475569 !important;
+}
+
+.theme-light .dashboard-revenue-css-bar {
+  background: linear-gradient(180deg, rgba(14, 116, 194, 0.58), rgba(8, 145, 178, 0.36) 52%, rgba(4, 120, 87, 0.3)) !important;
+  box-shadow: 0 0 18px rgba(14, 116, 194, 0.14) !important;
+}
+
+.theme-light .dashboard-quick-action-tile:hover {
+  background:
+    linear-gradient(145deg, rgba(var(--quick-action-rgb), 0.11), rgba(255, 255, 255, 0.9) 52%, rgba(239, 246, 255, 0.84)),
+    #ffffff !important;
+  box-shadow: 0 18px 40px rgba(32, 86, 146, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.76) !important;
+}
+
 .theme-light .admin-control-icon,
 .theme-light .admin-metric-icon,
 .theme-light .amc-metric-icon,
+.theme-light .billing-metric-icon,
+.theme-light .inventory-kpi-icon,
+.theme-light .reports-metric-icon,
+.theme-light .technician-kpi-icon,
 .theme-light .amc-form-section-icon {
   background: #eaf2ff !important;
   border-color: rgba(20, 120, 232, 0.2) !important;
@@ -6342,8 +6500,210 @@ button:disabled {
 
 .theme-light .amc-metric-icon svg,
 .theme-light .admin-control-icon svg,
-.theme-light .admin-metric-icon svg {
+.theme-light .admin-metric-icon svg,
+.theme-light .billing-metric-icon svg,
+.theme-light .inventory-kpi-icon svg,
+.theme-light .reports-metric-icon svg,
+.theme-light .technician-kpi-icon svg {
   color: var(--app-primary) !important;
+}
+
+.theme-light :where(
+  .admin-metric-card,
+  .amc-metric-card,
+  .billing-metric-card,
+  .inventory-kpi-card,
+  .reports-metric-card,
+  .technician-kpi-card,
+  .dashboard-kpi-card,
+  .reports-mini-metric,
+  .reports-insight-card,
+  .selected-invoice-card,
+  .technician-mobile-card,
+  .technician-detail-card
+) :where(
+  .admin-metric-value,
+  .amc-metric-value,
+  .billing-metric-value,
+  .inventory-kpi-value,
+  .reports-metric-value,
+  .reports-insight-card-value,
+  .technician-kpi-value,
+  .dashboard-kpi-value,
+  .font-black,
+  b,
+  strong
+) {
+  color: var(--app-heading) !important;
+}
+
+.theme-light :where(
+  .admin-metric-card,
+  .amc-metric-card,
+  .billing-metric-card,
+  .inventory-kpi-card,
+  .reports-metric-card,
+  .technician-kpi-card,
+  .dashboard-kpi-card,
+  .reports-mini-metric,
+  .reports-insight-card,
+  .selected-invoice-card,
+  .technician-mobile-card,
+  .technician-detail-card
+) :where(
+  .admin-metric-label,
+  .admin-metric-helper,
+  .amc-metric-label,
+  .amc-metric-helper,
+  .billing-metric-label,
+  .billing-metric-helper,
+  .inventory-kpi-label,
+  .inventory-kpi-helper,
+  .reports-metric-label,
+  .reports-metric-helper,
+  .reports-insight-card-message,
+  .technician-kpi-label,
+  .technician-kpi-helper,
+  .dashboard-kpi-title,
+  .dashboard-kpi-helper,
+  .technician-detail-card-metrics small,
+  .muted
+) {
+  color: var(--app-text-muted) !important;
+}
+
+.theme-light .reports-segment-active,
+.theme-light .reports-segment:hover,
+.theme-light .amc-tabs .tab-button-active,
+.theme-light .inventory-tabs .tab-button-active {
+  background: rgba(20, 120, 232, 0.12) !important;
+  border-color: rgba(20, 120, 232, 0.28) !important;
+  color: #0b4f9f !important;
+  box-shadow: 0 10px 22px rgba(20, 120, 232, 0.1) !important;
+}
+
+.theme-light .reports-period-chip {
+  background: #eaf2ff !important;
+  border-color: rgba(20, 120, 232, 0.22) !important;
+  color: #075985 !important;
+}
+
+.theme-light .role-matrix-card,
+.theme-light .role-list-card,
+.theme-light .role-users-card,
+.theme-light .role-matrix-wrap,
+.theme-light .permission-security-panel {
+  background: var(--app-card) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: var(--app-shadow-soft) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .role-matrix-legend span {
+  background: #f6faff !important;
+  border-color: rgba(22, 74, 132, 0.14) !important;
+  color: var(--app-text-muted) !important;
+}
+
+.theme-light .role-permission-matrix {
+  color: var(--app-text) !important;
+}
+
+.theme-light .role-permission-matrix th,
+.theme-light .role-permission-matrix td {
+  background: #ffffff !important;
+  border-bottom-color: rgba(22, 74, 132, 0.1) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .role-permission-matrix thead th,
+.theme-light .role-permission-matrix-editable thead th:first-child,
+.theme-light .role-permission-matrix-editable tbody td:first-child {
+  background: #edf5ff !important;
+  color: #0f3768 !important;
+  box-shadow: 1px 0 0 rgba(22, 74, 132, 0.12) !important;
+}
+
+.theme-light .role-permission-group-row td {
+  background: #f1f7ff !important;
+  color: #075985 !important;
+}
+
+.theme-light .role-permission-label {
+  color: var(--app-heading) !important;
+}
+
+.theme-light .role-permission-key {
+  color: var(--app-text-muted) !important;
+}
+
+.theme-light .role-matrix-selected-column,
+.theme-light .role-matrix-edited-cell {
+  background: #eff6ff !important;
+  box-shadow: inset 1px 0 rgba(20, 120, 232, 0.14), inset -1px 0 rgba(20, 120, 232, 0.14) !important;
+}
+
+.theme-light .role-permission-cell {
+  background: #f8fbff !important;
+  border-color: rgba(22, 74, 132, 0.12) !important;
+}
+
+.theme-light .role-permission-cell:not(:disabled):hover {
+  background: #eaf2ff !important;
+  border-color: rgba(20, 120, 232, 0.32) !important;
+}
+
+.theme-light .role-permission-state-allowed {
+  background: #dcfce7 !important;
+  border-color: rgba(4, 120, 87, 0.24) !important;
+  color: #047857 !important;
+}
+
+.theme-light .role-permission-state-denied {
+  background: #ffe4e9 !important;
+  border-color: rgba(190, 18, 60, 0.24) !important;
+  color: #be123c !important;
+}
+
+.theme-light .role-permission-state-not-set {
+  background: #f1f5f9 !important;
+  border-color: rgba(71, 85, 105, 0.16) !important;
+  color: #475569 !important;
+}
+
+.theme-light .role-permission-lock {
+  color: #64748b !important;
+  filter: none !important;
+}
+
+.theme-light .amc-payment-stack {
+  background: #f8fbff !important;
+  border-color: rgba(22, 74, 132, 0.14) !important;
+  color: var(--app-text) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+.theme-light .amc-payment-row span {
+  color: var(--app-text-muted) !important;
+}
+
+.theme-light .amc-payment-stack b,
+.theme-light .amc-payment-row b {
+  color: var(--app-heading) !important;
+}
+
+.theme-light :where(.work-order-detail-page, .enterprise-main) :where(
+  [class*="bg-[var(--surface)]"],
+  [class*="bg-slate-950/25"],
+  [class*="bg-emerald-500/10"],
+  [class*="bg-emerald-500/[0.12]"],
+  [class*="bg-amber-500/10"],
+  [class*="bg-sky-500/10"],
+  [class*="bg-cyan-500/10"]
+) {
+  background: #f8fbff !important;
+  border-color: rgba(22, 74, 132, 0.14) !important;
+  color: var(--app-text) !important;
 }
 
 .theme-light .modal,
@@ -6450,6 +6810,218 @@ button:disabled {
 .theme-light .toast-error {
   border-color: rgba(225, 29, 72, 0.28) !important;
   color: #be123c !important;
+}
+
+.theme-light :where(.enterprise-main, .enterprise-topbar) :where(
+  [class*="bg-[#020817"],
+  [class*="bg-[#06162a"],
+  [class*="bg-[#071b33"],
+  [class*="bg-[#071426"],
+  [class*="bg-[#0b172a"],
+  [class*="bg-[#0b2340"],
+  [class*="bg-[#10233c"],
+  [class*="bg-[#172b45"],
+  [class*="bg-[var(--surface)]"]
+) {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(20, 120, 232, 0.06), transparent 16rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 255, 0.96)) !important;
+  border-color: var(--app-border) !important;
+  color: var(--app-text) !important;
+  box-shadow: var(--app-shadow-soft) !important;
+}
+
+.theme-light :where(
+  .billing-hero,
+  .reports-hero,
+  .erp-page-header,
+  .inventory-erp-header,
+  .admin-control-hero,
+  .role-permissions-hero,
+  .amc-page-header,
+  .bookings-page-header,
+  .work-orders-page-header,
+  .customer-hero
+) {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(20, 120, 232, 0.1), transparent 18rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 255, 0.96) 58%, rgba(239, 246, 255, 0.94)) !important;
+  border-color: rgba(22, 74, 132, 0.16) !important;
+  color: var(--app-text) !important;
+  box-shadow: 0 18px 46px rgba(32, 86, 146, 0.12) !important;
+}
+
+.theme-light :where(
+  .billing-hero,
+  .reports-hero,
+  .erp-page-header,
+  .inventory-erp-header,
+  .admin-control-hero,
+  .role-permissions-hero,
+  .amc-page-header,
+  .bookings-page-header,
+  .work-orders-page-header,
+  .customer-hero
+) :where(h1, h2, h3, h4, .font-black) {
+  color: var(--app-heading) !important;
+}
+
+.theme-light :where(
+  .billing-hero,
+  .reports-hero,
+  .erp-page-header,
+  .inventory-erp-header,
+  .admin-control-hero,
+  .role-permissions-hero,
+  .amc-page-header,
+  .bookings-page-header,
+  .work-orders-page-header,
+  .customer-hero
+) :where(p, small, .muted, .text-slate-300, .text-slate-400, .text-slate-500) {
+  color: var(--app-text-muted) !important;
+}
+
+.theme-light .admin-dashboard-page .dashboard-revenue-modern-card,
+.theme-light .admin-dashboard-page .dashboard-quick-actions-card,
+.theme-light .admin-dashboard-page .dashboard-quick-action-tile {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(var(--quick-action-rgb, 20, 120, 232), 0.08), transparent 14rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 255, 0.95) 54%, rgba(239, 246, 255, 0.92)) !important;
+  border-color: rgba(22, 74, 132, 0.16) !important;
+  color: var(--app-text) !important;
+  box-shadow: 0 18px 44px rgba(32, 86, 146, 0.12) !important;
+}
+
+.theme-light .admin-dashboard-page .dashboard-revenue-modern-card::before,
+.theme-light .admin-dashboard-page .dashboard-quick-actions-card::before {
+  background:
+    linear-gradient(90deg, rgba(20, 120, 232, 0.08), transparent 44%, rgba(16, 185, 129, 0.06)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), transparent 42%) !important;
+}
+
+.theme-light .admin-dashboard-page .dashboard-revenue-chart-shell {
+  background:
+    linear-gradient(180deg, rgba(248, 251, 255, 0.98), rgba(239, 246, 255, 0.96)) !important;
+  border-color: rgba(22, 74, 132, 0.14) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .admin-dashboard-page .dashboard-revenue-modern-card :where(h2, strong, .dashboard-quick-action-label) {
+  color: var(--app-heading) !important;
+}
+
+.theme-light .admin-dashboard-page .dashboard-revenue-modern-card :where(p, span, .text-slate-400) {
+  color: var(--app-text-muted) !important;
+}
+
+.theme-light .admin-dashboard-page .dashboard-revenue-summary-primary strong,
+.theme-light .admin-dashboard-page .dashboard-revenue-trend-positive {
+  color: #047857 !important;
+}
+
+.theme-light .admin-dashboard-page .dashboard-revenue-trend-negative {
+  color: #be123c !important;
+}
+
+.theme-light .admin-dashboard-page .dashboard-quick-action-icon {
+  background: rgba(var(--quick-action-rgb, 20, 120, 232), 0.1) !important;
+  border-color: rgba(var(--quick-action-rgb, 20, 120, 232), 0.22) !important;
+  color: var(--quick-action-color, var(--app-primary)) !important;
+}
+
+.theme-light .admin-dashboard-page .dashboard-quick-action-arrow {
+  color: var(--quick-action-color, var(--app-primary)) !important;
+}
+
+.theme-light .role-matrix-wrap,
+.theme-light .role-permission-matrix,
+.theme-light .role-permission-matrix tbody,
+.theme-light .role-permission-matrix tbody tr {
+  background: #ffffff !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .role-permission-matrix tbody td {
+  background: #ffffff !important;
+  border-bottom-color: rgba(22, 74, 132, 0.1) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .role-permission-matrix-editable tbody td:first-child,
+.theme-light .role-permission-matrix-editable thead th:first-child,
+.theme-light .role-permission-matrix thead th {
+  background: #edf5ff !important;
+  color: #0f3768 !important;
+}
+
+.theme-light .role-permission-group-row td {
+  background: #f1f7ff !important;
+  color: #075985 !important;
+}
+
+.theme-light .role-permission-cell,
+.theme-light .role-permission-cell:disabled {
+  background: #f8fbff !important;
+  border-color: rgba(22, 74, 132, 0.13) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .role-permission-state-allowed,
+.theme-light .role-permission-cell-allowed .role-permission-state {
+  background: #dcfce7 !important;
+  border-color: rgba(4, 120, 87, 0.26) !important;
+  color: #047857 !important;
+}
+
+.theme-light .role-permission-state-denied,
+.theme-light .role-permission-cell-denied .role-permission-state {
+  background: #ffe4e9 !important;
+  border-color: rgba(190, 18, 60, 0.26) !important;
+  color: #be123c !important;
+}
+
+.theme-light .amc-payment-stack {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.96)) !important;
+  border-color: rgba(22, 74, 132, 0.14) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .amc-payment-paid,
+.theme-light .amc-status-active,
+.theme-light .amc-status-completed {
+  border-color: rgba(4, 120, 87, 0.24) !important;
+  background: #dcfce7 !important;
+  color: #047857 !important;
+}
+
+.theme-light .amc-payment-partial,
+.theme-light .amc-status-due,
+.theme-light .amc-status-renewal {
+  border-color: rgba(180, 83, 9, 0.26) !important;
+  background: #fff7dc !important;
+  color: #92400e !important;
+}
+
+.theme-light .amc-payment-pending,
+.theme-light .amc-status-overdue,
+.theme-light .amc-status-expired {
+  border-color: rgba(190, 18, 60, 0.24) !important;
+  background: #ffe4e9 !important;
+  color: #be123c !important;
+}
+
+.theme-light .amc-status-upcoming {
+  border-color: rgba(14, 116, 194, 0.24) !important;
+  background: #dff2ff !important;
+  color: #075985 !important;
+}
+
+.theme-light .amc-status-cancelled,
+.theme-light .amc-muted-badge {
+  border-color: rgba(71, 85, 105, 0.16) !important;
+  background: #f1f5f9 !important;
+  color: #475569 !important;
 }
 
 @media (min-width: 1280px) {

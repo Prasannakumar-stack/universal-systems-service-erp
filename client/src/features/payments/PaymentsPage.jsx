@@ -27,7 +27,6 @@ import {
   ConfirmModal,
   CreditCard,
   csvCell,
-  currency,
   customerCode,
   customerFromOrder,
   customerPhone,
@@ -143,6 +142,7 @@ import {
   workOrderPdfFlows,
   workOrderTabs,
   workStatuses,
+  wholeCurrency,
   Wrench,
   X,
   XAxis,
@@ -284,14 +284,9 @@ export function PaymentsPage({ role = 'admin' }) {
     const invoiceId = invoice?.id || invoice?._id || invoice;
     const payments = paymentSummaryByInvoice.get(invoiceId) || (payment ? [payment] : []);
     if (!payments.length) return '-';
-    const byMethod = payments.reduce((summary, payment) => {
-      const method = payment.method || 'Other';
-      summary[method] = Number(summary[method] || 0) + Number(payment.paidAmount || 0);
-      return summary;
-    }, {});
-    const entries = Object.entries(byMethod);
-    if (entries.length <= 1) return payment?.method || entries[0]?.[0] || '-';
-    return entries.map(([method, amount]) => `${method} ${currency(amount)}`).join(' + ');
+    const methods = Array.from(new Set(payments.map((item) => item.method || 'Other').filter(Boolean)));
+    if (methods.length <= 1) return payment?.method || methods[0] || '-';
+    return methods.join(' + ');
   }
   const paymentTotals = data.summary || {
     totalCollected: (data.payments || []).reduce((sum, payment) => sum + Number(payment.paidAmount || 0), 0),
@@ -301,11 +296,11 @@ export function PaymentsPage({ role = 'admin' }) {
     todayCollection: (data.payments || []).filter((payment) => isToday(payment.createdAt)).reduce((sum, payment) => sum + Number(payment.paidAmount || 0), 0)
   };
   const paymentKpis = [
-    { icon: CreditCard, label: 'Total Collected', value: currency(paymentTotals.totalCollected), helper: 'Received amount', tone: 'green' },
-    { icon: AlertTriangle, label: 'Pending Balance', value: currency(paymentTotals.pendingBalance), helper: 'Still outstanding', tone: 'amber', glow: Number(paymentTotals.pendingBalance || 0) > 0 },
+    { icon: CreditCard, label: 'Total Collected', value: wholeCurrency(paymentTotals.totalCollected), helper: 'Received amount', tone: 'green' },
+    { icon: AlertTriangle, label: 'Pending Balance', value: wholeCurrency(paymentTotals.pendingBalance), helper: 'Still outstanding', tone: 'amber', glow: Number(paymentTotals.pendingBalance || 0) > 0 },
     { icon: CheckCircle2, label: 'Paid Invoices', value: paymentTotals.paidInvoices, helper: 'Fully settled', tone: 'green' },
     { icon: ReceiptText, label: 'Partial Invoices', value: paymentTotals.partialInvoices, helper: 'Needs follow-up', tone: 'amber' },
-    { icon: CalendarClock, label: "Today's Collection", value: currency(paymentTotals.todayCollection), helper: 'Collected today', tone: 'blue' }
+    { icon: CalendarClock, label: "Today's Collection", value: wholeCurrency(paymentTotals.todayCollection), helper: 'Collected today', tone: 'blue' }
   ];
 
   function resetFilters() {
@@ -384,14 +379,14 @@ export function PaymentsPage({ role = 'admin' }) {
                 <option value="">Select invoice</option>
                 {data.invoices.filter((invoice) => invoiceDueAmount(invoice) > 0 || invoice.id === form.invoiceId || invoice._id === form.invoiceId).map((invoice) => {
                   const invoiceId = invoice.id || invoice._id;
-                  return <option key={invoiceId} value={invoiceId}>{invoice.invoiceNumber} - {currency(invoiceDueAmount(invoice))} due</option>;
+                  return <option key={invoiceId} value={invoiceId}>{invoice.invoiceNumber} - {wholeCurrency(invoiceDueAmount(invoice))} due</option>;
                 })}
               </select>
             </label>
             <label>
               <span className="label">Payment Amount</span>
               <input className="input payment-amount-input" type="number" min="1" placeholder="Enter amount received" value={form.paidAmount} onChange={(event) => setForm((current) => ({ ...current, paidAmount: event.target.value }))} required />
-              {selectedInvoice ? <span className="mt-1 block text-xs font-semibold text-amber-100">Balance due: {currency(selectedBalanceDue)}</span> : null}
+              {selectedInvoice ? <span className="mt-1 block text-xs font-semibold text-amber-100">Balance due: {wholeCurrency(selectedBalanceDue)}</span> : null}
             </label>
             <label>
               <span className="label">Payment Method</span>
@@ -421,9 +416,9 @@ export function PaymentsPage({ role = 'admin' }) {
                   <p className="text-xs muted">Customer ID: {getCustomerDisplayId(selectedInvoice.customerId)}</p>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  <BillingInfo label="Invoice Total" value={currency(selectedInvoice.total)} strong />
-                  <BillingInfo label="Paid Amount" value={currency(selectedInvoice.paidAmount)} tone="green" />
-                  <BillingInfo label="Balance Due" value={currency(selectedBalanceDue)} tone={selectedBalanceDue > 0 ? 'amber' : 'green'} />
+                  <BillingInfo label="Invoice Total" value={wholeCurrency(selectedInvoice.total)} strong />
+                  <BillingInfo label="Paid Amount" value={wholeCurrency(selectedInvoice.paidAmount)} tone="green" />
+                  <BillingInfo label="Balance Due" value={wholeCurrency(selectedBalanceDue)} tone={selectedBalanceDue > 0 ? 'amber' : 'green'} />
                 </div>
               </div>
             ) : (
@@ -475,10 +470,10 @@ export function PaymentsPage({ role = 'admin' }) {
                       <span className="block truncate font-semibold text-slate-100" title={payment.customerId?.name || '-'}>{payment.customerId?.name || '-'}</span>
                       <span className="block text-xs muted">{payment.customerId?.phone || '-'}</span>
                     </td>
-                    <td className="billing-money-cell text-right text-emerald-100">{currency(payment.paidAmount)}</td>
+                    <td className="billing-money-cell text-right text-emerald-100">{wholeCurrency(payment.paidAmount)}</td>
                     <td><span className="billing-method-pill">{paymentMethodDisplay(payment)}</span></td>
                     <td className={`billing-money-cell text-right ${balanceAfter > 0 ? 'text-amber-100' : 'text-emerald-100'}`}>
-                      {currency(payment.balance)}
+                      {wholeCurrency(payment.balance)}
                       <span className="mt-1 block"><BillingStatusPill status={payment.status} /></span>
                     </td>
                   </tr>
@@ -508,8 +503,8 @@ function TechnicianPaymentMobileCard({ payment, base, paymentMethodDisplay }) {
         <BillingStatusPill status={payment.status} />
       </div>
       <div className="technician-detail-card-metrics">
-        <span><b>{currency(payment.paidAmount)}</b><small>Paid</small></span>
-        <span><b>{currency(payment.balance)}</b><small>Balance</small></span>
+        <span><b>{wholeCurrency(payment.paidAmount)}</b><small>Paid</small></span>
+        <span><b>{wholeCurrency(payment.balance)}</b><small>Balance</small></span>
         <span><b>{paymentMethodDisplay(payment)}</b><small>Method</small></span>
       </div>
       <div className="technician-mobile-card-body">

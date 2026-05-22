@@ -6,7 +6,7 @@ import { ConfirmModal, EmptyState, PageHeader, SearchBox, StatCard } from '../co
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { apiBase, company, serviceTypes } from '../utils/constants.js';
-import { currency, formatDate, statusTone } from '../utils/format.js';
+import { currency, formatDate, statusTone, wholeCurrency } from '../utils/format.js';
 import { telHref, whatsappHref } from '../utils/phone.js';
 import {
   customerSearchText,
@@ -108,6 +108,7 @@ export {
   company,
   serviceTypes,
   currency,
+  wholeCurrency,
   formatDate,
   statusTone
 };export const workStatuses = ['Pending', 'In Progress', 'Awaiting Parts', 'Completed'];

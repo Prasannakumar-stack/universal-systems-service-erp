@@ -171,6 +171,16 @@ const roleIconMap = {
   viewer: UserRound
 };
 
+const permissionMatrixRoleDisplayOrder = [
+  'admin',
+  'technician',
+  'manager',
+  'receptionist',
+  'accountant',
+  'inventory',
+  'viewer'
+];
+
 function SettingsInfoCard({ title, icon: Icon, children, action = null, className = '' }) {
   return (
     <div className={`surface admin-control-card p-5 ${className}`}>
@@ -589,7 +599,7 @@ function UsersRolesSection() {
               <thead>
                 <tr>
                   <th>Permission</th>
-                  {roleDisplayOrder.map((role) => (
+                  {permissionMatrixRoleDisplayOrder.map((role) => (
                     <th key={role}>{roleUiMetadata[role]?.shortLabel || roleLabel(role)}</th>
                   ))}
                 </tr>
@@ -598,7 +608,7 @@ function UsersRolesSection() {
                 {filteredPermissionGroups.length ? filteredPermissionGroups.map((group) => (
                   <Fragment key={group.group}>
                     <tr className="role-permission-group-row">
-                      <td colSpan={roleDisplayOrder.length + 1}>{group.group}</td>
+                      <td colSpan={permissionMatrixRoleDisplayOrder.length + 1}>{group.group}</td>
                     </tr>
                     {group.permissions.map((item) => (
                       <tr key={`${group.group}-${item.label}`}>
@@ -606,7 +616,7 @@ function UsersRolesSection() {
                           <span className="role-permission-label">{item.label}</span>
                           {item.permission ? <span className="role-permission-key">{item.permission}</span> : <span className="role-permission-key">No Phase 1 guard</span>}
                         </td>
-                        {roleDisplayOrder.map((role) => {
+                        {permissionMatrixRoleDisplayOrder.map((role) => {
                           const state = permissionStateFromDraft(permissionDraft, role, item.permission);
                           const locked = isLockedCell(role, item.permission);
                           const edited = Boolean(item.permission) && Boolean(permissionDraft?.[role]?.[item.permission]) !== Boolean(baselinePermissions?.[role]?.[item.permission]);
@@ -627,7 +637,7 @@ function UsersRolesSection() {
                   </Fragment>
                 )) : (
                   <tr>
-                    <td colSpan={roleDisplayOrder.length + 1}>
+                    <td colSpan={permissionMatrixRoleDisplayOrder.length + 1}>
                       <EmptyState title="No permissions found" message="Try another permission name, group, or key." />
                     </td>
                   </tr>

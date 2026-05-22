@@ -26,7 +26,6 @@ import {
   ConfirmModal,
   CreditCard,
   csvCell,
-  currency,
   customerCode,
   customerFromOrder,
   customerPhone,
@@ -139,6 +138,7 @@ import {
   workOrderPdfFlows,
   workOrderTabs,
   workStatuses,
+  wholeCurrency,
   Wrench,
   X,
   XAxis,
@@ -196,8 +196,8 @@ export function InvoicesPage({ role = 'admin' }) {
     { icon: AlertTriangle, label: 'Pending Invoices', value: totals.pending, helper: 'Need follow-up', tone: 'amber' },
     { icon: CreditCard, label: 'Partial Payments', value: totals.partial, helper: 'Partially collected', tone: 'amber' },
     { icon: CheckCircle2, label: 'Paid Invoices', value: totals.paid, helper: 'Fully paid', tone: 'green' },
-    { icon: ReceiptText, label: 'Total Invoice Value', value: currency(totals.totalValue), helper: 'Billed amount', tone: 'blue' },
-    { icon: AlertTriangle, label: 'Pending Balance', value: currency(totals.balance), helper: 'Outstanding amount', tone: 'amber', glow: Number(totals.balance || 0) > 0 }
+    { icon: ReceiptText, label: 'Total Invoice Value', value: wholeCurrency(totals.totalValue), helper: 'Billed amount', tone: 'blue' },
+    { icon: AlertTriangle, label: 'Pending Balance', value: wholeCurrency(totals.balance), helper: 'Outstanding amount', tone: 'amber', glow: Number(totals.balance || 0) > 0 }
   ];
 
   function resetFilters() {
@@ -215,7 +215,7 @@ export function InvoicesPage({ role = 'admin' }) {
       return;
     }
     const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
-    const message = `Hello ${invoice.customerId?.name || 'Customer'}, your invoice ${invoice.invoiceNumber} from Universal Systems is ready. Balance: ${currency(invoiceDueAmount(invoice))}.`;
+    const message = `Hello ${invoice.customerId?.name || 'Customer'}, your invoice ${invoice.invoiceNumber} from Universal Systems is ready. Balance: ${wholeCurrency(invoiceDueAmount(invoice))}.`;
     window.open(`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
   }
 
@@ -309,9 +309,9 @@ export function InvoicesPage({ role = 'admin' }) {
                       <span className="mt-1 block text-xs muted">Phone: {customerPhone}</span>
                     </td>
                     <td>{invoiceSourceCell(invoice)}</td>
-                    <td className="billing-money-cell text-right">{currency(invoice.total)}</td>
-                    <td className="billing-money-cell text-right text-emerald-100">{currency(invoice.paidAmount)}</td>
-                    <td className={`billing-money-cell text-right ${dueAmount > 0 ? 'text-amber-100' : 'text-emerald-100'}`}>{currency(dueAmount)}</td>
+                    <td className="billing-money-cell text-right">{wholeCurrency(invoice.total)}</td>
+                    <td className="billing-money-cell text-right text-emerald-100">{wholeCurrency(invoice.paidAmount)}</td>
+                    <td className={`billing-money-cell text-right ${dueAmount > 0 ? 'text-amber-100' : 'text-emerald-100'}`}>{wholeCurrency(dueAmount)}</td>
                     <td className="text-center"><BillingStatusPill status={invoice.status} /></td>
                     <td className="whitespace-nowrap">{formatDate(invoice.createdAt)}</td>
                     <td className="text-center">
@@ -350,9 +350,9 @@ function TechnicianInvoiceMobileCard({ invoice, base }) {
         <BillingStatusPill status={invoice.status} />
       </div>
       <div className="technician-detail-card-metrics">
-        <span><b>{currency(invoice.total)}</b><small>Total</small></span>
-        <span><b>{currency(invoice.paidAmount)}</b><small>Paid</small></span>
-        <span><b>{currency(dueAmount)}</b><small>Balance</small></span>
+        <span><b>{wholeCurrency(invoice.total)}</b><small>Total</small></span>
+        <span><b>{wholeCurrency(invoice.paidAmount)}</b><small>Paid</small></span>
+        <span><b>{wholeCurrency(dueAmount)}</b><small>Balance</small></span>
       </div>
       <div className="technician-mobile-card-body">
         <div>
