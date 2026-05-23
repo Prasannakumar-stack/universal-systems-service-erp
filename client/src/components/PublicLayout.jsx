@@ -164,8 +164,8 @@ export default function PublicLayout() {
             </div>
           </div>
         </div>
-        <div className="border-t border-[var(--line)] py-4 text-center text-xs muted">
-          &copy; {new Date().getFullYear()} Universal Systems. All rights reserved.
+        <div className="footer-copyright border-t border-[var(--line)] py-4 text-center text-xs muted">
+          <span>&copy; {new Date().getFullYear()} Universal Systems. All rights reserved.</span>
         </div>
       </footer>
     </div>

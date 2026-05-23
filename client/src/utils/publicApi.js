@@ -25,3 +25,16 @@ export function createContactRequest(payload) {
     })
   );
 }
+
+export function createContactBooking(payload) {
+  const serviceInterest = String(payload.serviceInterest || '').trim();
+  const data = new FormData();
+  data.append('customerName', String(payload.name || '').trim());
+  data.append('phone', String(payload.phone || '').trim());
+  data.append('serviceType', serviceInterest);
+  data.append('device', serviceInterest || 'General Service Request');
+  data.append('issue', String(payload.message || '').trim());
+  data.append('bookingSource', 'Website');
+  data.append('address', '');
+  return createBooking(data);
+}

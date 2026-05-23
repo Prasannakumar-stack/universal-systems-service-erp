@@ -435,8 +435,10 @@ export function WorkOrdersPage({ role = 'admin' }) {
 
       <section className="work-orders-filter-bar surface min-w-0 border border-white/10 bg-[#0b172a]/60 p-4 shadow-lg backdrop-blur-md">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-12">
-          <div className="work-orders-filter-search relative min-w-0 md:col-span-2 lg:col-span-4">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <div className="work-orders-filter-search search-input-shell relative min-w-0 md:col-span-2 lg:col-span-4">
+            <span className="search-input-icon pointer-events-none text-slate-400" aria-hidden="true">
+              <Search className="h-4 w-4" />
+            </span>
             <input
               className={`h-12 w-full min-w-0 rounded-xl border border-sky-400/20 bg-slate-950/40 pl-10 pr-4 text-sm text-slate-100 placeholder:text-slate-500 ${workOrdersFocusRing}`}
               value={search}

@@ -529,7 +529,7 @@ function ConvertBooking({ booking, technicians, onConvert, workOrdersBase = '/ad
   );
 }
 
-function BookingModal({ initialCustomer = null, onClose, onSaved }) {
+export function BookingModal({ initialCustomer = null, onClose, onSaved }) {
   const { request } = useAuth();
   const { push } = useToast();
   const [form, setForm] = useState(() => ({

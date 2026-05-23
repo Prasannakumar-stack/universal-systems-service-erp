@@ -298,12 +298,16 @@ export function StockMovementsPage() {
           <option value="">All parts</option>
           {data.parts.map((part) => <option key={part.id} value={part.id}>{part.partName}</option>)}
         </select>
-        <label className="stock-date-filter relative block">
-          <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
+        <label className="stock-date-filter date-input-shell relative block">
+          <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
+            <CalendarClock className="h-4 w-4" />
+          </span>
           <input className="input pl-10" type="date" aria-label="Start date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         </label>
-        <label className="stock-date-filter relative block">
-          <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
+        <label className="stock-date-filter date-input-shell relative block">
+          <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
+            <CalendarClock className="h-4 w-4" />
+          </span>
           <input className="input pl-10" type="date" aria-label="End date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
         </label>
         <button

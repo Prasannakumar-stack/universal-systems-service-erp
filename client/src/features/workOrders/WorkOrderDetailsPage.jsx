@@ -257,6 +257,7 @@ function WorkOrderBadgeGroup({ children, justify = 'justify-start' }) {
 function detailStatusButtonClass(active) {
   return [
     'inline-flex min-h-[38px] items-center justify-center rounded-xl border px-3.5 py-2 text-sm font-semibold transition',
+    'disabled:cursor-not-allowed disabled:opacity-60',
     detailFocusRing,
     active
       ? 'border-sky-300/50 bg-sky-500/20 text-sky-50 shadow-[0_0_18px_rgba(56,189,248,0.16)]'
@@ -1275,7 +1276,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const visibleWorkOrderTabs = isTechnician ? technicianCloneTabs : workOrderTabs;
   const contentTabs = isTechnician ? ['parts', 'partRequests', 'billing', 'notes', 'photos'] : ['overview', 'workUpdate', 'parts', 'partRequests', 'billing', 'notes', 'photos'];
   const sideTabs = isTechnician ? ['documents'] : ['documents', 'timeline'];
-  const statusOptions = isTechnician ? technicianAllowedStatuses : workOrderDetailStatuses;
+  const statusOptions = workOrderDetailStatuses;
   const phone = customerPhone(order);
   const completedStatuses = ['Completed', 'Delivered', 'Returned'];
   const showCompletedDate = completedStatuses.includes(order.status);
@@ -1762,13 +1763,6 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       <PageHeader
         title={workOrderDisplayId}
         eyebrow="Repair & Service Job Details"
-        action={isTechnician ? (
-          <div className="flex flex-wrap gap-2">
-            <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
-            <a className={`btn btn-primary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
-            <button type="button" className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} onClick={copyPhone}><ClipboardList className="h-4 w-4" />Copy</button>
-          </div>
-        ) : null}
       >
         {order.customerId?.name || 'Customer'} - {order.device || 'Service job'}
       </PageHeader>
@@ -1816,7 +1810,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <WorkOrderInfoCard key={label} label={label} className={className || ''}>{value}</WorkOrderInfoCard>
           ))}
         </div>
-        <div className="mt-3">
+        {!isTechnician ? <div className="mt-3">
           <span className={detailLabelClass}>Status Workflow</span>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {canUpdateWorkOrderStatus ? statusOptions.map((item) => (
@@ -1827,13 +1821,25 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             )) : <StatusBadge status={order.status} />}
             {canAssignTechnician && !order.technicianId ? <button type="button" className={`${detailStatusButtonClass(false)} border-sky-400/30 text-sky-100`} onClick={autoAssignDetail}>Auto Assign Technician</button> : null}
           </div>
-        </div>
+        </div> : null}
         {isTechnician ? (
-          <div className="technician-detail-quick-actions mt-4">
-            <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call Customer</a>
-            <a className={`btn btn-primary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />Open WhatsApp</a>
-            <button type="button" className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} onClick={copyPhone}><ClipboardList className="h-4 w-4" />Copy Phone</button>
-            <Link className="btn btn-secondary" to={workOrdersBase}>Back to Jobs</Link>
+          <div className="technician-detail-status-workflow mt-4">
+            <span className={detailLabelClass}>Status Workflow</span>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {statusOptions.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  className={detailStatusButtonClass(order.status === item)}
+                  onClick={() => saveStatus(item)}
+                  disabled={!canUpdateWorkOrderStatus}
+                  aria-current={order.status === item ? 'step' : undefined}
+                >
+                  {order.status === item ? <CheckCircle2 className="h-4 w-4" /> : null}
+                  {item}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
       </div>
@@ -1880,13 +1886,6 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 <WorkOrderInfoCard key={label} label={label}>{value}</WorkOrderInfoCard>
               ))}
             </div>
-            {isTechnician ? (
-              <div className="mt-4 flex flex-wrap gap-2">
-                <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call Customer</a>
-                <a className={`btn btn-primary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />Open WhatsApp</a>
-                <Link className="btn btn-secondary" to={workOrdersBase}>Back to Work Orders</Link>
-              </div>
-            ) : null}
           </div>
 
           <div className={activeTab === 'workUpdate' ? detailSectionClass : 'hidden'}>

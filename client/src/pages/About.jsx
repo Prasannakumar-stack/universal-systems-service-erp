@@ -106,7 +106,7 @@ export default function About() {
   return (
     <div className="about-page section">
       <div className="container-page about-page-container">
-        <section className="about-premium-hero about-reveal page-hero hero-with-bg">
+        <section className="about-premium-hero about-reveal page-hero hero-with-bg public-hero-card public-hero-glass">
           <img
             className="page-hero-bg-image"
             src="/About%20page%20image.png"

@@ -234,12 +234,16 @@ export function CustomersPage({ role = 'admin' }) {
             <SearchBox value={search} onChange={setSearch} placeholder="Search customer ID, name, phone, work order, invoice, payment" />
           </div>
           <div className="customers-date-filter-group">
-            <label className="relative block">
-              <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
+            <label className="date-input-shell relative block">
+              <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
+                <CalendarClock className="h-4 w-4" />
+              </span>
               <input className="input pl-10" type="date" aria-label="Start date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
             </label>
-            <label className="relative block">
-              <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
+            <label className="date-input-shell relative block">
+              <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
+                <CalendarClock className="h-4 w-4" />
+              </span>
               <input className="input pl-10" type="date" aria-label="End date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
             </label>
             <button

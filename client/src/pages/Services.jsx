@@ -160,7 +160,7 @@ export default function Services() {
   return (
     <div className="services-page section">
       <div className="container-page">
-        <section className="services-page-hero services-reveal page-hero hero-with-bg">
+        <section className="services-page-hero services-reveal page-hero hero-with-bg public-hero-card public-hero-glass">
           <img
             className="page-hero-bg-image"
             src="/Service%20page%20image.png"
@@ -213,7 +213,7 @@ export default function Services() {
             return (
               <article
                 key={service.title}
-                className="services-showcase-card services-reveal"
+                className="services-showcase-card public-service-card services-reveal"
                 style={{
                   '--service-card-image': imageLayers,
                   '--reveal-delay': `${Math.min(index, 8) * 55}ms`

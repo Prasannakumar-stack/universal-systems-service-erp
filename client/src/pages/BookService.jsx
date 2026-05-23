@@ -256,7 +256,7 @@ export default function BookService() {
   return (
     <div className="booking-page section">
       <div className="container-page booking-container">
-        <section className="booking-hero page-hero hero-with-bg">
+        <section className="booking-hero page-hero hero-with-bg public-hero-card public-hero-glass">
           <img
             className="page-hero-bg-image"
             src="/Book%20Service%20Page%20image.png"

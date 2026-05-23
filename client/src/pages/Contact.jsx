@@ -18,7 +18,7 @@ import {
   Store
 } from 'lucide-react';
 import { company, serviceTypes } from '../utils/constants.js';
-import { createContactRequest } from '../utils/publicApi.js';
+import { createContactBooking } from '../utils/publicApi.js';
 import { useToast } from '../context/ToastContext.jsx';
 
 const empty = { name: '', phone: '', serviceInterest: 'OS Installation', message: '' };
@@ -85,6 +85,10 @@ function getContactErrorMessage(error) {
   return message;
 }
 
+function phoneDigits(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
 export default function Contact() {
   const [form, setForm] = useState(empty);
   const [loading, setLoading] = useState(false);
@@ -132,15 +136,24 @@ export default function Contact() {
   async function submit(event) {
     event.preventDefault();
     if (loading) return;
-    if (!form.name.trim() || !form.phone.trim()) {
-      push('Name and phone are required', 'error');
+    const digits = phoneDigits(form.phone);
+    if (!form.name.trim()) {
+      push('Name is required', 'error');
+      return;
+    }
+    if (digits.length !== 10) {
+      push('Phone must be 10 digits', 'error');
+      return;
+    }
+    if (!form.message.trim()) {
+      push('Message is required', 'error');
       return;
     }
     setSubmitError('');
     setLoading(true);
     try {
-      await createContactRequest(form);
-      push('Request submitted successfully. Our team will contact you shortly.');
+      await createContactBooking({ ...form, phone: digits });
+      push('Request sent successfully. Our team will contact you soon.');
       setForm(empty);
     } catch (error) {
       console.error('Contact request submit failed', error);
@@ -155,7 +168,7 @@ export default function Contact() {
   return (
     <div className="contact-page section">
       <div className="container-page contact-container">
-        <section className="contact-hero contact-reveal page-hero hero-with-bg">
+        <section className="contact-hero contact-reveal page-hero hero-with-bg public-hero-card public-hero-glass">
           <img
             className="page-hero-bg-image"
             src="/Contact%20Page%20image.png"
@@ -390,7 +403,7 @@ export default function Contact() {
               </div>
             ) : null}
 
-            <button className="btn btn-primary shine-button contact-submit-button" disabled={loading}>
+            <button className="btn btn-primary shine-button contact-submit-button" disabled={loading} aria-busy={loading}>
               <Send className="h-4 w-4" />
               {loading ? 'Sending...' : 'Submit Request'}
             </button>

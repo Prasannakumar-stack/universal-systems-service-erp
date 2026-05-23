@@ -788,12 +788,16 @@ export function CustomerProfilePage({ role = 'admin' }) {
               <option value="">All service types</option>
               {serviceTypes.map((item) => <option key={item}>{item}</option>)}
             </select>
-            <label className="relative block">
-              <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
+            <label className="date-input-shell relative block">
+              <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
+                <CalendarClock className="h-4 w-4" />
+              </span>
               <input className="input pl-10" type="date" aria-label="Start date" value={historyDateFrom} onChange={(event) => setHistoryDateFrom(event.target.value)} />
             </label>
-            <label className="relative block">
-              <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 muted" />
+            <label className="date-input-shell relative block">
+              <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
+                <CalendarClock className="h-4 w-4" />
+              </span>
               <input className="input pl-10" type="date" aria-label="End date" value={historyDateTo} onChange={(event) => setHistoryDateTo(event.target.value)} />
             </label>
             {hasHistoryFilters ? (

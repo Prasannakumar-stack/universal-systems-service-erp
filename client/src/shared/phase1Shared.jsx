@@ -258,7 +258,7 @@ export function PaginationControls({ pagination, onPageChange }) {
   const meta = paginationFrom({ pagination });
   if (meta.totalPages <= 1) return null;
   return (
-    <div className="mt-4 flex flex-col gap-3 rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+    <div className="pagination-controls mt-4 flex flex-col gap-3 rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
       <p className="font-semibold muted">
         Page {meta.page} of {meta.totalPages} ({meta.total} records)
       </p>

@@ -224,7 +224,7 @@ export default function Home() {
     <div className="premium-home">
       <section className="premium-hero hero-section relative isolate overflow-hidden">
         <div className="hero-scanline" aria-hidden="true" />
-        <div className="premium-hero-grid page-hero hero-with-bg container-page relative z-10">
+        <div className="premium-hero-grid page-hero hero-with-bg public-hero-card public-hero-glass container-page relative z-10">
           <img
             className="page-hero-bg-image"
             src="/Home%20Page%20image.png"
@@ -288,7 +288,7 @@ export default function Home() {
                 <Link
                   key={service.title}
                   to="/book-service"
-                  className="premium-service-card service-card reveal-on-scroll"
+                  className="premium-service-card service-card public-service-card reveal-on-scroll"
                   style={{
                     '--reveal-delay': `${index * 85}ms`,
                     '--card-image': `url(${service.image})`
