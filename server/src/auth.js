@@ -9,6 +9,7 @@ export function signToken(user) {
 
 export function publicUser(user) {
   if (!user) return null;
+  const effectivePermissions = user._effectivePermissions || user.effectivePermissions || user.permissions;
   return {
     id: user.id,
     _id: String(user._id || user.id || ''),
@@ -20,6 +21,7 @@ export function publicUser(user) {
     active: Boolean(user.active),
     isActive: Boolean(user.active),
     status: user.active ? 'Active' : 'Inactive',
+    permissions: effectivePermissions || undefined,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
   };

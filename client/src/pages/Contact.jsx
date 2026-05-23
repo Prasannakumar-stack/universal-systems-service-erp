@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
+  ArrowUpRight,
   CalendarClock,
   CheckCircle2,
   Clock3,
@@ -96,18 +97,19 @@ export default function Contact() {
   const phoneHref = useMemo(() => `tel:${primaryPhone.replace(/\s/g, '')}`, [primaryPhone]);
   const whatsappHref = useMemo(() => `https://wa.me/${company.whatsapp}`, []);
   const landlineHref = useMemo(() => `tel:${company.landline.replace(/[^\d]/g, '')}`, []);
+  const googleMapsHref = useMemo(() => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(company.address)}`, []);
 
   const quickActions = [
     {
       title: 'Call Now',
-      text: 'Speak directly with our service team.',
+      text: 'Tap to speak with our service team',
       href: phoneHref,
       icon: PhoneCall,
       tone: 'cyan'
     },
     {
       title: 'WhatsApp Support',
-      text: 'Share your issue and get a faster response.',
+      text: 'Message us for quick repair help',
       href: whatsappHref,
       icon: MessageCircle,
       tone: 'green',
@@ -115,7 +117,7 @@ export default function Contact() {
     },
     {
       title: 'Book Service',
-      text: 'Start a structured service request.',
+      text: 'Create a service request in simple steps',
       to: '/book-service',
       icon: CalendarClock,
       tone: 'blue'
@@ -187,6 +189,7 @@ export default function Contact() {
         </section>
 
         <section className="contact-action-grid contact-reveal" aria-label="Quick contact actions">
+          <p className="contact-action-helper">Choose how you want to reach us</p>
           {quickActions.map((action) => {
             const Icon = action.icon;
             const content = (
@@ -198,6 +201,7 @@ export default function Contact() {
                   <strong>{action.title}</strong>
                   <small>{action.text}</small>
                 </span>
+                <ArrowUpRight className="contact-action-arrow h-4 w-4" />
               </>
             );
 
@@ -276,7 +280,24 @@ export default function Contact() {
               </a>
             </section>
 
-            <section className="contact-location-card contact-reveal">
+            <section className="contact-quick-response-card contact-reveal">
+              <div className="contact-quick-response-icon">
+                <Clock3 className="h-5 w-5" />
+              </div>
+              <div>
+                <h2>Quick Response</h2>
+                <p>We usually respond within 10-30 minutes during working hours.</p>
+                <p>Serving Mettur Dam, Salem Dt and nearby areas.</p>
+              </div>
+            </section>
+
+            <a
+              className="contact-location-card contact-reveal"
+              href={googleMapsHref}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open Universal Systems location in Google Maps"
+            >
               <div className="contact-location-visual" aria-hidden="true">
                 <div className="contact-map-grid" />
                 <div className="contact-map-pin">
@@ -287,8 +308,12 @@ export default function Contact() {
                 <p className="contact-section-eyebrow">Universal Systems service area</p>
                 <h2>Mettur Dam, Salem Dt</h2>
                 <p>Serving homes, shops, offices, students, and local businesses.</p>
+                <span className="contact-map-button">
+                  Open Location in Google Maps
+                  <ArrowUpRight className="h-4 w-4" />
+                </span>
               </div>
-            </section>
+            </a>
           </div>
 
           <form className="contact-form-card contact-reveal" onSubmit={submit}>

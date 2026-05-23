@@ -24,6 +24,10 @@ const categoryChips = [
   'Support & Recovery'
 ];
 
+const categoryDisplayLabels = {
+  'Power & UPS': 'Solar & UPS'
+};
+
 const services = [
   {
     title: 'OS Installation & Setup',
@@ -197,7 +201,7 @@ export default function Services() {
                 onClick={() => setActiveCategory(category)}
                 aria-pressed={activeCategory === category}
               >
-                {category}
+                {categoryDisplayLabels[category] || category}
               </button>
             ))}
           </div>
@@ -220,7 +224,7 @@ export default function Services() {
                 <div className="services-card-copy">
                   <h2 className="text-xl font-black">{service.title}</h2>
                   <p className="mt-2 text-sm leading-6 muted">{service.text}</p>
-                  <Link to="/book-service" className="services-book-button mt-5">
+                  <Link to={`/book-service?service=${encodeURIComponent(service.title)}`} className="services-book-button mt-5">
                     Book Now <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>

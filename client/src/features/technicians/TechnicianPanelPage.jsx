@@ -1,4 +1,4 @@
-import { Mail, RefreshCw } from 'lucide-react';
+import { MoreHorizontal, RefreshCw } from 'lucide-react';
 import {
   AlertTriangle,
   amcContractTypes,
@@ -50,7 +50,6 @@ import {
   FileText,
   filterByRange,
   findInvoice,
-  formatDate,
   getWorkOrderDisplayId,
   getPdfLabel,
   inventoryCategories,
@@ -154,6 +153,8 @@ export function TechnicianPanelPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [resetUser, setResetUser] = useState(null);
+  const [actionMenuId, setActionMenuId] = useState('');
+  const actionMenuRef = useRef(null);
   const { data, loading, error, reload } = useResource(async () => {
     const [usersResult, workOrdersResult] = await Promise.all([
       request('/users?role=technician&limit=100').catch(() => ({ users: [] })),
@@ -201,6 +202,26 @@ export function TechnicianPanelPage() {
     { icon: ShieldCheck, label: 'Available / Low Workload', value: lowWorkloadTechnicians, helper: '0-1 assigned jobs', tone: 'cyan' },
     { icon: Wrench, label: 'Assigned Jobs', value: totalAssignedJobs, helper: 'Linked to technicians', tone: 'blue' }
   ];
+
+  useEffect(() => {
+    if (!actionMenuId) return undefined;
+
+    function closeActionMenu(event) {
+      if (actionMenuRef.current?.contains(event.target)) return;
+      setActionMenuId('');
+    }
+
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') setActionMenuId('');
+    }
+
+    document.addEventListener('mousedown', closeActionMenu);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeActionMenu);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [actionMenuId]);
 
   function clearFilters() {
     setSearch('');
@@ -333,7 +354,7 @@ export function TechnicianPanelPage() {
         </div>
 
         <div className="technician-filter-row mb-5">
-          <input className="input" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search technician by name, phone or email" />
+          <input className="input" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search technician by name or phone" />
           <select className="input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
             <option value="">All Status</option>
             <option value="Active">Active</option>
@@ -353,6 +374,16 @@ export function TechnicianPanelPage() {
         ) : visibleTechnicians.length ? (
           <div className="table-wrap admin-table-wrap bg-[var(--surface)]">
             <table className="data-table technician-management-table technician-table">
+              <colgroup>
+                <col className="technician-col-name" />
+                <col className="technician-col-contact" />
+                <col className="technician-col-role" />
+                <col className="technician-col-status" />
+                <col className="technician-col-workload" />
+                <col className="technician-col-jobs" />
+                <col className="technician-col-active" />
+                <col className="technician-col-action" />
+              </colgroup>
               <thead>
                 <tr>
                   <th>TECHNICIAN</th>
@@ -389,10 +420,6 @@ export function TechnicianPanelPage() {
                           {tech.phone ? <PhoneCallIcon className="h-3.5 w-3.5" /> : null}
                           <span>{tech.phone || 'No phone added'}</span>
                         </p>
-                        <p className="technician-contact-line text-xs muted">
-                          {tech.email ? <Mail className="h-3.5 w-3.5" /> : null}
-                          <span>{tech.email || 'No email added'}</span>
-                        </p>
                       </td>
                       <td><span className="admin-role-badge">{technicianRoleLabel(tech)}</span></td>
                       <td><TechnicianStatusPill active={tech.active} /></td>
@@ -415,28 +442,41 @@ export function TechnicianPanelPage() {
                         )}
                       </td>
                       <td>
-                        <span className="font-semibold text-slate-200">{technicianLastActive(tech)}</span>
+                        <span className="technician-last-active font-semibold text-slate-200">{technicianLastActive(tech)}</span>
                       </td>
                       <td className="text-center">
-                        <div className="admin-row-actions technician-row-actions">
-                          {assignedJobs > 0 ? (
-                            <Link className="btn btn-secondary admin-table-button" to={jobsPath}>View Jobs</Link>
-                          ) : (
-                            <span className="technician-no-jobs-pill">No Jobs</span>
-                          )}
-                          <button type="button" className="btn btn-primary admin-table-button" onClick={() => setResetUser(tech)}>
-                            <KeyRound className="h-4 w-4" />
-                            Reset Password
+                        <div className="technician-action-menu-wrap" ref={actionMenuId === techId ? actionMenuRef : null}>
+                          <button
+                            type="button"
+                            className="icon-button technician-action-menu-button"
+                            onClick={() => setActionMenuId((current) => (current === techId ? '' : techId))}
+                            aria-label={`Open actions for ${tech.name || 'technician'}`}
+                            aria-expanded={actionMenuId === techId}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
                           </button>
-                          {techId !== recordId(user) ? (
-                            <button type="button" className="btn btn-secondary admin-table-button" onClick={() => toggleStatus(tech)}>
-                              {tech.active ? 'Disable' : 'Enable'}
-                            </button>
+                          {actionMenuId === techId ? (
+                            <div className="technician-action-menu">
+                              <Link className="technician-action-menu-item" to={jobsPath} onClick={() => setActionMenuId('')}>
+                                <Wrench className="h-4 w-4" />
+                                View Jobs
+                              </Link>
+                              <button type="button" className="technician-action-menu-item" onClick={() => { setActionMenuId(''); setResetUser(tech); }}>
+                                <KeyRound className="h-4 w-4" />
+                                Reset Password
+                              </button>
+                              {techId !== recordId(user) ? (
+                                <button type="button" className="technician-action-menu-item" onClick={() => { setActionMenuId(''); toggleStatus(tech); }}>
+                                  <ShieldCheck className="h-4 w-4" />
+                                  {tech.active ? 'Disable' : 'Enable'}
+                                </button>
+                              ) : null}
+                              <button type="button" className="technician-action-menu-item" onClick={() => { setActionMenuId(''); setEditUser(tech); }}>
+                                <Edit3 className="h-4 w-4" />
+                                Edit
+                              </button>
+                            </div>
                           ) : null}
-                          <button type="button" className="btn btn-secondary admin-table-button" onClick={() => setEditUser(tech)}>
-                            <Edit3 className="h-4 w-4" />
-                            Edit
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -491,8 +531,32 @@ function technicianWorkload(count = 0) {
 }
 
 function technicianLastActive(technician = {}) {
-  const lastActive = technician.lastActiveAt || technician.lastActive || technician.lastLoginAt || technician.lastLogin || technician.lastSeenAt;
-  return lastActive ? formatDate(lastActive) : 'Never logged in';
+  const lastActive =
+    technician.lastActiveAt ||
+    technician.lastActive ||
+    technician.lastLoginAt ||
+    technician.lastLogin ||
+    technician.lastSeenAt ||
+    technician.lastSeen ||
+    technician.updatedAt;
+
+  if (!lastActive) return 'Never logged in';
+
+  const date = new Date(lastActive);
+  if (Number.isNaN(date.getTime())) return 'Never logged in';
+
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayDiff = Math.round((startOfToday - startOfDate) / 86400000);
+  const timeLabel = date
+    .toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })
+    .replace(/\s?(am|pm)$/i, (match) => match.toUpperCase());
+
+  if (dayDiff === 0) return `Today, ${timeLabel}`;
+  if (dayDiff === 1) return `Yesterday, ${timeLabel}`;
+
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function TechnicianStatusPill({ active }) {

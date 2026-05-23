@@ -148,10 +148,11 @@ export function AMCRenewalsPage({ role = 'admin' }) {
   const navigate = useNavigate();
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
-  const canCreateAmc = can(effectiveRole, 'create_amc');
-  const canRenewAmc = can(effectiveRole, 'renew_amc');
-  const canCreateAmcJob = can(effectiveRole, 'create_amc_job');
-  const canSendPdfWhatsapp = can(effectiveRole, 'send_pdf_whatsapp');
+  const permissionSubject = user || effectiveRole;
+  const canCreateAmc = can(permissionSubject, 'create_amc');
+  const canRenewAmc = can(permissionSubject, 'renew_amc');
+  const canCreateAmcJob = can(permissionSubject, 'create_amc_job');
+  const canSendPdfWhatsapp = can(permissionSubject, 'send_pdf_whatsapp');
   const base = isTechnician ? '/tech' : '/admin';
   const { data, loading, error, reload } = useResource(() => request('/amc/renewals'), [request]);
   const renewals = data?.renewals || [];

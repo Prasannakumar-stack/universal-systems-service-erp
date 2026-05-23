@@ -152,7 +152,8 @@ export function CustomersPage({ role = 'admin' }) {
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
   const base = isTechnician ? '/tech' : '/admin';
-  const canCreateBooking = can(effectiveRole, 'create_booking');
+  const permissionSubject = user || effectiveRole;
+  const canCreateBooking = can(permissionSubject, 'create_booking');
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');

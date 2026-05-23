@@ -338,6 +338,14 @@ function roleFrom(userOrRole = '') {
   return normalizeRole(typeof userOrRole === 'string' ? userOrRole : userOrRole?.role);
 }
 
+function permissionMapFrom(userOrRole = null) {
+  if (!userOrRole || typeof userOrRole !== 'object') return null;
+  const map = userOrRole.permissions || userOrRole.effectivePermissions || userOrRole._effectivePermissions || userOrRole.rolePermissions;
+  if (!map || typeof map !== 'object') return null;
+  if (map instanceof Map) return Object.fromEntries(map.entries());
+  return map;
+}
+
 export function roleLabel(role = '') {
   const normalized = normalizeRole(role);
   return roleLabels[normalized] || 'Team Member';
@@ -348,9 +356,14 @@ export function hasRole(userOrRole, role) {
 }
 
 export function can(userOrRole, permission) {
+  if (!permission) return false;
+  const permissionMap = permissionMapFrom(userOrRole);
+  if (permissionMap && Object.prototype.hasOwnProperty.call(permissionMap, permission)) {
+    return Boolean(permissionMap[permission]);
+  }
   const role = roleFrom(userOrRole);
   if (role === 'admin') return true;
-  return Boolean(permission && ROLE_PERMISSIONS[role]?.includes(permission));
+  return Boolean(ROLE_PERMISSIONS[role]?.includes(permission));
 }
 
 export function permissionStateForRole(userOrRole, permission) {

@@ -158,6 +158,7 @@ const notePrefillText = {
 
 function customerTimelineMeta(event) {
   const text = `${event?.type || ''} ${event?.title || ''} ${event?.detail || ''} ${event?.status || ''}`.toLowerCase();
+  if (text.includes('profile') || text.includes('customer type')) return { label: 'Profile', Icon: UserRound, tone: 'border-sky-400/35 bg-sky-500/15 text-sky-100' };
   if (text.includes('payment')) return { label: 'Payment', Icon: CreditCard, tone: 'border-emerald-400/35 bg-emerald-500/15 text-emerald-100' };
   if (text.includes('invoice') || text.includes('billing')) return { label: 'Invoice', Icon: ReceiptText, tone: 'border-sky-400/35 bg-sky-500/15 text-sky-100' };
   if (text.includes('part')) return { label: 'Part', Icon: PackagePlus, tone: 'border-cyan-400/35 bg-cyan-500/15 text-cyan-100' };
@@ -176,11 +177,12 @@ export function CustomerProfilePage({ role = 'admin' }) {
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
   const base = isTechnician ? '/tech' : '/admin';
-  const canManageCustomer = can(effectiveRole, 'edit_customer');
-  const canCreateBooking = can(effectiveRole, 'create_booking');
-  const canRecordPayments = can(effectiveRole, 'record_payment');
-  const canExportReports = can(effectiveRole, 'export_reports');
-  const canAddCustomerNote = can(effectiveRole, 'add_notes') || canManageCustomer;
+  const permissionSubject = user || effectiveRole;
+  const canManageCustomer = can(permissionSubject, 'edit_customer');
+  const canCreateBooking = can(permissionSubject, 'create_booking');
+  const canRecordPayments = can(permissionSubject, 'record_payment');
+  const canExportReports = can(permissionSubject, 'export_reports');
+  const canAddCustomerNote = can(permissionSubject, 'add_notes') || canManageCustomer;
   const workOrdersBase = `${base}/work-orders`;
   const paymentsBase = `${base}/payments`;
   const bookingsBase = `${base}/bookings`;
@@ -194,6 +196,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
   const [showWhatsappPreview, setShowWhatsappPreview] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', phone: '', address: '', customerType: '' });
+  const [editSaving, setEditSaving] = useState(false);
   const [noteModal, setNoteModal] = useState(null);
   const [noteSaving, setNoteSaving] = useState(false);
   const { data, loading, error, reload } = useResource(async () => {
@@ -210,6 +213,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
   const invoices = data?.invoices || [];
   const payments = data?.payments || [];
   const communications = data?.communications || [];
+  const profileEvents = data?.profileEvents || [];
   const notAdded = 'Not available';
   const noAmcAdded = 'No active AMC';
   const noWarrantyAdded = 'No warranty record';
@@ -318,8 +322,25 @@ export function CustomerProfilePage({ role = 'admin' }) {
         to: recordId(item.workOrderId) ? `${workOrdersBase}/${recordId(item.workOrderId)}` : ''
       });
     });
+    profileEvents.forEach((item) => {
+      const previousType = String(item.before?.customerType || '').trim();
+      const nextType = String(item.after?.customerType || '').trim();
+      events.push({
+        date: item.createdAt,
+        title: previousType && nextType
+          ? `Customer type changed from ${previousType} to ${nextType}`
+          : nextType
+            ? `Customer type updated to ${nextType}`
+            : 'Customer type cleared',
+        detail: previousType || nextType
+          ? `Old customer type: ${previousType || notAdded}. New customer type: ${nextType || notAdded}.`
+          : 'Customer type was updated.',
+        type: 'PROFILE',
+        source: item.userId?.name || item.userId?.username || 'Profile'
+      });
+    });
     return events.filter((event) => event.date).sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [communications, customer.createdAt, serviceHistory, invoices, payments, workOrdersBase]);
+  }, [communications, customer.createdAt, serviceHistory, invoices, payments, profileEvents, notAdded, workOrdersBase]);
   const whatsappPhone = String(customer.phone || '').replace(/\D/g, '');
   const hasCustomerPhone = Boolean(whatsappPhone);
   const pendingInvoice = invoices.find((invoice) => Number(invoice.balance || 0) > 0);
@@ -418,14 +439,31 @@ export function CustomerProfilePage({ role = 'admin' }) {
     });
     setEditModalOpen(true);
   };
-  const saveEditCustomer = (event) => {
+  const saveEditCustomer = async (event) => {
     event.preventDefault();
     if (!canManageCustomer) {
       push('You do not have permission to edit customers', 'error');
       return;
     }
-    const typeChanged = editForm.customerType !== currentCustomerType;
-    push(typeChanged ? 'Customer type saving is not connected yet.' : 'Customer edit saving is not connected yet.', 'info');
+    setEditSaving(true);
+    try {
+      await request(`/customers/${recordId(customer) || id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editForm.name,
+          phone: editForm.phone,
+          address: editForm.address,
+          customerType: editForm.customerType
+        })
+      });
+      await reload({ silent: true });
+      setEditModalOpen(false);
+      push('Customer updated');
+    } catch (err) {
+      push(err.message || 'Unable to update customer', 'error');
+    } finally {
+      setEditSaving(false);
+    }
   };
   const openNoteModal = (type = 'General note') => {
     if (!canAddCustomerNote) {
@@ -1076,7 +1114,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
               <div>
                 <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Customer Profile</p>
                 <h2 id="edit-customer-title" className="mt-1 text-xl font-black text-white">Edit Customer</h2>
-                <p className="mt-1 text-sm muted">Update customer identity, contact details, and customer type when saving is connected.</p>
+                <p className="mt-1 text-sm muted">Update customer identity, contact details, and customer type.</p>
               </div>
               <button type="button" className="icon-button h-8 w-8" aria-label="Close edit customer" onClick={() => setEditModalOpen(false)}>
                 <X className="h-4 w-4" />
@@ -1103,8 +1141,11 @@ export function CustomerProfilePage({ role = 'admin' }) {
               </label>
             </div>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button type="button" className="btn btn-secondary h-10 px-4" onClick={() => setEditModalOpen(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary h-10 px-4"><Save className="h-4 w-4" />Save Changes</button>
+              <button type="button" className="btn btn-secondary h-10 px-4" onClick={() => setEditModalOpen(false)} disabled={editSaving}>Cancel</button>
+              <button type="submit" className="btn btn-primary h-10 px-4" disabled={editSaving}>
+                {editSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save Changes
+              </button>
             </div>
           </form>
         </div>

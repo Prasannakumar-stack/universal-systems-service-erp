@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import { publicUser, signToken } from '../auth.js';
 import { clearLoginRateLimit } from '../middleware/loginRateLimit.js';
+import { attachEffectivePermissions } from '../permissions.js';
 import { appError, clean, required } from '../utils/http.js';
 
 export async function login(req, res) {
@@ -13,6 +14,7 @@ export async function login(req, res) {
   const ok = await bcrypt.compare(String(req.body.password), user.passwordHash);
   if (!ok) throw appError('Invalid username or password', 401);
   clearLoginRateLimit(req);
+  await attachEffectivePermissions(user);
 
   res.json({ success: true, token: signToken(user), user: publicUser(user), role: user.role });
 }
@@ -39,5 +41,6 @@ export async function updateProfile(req, res) {
   }
 
   await user.save();
+  await attachEffectivePermissions(user);
   res.json({ user: publicUser(user), message: 'Profile updated' });
 }

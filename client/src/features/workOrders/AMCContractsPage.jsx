@@ -183,10 +183,11 @@ export function AMCContractsPage({ role = 'admin' }) {
   const location = useLocation();
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
-  const canCreateAmc = can(effectiveRole, 'create_amc');
-  const canRenewAmc = can(effectiveRole, 'renew_amc');
-  const canCreateAmcJob = can(effectiveRole, 'create_amc_job');
-  const canCreateInvoice = can(effectiveRole, 'create_invoice');
+  const permissionSubject = user || effectiveRole;
+  const canCreateAmc = can(permissionSubject, 'create_amc');
+  const canRenewAmc = can(permissionSubject, 'renew_amc');
+  const canCreateAmcJob = can(permissionSubject, 'create_amc_job');
+  const canCreateInvoice = can(permissionSubject, 'create_invoice');
   const canManageAmc = canCreateAmc || canRenewAmc || canCreateAmcJob || canCreateInvoice;
   const base = isTechnician ? '/tech' : '/admin';
   const [formOpen, setFormOpen] = useState(false);

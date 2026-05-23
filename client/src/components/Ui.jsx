@@ -56,6 +56,9 @@ export function StatCard({ icon: Icon, label, value, tone = 'brand' }) {
 }
 
 export function ConfirmModal({ title, message, onCancel, onConfirm, confirmLabel = 'Confirm' }) {
+  const destructivePattern = /delete|remove|reject|deny|void/i;
+  const isDestructive = destructivePattern.test(`${title} ${confirmLabel}`);
+
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
       <div className="surface w-full max-w-md p-5">
@@ -65,7 +68,7 @@ export function ConfirmModal({ title, message, onCancel, onConfirm, confirmLabel
           <button className="btn btn-secondary" onClick={onCancel}>
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={onConfirm}>
+          <button className={`btn ${isDestructive ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm}>
             {confirmLabel}
           </button>
         </div>

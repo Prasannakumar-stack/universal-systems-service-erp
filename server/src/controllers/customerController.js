@@ -1,7 +1,7 @@
 import Customer from '../models/Customer.js';
 import Invoice from '../models/Invoice.js';
 import WorkOrder from '../models/WorkOrder.js';
-import { createCustomer, getCustomerProfile } from '../services/customerService.js';
+import { createCustomer, getCustomerProfile, updateCustomer } from '../services/customerService.js';
 import { getTechnicianScope } from '../services/technicianScopeService.js';
 import { clean, required } from '../utils/http.js';
 import { addDateRange, paginatedPayload, paginationMeta, parsePagination, searchRegex, withIds } from '../utils/pagination.js';
@@ -56,4 +56,9 @@ export async function list(req, res) {
 export async function getById(req, res) {
   const profile = await getCustomerProfile(req.params.id, req.user);
   res.json(profile);
+}
+
+export async function update(req, res) {
+  const customer = await updateCustomer(req.params.id, req.body, req.user);
+  res.json({ customer, message: 'Customer updated' });
 }

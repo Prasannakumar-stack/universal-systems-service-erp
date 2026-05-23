@@ -125,6 +125,7 @@ export default function App() {
           <Route path="customers/:id" element={lazyElement(<CustomerProfilePage role="technician" />)} />
           <Route path="invoices" element={lazyElement(<InvoicesPage role="technician" />)} />
           <Route path="payments" element={lazyElement(<PaymentsPage role="technician" />)} />
+          <Route path="parts" element={lazyElement(<InventoryPage role="technician" />)} />
           <Route path="amc-contracts" element={lazyElement(<AMCContractsPage role="technician" />)} />
           <Route path="amc-contracts/schedule" element={<Navigate to="/tech/amc-schedule" replace />} />
           <Route path="amc-schedule" element={lazyElement(<AMCSchedulePage role="technician" />)} />
@@ -141,6 +142,7 @@ export default function App() {
           <Route path="customers/:id" element={lazyElement(<CustomerProfilePage role="technician" />)} />
           <Route path="invoices" element={<Navigate to="/tech/invoices" replace />} />
           <Route path="payments" element={<Navigate to="/tech/payments" replace />} />
+          <Route path="parts" element={<Navigate to="/tech/parts" replace />} />
           <Route path="amc-contracts" element={<Navigate to="/tech/amc-contracts" replace />} />
           <Route path="amc-contracts/schedule" element={<Navigate to="/tech/amc-schedule" replace />} />
           <Route path="amc-schedule" element={<Navigate to="/tech/amc-schedule" replace />} />

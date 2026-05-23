@@ -151,7 +151,8 @@ export function InvoicesPage({ role = 'admin' }) {
   const { push } = useToast();
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
-  const canSendPdfWhatsapp = can(effectiveRole, 'send_pdf_whatsapp');
+  const permissionSubject = user || effectiveRole;
+  const canSendPdfWhatsapp = can(permissionSubject, 'send_pdf_whatsapp');
   const base = isTechnician ? '/tech' : '/admin';
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');

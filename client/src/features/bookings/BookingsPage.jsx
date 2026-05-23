@@ -142,6 +142,7 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { FileImage, ImageUp, UploadCloud } from 'lucide-react';
 import { ADMIN_ASSIGNMENT_LABEL } from '../../utils/assignment.js';
 import { can, normalizeRole } from '../../utils/roles.js';
 
@@ -191,9 +192,10 @@ export function BookingsPage({ role = 'admin' }) {
   const location = useLocation();
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
-  const canCreateBooking = can(effectiveRole, 'create_booking');
-  const canConvertBooking = can(effectiveRole, 'create_work_order');
-  const canAssignTechnician = can(effectiveRole, 'assign_technician');
+  const permissionSubject = user || effectiveRole;
+  const canCreateBooking = can(permissionSubject, 'create_booking');
+  const canConvertBooking = can(permissionSubject, 'create_work_order');
+  const canAssignTechnician = can(permissionSubject, 'assign_technician');
   const workOrdersBase = isTechnician ? '/tech/work-orders' : '/admin/work-orders';
   const [formOpen, setFormOpen] = useState(false);
   const [technicians, setTechnicians] = useState([]);
@@ -245,6 +247,10 @@ export function BookingsPage({ role = 'admin' }) {
   }
 
   async function convert(bookingId, technicianId) {
+    if (!canConvertBooking) {
+      push('You do not have permission to create work orders', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request('/work-orders', { method: 'POST', body: JSON.stringify({ bookingId, technicianId: technicianId || undefined }) });
@@ -535,8 +541,46 @@ function BookingModal({ initialCustomer = null, onClose, onSaved }) {
     bookingSource: 'Walk-in',
     issue: ''
   }));
+  const [deviceBrand, setDeviceBrand] = useState('');
+  const [deviceImage, setDeviceImage] = useState(null);
+  const [deviceImagePreview, setDeviceImagePreview] = useState('');
   const [saving, setSaving] = useState(false);
+  const deviceImageInputRef = useRef(null);
+  const deviceImagePreviewRef = useRef('');
   const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+
+  function resetDeviceImage() {
+    if (deviceImagePreviewRef.current) {
+      URL.revokeObjectURL(deviceImagePreviewRef.current);
+      deviceImagePreviewRef.current = '';
+    }
+    setDeviceImage(null);
+    setDeviceImagePreview('');
+    if (deviceImageInputRef.current) deviceImageInputRef.current.value = '';
+  }
+
+  function resetBookingExtras() {
+    setDeviceBrand('');
+    resetDeviceImage();
+  }
+
+  function closeModal() {
+    resetBookingExtras();
+    onClose();
+  }
+
+  function chooseDeviceImage(file) {
+    if (!file) return;
+    if (file.type && !file.type.startsWith('image/')) {
+      push('Please select an image file', 'error');
+      return;
+    }
+    if (deviceImagePreviewRef.current) URL.revokeObjectURL(deviceImagePreviewRef.current);
+    const nextPreview = URL.createObjectURL(file);
+    deviceImagePreviewRef.current = nextPreview;
+    setDeviceImage(file);
+    setDeviceImagePreview(nextPreview);
+  }
 
   useEffect(() => {
     if (!initialCustomer) return;
@@ -548,12 +592,17 @@ function BookingModal({ initialCustomer = null, onClose, onSaved }) {
     }));
   }, [initialCustomer]);
 
+  useEffect(() => () => {
+    if (deviceImagePreviewRef.current) URL.revokeObjectURL(deviceImagePreviewRef.current);
+  }, []);
+
   async function submit(event) {
     event.preventDefault();
     setSaving(true);
     try {
       await request('/bookings', { method: 'POST', body: JSON.stringify(form) });
       push('Booking created');
+      resetBookingExtras();
       onSaved();
       onClose();
     } catch (err) {
@@ -564,42 +613,99 @@ function BookingModal({ initialCustomer = null, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
-      <form className="surface max-h-[92vh] w-full max-w-3xl overflow-y-auto p-5" onSubmit={submit}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-black">Create Booking</h2>
-            <p className="mt-1 text-sm muted">Capture intake details without changing the existing booking API.</p>
+    <div className="booking-modal-overlay">
+      <form className="booking-modal-shell" onSubmit={submit}>
+        <div className="booking-modal-header">
+          <div className="min-w-0">
+            <p className="booking-modal-eyebrow">New intake</p>
+            <h2>Create Booking</h2>
+            <p>Capture customer, device, and service details.</p>
           </div>
-          <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close booking modal"><X className="h-4 w-4" /></button>
+          <button type="button" className="booking-modal-close" onClick={closeModal} aria-label="Close booking modal"><X className="h-4 w-4" /></button>
         </div>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <label><span className="label">Customer name</span><input className="input" value={form.customerName} onChange={(event) => update('customerName', event.target.value)} required /></label>
-          <label><span className="label">Phone</span><input className="input" value={form.phone} onChange={(event) => update('phone', event.target.value)} required /></label>
-          <label>
-            <span className="label">Service Type</span>
-            <select className="input" value={form.serviceType} onChange={(event) => update('serviceType', event.target.value)}>
+        <div className="booking-modal-body">
+          <label className="booking-modal-field">
+            <span className="booking-modal-label">Customer name</span>
+            <input className="input booking-modal-control" value={form.customerName} onChange={(event) => update('customerName', event.target.value)} required />
+          </label>
+          <label className="booking-modal-field">
+            <span className="booking-modal-label">Phone</span>
+            <input className="input booking-modal-control" value={form.phone} onChange={(event) => update('phone', event.target.value)} required />
+          </label>
+          <label className="booking-modal-field">
+            <span className="booking-modal-label">Service Type</span>
+            <select className="input booking-modal-control" value={form.serviceType} onChange={(event) => update('serviceType', event.target.value)}>
               {serviceTypes.map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
-          <label>
-            <span className="label">Device / Asset</span>
-            <select className="input" value={form.device} onChange={(event) => update('device', event.target.value)}>
+          <label className="booking-modal-field">
+            <span className="booking-modal-label">Device / Asset</span>
+            <select className="input booking-modal-control" value={form.device} onChange={(event) => update('device', event.target.value)}>
               {deviceTypes.map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
-          <label>
-            <span className="label">Booking Source</span>
-            <select className="input" value={form.bookingSource} onChange={(event) => update('bookingSource', event.target.value)}>
+          <label className="booking-modal-field">
+            <span className="booking-modal-label">Device Brand</span>
+            <input className="input booking-modal-control" value={deviceBrand} onChange={(event) => setDeviceBrand(event.target.value)} placeholder="Example: Dell, HP, Lenovo" />
+          </label>
+          <label className="booking-modal-field">
+            <span className="booking-modal-label">Booking Source</span>
+            <select className="input booking-modal-control" value={form.bookingSource} onChange={(event) => update('bookingSource', event.target.value)}>
               {finalBookingSources.map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
-          <label className="sm:col-span-2"><span className="label">Address</span><textarea className="input min-h-24" value={form.address} onChange={(event) => update('address', event.target.value)} /></label>
-          <label className="sm:col-span-2"><span className="label">Issue / Requirement</span><textarea className="input min-h-24" value={form.issue} onChange={(event) => update('issue', event.target.value)} required /></label>
+          <label className="booking-modal-field sm:col-span-2">
+            <span className="booking-modal-label">Address</span>
+            <textarea className="input booking-modal-control booking-modal-textarea" value={form.address} onChange={(event) => update('address', event.target.value)} />
+          </label>
+          <label className="booking-modal-field sm:col-span-2">
+            <span className="booking-modal-label">Issue / Requirement</span>
+            <textarea className="input booking-modal-control booking-modal-textarea" value={form.issue} onChange={(event) => update('issue', event.target.value)} required />
+          </label>
+          <div className="booking-modal-upload-field sm:col-span-2">
+            <span className="booking-modal-label">Device Image / Photo upload</span>
+            <button
+              type="button"
+              className={`booking-modal-upload ${deviceImagePreview ? 'booking-modal-upload-active' : ''}`}
+              onClick={() => deviceImageInputRef.current?.click()}
+            >
+              {deviceImagePreview ? (
+                <span className="booking-modal-upload-preview">
+                  <img src={deviceImagePreview} alt="Selected device preview" />
+                  <span>
+                    <b><FileImage className="h-4 w-4" />{deviceImage?.name || 'Selected image'}</b>
+                    <small>Preview only. This image is not saved with the booking yet.</small>
+                  </span>
+                </span>
+              ) : (
+                <span className="booking-modal-upload-empty">
+                  <span className="booking-modal-upload-icon"><UploadCloud className="h-5 w-5" /></span>
+                  <span>
+                    <b>Upload device photo</b>
+                    <small>Optional image preview for intake reference</small>
+                  </span>
+                  <ImageUp className="booking-modal-upload-action h-4 w-4" />
+                </span>
+              )}
+            </button>
+            <input
+              ref={deviceImageInputRef}
+              className="sr-only"
+              type="file"
+              accept="image/*"
+              onChange={(event) => chooseDeviceImage(event.target.files?.[0])}
+            />
+            {deviceImagePreview ? (
+              <button type="button" className="booking-modal-remove-image" onClick={resetDeviceImage}>
+                <Trash2 className="h-3.5 w-3.5" />
+                Remove image
+              </button>
+            ) : null}
+          </div>
         </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={saving}><Save className="h-4 w-4" />Save</button>
+        <div className="booking-modal-footer">
+          <button type="button" className="btn btn-secondary booking-modal-cancel" onClick={closeModal}>Cancel</button>
+          <button type="submit" className="btn btn-primary booking-modal-save" disabled={saving}><Save className="h-4 w-4" />Save</button>
         </div>
       </form>
     </div>

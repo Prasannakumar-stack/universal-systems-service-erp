@@ -88,29 +88,33 @@ const adminGroups = [
 const technicianGroups = [
   {
     title: '',
-    links: [{ to: '/technician/dashboard', label: 'Dashboard', icon: LayoutDashboard }]
+    links: [{ to: '/technician/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'view_dashboard' }]
   },
   {
     title: 'Operations',
     links: [
-      { to: '/tech/bookings', label: 'Bookings', icon: BookOpenCheck },
-      { to: '/tech/work-orders', label: 'Work Orders', icon: Wrench }
+      { to: '/tech/bookings', label: 'Bookings', icon: BookOpenCheck, permission: 'view_bookings' },
+      { to: '/tech/work-orders', label: 'Work Orders', icon: Wrench, permission: 'view_work_orders' }
     ]
   },
   {
     title: 'Customers',
-    links: [{ to: '/tech/customers', label: 'Customers', icon: Users }]
+    links: [{ to: '/tech/customers', label: 'Customers', icon: Users, permission: 'view_customers' }]
   },
   {
     title: 'Sales & Billing',
     links: [
-      { to: '/tech/invoices', label: 'Invoices', icon: ReceiptText },
-      { to: '/tech/payments', label: 'Payments', icon: CreditCard }
+      { to: '/tech/invoices', label: 'Invoices', icon: ReceiptText, permission: 'view_invoices' },
+      { to: '/tech/payments', label: 'Payments', icon: CreditCard, permission: 'view_payments' }
     ]
   },
   {
+    title: 'Inventory',
+    links: [{ to: '/tech/parts', label: 'Products / Parts', icon: Boxes, permission: 'view_inventory' }]
+  },
+  {
     title: 'AMC & Warranty',
-    links: [{ to: '/tech/amc-contracts', label: 'AMC Contracts', icon: FileCheck2 }]
+    links: [{ to: '/tech/amc-contracts', label: 'AMC Contracts', icon: FileCheck2, permission: 'view_amc' }]
   },
   {
     title: 'System',
@@ -141,25 +145,65 @@ const adminRouteAccess = [
   { prefix: '/admin/settings', permission: 'view_settings' }
 ];
 
-function canSeeLink(link, role) {
-  if (link.permission) return can(role, link.permission);
-  return !link.roles || canAccessRoles(role, link.roles);
+const technicianRouteAccess = [
+  { prefix: '/tech/dashboard', permission: 'view_dashboard' },
+  { prefix: '/technician/dashboard', permission: 'view_dashboard' },
+  { prefix: '/tech/bookings', permission: 'view_bookings' },
+  { prefix: '/technician/bookings', permission: 'view_bookings' },
+  { prefix: '/tech/work-orders', permission: 'view_work_orders' },
+  { prefix: '/technician/work-orders', permission: 'view_work_orders' },
+  { prefix: '/tech/customers', permission: 'view_customers' },
+  { prefix: '/technician/customers', permission: 'view_customers' },
+  { prefix: '/tech/invoices', permission: 'view_invoices' },
+  { prefix: '/technician/invoices', permission: 'view_invoices' },
+  { prefix: '/tech/payments', permission: 'view_payments' },
+  { prefix: '/technician/payments', permission: 'view_payments' },
+  { prefix: '/tech/parts', permission: 'view_inventory' },
+  { prefix: '/technician/parts', permission: 'view_inventory' },
+  { prefix: '/tech/amc', permission: 'view_amc' },
+  { prefix: '/technician/amc', permission: 'view_amc' },
+  { prefix: '/tech/warranties', permission: 'view_amc' },
+  { prefix: '/technician/warranties', permission: 'view_amc' },
+  { prefix: '/tech/settings' },
+  { prefix: '/technician/settings' },
+  { prefix: '/technician/profile' }
+];
+
+function canSeeLink(link, subject) {
+  if (link.permission) return can(subject, link.permission);
+  return !link.roles || canAccessRoles(roleFromSubject(subject), link.roles);
 }
 
-function visibleAdminGroups(role) {
+function roleFromSubject(subject) {
+  return typeof subject === 'string' ? subject : subject?.role;
+}
+
+function visibleAdminGroups(subject) {
   return adminGroups
-    .map((group) => ({ ...group, links: group.links.filter((link) => canSeeLink(link, role)) }))
+    .map((group) => ({ ...group, links: group.links.filter((link) => canSeeLink(link, subject)) }))
     .filter((group) => group.links.length);
 }
 
-function canOpenAdminPath(pathname, role) {
-  const match = adminRouteAccess.find((item) => pathname.startsWith(item.prefix));
-  if (match?.permission) return can(role, match.permission);
-  return match ? canAccessRoles(role, match.roles) : canAccessRoles(role, fullAccessRoles);
+function visibleTechnicianGroups(subject) {
+  return technicianGroups
+    .map((group) => ({ ...group, links: group.links.filter((link) => canSeeLink(link, subject)) }))
+    .filter((group) => group.links.length);
 }
 
-function canUseGlobalSearch(role) {
-  return normalizeRole(role) === 'technician' || canAny(role, ['view_customers', 'view_bookings', 'view_work_orders', 'view_invoices', 'view_payments', 'view_inventory']);
+function canOpenAdminPath(pathname, subject) {
+  const match = adminRouteAccess.find((item) => pathname.startsWith(item.prefix));
+  if (match?.permission) return can(subject, match.permission);
+  return match ? canAccessRoles(roleFromSubject(subject), match.roles) : canAccessRoles(roleFromSubject(subject), fullAccessRoles);
+}
+
+function canOpenTechnicianPath(pathname, subject) {
+  const match = technicianRouteAccess.find((item) => pathname.startsWith(item.prefix));
+  if (match?.permission) return can(subject, match.permission);
+  return Boolean(match);
+}
+
+function canUseGlobalSearch(subject) {
+  return canAny(subject, ['view_customers', 'view_bookings', 'view_work_orders', 'view_invoices', 'view_payments', 'view_inventory']);
 }
 
 function sidebarBadgeClass(tone) {
@@ -353,7 +397,7 @@ function AdminSidebar({ close }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [dashboardData, setDashboardData] = useState(null);
-  const groups = visibleAdminGroups(user?.role);
+  const groups = visibleAdminGroups(user);
   const badges = buildSidebarBadges(dashboardData);
 
   useEffect(() => {
@@ -439,6 +483,7 @@ function AdminSidebar({ close }) {
 function TechnicianSidebar({ close }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const groups = visibleTechnicianGroups(user);
 
   function handleLogout() {
     logout();
@@ -465,7 +510,7 @@ function TechnicianSidebar({ close }) {
       </div>
 
       <nav className="enterprise-sidebar-nav flex-1 overflow-y-auto px-3 py-4">
-        {technicianGroups.map((group) => (
+        {groups.map((group) => (
           <div className="enterprise-sidebar-group" key={group.title || 'dashboard'}>
             {group.title ? (
               <div className="enterprise-sidebar-heading">
@@ -498,7 +543,7 @@ function TechnicianSidebar({ close }) {
   );
 }
 
-function GlobalSearch({ role }) {
+function GlobalSearch({ role, permissionSubject = role }) {
   const { request } = useAuth();
   const navigate = useNavigate();
   const searchRef = useRef(null);
@@ -522,7 +567,7 @@ function GlobalSearch({ role }) {
 
   useEffect(() => {
     const value = debouncedQuery;
-    if (value.length < 2 || !canUseGlobalSearch(role)) {
+    if (value.length < 2 || !canUseGlobalSearch(permissionSubject)) {
       setResultGroups([]);
       setOpen(false);
       setLoading(false);
@@ -544,6 +589,7 @@ function GlobalSearch({ role }) {
       const groups = [
         {
           label: 'Customers',
+          permission: 'view_customers',
           items: (customers.customers || []).map((customer) => ({
             title: customer.name || getCustomerDisplayId(customer) || 'Customer',
             meta: [getCustomerDisplayId(customer), customer.phone].filter(Boolean).join(' - '),
@@ -552,6 +598,7 @@ function GlobalSearch({ role }) {
         },
         {
           label: 'Bookings',
+          permission: 'view_bookings',
           items: (bookings.bookings || []).map((booking) => ({
             title: booking.bookingCode || 'Booking',
             meta: [booking.customerName, booking.phone, booking.serviceType || booking.device].filter(Boolean).join(' - '),
@@ -560,6 +607,7 @@ function GlobalSearch({ role }) {
         },
         {
           label: 'Work Orders',
+          permission: 'view_work_orders',
           items: (workOrders.workOrders || workOrders.data || []).map((order) => ({
             title: getWorkOrderDisplayId(order),
             meta: [order.customerId?.name || order.customerName, order.serviceType || order.device, order.status].filter(Boolean).join(' - '),
@@ -568,6 +616,7 @@ function GlobalSearch({ role }) {
         },
         {
           label: 'Invoices',
+          permission: 'view_invoices',
           items: (invoices.invoices || []).map((invoice) => ({
             title: getInvoiceDisplayId(invoice),
             meta: [invoice.customerId?.name || invoice.customerName, invoice.status, currency(invoice.total ?? invoice.totalAmount)].filter(Boolean).join(' - '),
@@ -576,6 +625,7 @@ function GlobalSearch({ role }) {
         },
         {
           label: 'Payments',
+          permission: 'view_payments',
           items: (payments.payments || []).map((payment) => {
             const invoiceId = payment.invoiceId?.id || payment.invoiceId?._id || payment.invoiceId;
             return {
@@ -587,13 +637,14 @@ function GlobalSearch({ role }) {
         },
         {
           label: 'Products / Parts',
+          permission: 'view_inventory',
           items: (inventory.parts || []).map((part) => ({
             title: part.partName || part.sku || 'Part',
             meta: [part.sku, part.category, `${Number(part.available || 0)} available`].filter(Boolean).join(' - '),
-            to: '/admin/parts'
+            to: `${base}/parts`
           }))
         }
-      ].filter((group) => !isTechnician || group.label !== 'Products / Parts').map((group) => ({ ...group, items: group.items.slice(0, 5) })).filter((group) => group.items.length);
+      ].filter((group) => can(permissionSubject, group.permission)).map((group) => ({ ...group, items: group.items.slice(0, 5) })).filter((group) => group.items.length);
       setResultGroups(groups);
     }).finally(() => {
       if (active) setLoading(false);
@@ -601,7 +652,7 @@ function GlobalSearch({ role }) {
     return () => {
       active = false;
     };
-  }, [debouncedQuery, role]);
+  }, [debouncedQuery, permissionSubject, role]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -830,48 +881,63 @@ function AdminTopBar({ role, openSidebar }) {
   const [quickOpen, setQuickOpen] = useState(false);
   const userRole = user?.role || role;
   const isTechnician = normalizeRole(userRole) === 'technician';
+  const permissionSubject = user || userRole;
   const quickActions = (isTechnician ? [
-    { to: '/tech/bookings', label: 'Bookings', icon: BookOpenCheck, primary: true },
-    { to: '/tech/work-orders', label: 'Work Orders', icon: Wrench },
-    { to: '/tech/payments', label: 'Payments', icon: CreditCard }
+    { to: '/tech/bookings', label: 'Bookings', icon: BookOpenCheck, permission: 'view_bookings', primary: true },
+    { to: '/tech/work-orders', label: 'Work Orders', icon: Wrench, permission: 'view_work_orders' },
+    { to: '/tech/payments', label: 'Payments', icon: CreditCard, permission: 'view_payments' }
   ] : [
     { to: '/admin/bookings', label: 'Booking', icon: BookOpenCheck, permission: 'create_booking', primary: true },
     { to: '/admin/work-orders', label: 'Service Job', icon: Wrench, permission: 'create_work_order' },
     { to: '/admin/payments', label: 'Payment', icon: CreditCard, permission: 'record_payment' }
-  ]).filter((item) => canSeeLink(item, userRole));
+  ]).filter((item) => canSeeLink(item, permissionSubject));
+  const primaryAction = quickActions.find((item) => item.primary) || quickActions[0] || null;
+  const menuActions = quickActions.filter((item) => item.to !== primaryAction?.to);
+  const quickMenuItems = [
+    ...menuActions,
+    { to: '/', label: 'Website', icon: Wrench, external: true }
+  ];
+  const PrimaryIcon = primaryAction?.icon;
 
   return (
     <header className="enterprise-topbar">
-      <div className="flex min-h-16 flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:px-6">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="enterprise-topbar-inner">
+        <div className="enterprise-topbar-search">
           <button className="icon-button enterprise-top-icon h-11 w-11 xl:hidden" onClick={openSidebar} aria-label={`Open ${isTechnician ? 'technician' : 'admin'} menu`}>
             <Menu className="h-5 w-5" />
           </button>
-          <GlobalSearch role={userRole} />
+          <GlobalSearch role={userRole} permissionSubject={permissionSubject} />
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
-          <div className="hidden items-center gap-2 md:flex">
-            {quickActions.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink key={item.to} className={`btn ${item.primary ? 'btn-primary glow-action' : 'btn-secondary'}`} to={item.to}>
-                  <Icon className="h-4 w-4" />{item.label}
-                </NavLink>
-              );
-            })}
-          </div>
-          {quickActions.length ? (
-            <div className="relative md:hidden">
-              <button className="icon-button enterprise-top-icon h-11 w-11" type="button" onClick={() => setQuickOpen((value) => !value)} aria-label="Open quick actions">
+        <div className="enterprise-topbar-controls">
+          {primaryAction && PrimaryIcon ? (
+            <NavLink className="btn btn-primary glow-action enterprise-primary-action" to={primaryAction.to}>
+              <PrimaryIcon className="h-4 w-4" />
+              <span>{primaryAction.label}</span>
+            </NavLink>
+          ) : null}
+          {quickMenuItems.length ? (
+            <div className="relative">
+              <button className="btn btn-secondary enterprise-quick-actions-button" type="button" onClick={() => setQuickOpen((value) => !value)} aria-label="Open quick actions" aria-expanded={quickOpen}>
                 <MoreHorizontal className="h-5 w-5" />
+                <span>Quick Actions</span>
               </button>
               {quickOpen ? (
-                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 min-w-48 rounded-card border border-[var(--line)] bg-[#071426] p-2 shadow-2xl">
-                  {quickActions.map((item) => {
+                <div className="enterprise-quick-actions-menu">
+                  {quickMenuItems.map((item) => {
                     const Icon = item.icon;
+                    const className = "enterprise-quick-actions-item";
+                    if (item.external) {
+                      return (
+                        <a key={item.to} className={className} href={item.to} onClick={() => setQuickOpen(false)}>
+                          <Icon className="h-4 w-4" />
+                          <span>{item.label}</span>
+                        </a>
+                      );
+                    }
                     return (
-                      <NavLink key={item.to} className="flex items-center gap-2 rounded-card px-3 py-2 text-sm font-bold text-slate-200 hover:bg-sky-400/10" to={item.to} onClick={() => setQuickOpen(false)}>
-                        <Icon className="h-4 w-4" />{item.label}
+                      <NavLink key={item.to} className={className} to={item.to} onClick={() => setQuickOpen(false)}>
+                        <Icon className="h-4 w-4" />
+                        <span>{item.label}</span>
                       </NavLink>
                     );
                   })}
@@ -880,17 +946,13 @@ function AdminTopBar({ role, openSidebar }) {
             </div>
           ) : null}
           <NotificationCenter role={userRole} />
-          <div className="hidden items-center gap-3 rounded-card border border-white/10 bg-white/[0.045] px-3 py-2.5 sm:flex">
+          <div className="enterprise-user-chip">
             <div className="grid h-8 w-8 place-items-center rounded-card bg-sky-400/15 text-xs font-black text-sky-100">{user?.name?.slice(0, 1) || 'A'}</div>
             <div className="min-w-0">
               <p className="max-w-36 truncate text-sm font-bold">{user?.name || 'Admin User'}</p>
               <span className="admin-role-badge mt-1 inline-flex">{roleLabel(userRole)}</span>
             </div>
           </div>
-          <a href="/" className="btn btn-secondary sm:shrink-0">
-            <Wrench className="h-4 w-4" />
-            Website
-          </a>
         </div>
       </div>
     </header>
@@ -918,7 +980,7 @@ export default function DashboardLayout({ role }) {
   const [open, setOpen] = useState(false);
 
   if (role === 'admin') {
-    const allowed = canOpenAdminPath(location.pathname, user?.role || role);
+    const allowed = canOpenAdminPath(location.pathname, user || role);
     const auditOnly = location.pathname.startsWith('/admin/audit-logs');
     return (
       <div className="min-h-screen bg-[var(--bg)]">
@@ -960,7 +1022,7 @@ export default function DashboardLayout({ role }) {
         </div>
       ) : null}
       <main className="enterprise-main p-4 md:p-6">
-        <Outlet />
+        {canOpenTechnicianPath(location.pathname, user || role) ? <Outlet /> : <UnauthorizedPanel role={user?.role || role} />}
       </main>
     </div>
   );

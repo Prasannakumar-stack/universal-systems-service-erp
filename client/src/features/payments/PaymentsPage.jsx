@@ -156,7 +156,8 @@ export function PaymentsPage({ role = 'admin' }) {
   const location = useLocation();
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
-  const canRecordPayments = can(effectiveRole, 'record_payment');
+  const permissionSubject = user || effectiveRole;
+  const canRecordPayments = can(permissionSubject, 'record_payment');
   const base = isTechnician ? '/tech' : '/admin';
   const invoiceIdParam = useMemo(() => new URLSearchParams(location.search).get('invoiceId') || '', [location.search]);
   const invoiceIdParamHandled = useRef('');
@@ -226,6 +227,10 @@ export function PaymentsPage({ role = 'admin' }) {
   async function submit(event) {
     event.preventDefault();
     event.stopPropagation();
+    if (!canRecordPayments) {
+      push('You do not have permission to record payments', 'error');
+      return;
+    }
     const paidAmount = Number(form.paidAmount);
     const invoice = findInvoice(data?.invoices || [], form.invoiceId);
     const dueAmount = invoiceDueAmount(invoice);

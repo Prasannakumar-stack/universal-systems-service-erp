@@ -43,6 +43,20 @@ function NavItems({ onClick }) {
   );
 }
 
+function PublicNavbarLogo() {
+  return (
+    <span className="public-navbar-brand" aria-hidden="true">
+      <span className="public-navbar-icon-crop">
+        <img src="/logo-icon.png" alt="" className="public-navbar-logo-icon" />
+      </span>
+      <span className="public-navbar-logo-text">
+        <span>Universal</span>
+        <span>Systems</span>
+      </span>
+    </span>
+  );
+}
+
 export default function PublicLayout() {
   const [open, setOpen] = useState(false);
 
@@ -50,8 +64,8 @@ export default function PublicLayout() {
     <div className="min-h-screen">
       <header className="public-header sticky top-0 z-50 border-b border-[var(--line)] backdrop-blur-xl">
         <div className="container-page flex h-18 items-center justify-between py-3">
-          <NavLink to="/" className="public-logo-link flex items-center gap-3 rounded-card px-2 py-1">
-            <img src="/logo-full.png" alt="Universal Systems" className="h-10 w-auto max-w-[185px] object-contain" />
+          <NavLink to="/" className="public-logo-link flex items-center" aria-label="Universal Systems home">
+            <PublicNavbarLogo />
           </NavLink>
           <nav className="public-nav hidden items-center gap-1 lg:flex">
             <NavItems />
@@ -66,8 +80,8 @@ export default function PublicLayout() {
         <div className="public-mobile-scrim fixed inset-0 z-[60] bg-black/55 lg:hidden" onClick={() => setOpen(false)}>
           <div className="public-mobile-drawer ml-auto h-full w-80 max-w-[88vw] p-5 shadow-soft" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between">
-              <span className="public-logo-link public-logo-lockup inline-flex rounded-card px-2 py-1">
-                <img src="/logo-full.png" alt="Universal Systems" className="h-10 w-auto max-w-[170px]" />
+              <span className="public-logo-link public-logo-lockup inline-flex items-center">
+                <PublicNavbarLogo />
               </span>
               <button className="icon-button h-9 w-9" onClick={() => setOpen(false)} aria-label="Close menu">
                 <X className="h-5 w-5" />

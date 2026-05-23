@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CalendarClock,
@@ -26,12 +27,28 @@ const initial = {
   customerName: '',
   phone: '',
   address: '',
-  serviceType: serviceTypes[0] || 'PC / Laptop Service',
+  serviceType: '',
   device: '',
   bookingSource: 'Website',
-  problemDescription: '',
-  preferredDateTime: ''
+  problemDescription: ''
 };
+
+const publicServiceOptions = [
+  'OS Installation & Setup',
+  'Laptop Repair',
+  'Desktop Repair',
+  'Printer Service / Toner Refilling',
+  'CCTV Installation & Maintenance',
+  'Networking Support',
+  'Computer Sales & Service',
+  'UPS Battery Sales & Replacement',
+  'Solar UPS & Inverter Sales & Service',
+  'AMC / On-site Support',
+  'Software Support',
+  'Data Recovery'
+];
+
+const bookingServiceOptions = Array.from(new Set([...publicServiceOptions, ...serviceTypes]));
 
 const maxSize = 5 * 1024 * 1024;
 const accepted = ['image/jpeg', 'image/png', 'image/webp'];
@@ -46,10 +63,10 @@ const trustBadges = [
 ];
 
 const whatNext = [
-  { title: 'We receive your request', icon: ClipboardCheck },
-  { title: 'Our team contacts you on call/WhatsApp', icon: MessageCircle },
-  { title: 'Technician confirms the service', icon: Wrench },
-  { title: 'You pay only after service confirmation', icon: CreditCard }
+  { title: 'Request received', body: 'We get your booking details instantly.', icon: ClipboardCheck },
+  { title: 'Quick contact', body: 'We call or WhatsApp you to confirm the issue.', icon: MessageCircle },
+  { title: 'Service confirmation', body: 'Technician confirms service, timing, and next steps.', icon: Wrench },
+  { title: 'Pay after confirmation', body: 'No upfront payment. Pay only after service confirmation.', icon: CreditCard }
 ];
 
 function getBookingErrorMessage(error) {
@@ -73,8 +90,12 @@ function getBookingErrorMessage(error) {
 }
 
 export default function BookService() {
+  const [searchParams] = useSearchParams();
+  const requestedService = searchParams.get('service')?.trim() || '';
+  const queryServiceType = bookingServiceOptions.includes(requestedService) ? requestedService : '';
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState(initial);
+  const [form, setForm] = useState(() => ({ ...initial, serviceType: queryServiceType }));
+  const [fieldErrors, setFieldErrors] = useState({});
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState('');
   const [dragging, setDragging] = useState(false);
@@ -86,24 +107,68 @@ export default function BookService() {
   const progress = useMemo(() => Math.round((step / totalSteps) * 100), [step]);
   const whatsappHref = useMemo(() => `https://wa.me/${company.whatsapp}`, []);
 
+  useEffect(() => {
+    if (!queryServiceType) return;
+    setForm((current) => (
+      current.serviceType === queryServiceType ? current : { ...current, serviceType: queryServiceType }
+    ));
+    setFieldErrors((current) => {
+      if (!current.serviceType) return current;
+      const nextErrors = { ...current };
+      delete nextErrors.serviceType;
+      return nextErrors;
+    });
+  }, [queryServiceType]);
+
   function update(field, value) {
     setSubmitError('');
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const nextErrors = { ...current };
+      delete nextErrors[field];
+      return nextErrors;
+    });
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function validateStep(targetStep = step) {
+  function getStepErrors(targetStep) {
+    const errors = {};
     if (targetStep === 1) {
-      if (!form.customerName.trim() || !form.phone.trim() || !form.address.trim()) {
-        push('Customer name, phone, and address are required', 'error');
-        return false;
-      }
+      if (form.customerName.trim().length < 2) errors.customerName = 'Customer name must be at least 2 characters.';
+      if (!/^\d{10}$/.test(form.phone)) errors.phone = 'Enter a valid 10-digit phone number.';
+      if (form.address.trim().length < 5) errors.address = 'Address must be at least 5 characters.';
     }
     if (targetStep === 2) {
-      if (!form.serviceType.trim() || !form.device.trim() || !form.problemDescription.trim() || !form.bookingSource.trim()) {
-        push('Service type, device, problem description, and booking source are required', 'error');
-        return false;
-      }
+      if (!form.serviceType.trim()) errors.serviceType = 'Select a service type.';
+      if (!form.device.trim()) errors.device = 'Device is required.';
+      if (!form.problemDescription.trim()) errors.problemDescription = 'Issue / problem description is required.';
+      if (!form.bookingSource.trim()) errors.bookingSource = 'Booking source is required.';
     }
+    return errors;
+  }
+
+  function validateStep(targetStep = step) {
+    const errors = getStepErrors(targetStep);
+    if (Object.keys(errors).length) {
+      setFieldErrors(errors);
+      push(Object.values(errors)[0], 'error');
+      return false;
+    }
+    setFieldErrors({});
+    return true;
+  }
+
+  function validateAll() {
+    const stepOneErrors = getStepErrors(1);
+    const stepTwoErrors = getStepErrors(2);
+    const errors = { ...stepOneErrors, ...stepTwoErrors };
+    if (Object.keys(errors).length) {
+      setFieldErrors(errors);
+      setStep(Object.keys(stepOneErrors).length ? 1 : 2);
+      push(Object.values(errors)[0], 'error');
+      return false;
+    }
+    setFieldErrors({});
     return true;
   }
 
@@ -155,7 +220,7 @@ export default function BookService() {
   async function submit(event) {
     event.preventDefault();
     if (loading || step !== totalSteps) return;
-    if (!validateStep(1) || !validateStep(2)) return;
+    if (!validateAll()) return;
     const data = new FormData();
     Object.entries(form).forEach(([key, value]) => data.append(key, value));
     if (image) data.append('problemImage', image);
@@ -164,7 +229,8 @@ export default function BookService() {
     try {
       await createBooking(data);
       push('Booking request submitted successfully. Our team will contact you shortly.');
-      setForm(initial);
+      setForm({ ...initial, serviceType: queryServiceType });
+      setFieldErrors({});
       removeImage();
       setStep(1);
     } catch (error) {
@@ -184,7 +250,6 @@ export default function BookService() {
     ['Service', form.serviceType],
     ['Device', form.device],
     ['Problem', form.problemDescription],
-    ['Preferred', form.preferredDateTime || 'Not specified'],
     ['Image', image ? image.name : 'No image selected']
   ];
 
@@ -260,10 +325,13 @@ export default function BookService() {
                     id="booking-customer-name"
                     className="input"
                     autoComplete="name"
+                    aria-invalid={fieldErrors.customerName ? 'true' : 'false'}
+                    aria-describedby={fieldErrors.customerName ? 'booking-customer-name-error' : undefined}
                     value={form.customerName}
                     onChange={(event) => update('customerName', event.target.value)}
                     placeholder="Enter your full name"
                   />
+                  <FieldError id="booking-customer-name-error" message={fieldErrors.customerName} />
                 </div>
                 <div className="booking-field">
                   <label className="label" htmlFor="booking-phone">Phone number</label>
@@ -271,13 +339,18 @@ export default function BookService() {
                     id="booking-phone"
                     className="input"
                     type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={10}
                     autoComplete="tel"
-                    aria-describedby="booking-phone-help"
+                    aria-invalid={fieldErrors.phone ? 'true' : 'false'}
+                    aria-describedby={`booking-phone-help${fieldErrors.phone ? ' booking-phone-error' : ''}`}
                     value={form.phone}
-                    onChange={(event) => update('phone', event.target.value)}
+                    onChange={(event) => update('phone', event.target.value.replace(/\D/g, '').slice(0, 10))}
                     placeholder="Phone or WhatsApp number"
                   />
                   <span id="booking-phone-help" className="booking-helper">Our team will use this number to confirm your booking.</span>
+                  <FieldError id="booking-phone-error" message={fieldErrors.phone} />
                 </div>
                 <div className="booking-field">
                   <label className="label" htmlFor="booking-address">Address</label>
@@ -285,12 +358,14 @@ export default function BookService() {
                     id="booking-address"
                     className="input min-h-28"
                     autoComplete="street-address"
-                    aria-describedby="booking-address-help"
+                    aria-invalid={fieldErrors.address ? 'true' : 'false'}
+                    aria-describedby={`booking-address-help${fieldErrors.address ? ' booking-address-error' : ''}`}
                     value={form.address}
                     onChange={(event) => update('address', event.target.value)}
                     placeholder="House/shop name, street, area, city"
                   />
                   <span id="booking-address-help" className="booking-helper">Add enough detail for onsite, pickup, or service coordination.</span>
+                  <FieldError id="booking-address-error" message={fieldErrors.address} />
                 </div>
               </div>
             ) : null}
@@ -302,50 +377,44 @@ export default function BookService() {
                   <select
                     id="booking-service-type"
                     className="input"
+                    aria-invalid={fieldErrors.serviceType ? 'true' : 'false'}
+                    aria-describedby={fieldErrors.serviceType ? 'booking-service-type-error' : undefined}
                     value={form.serviceType}
                     onChange={(event) => update('serviceType', event.target.value)}
                   >
-                    {serviceTypes.map((service) => (
-                      <option key={service}>{service}</option>
+                    <option value="">Select service type</option>
+                    {bookingServiceOptions.map((service) => (
+                      <option key={service} value={service}>{service}</option>
                     ))}
                   </select>
+                  <FieldError id="booking-service-type-error" message={fieldErrors.serviceType} />
                 </div>
                 <div className="booking-field">
                   <label className="label" htmlFor="booking-device">Device</label>
                   <input
                     id="booking-device"
                     className="input"
+                    aria-invalid={fieldErrors.device ? 'true' : 'false'}
+                    aria-describedby={fieldErrors.device ? 'booking-device-error' : undefined}
                     value={form.device}
                     onChange={(event) => update('device', event.target.value)}
                     placeholder="Laptop, desktop, printer, CCTV, UPS..."
                   />
+                  <FieldError id="booking-device-error" message={fieldErrors.device} />
                 </div>
                 <div className="booking-field">
                   <label className="label" htmlFor="booking-problem">Issue / problem description</label>
                   <textarea
                     id="booking-problem"
                     className="input min-h-32"
-                    aria-describedby="booking-problem-help"
+                    aria-invalid={fieldErrors.problemDescription ? 'true' : 'false'}
+                    aria-describedby={`booking-problem-help${fieldErrors.problemDescription ? ' booking-problem-error' : ''}`}
                     value={form.problemDescription}
                     onChange={(event) => update('problemDescription', event.target.value)}
                     placeholder="Describe the issue briefly"
                   />
                   <span id="booking-problem-help" className="booking-helper">Describe the issue briefly. Our team will confirm details before service.</span>
-                </div>
-                <div className="booking-field">
-                  <span className="booking-label-row">
-                    <label className="label" htmlFor="booking-preferred-date-time">Preferred date/time</label>
-                    <span className="booking-optional">Optional</span>
-                  </span>
-                  <input
-                    id="booking-preferred-date-time"
-                    className="input"
-                    type="datetime-local"
-                    aria-describedby="booking-preferred-help"
-                    value={form.preferredDateTime}
-                    onChange={(event) => update('preferredDateTime', event.target.value)}
-                  />
-                  <span id="booking-preferred-help" className="booking-helper">Choose a preferred slot if you have one. We will confirm availability.</span>
+                  <FieldError id="booking-problem-error" message={fieldErrors.problemDescription} />
                 </div>
               </div>
             ) : null}
@@ -485,6 +554,7 @@ export default function BookService() {
             <div>
               <p className="booking-section-eyebrow">What happens next?</p>
               <h2>Clear confirmation before service starts</h2>
+              <p>After you submit the request, our team verifies the details before any work begins.</p>
             </div>
           </div>
           <div className="booking-next-grid">
@@ -492,9 +562,16 @@ export default function BookService() {
               const Icon = item.icon;
               return (
                 <div className="booking-next-step" key={item.title}>
-                  <span className="booking-next-number">{index + 1}</span>
-                  <Icon className="h-4 w-4" />
-                  <p>{item.title}</p>
+                  <div className="booking-next-topline">
+                    <span className="booking-next-number">{index + 1}</span>
+                    <span className="booking-next-icon">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                  </div>
+                  <div className="booking-next-copy">
+                    <h3>{item.title}</h3>
+                    <p>{item.body}</p>
+                  </div>
                 </div>
               );
             })}
@@ -517,6 +594,15 @@ export default function BookService() {
         </section>
       </div>
     </div>
+  );
+}
+
+function FieldError({ id, message }) {
+  if (!message) return null;
+  return (
+    <span id={id} className="booking-field-error" role="alert">
+      {message}
+    </span>
   );
 }
 

@@ -240,9 +240,10 @@ export function WorkOrdersPage({ role = 'admin' }) {
   const location = useLocation();
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
-  const canAssignTechnician = can(effectiveRole, 'assign_technician');
-  const canDeleteWorkOrder = can(effectiveRole, 'delete_work_order');
-  const canViewCustomer360 = can(effectiveRole, 'view_customer_360');
+  const permissionSubject = user || effectiveRole;
+  const canAssignTechnician = can(permissionSubject, 'assign_technician');
+  const canDeleteWorkOrder = can(permissionSubject, 'delete_work_order');
+  const canViewCustomer360 = can(permissionSubject, 'view_customer_360');
   const routeParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const statusParam = useMemo(() => normalizeStatusParam(routeParams.get('status')), [routeParams]);
   const priorityParam = useMemo(() => new URLSearchParams(location.search).get('priority') || '', [location.search]);
@@ -311,6 +312,10 @@ export function WorkOrdersPage({ role = 'admin' }) {
   }, [debouncedSearch, status, dateFrom, dateTo, technicianId, serviceType, source, priorityFilter]);
 
   async function autoAssign(id) {
+    if (!canAssignTechnician) {
+      push('You do not have permission to assign technicians', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/auto-assign`, { method: 'POST' });
@@ -323,6 +328,10 @@ export function WorkOrdersPage({ role = 'admin' }) {
   }
 
   async function saveAssignment(order, nextTechnicianId) {
+    if (!canAssignTechnician) {
+      push('You do not have permission to assign technicians', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${recordId(order)}/assignment`, {
@@ -341,6 +350,10 @@ export function WorkOrdersPage({ role = 'admin' }) {
 
   async function confirmDeleteWorkOrder() {
     if (!deleteOrder) return;
+    if (!canDeleteWorkOrder) {
+      push('You do not have permission to delete work orders', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${recordId(deleteOrder)}`, { method: 'DELETE' });
@@ -507,7 +520,13 @@ export function WorkOrdersPage({ role = 'admin' }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--line)]">
-              {visibleWorkOrders.map((order) => (
+              {visibleWorkOrders.map((order) => {
+                const canShowAutoAssign = canAssignTechnician && !order.technicianId;
+                const canShowAssignmentAction = canAssignTechnician && !isTechnician;
+                const canShowDeleteAction = canDeleteWorkOrder;
+                const hasMoreActions = canShowAutoAssign || canShowAssignmentAction || canShowDeleteAction;
+
+                return (
                 <tr
                   key={order.id}
                   className="work-orders-table-row transition-colors duration-150 hover:bg-sky-400/[0.05] hover:shadow-[inset_2px_0_0_rgba(56,189,248,0.45)]"
@@ -551,7 +570,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
                   <td className={`${workOrdersTdClass} work-orders-cell-actions !whitespace-normal px-4 text-center align-middle`}>
                     <div className="work-orders-actions relative flex items-center justify-center gap-1.5">
                       <Link className={workOrdersDetailsBtnClass} to={`${base}/${order.id}`}>Details</Link>
-                      {canAssignTechnician || canDeleteWorkOrder ? (
+                      {hasMoreActions ? (
                         <div className="relative">
                           <button
                             type="button"
@@ -563,13 +582,13 @@ export function WorkOrdersPage({ role = 'admin' }) {
                           </button>
                           {actionMenuId === recordId(order) ? (
                             <div className="work-orders-more-menu">
-                              {canAssignTechnician && !order.technicianId ? (
+                              {canShowAutoAssign ? (
                                 <button type="button" onClick={() => autoAssign(order.id)}>Auto Assign</button>
                               ) : null}
-                              {canAssignTechnician ? <button type="button" onClick={() => { setAssignOrder(order); setActionMenuId(''); }}>
+                              {canShowAssignmentAction ? <button type="button" onClick={() => { setAssignOrder(order); setActionMenuId(''); }}>
                                 {order.technicianId ? 'Reassign' : 'Assign'}
                               </button> : null}
-                              {canDeleteWorkOrder ? <button type="button" className="work-orders-danger-menu-item" onClick={() => { setDeleteOrder(order); setActionMenuId(''); }}>
+                              {canShowDeleteAction ? <button type="button" className="work-orders-danger-menu-item" onClick={() => { setDeleteOrder(order); setActionMenuId(''); }}>
                                 <Trash2 className="h-3.5 w-3.5" />
                                 Delete
                               </button> : null}
@@ -580,7 +599,8 @@ export function WorkOrdersPage({ role = 'admin' }) {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

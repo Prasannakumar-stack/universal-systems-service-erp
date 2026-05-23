@@ -212,6 +212,15 @@ export function InventoryPage() {
   ];
 
   async function savePart(partForm) {
+    const editing = Boolean(partForm.id);
+    if (editing && !canEditStock) {
+      push('You do not have permission to edit parts', 'error');
+      return;
+    }
+    if (!editing && !canCreatePart) {
+      push('You do not have permission to add parts', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         const payload = {
@@ -239,6 +248,10 @@ export function InventoryPage() {
 
   async function confirmDeletePart() {
     if (!deletePart) return;
+    if (!canDeletePart) {
+      push('You do not have permission to delete parts', 'error');
+      return;
+    }
     try {
       await preserveScroll(async () => {
         await request(`/inventory/${deletePart.id}`, { method: 'DELETE' });
@@ -252,6 +265,10 @@ export function InventoryPage() {
   }
 
   async function addQuickStock(stockForm) {
+    if (!canEditStock) {
+      push('You do not have permission to update stock', 'error');
+      return;
+    }
     const quantity = Number(stockForm.quantity || 0);
     if (!quantity || (stockForm.type !== 'ADJUST' && quantity <= 0)) {
       push(stockForm.type === 'ADJUST' ? 'Adjustment quantity cannot be zero' : 'Quantity must be greater than 0', 'error');

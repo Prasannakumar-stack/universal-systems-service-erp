@@ -434,20 +434,21 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const base = isTechnician ? '/tech' : '/admin';
   const paymentsBase = `${base}/payments`;
   const workOrdersBase = `${base}/work-orders`;
-  const canCreateInvoice = can(effectiveRole, 'create_invoice');
-  const canEditInvoice = can(effectiveRole, 'edit_invoice');
-  const canRecordPayment = can(effectiveRole, 'record_payment');
-  const canViewPayments = can(effectiveRole, 'view_payments');
-  const canEditServiceCharge = can(effectiveRole, 'edit_service_charge');
-  const canManagePartsUsed = can(effectiveRole, 'manage_parts_used');
-  const canCreatePartRequest = can(effectiveRole, 'create_part_request');
-  const canApprovePartRequests = can(effectiveRole, 'approve_part_requests');
-  const canSendPdfWhatsapp = can(effectiveRole, 'send_pdf_whatsapp');
-  const canEditWorkOrder = can(effectiveRole, 'edit_work_order');
-  const canUpdateWorkOrderStatus = can(effectiveRole, 'update_work_order_status');
-  const canAddNotes = can(effectiveRole, 'add_notes');
-  const canUploadPhotos = can(effectiveRole, 'upload_photos');
-  const canAssignTechnician = can(effectiveRole, 'assign_technician');
+  const permissionSubject = user || effectiveRole;
+  const canCreateInvoice = can(permissionSubject, 'create_invoice');
+  const canEditInvoice = can(permissionSubject, 'edit_invoice');
+  const canRecordPayment = can(permissionSubject, 'record_payment');
+  const canViewPayments = can(permissionSubject, 'view_payments');
+  const canEditServiceCharge = can(permissionSubject, 'edit_service_charge');
+  const canManagePartsUsed = can(permissionSubject, 'manage_parts_used');
+  const canCreatePartRequest = can(permissionSubject, 'create_part_request');
+  const canApprovePartRequests = can(permissionSubject, 'approve_part_requests');
+  const canSendPdfWhatsapp = can(permissionSubject, 'send_pdf_whatsapp');
+  const canEditWorkOrder = can(permissionSubject, 'edit_work_order');
+  const canUpdateWorkOrderStatus = can(permissionSubject, 'update_work_order_status');
+  const canAddNotes = can(permissionSubject, 'add_notes');
+  const canUploadPhotos = can(permissionSubject, 'upload_photos');
+  const canAssignTechnician = can(permissionSubject, 'assign_technician');
 
   useEffect(() => {
     if (!data?.workOrder) return;
@@ -532,12 +533,18 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     setPart((current) => ({ ...current, quantity }));
   }
 
+  function handlePartRequestQuantityChange(value) {
+    let quantity = Number(value);
+    if (!quantity || quantity < 1) quantity = 1;
+    setPartRequest((current) => ({ ...current, quantity }));
+  }
+
   async function addPart(event, flags = {}) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
 
     if (!canManagePartsUsed) {
-      push('Only admins can add parts used', 'error');
+      push('You do not have permission to add parts used', 'error');
       return;
     }
 
@@ -597,7 +604,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     event?.stopPropagation?.();
     if (!editPartRow) return;
     if (!canManagePartsUsed) {
-      push('Only admins can edit parts used', 'error');
+      push('You do not have permission to edit parts used', 'error');
       return;
     }
     if (partsLocked) {
@@ -640,7 +647,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     event?.stopPropagation?.();
 
     if (!canManagePartsUsed) {
-      push('Only admins can remove parts used', 'error');
+      push('You do not have permission to remove parts used', 'error');
       return;
     }
 
@@ -1055,7 +1062,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
   async function sendWorkflowPdf(flow) {
     if (!canSendPdfWhatsapp) {
-      push('Only admins can send PDFs through WhatsApp', 'error');
+      push('You do not have permission to send PDFs through WhatsApp', 'error');
       return;
     }
     const phone = order.customerId?.phone || '';
@@ -1614,7 +1621,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                   <option value="">Manual / Outside Part</option>
                   {inventoryParts.map((item) => <option key={item.id} value={item.id}>{item.partName} - {item.available} available</option>)}
                 </select>
-                <input className={`${detailNumberInputClass} disabled:cursor-not-allowed disabled:opacity-60`} type="number" min="1" value={part.quantity} disabled={partsLocked} onChange={(event) => handlePartQuantityChange(event.target.value)} />
+                <input className="input disabled:cursor-not-allowed disabled:opacity-60" type="number" min="1" value={part.quantity} disabled={partsLocked} onChange={(event) => handlePartQuantityChange(event.target.value)} />
                 {isAmcLinked ? (
                   <select className="input disabled:cursor-not-allowed disabled:opacity-60" value={normalizeAmcChargeTypeSelectValue(part.chargeType)} disabled={partsLocked} onChange={(event) => setPart((current) => ({ ...current, chargeType: event.target.value }))}>
                     {amcChargeTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -1663,7 +1670,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                   <option value="">Manual / Outside Part</option>
                   {inventoryParts.map((item) => <option key={item.id} value={item.id}>{item.partName} - {item.available} available</option>)}
                 </select>
-                <input className={detailNumberInputClass} type="number" min="1" value={partRequest.quantity} onChange={(event) => setPartRequest((current) => ({ ...current, quantity: event.target.value }))} />
+                <input className="input" type="number" min="1" value={partRequest.quantity} onChange={(event) => handlePartRequestQuantityChange(event.target.value)} />
                 <button type="submit" className="btn btn-primary"><PackagePlus className="h-4 w-4" />Request Part Approval</button>
               </div>
               {!partRequest.inventoryPartId ? <input className="input mt-3" placeholder="Requested part name" value={partRequest.partName} onChange={(event) => setPartRequest((current) => ({ ...current, partName: event.target.value }))} /> : null}
@@ -2037,7 +2044,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <label className="grid gap-1.5">
                     <span className="label">Quantity</span>
-                    <input className={`${detailNumberInputClass} py-2 disabled:cursor-not-allowed disabled:opacity-60`} type="number" min="1" value={part.quantity} disabled={partsLocked} onChange={(event) => handlePartQuantityChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addPart(event); }} />
+                    <input className="input py-2 disabled:cursor-not-allowed disabled:opacity-60" type="number" min="1" value={part.quantity} disabled={partsLocked} onChange={(event) => handlePartQuantityChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addPart(event); }} />
                   </label>
                   <label className="grid gap-1.5">
                     <span className="label">Unit Price</span>
@@ -2150,7 +2157,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1.5">
                     <span className="label">Quantity</span>
-                    <input className={`${detailNumberInputClass} py-2`} type="number" min="1" value={partRequest.quantity} onChange={(event) => setPartRequest((current) => ({ ...current, quantity: event.target.value }))} />
+                    <input className="input py-2" type="number" min="1" value={partRequest.quantity} onChange={(event) => handlePartRequestQuantityChange(event.target.value)} />
                   </label>
                   <label className="grid gap-1.5">
                     <span className="label">Request Note / Reason</span>
