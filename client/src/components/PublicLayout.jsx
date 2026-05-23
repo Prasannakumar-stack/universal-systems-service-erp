@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { BookOpenCheck, CreditCard, Mail, MapPin, Menu, MessageCircle, Phone, ShieldCheck, Wrench, X } from 'lucide-react';
+import { Mail, MapPin, Menu, MessageCircle, Phone, ShieldCheck, X } from 'lucide-react';
 import { company } from '../utils/constants.js';
 
 const links = [
@@ -20,8 +20,6 @@ const footerServices = [
   'Networking'
 ];
 
-const paymentBadges = ['UPI', 'Cash', 'Cards', 'Bank Transfer'];
-
 function NavItems({ onClick }) {
   return (
     <>
@@ -40,6 +38,14 @@ function NavItems({ onClick }) {
         Admin Login
       </a>
     </>
+  );
+}
+
+function WhatsAppIcon(props) {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true" fill="currentColor" {...props}>
+      <path d="M16.04 4.5c-6.2 0-11.25 4.86-11.25 10.84 0 2.05.6 4.05 1.75 5.78L4.5 27.5l6.72-1.98a11.7 11.7 0 0 0 4.82.99c6.2 0 11.25-4.86 11.25-10.84S22.24 4.5 16.04 4.5Zm0 20.04c-1.56 0-3.08-.38-4.42-1.1l-.46-.25-3.88 1.14 1.18-3.66-.3-.48a8.7 8.7 0 0 1-1.39-4.84c0-4.9 4.15-8.87 9.27-8.87s9.27 3.97 9.27 8.87-4.16 9.19-9.27 9.19Zm5.08-6.7c-.28-.13-1.65-.79-1.9-.88-.26-.09-.45-.14-.64.14-.19.27-.73.88-.9 1.06-.16.18-.33.2-.61.07-.28-.14-1.18-.42-2.25-1.34-.83-.74-1.39-1.64-1.55-1.92-.16-.27-.02-.42.12-.56.13-.12.28-.32.42-.48.14-.16.19-.27.28-.45.09-.18.05-.34-.02-.48-.07-.14-.64-1.5-.88-2.05-.23-.54-.47-.46-.64-.47h-.55c-.19 0-.49.07-.75.34-.26.27-.98.93-.98 2.28 0 1.34 1 2.64 1.14 2.82.14.18 1.97 2.91 4.77 4.08.67.28 1.19.45 1.59.57.67.2 1.28.17 1.77.1.54-.08 1.65-.65 1.88-1.28.23-.63.23-1.17.16-1.28-.07-.12-.25-.18-.53-.32Z" />
+    </svg>
   );
 }
 
@@ -105,40 +111,17 @@ export default function PublicLayout() {
         rel="noreferrer"
         aria-label="WhatsApp Universal Systems"
       >
-        <MessageCircle className="h-6 w-6" />
+        <WhatsAppIcon className="h-7 w-7" />
         <span className="whatsapp-tooltip">Chat with us</span>
       </a>
 
       <footer className="public-footer border-t border-[var(--line)] bg-[var(--surface)]">
         <div className="container-page grid gap-8 py-10 md:grid-cols-2 xl:grid-cols-[1.35fr_0.85fr_0.9fr_1fr]">
           <div className="footer-brand-block">
-            <span className="footer-logo-shell mb-4 inline-flex rounded-card px-2 py-1">
-              <img src="/logo-full.png" alt="Universal Systems" className="h-12 w-auto max-w-[220px]" />
-            </span>
+            <PublicNavbarLogo />
             <p className="muted max-w-md text-sm leading-6">
               Computer repair, OS installation, printer service, software support, data recovery, and maintenance solutions in Mettur Dam.
             </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <span className="status-badge">
-                <Wrench className="mr-1.5 h-3.5 w-3.5" />
-                Repair Focused
-              </span>
-              <span className="status-badge">
-                <BookOpenCheck className="mr-1.5 h-3.5 w-3.5" />
-                Easy Booking
-              </span>
-            </div>
-            <div className="mt-5">
-              <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Payment</h3>
-              <div className="flex flex-wrap gap-2">
-                {paymentBadges.map((badge) => (
-                  <span key={badge} className="payment-badge">
-                    <CreditCard className="h-3.5 w-3.5" />
-                    {badge}
-                  </span>
-                ))}
-              </div>
-            </div>
           </div>
           <div>
             <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Quick Links</h3>

@@ -10589,8 +10589,7 @@ footer a:hover {
   padding-block: 0.45rem !important;
 }
 
-.public-logo-link,
-.footer-logo-shell {
+.public-logo-link {
   position: relative;
   overflow: hidden;
   border: 1px solid rgba(125, 211, 252, 0.16) !important;
@@ -10601,8 +10600,7 @@ footer a:hover {
   backdrop-filter: blur(18px);
 }
 
-.public-logo-link::before,
-.footer-logo-shell::before {
+.public-logo-link::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -10611,8 +10609,7 @@ footer a:hover {
   pointer-events: none;
 }
 
-.public-logo-link img,
-.footer-logo-shell img {
+.public-logo-link img {
   position: relative;
   z-index: 1;
   border-radius: 6px;
@@ -11075,7 +11072,7 @@ footer a:hover {
 
 .public-footer .container-page {
   gap: 1.55rem;
-  padding-block: 1.35rem;
+  padding-block: 2.65rem;
 }
 
 .public-footer h3 {
@@ -11083,15 +11080,54 @@ footer a:hover {
   font-size: 0.76rem;
 }
 
-.public-footer .status-badge,
-.public-footer .payment-badge {
-  border-color: rgba(125, 211, 252, 0.16);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    rgba(2, 8, 23, 0.42);
-  color: #dff4ff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
-  backdrop-filter: blur(10px);
+.public-footer .footer-brand-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.public-footer .public-navbar-brand {
+  --public-navbar-icon-size: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 52px;
+}
+
+.public-footer .public-navbar-icon-crop {
+  display: grid;
+  width: var(--public-navbar-icon-size);
+  height: var(--public-navbar-icon-size);
+  flex: 0 0 var(--public-navbar-icon-size);
+  place-items: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.public-footer .public-navbar-logo-icon {
+  width: auto;
+  height: calc(var(--public-navbar-icon-size) * 1.47);
+  max-width: none;
+  object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(125, 211, 252, 0.18));
+  transform: translateY(1px);
+}
+
+.public-footer .public-navbar-logo-text {
+  display: flex;
+  flex-direction: column;
+  color: #f8fbff;
+  font-size: clamp(1.08rem, 1.55vw, 1.42rem);
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 0.9;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 18px rgba(56, 189, 248, 0.12);
 }
 
 .footer-link-list a,
@@ -11108,9 +11144,33 @@ footer a:hover {
 .whatsapp-floating {
   width: 3.35rem;
   height: 3.35rem;
-  background: linear-gradient(135deg, #10b981, #22c55e) !important;
-  box-shadow: 0 0 26px rgba(16, 185, 129, 0.42), 0 12px 32px rgba(0, 8, 24, 0.28);
+  border: 1px solid rgba(220, 252, 231, 0.42);
+  background:
+    radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.35), transparent 27%),
+    linear-gradient(135deg, #25d366 0%, #16a34a 100%) !important;
+  color: #fff;
+  box-shadow:
+    0 0 24px rgba(37, 211, 102, 0.38),
+    0 0 0 8px rgba(37, 211, 102, 0.08),
+    0 14px 32px rgba(0, 8, 24, 0.34);
   animation: whatsappPulse 3.4s ease-in-out infinite;
+}
+
+.whatsapp-floating svg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 2px 4px rgba(2, 8, 23, 0.22));
+}
+
+.whatsapp-floating:hover {
+  transform: translateY(-3px) scale(1.03);
+  background:
+    radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.42), transparent 28%),
+    linear-gradient(135deg, #2ee56f 0%, #17b957 100%) !important;
+  box-shadow:
+    0 0 30px rgba(37, 211, 102, 0.56),
+    0 0 0 10px rgba(37, 211, 102, 0.1),
+    0 18px 38px rgba(0, 8, 24, 0.38);
 }
 
 @keyframes premiumOrbDrift {
@@ -11275,12 +11335,19 @@ footer a:hover {
 
   .public-footer .container-page {
     padding-top: 1.25rem;
-    padding-bottom: 4.75rem;
+    padding-bottom: 5.5rem;
   }
 
   .whatsapp-floating {
+    width: 3rem;
+    height: 3rem;
     bottom: max(1rem, env(safe-area-inset-bottom));
     right: max(0.85rem, env(safe-area-inset-right));
+  }
+
+  .whatsapp-floating svg {
+    width: 1.5rem;
+    height: 1.5rem;
   }
 }
 
