@@ -6,6 +6,7 @@ import { logAudit } from './auditService.js';
 import { createNotification } from './notificationService.js';
 
 const bookingSources = ['Walk-in', 'Call', 'Website', 'WhatsApp', 'Referral'];
+const bookingStatuses = ['Pending', 'Converted'];
 
 function bookingCode() {
   const now = new Date();
@@ -17,6 +18,18 @@ function cleanBookingSource(value) {
   const source = clean(value);
   if (!source) return '';
   return bookingSources.includes(source) ? source : source;
+}
+
+function validBookingStatus(value) {
+  const status = clean(value);
+  return bookingStatuses.includes(status) ? status : 'Pending';
+}
+
+function preferredDateValue(value) {
+  const text = clean(value);
+  if (!text) return null;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export async function createBooking(payload, user = null) {
@@ -49,6 +62,9 @@ export async function createBooking(payload, user = null) {
     problemImage,
     device: clean(payload.device || serviceType || payload.product || 'General Service'),
     issue: clean(payload.issue || payload.problemDescription || payload.problem || 'Service request'),
+    preferredDate: preferredDateValue(payload.preferredDate),
+    preferredTime: clean(payload.preferredTime),
+    status: validBookingStatus(payload.status),
     technicianId: payload.technicianId || payload.assignedTo || (user?.role === 'technician' ? user._id : null)
   });
 
@@ -76,6 +92,8 @@ export async function createBooking(payload, user = null) {
         bookingSource: booking.bookingSource,
         problemImage: booking.problemImage?.url || '',
         device: booking.device,
+        preferredDate: booking.preferredDate,
+        preferredTime: booking.preferredTime,
         timestamp: booking.createdAt
       }
     });

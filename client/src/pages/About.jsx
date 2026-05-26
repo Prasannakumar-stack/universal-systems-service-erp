@@ -19,7 +19,8 @@ import {
   Users,
   Wrench
 } from 'lucide-react';
-import { company } from '../utils/constants.js';
+import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
+import { phoneHref, publicAssetUrl, publicPhoneList, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const serviceFocus = [
   'OS installation & setup',
@@ -97,19 +98,20 @@ function useAboutReveal() {
 }
 
 export default function About() {
+  const { settings, contact, booking } = usePublicWebsiteSettings();
   useAboutReveal();
 
-  const phoneHref = useMemo(() => `tel:${company.phones[0].replace(/\s/g, '')}`, []);
-  const whatsappHref = useMemo(() => `https://wa.me/${company.whatsapp}`, []);
-  const landlineHref = useMemo(() => `tel:${company.landline.replace(/[^\d]/g, '')}`, []);
+  const phones = publicPhoneList(contact);
+  const contactWhatsappHref = useMemo(() => whatsappHref(contact.whatsappNumber), [contact.whatsappNumber]);
+  const heroCardClass = settings.hero.glassmorphismAnimation === false ? 'public-hero-card public-hero-static' : 'public-hero-card public-hero-glass';
 
   return (
     <div className="about-page section">
       <div className="container-page about-page-container">
-        <section className="about-premium-hero about-reveal page-hero hero-with-bg public-hero-card public-hero-glass">
+        <section className={`about-premium-hero about-reveal page-hero hero-with-bg ${heroCardClass}`}>
           <img
             className="page-hero-bg-image"
-            src="/About%20page%20image.png"
+            src={publicAssetUrl(settings.hero.imageUrl || '/About%20page%20image.png')}
             alt="Universal Systems hero"
           />
           <div className="page-hero-overlay" aria-hidden="true" />
@@ -232,7 +234,7 @@ export default function About() {
                 <MapPin className="h-4 w-4" />
                 <span>
                   <strong>Address</strong>
-                  <small>{company.address}</small>
+                  <small>{contact.address}</small>
                 </span>
               </p>
               <div className="about-contact-row">
@@ -240,27 +242,20 @@ export default function About() {
                 <span>
                   <strong>Phone</strong>
                   <small className="about-inline-links">
-                    {company.phones.map((phone, index) => (
+                    {phones.map((phone, index) => (
                       <span key={phone}>
                         {index > 0 ? ' / ' : ''}
-                        <a href={`tel:${phone.replace(/\s/g, '')}`}>{phone}</a>
+                        <a href={phoneHref(phone)}>{phone}</a>
                       </span>
                     ))}
                   </small>
                 </span>
               </div>
-              <a className="about-contact-row" href={landlineHref}>
-                <Phone className="h-4 w-4" />
-                <span>
-                  <strong>Landline</strong>
-                  <small>{company.landline}</small>
-                </span>
-              </a>
-              <a className="about-contact-row" href={`mailto:${company.email}`}>
+              <a className="about-contact-row" href={`mailto:${contact.email}`}>
                 <Mail className="h-4 w-4" />
                 <span>
                   <strong>Email</strong>
-                  <small>{company.email}</small>
+                  <small>{contact.email}</small>
                 </span>
               </a>
             </div>
@@ -269,7 +264,7 @@ export default function About() {
               <Users className="h-5 w-5" />
               <p>Local staff, direct follow-up, and practical service records.</p>
             </div>
-            <a className="btn btn-secondary about-whatsapp-button" href={whatsappHref} target="_blank" rel="noreferrer">
+            <a className="btn btn-secondary about-whatsapp-button" href={contactWhatsappHref} target="_blank" rel="noreferrer">
               <MessageCircle className="h-4 w-4" />
               WhatsApp Support
             </a>
@@ -296,11 +291,13 @@ export default function About() {
             <p>Book a service or message us on WhatsApp. Our team will guide you clearly before any service starts.</p>
           </div>
           <div className="about-cta-actions">
-            <Link className="btn btn-primary shine-button about-book-button" to="/book-service">
-              <CalendarClock className="h-4 w-4" />
-              Book Service
-            </Link>
-            <a className="btn btn-secondary about-whatsapp-action" href={whatsappHref} target="_blank" rel="noreferrer">
+            {booking.publicBookingEnabled ? (
+              <Link className="btn btn-primary shine-button about-book-button" to="/book-service">
+                <CalendarClock className="h-4 w-4" />
+                {booking.bookingButtonText}
+              </Link>
+            ) : null}
+            <a className="btn btn-secondary about-whatsapp-action" href={contactWhatsappHref} target="_blank" rel="noreferrer">
               <MessageCircle className="h-4 w-4" />
               WhatsApp Support
             </a>

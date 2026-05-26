@@ -63,8 +63,19 @@ export const ALL_PERMISSIONS = [
   'view_documents',
   'send_pdf_whatsapp',
   'mark_document_sent',
+  'manage_pdf_templates',
   'view_settings',
   'edit_settings',
+  'manage_company_profile',
+  'manage_public_website_settings',
+  'manage_backup_storage',
+  'manage_document_numbering',
+  'manage_tax_settings',
+  'manage_payment_settings',
+  'manage_notification_templates',
+  'manage_status_workflows',
+  'manage_pdf_terms',
+  'view_system_information',
   'manage_users',
   'manage_roles',
   'view_audit_logs',
@@ -175,7 +186,8 @@ export const ADMIN_LOCKED_PERMISSIONS = Object.freeze([
   'manage_users',
   'view_settings',
   'edit_settings',
-  'view_audit_logs'
+  'view_audit_logs',
+  'view_system_information'
 ]);
 
 export function normalizeRole(role = '') {
@@ -228,6 +240,7 @@ export function mergeRolePermissions(role = '', permissions = {}) {
 
   ADMIN_LOCKED_PERMISSIONS.forEach((permission) => {
     if (normalized === 'admin') merged[permission] = true;
+    else merged[permission] = false;
   });
 
   return merged;

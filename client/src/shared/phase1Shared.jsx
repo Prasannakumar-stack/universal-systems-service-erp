@@ -384,6 +384,7 @@ export function getPdfLabel(pdfType) {
   if (pdfType === 'amc-contract') return 'AMC Contract PDF';
   if (pdfType === 'amc-service-visit') return 'AMC Service Visit PDF';
   if (pdfType === 'amc-invoice') return 'AMC Invoice / Receipt PDF';
+  if (pdfType === 'amc-renewal-reminder') return 'AMC Renewal / Expiry Reminder PDF';
   return 'PDF';
 }
 

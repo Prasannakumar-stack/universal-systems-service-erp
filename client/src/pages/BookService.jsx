@@ -19,8 +19,10 @@ import {
   UploadCloud,
   Wrench
 } from 'lucide-react';
-import { company, serviceTypes } from '../utils/constants.js';
+import { serviceTypes } from '../utils/constants.js';
+import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
 import { createBooking } from '../utils/publicApi.js';
+import { publicAssetUrl, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 import { useToast } from '../context/ToastContext.jsx';
 
 const initial = {
@@ -30,7 +32,9 @@ const initial = {
   serviceType: '',
   device: '',
   bookingSource: 'Website',
-  problemDescription: ''
+  problemDescription: '',
+  preferredDate: '',
+  preferredTime: ''
 };
 
 const publicServiceOptions = [
@@ -90,9 +94,15 @@ function getBookingErrorMessage(error) {
 }
 
 export default function BookService() {
+  const { settings, contact, booking } = usePublicWebsiteSettings();
   const [searchParams] = useSearchParams();
   const requestedService = searchParams.get('service')?.trim() || '';
-  const queryServiceType = bookingServiceOptions.includes(requestedService) ? requestedService : '';
+  const servicesFromSettings = useMemo(() => visiblePublicServices(settings).map((service) => service.title), [settings]);
+  const activeBookingServiceOptions = useMemo(() => Array.from(new Set([
+    ...servicesFromSettings,
+    ...bookingServiceOptions
+  ])), [servicesFromSettings]);
+  const queryServiceType = activeBookingServiceOptions.includes(requestedService) ? requestedService : '';
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(() => ({ ...initial, serviceType: queryServiceType }));
   const [fieldErrors, setFieldErrors] = useState({});
@@ -105,7 +115,8 @@ export default function BookService() {
   const { push } = useToast();
 
   const progress = useMemo(() => Math.round((step / totalSteps) * 100), [step]);
-  const whatsappHref = useMemo(() => `https://wa.me/${company.whatsapp}`, []);
+  const contactWhatsappHref = useMemo(() => whatsappHref(contact.whatsappNumber), [contact.whatsappNumber]);
+  const heroCardClass = settings.hero.glassmorphismAnimation === false ? 'public-hero-card public-hero-static' : 'public-hero-card public-hero-glass';
 
   useEffect(() => {
     if (!queryServiceType) return;
@@ -139,7 +150,7 @@ export default function BookService() {
       if (form.address.trim().length < 5) errors.address = 'Address must be at least 5 characters.';
     }
     if (targetStep === 2) {
-      if (!form.serviceType.trim()) errors.serviceType = 'Select a service type.';
+      if (booking.showServiceSelection && !form.serviceType.trim()) errors.serviceType = 'Select a service type.';
       if (!form.device.trim()) errors.device = 'Device is required.';
       if (!form.problemDescription.trim()) errors.problemDescription = 'Issue / problem description is required.';
       if (!form.bookingSource.trim()) errors.bookingSource = 'Booking source is required.';
@@ -222,7 +233,11 @@ export default function BookService() {
     if (loading || step !== totalSteps) return;
     if (!validateAll()) return;
     const data = new FormData();
-    Object.entries(form).forEach(([key, value]) => data.append(key, value));
+    const submission = {
+      ...form,
+      serviceType: booking.showServiceSelection ? form.serviceType : (form.serviceType || 'General Service Request')
+    };
+    Object.entries(submission).forEach(([key, value]) => data.append(key, value));
     if (image) data.append('problemImage', image);
     setSubmitError('');
     setLoading(true);
@@ -250,16 +265,41 @@ export default function BookService() {
     ['Service', form.serviceType],
     ['Device', form.device],
     ['Problem', form.problemDescription],
+    ...(booking.showPreferredDateTime ? [
+      ['Preferred Date', form.preferredDate || 'Not selected'],
+      ['Preferred Time', form.preferredTime || 'Not selected']
+    ] : []),
     ['Image', image ? image.name : 'No image selected']
   ];
+
+  if (!booking.publicBookingEnabled) {
+    return (
+      <div className="booking-page section">
+        <div className="container-page booking-container">
+          <section className="booking-unavailable-card">
+            <AlertTriangle className="h-9 w-9 text-amber-200" />
+            <div>
+              <p className="booking-section-eyebrow">Booking unavailable</p>
+              <h1>Public booking is currently disabled.</h1>
+              <p>Please contact Universal Systems by WhatsApp or phone for urgent service support.</p>
+            </div>
+            <a className="btn btn-primary btn-xl" href={contactWhatsappHref} target="_blank" rel="noreferrer">
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp Support
+            </a>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="booking-page section">
       <div className="container-page booking-container">
-        <section className="booking-hero page-hero hero-with-bg public-hero-card public-hero-glass">
+        <section className={`booking-hero page-hero hero-with-bg ${heroCardClass}`}>
           <img
             className="page-hero-bg-image"
-            src="/Book%20Service%20Page%20image.png"
+            src={publicAssetUrl(settings.hero.imageUrl || '/Book%20Service%20Page%20image.png')}
             alt="Universal Systems hero"
           />
           <div className="page-hero-overlay" aria-hidden="true" />
@@ -372,7 +412,8 @@ export default function BookService() {
 
             {step === 2 ? (
               <div className="booking-step-panel fade-in">
-                <div className="booking-field">
+                {booking.showServiceSelection ? (
+                  <div className="booking-field">
                   <label className="label" htmlFor="booking-service-type">Service type</label>
                   <select
                     id="booking-service-type"
@@ -383,12 +424,13 @@ export default function BookService() {
                     onChange={(event) => update('serviceType', event.target.value)}
                   >
                     <option value="">Select service type</option>
-                    {bookingServiceOptions.map((service) => (
+                    {activeBookingServiceOptions.map((service) => (
                       <option key={service} value={service}>{service}</option>
                     ))}
                   </select>
                   <FieldError id="booking-service-type-error" message={fieldErrors.serviceType} />
-                </div>
+                  </div>
+                ) : null}
                 <div className="booking-field">
                   <label className="label" htmlFor="booking-device">Device</label>
                   <input
@@ -416,6 +458,30 @@ export default function BookService() {
                   <span id="booking-problem-help" className="booking-helper">Describe the issue briefly. Our team will confirm details before service.</span>
                   <FieldError id="booking-problem-error" message={fieldErrors.problemDescription} />
                 </div>
+                {booking.showPreferredDateTime ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="booking-field">
+                      <label className="label" htmlFor="booking-preferred-date">Preferred date</label>
+                      <input
+                        id="booking-preferred-date"
+                        className="input"
+                        type="date"
+                        value={form.preferredDate}
+                        onChange={(event) => update('preferredDate', event.target.value)}
+                      />
+                    </div>
+                    <div className="booking-field">
+                      <label className="label" htmlFor="booking-preferred-time">Preferred time</label>
+                      <input
+                        id="booking-preferred-time"
+                        className="input"
+                        type="time"
+                        value={form.preferredTime}
+                        onChange={(event) => update('preferredTime', event.target.value)}
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -521,7 +587,7 @@ export default function BookService() {
                   <strong>Booking needs attention</strong>
                   <p>{submitError}</p>
                 </div>
-                <a className="btn btn-secondary booking-error-whatsapp" href={whatsappHref} target="_blank" rel="noreferrer">
+                <a className="btn btn-secondary booking-error-whatsapp" href={contactWhatsappHref} target="_blank" rel="noreferrer">
                   <MessageCircle className="h-4 w-4" />
                   WhatsApp Support
                 </a>
@@ -587,7 +653,7 @@ export default function BookService() {
             <h2>WhatsApp us directly.</h2>
             <p>Our team can guide you to the right service before you submit the form.</p>
           </div>
-          <a className="btn btn-secondary booking-whatsapp-action" href={whatsappHref} target="_blank" rel="noreferrer">
+          <a className="btn btn-secondary booking-whatsapp-action" href={contactWhatsappHref} target="_blank" rel="noreferrer">
             <MessageCircle className="h-4 w-4" />
             WhatsApp Support
           </a>

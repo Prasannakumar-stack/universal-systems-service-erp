@@ -102,6 +102,16 @@ export function buildWhatsappPdfMessage(pdfType, context = {}) {
       pdfUrl ? 'Please find the AMC invoice PDF at the link below.' : 'Please find the AMC invoice PDF attached.'
     );
     if (pdfUrl) lines.push('', pdfUrl);
+  } else if (pdfType === 'amc-renewal-reminder') {
+    lines.push(
+      'Your AMC Renewal / Expiry Reminder PDF from Universal Systems is ready.',
+      '',
+      `Service: ${service}`,
+      `Device: ${device}`,
+      '',
+      pdfUrl ? 'Please find the AMC renewal reminder PDF at the link below.' : 'Please find the AMC renewal reminder PDF attached.'
+    );
+    if (pdfUrl) lines.push('', pdfUrl);
   } else {
     lines.push(
       'Your Service Completed PDF from Universal Systems is ready.',
@@ -144,6 +154,7 @@ export function documentTypeToPdfType(documentType) {
   if (documentType === 'amc-contract') return 'amc-contract';
   if (documentType === 'amc-service-visit') return 'amc-service-visit';
   if (documentType === 'amc-invoice') return 'amc-invoice';
+  if (documentType === 'amc-renewal-reminder') return 'amc-renewal-reminder';
   if (documentType === 'invoice') return 'work';
   if (documentType === 'service') return 'service-completed';
   return 'quotation';

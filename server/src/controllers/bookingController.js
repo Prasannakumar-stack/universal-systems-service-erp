@@ -17,7 +17,11 @@ function imageFromUpload(file) {
 
 export async function create(req, res) {
   required(req.body, ['customerName', 'phone']);
-  const booking = await createBooking({ ...req.body, problemImage: imageFromUpload(req.file) }, req.user);
+  const booking = await createBooking({
+    ...req.body,
+    status: req.publicWebsiteSettings?.booking?.defaultBookingStatus || req.body.status,
+    problemImage: imageFromUpload(req.file)
+  }, req.user);
   res.status(201).json({ booking, message: 'Booking created' });
 }
 

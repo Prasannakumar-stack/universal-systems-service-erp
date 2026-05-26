@@ -164,6 +164,7 @@ import {
 } from '../../shared/partWorkflow.jsx';
 import { isPdfSentViaWhatsapp } from '../../shared/whatsappPdfMessage.js';
 import { can, normalizeRole } from '../../utils/roles.js';
+import { RotateCcw } from 'lucide-react';
 
 const detailFocusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
@@ -405,7 +406,7 @@ function partsLockedInvoiceMessage(invoice) {
 export function WorkOrderDetailsPage({ role = 'admin' }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { request, token, user } = useAuth();
+  const { request, token, user, setUser } = useAuth();
   const { push } = useToast();
   const [note, setNote] = useState('');
   const [part, setPart] = useState({ inventoryPartId: '', partName: '', quantity: 1, unitPrice: 0, chargeType: autoAmcPartChargeType });
@@ -427,6 +428,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const [editPartRow, setEditPartRow] = useState(null);
   const [voidUnlockConfirm, setVoidUnlockConfirm] = useState(false);
   const [priorityValue, setPriorityValue] = useState('Normal');
+  const permissionRefreshAttemptedRef = useRef(false);
   const { data, loading, error, reload } = useResource(() => request(`/work-orders/${id}`), [request, id]);
   const [liveOrder, setLiveOrder] = useState(null);
   const order = liveOrder || data?.workOrder;
@@ -450,6 +452,22 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const canAddNotes = can(permissionSubject, 'add_notes');
   const canUploadPhotos = can(permissionSubject, 'upload_photos');
   const canAssignTechnician = can(permissionSubject, 'assign_technician');
+
+  useEffect(() => {
+    if (!isTechnician || canUpdateWorkOrderStatus || permissionRefreshAttemptedRef.current) return;
+    permissionRefreshAttemptedRef.current = true;
+    let mounted = true;
+    request('/auth/me')
+      .then((result) => {
+        if (!mounted || !result?.user) return;
+        setUser(result.user);
+        window.localStorage.setItem('us_user', JSON.stringify(result.user));
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [canUpdateWorkOrderStatus, isTechnician, request, setUser]);
 
   useEffect(() => {
     if (!data?.workOrder) return;
@@ -483,7 +501,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     }
     try {
       await preserveScroll(async () => {
-        await request(`/work-orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) });
+        const result = await request(`/work-orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) });
+        if (result?.workOrder) setLiveOrder(result.workOrder);
         push('Status updated');
         reload({ silent: true });
       });
@@ -1028,12 +1047,12 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     URL.revokeObjectURL(url);
   }
 
-  async function downloadWorkflowPdf(flow) {
+  async function downloadWorkflowPdf(flow, regenerate = false) {
     try {
       await preserveScroll(async () => {
-        setPdfBusy(`download-${flow.type}`);
+        setPdfBusy(`${regenerate ? 'regenerate' : 'download'}-${flow.type}`);
         await downloadPdfFile(flow.type, flow.filename);
-        push(`${flow.title} generated`);
+        push(regenerate ? `${flow.title} regenerated as a fresh PDF without replacing old files` : `${flow.title} generated`);
       });
     } catch (err) {
       push(err.message, 'error');
@@ -1252,6 +1271,16 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       filename: 'amc-invoice.pdf',
       amcOnly: true,
       requiresAmcInvoice: true
+    },
+    {
+      type: 'amc-renewal-reminder',
+      title: 'AMC RENEWAL / EXPIRY REMINDER PDF',
+      statusText: 'AMC linked',
+      readyText: 'Creates a fresh renewal reminder from the current AMC contract details.',
+      lockedText: 'Available only for AMC-linked jobs.',
+      allowedStatuses: workOrderDetailStatuses,
+      filename: 'amc-renewal-reminder.pdf',
+      amcOnly: true
     }
   ];
   const pdfFlows = isAmcLinked ? [...amcDocumentFlows, ...workOrderPdfFlows] : workOrderPdfFlows;
@@ -1724,6 +1753,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               {pdfFlows.map((flow) => {
                 const enabled = pdfFlowAllowed(flow);
                 const downloading = pdfBusy === `download-${flow.type}`;
+                const regenerating = pdfBusy === `regenerate-${flow.type}`;
                 return (
                   <div key={flow.type} className={pdfWorkflowCardClass(enabled)}>
                     <div className="flex items-start justify-between gap-3">
@@ -1735,9 +1765,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     </div>
                     <span className={`mt-3 inline-flex min-h-[1.75rem] items-center rounded-full border px-2.5 py-1 text-xs font-bold ${enabled ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-100' : 'border-slate-400/20 bg-slate-600/20 text-slate-200'}`}>{enabled ? 'Ready' : 'Locked'}</span>
                     <p className="mt-2 text-sm muted">{enabled ? flow.readyText : pdfFlowLockedReason(flow)}</p>
-                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    <div className="mt-4 grid gap-2 sm:grid-cols-3">
                       <button type="button" className={pdfActionButtonClass(enabled)} disabled={!enabled || Boolean(pdfBusy)} onClick={() => previewWorkflowPdf(flow)}><FileText className="h-4 w-4" />Preview PDF</button>
                       <button type="button" className={pdfActionButtonClass(enabled)} disabled={!enabled || Boolean(pdfBusy)} onClick={() => downloadWorkflowPdf(flow)}>{downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}Download PDF</button>
+                      <button type="button" className={pdfActionButtonClass(enabled)} disabled={!enabled || Boolean(pdfBusy)} onClick={() => downloadWorkflowPdf(flow, true)}>{regenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}Regenerate PDF</button>
                     </div>
                   </div>
                 );
@@ -2391,6 +2422,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               {pdfFlows.map((flow) => {
                 const enabled = pdfFlowAllowed(flow);
                 const downloading = pdfBusy === `download-${flow.type}`;
+                const regenerating = pdfBusy === `regenerate-${flow.type}`;
                 const sending = pdfBusy === `send-${flow.type}`;
                 const sentViaWhatsapp = isPdfSentViaWhatsapp(order, flow.type);
                 return (
@@ -2409,9 +2441,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                       {sentViaWhatsapp ? <span className="inline-flex min-h-[1.75rem] items-center rounded-full border border-sky-400/25 bg-sky-500/15 px-2.5 py-1 text-xs font-bold text-sky-100">Sent via WhatsApp</span> : null}
                     </div>
                     <p className="mt-2 text-sm muted">{enabled ? flow.readyText : pdfFlowLockedReason(flow)}</p>
-                    <div className={`mt-4 grid gap-2 ${isTechnician ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
+                    <div className={`mt-4 grid gap-2 ${isTechnician ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
                       <button type="button" className={pdfActionButtonClass(enabled)} disabled={!enabled || Boolean(pdfBusy)} onClick={() => previewWorkflowPdf(flow)}><FileText className="h-4 w-4" />Preview PDF</button>
                       <button type="button" className={pdfActionButtonClass(enabled)} disabled={!enabled || Boolean(pdfBusy)} onClick={() => downloadWorkflowPdf(flow)}>{downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}Download PDF</button>
+                      <button type="button" className={pdfActionButtonClass(enabled)} disabled={!enabled || Boolean(pdfBusy)} onClick={() => downloadWorkflowPdf(flow, true)}>{regenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}Regenerate PDF</button>
                       {canSendPdfWhatsapp ? (
                         <button type="button" className={pdfActionButtonClass(enabled, 'primary')} disabled={!enabled || Boolean(pdfBusy)} onClick={() => sendWorkflowPdf(flow)}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}Send via WhatsApp</button>
                       ) : null}

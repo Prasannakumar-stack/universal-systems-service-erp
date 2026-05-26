@@ -16,6 +16,10 @@ export function createBooking(formData) {
   );
 }
 
+export function getPublicWebsiteSettings() {
+  return parse(fetch(`${apiBase}/public/website-settings`));
+}
+
 export function createContactRequest(payload) {
   return parse(
     fetch(`${apiBase}/public/contact-requests`, {

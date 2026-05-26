@@ -974,7 +974,7 @@ export async function addImages(id, files, user) {
 
 export async function markDocumentSent(id, type, payload, user) {
   assertPermission(user, 'mark_document_sent');
-  if (!['quotation', 'work', 'service-completed', 'amc-contract', 'amc-service-visit', 'amc-invoice'].includes(type)) throw appError('Invalid document type');
+  if (!['quotation', 'work', 'service-completed', 'amc-contract', 'amc-service-visit', 'amc-invoice', 'amc-renewal-reminder'].includes(type)) throw appError('Invalid document type');
   const workOrder = await getWorkOrder(id, user);
   const sentAt = payload.sentAt ? new Date(payload.sentAt) : new Date();
   const sentVia = clean(payload.sentVia) || 'WhatsApp';
@@ -1003,6 +1003,7 @@ function documentLabel(type) {
   if (type === 'amc-contract') return 'AMC Contract PDF';
   if (type === 'amc-service-visit') return 'AMC Service Visit PDF';
   if (type === 'amc-invoice') return 'AMC Invoice / Receipt PDF';
+  if (type === 'amc-renewal-reminder') return 'AMC Renewal / Expiry Reminder PDF';
   return 'Service Completed PDF';
 }
 

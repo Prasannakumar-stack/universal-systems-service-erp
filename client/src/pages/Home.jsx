@@ -19,40 +19,8 @@ import {
   Users,
   Wrench
 } from 'lucide-react';
-import { company } from '../utils/constants.js';
-
-const services = [
-  {
-    title: 'OS Installation & Setup',
-    text: 'Clean Windows setup, drivers, activation guidance, updates, and essential software.',
-    image: '/images/service-laptop.png'
-  },
-  {
-    title: 'Laptop Repair',
-    text: 'Charging, screen, keyboard, heating, slow performance, SSD, RAM, and diagnosis.',
-    image: '/images/service-laptop-repair.png'
-  },
-  {
-    title: 'Desktop Service',
-    text: 'Boot issues, SMPS, motherboard checks, upgrades, cleaning, and tune-ups.',
-    image: '/images/service-desktop.png'
-  },
-  {
-    title: 'Printer Service',
-    text: 'Printer not printing, toner support, cartridge help, and office maintenance.',
-    image: '/images/service-printer.png'
-  },
-  {
-    title: 'CCTV Installation & Maintenance',
-    text: 'Camera setup, DVR checks, cabling support, troubleshooting, and maintenance.',
-    image: '/images/service-cctv.png'
-  },
-  {
-    title: 'Networking Solutions',
-    text: 'Wi-Fi, LAN, router setup, sharing, office connectivity, and network repair.',
-    image: '/images/service-router.png'
-  }
-];
+import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
+import { phoneHref, publicAssetUrl, publicPhoneList, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const steps = [
   { title: 'Book Service', text: 'Share your device issue and preferred time.', icon: BookOpenCheck },
@@ -205,6 +173,8 @@ function SectionHeading({ eyebrow, title, text, align = 'left' }) {
 
 export default function Home() {
   const [activeTestimonial, setActiveTestimonial] = useState(0);
+  const { settings, contact, booking } = usePublicWebsiteSettings();
+  const homeServices = useMemo(() => visiblePublicServices(settings).slice(0, 6), [settings]);
 
   useScrollReveal();
 
@@ -216,18 +186,20 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const phoneHref = useMemo(() => `tel:${company.phones[0].replace(/\s/g, '')}`, []);
-  const whatsappHref = useMemo(() => `https://wa.me/${company.whatsapp}`, []);
+  const primaryPhone = publicPhoneList(contact)[0] || '';
+  const callHref = useMemo(() => phoneHref(primaryPhone), [primaryPhone]);
+  const contactWhatsappHref = useMemo(() => whatsappHref(contact.whatsappNumber), [contact.whatsappNumber]);
   const activeReview = testimonials[activeTestimonial];
+  const heroCardClass = settings.hero.glassmorphismAnimation === false ? 'public-hero-card public-hero-static' : 'public-hero-card public-hero-glass';
 
   return (
     <div className="premium-home">
       <section className="premium-hero hero-section relative isolate overflow-hidden">
         <div className="hero-scanline" aria-hidden="true" />
-        <div className="premium-hero-grid page-hero hero-with-bg public-hero-card public-hero-glass container-page relative z-10">
+        <div className={`premium-hero-grid page-hero hero-with-bg ${heroCardClass} container-page relative z-10`}>
           <img
             className="page-hero-bg-image"
-            src="/Home%20Page%20image.png"
+            src={publicAssetUrl(settings.hero.imageUrl)}
             alt="Universal Systems hero"
           />
           <div className="page-hero-overlay" aria-hidden="true" />
@@ -238,20 +210,22 @@ export default function Home() {
               Premium local technology service
             </div>
             <h1 className="hero-reveal mt-5 max-w-4xl text-4xl font-black leading-[1.02] text-white sm:text-5xl xl:text-7xl">
-              Fast, Reliable & Professional Tech Support <span className="hero-trust-emphasis">You Can Trust</span>
+              {settings.hero.title}
             </h1>
             <p className="hero-reveal mt-6 max-w-2xl text-base leading-8 text-slate-300 md:text-lg">
-              Computer, laptop, printer, CCTV, and networking service for homes, students, shops, and offices with clear diagnosis, careful repair, and simple booking.
+              {settings.hero.subtitle}
             </p>
             <div className="hero-reveal mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link to="/book-service" className="btn btn-primary btn-xl shine-button w-full sm:w-auto">
-                <BookOpenCheck className="h-5 w-5" />
-                Book a Service
-                <ArrowRight className="btn-arrow h-5 w-5" />
-              </Link>
-              <a href={whatsappHref} target="_blank" rel="noreferrer" className="btn btn-secondary btn-xl shine-button w-full sm:w-auto">
+              {booking.publicBookingEnabled ? (
+                <Link to="/book-service" className="btn btn-primary btn-xl shine-button w-full sm:w-auto">
+                  <BookOpenCheck className="h-5 w-5" />
+                  {settings.hero.primaryButtonText || booking.bookingButtonText}
+                  <ArrowRight className="btn-arrow h-5 w-5" />
+                </Link>
+              ) : null}
+              <a href={contactWhatsappHref} target="_blank" rel="noreferrer" className="btn btn-secondary btn-xl shine-button w-full sm:w-auto">
                 <MessageCircle className="h-5 w-5" />
-                Contact / WhatsApp
+                {settings.hero.secondaryButtonText}
               </a>
             </div>
             <div className="hero-trust-pill hero-reveal mt-4">
@@ -283,24 +257,25 @@ export default function Home() {
             text="Choose the support you need. Every card leads into the booking flow, so your request is simple and direct."
           />
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {services.map((service, index) => {
+            {homeServices.map((service, index) => {
+              const imageUrl = publicAssetUrl(service.imageUrl || service.image);
               return (
                 <Link
                   key={service.title}
-                  to="/book-service"
+                  to={booking.publicBookingEnabled ? `/book-service?service=${encodeURIComponent(service.title)}` : '/contact'}
                   className="premium-service-card service-card public-service-card reveal-on-scroll"
                   style={{
                     '--reveal-delay': `${index * 85}ms`,
-                    '--card-image': `url(${service.image})`
+                    '--card-image': `url(${imageUrl})`
                   }}
                 >
                   <div className="service-card-content">
                     <h3 className="text-xl font-black text-white">{service.title}</h3>
-                    <p className="mt-3 text-sm leading-6 text-slate-300">{service.text}</p>
+                    <p className="mt-3 text-sm leading-6 text-slate-300">{service.description || service.text}</p>
                   </div>
                   <div className="service-card-image-wrap" aria-hidden="true">
                     <img
-                      src={service.image}
+                      src={imageUrl}
                       alt=""
                       onError={(event) => {
                         event.currentTarget.style.display = 'none';
@@ -474,12 +449,14 @@ export default function Home() {
               <h2 className="mt-3 text-3xl font-black leading-tight text-white md:text-5xl">Need urgent support today?</h2>
               <p className="mt-4 text-base leading-7 text-slate-300">We are just a call away. Our team is ready to help you!</p>
               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-                <Link to="/book-service" className="btn btn-primary btn-xl shine-button w-full sm:w-auto">
-                  <BookOpenCheck className="h-5 w-5" />
-                  Book a Service
-                  <ArrowRight className="btn-arrow h-5 w-5" />
-                </Link>
-                <a href={phoneHref} className="btn btn-secondary btn-xl shine-button w-full sm:w-auto">
+                {booking.publicBookingEnabled ? (
+                  <Link to="/book-service" className="btn btn-primary btn-xl shine-button w-full sm:w-auto">
+                    <BookOpenCheck className="h-5 w-5" />
+                    {booking.bookingButtonText}
+                    <ArrowRight className="btn-arrow h-5 w-5" />
+                  </Link>
+                ) : null}
+                <a href={callHref} className="btn btn-secondary btn-xl shine-button w-full sm:w-auto">
                   <Phone className="h-5 w-5" />
                   Call Now
                 </a>

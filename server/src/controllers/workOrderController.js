@@ -142,7 +142,9 @@ export async function postSendPdfWhatsapp(req, res) {
             ? 'AMC Service Visit PDF'
             : req.params.type === 'amc-invoice'
               ? 'AMC Invoice / Receipt PDF'
-              : 'Service Completed PDF';
+              : req.params.type === 'amc-renewal-reminder'
+                ? 'AMC Renewal / Expiry Reminder PDF'
+                : 'Service Completed PDF';
   res.json({
     success: true,
     sentViaApi: result.sentViaApi,

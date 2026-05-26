@@ -40,7 +40,8 @@
   --app-shadow-soft: 0 18px 55px rgba(0, 8, 22, 0.18);
 }
 
-:root[data-theme='light'] {
+:root[data-theme='light'],
+.app-shell.theme-light {
   color-scheme: light;
   --bg: #eef5ff;
   --bg-2: #e7f0fc;
@@ -95,7 +96,8 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, Segoe UI, Arial, sans-serif;
 }
 
-body[data-theme='light'] {
+body[data-theme='light'],
+.app-shell.theme-light {
   background:
     radial-gradient(circle at 12% 8%, rgba(47, 157, 244, 0.18), transparent 30rem),
     radial-gradient(circle at 88% 16%, rgba(34, 197, 94, 0.12), transparent 28rem),
@@ -3539,16 +3541,41 @@ button:disabled {
   }
 
   .settings-tabs-card {
-    overflow-x: auto;
+    overflow-x: visible;
   }
 
   .settings-tabs {
-    min-width: max-content;
-    gap: 0.35rem;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 0.45rem;
   }
 
   .settings-tabs .tab-button {
     min-height: 2.4rem;
+    flex: 1 1 8.5rem;
+    justify-content: center;
+    white-space: normal;
+  }
+
+  .settings-sticky-actions {
+    position: sticky;
+    bottom: 1rem;
+    z-index: 30;
+    margin-left: auto;
+    display: flex;
+    width: min(100%, 34rem);
+    justify-content: flex-end;
+    gap: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-card);
+    background: rgba(7, 27, 53, 0.94);
+    padding: 0.75rem;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+    backdrop-filter: blur(16px);
+  }
+
+  .settings-overview-card {
+    min-height: 15rem;
   }
 
   .settings-preference-card {
@@ -5930,6 +5957,551 @@ button:disabled {
     padding-right: 0.85rem;
   }
 
+  .notifications-page {
+    display: grid;
+    gap: 1rem;
+    color: var(--text);
+  }
+
+  .notifications-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    overflow: visible;
+    border-radius: 8px;
+    border: 1px solid rgba(117, 196, 255, 0.16);
+    background:
+      linear-gradient(135deg, rgba(16, 47, 87, 0.9), rgba(6, 20, 38, 0.9)),
+      var(--surface);
+    padding: 1.35rem;
+    box-shadow: var(--shadow);
+  }
+
+  .notifications-hero-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--brand);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .notifications-hero h1 {
+    margin-top: 0.4rem;
+    color: #ffffff;
+    font-size: clamp(1.65rem, 2.1vw, 2.15rem);
+    font-weight: 950;
+    letter-spacing: 0;
+    line-height: 1.08;
+  }
+
+  .notifications-hero p {
+    margin-top: 0.45rem;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .notifications-hero-actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.75rem;
+  }
+
+  .notifications-mark-all-button,
+  .notifications-settings-button,
+  .notifications-clear-button {
+    min-height: 2.65rem;
+    white-space: nowrap;
+  }
+
+  .notifications-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .notifications-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+
+  .notifications-tab {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    border-radius: 8px;
+    border: 1px solid rgba(117, 196, 255, 0.14);
+    background: rgba(255, 255, 255, 0.05);
+    color: #dbeafe;
+    padding: 0.72rem 1.05rem;
+    font-size: 0.88rem;
+    font-weight: 850;
+    transition: background 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+  }
+
+  .notifications-tab:hover {
+    border-color: rgba(117, 196, 255, 0.28);
+    background: rgba(56, 189, 248, 0.1);
+    color: #ffffff;
+  }
+
+  .notifications-tab-active {
+    border-color: rgba(117, 196, 255, 0.5);
+    background: linear-gradient(135deg, rgba(31, 140, 255, 0.34), rgba(14, 165, 233, 0.12));
+    color: #ffffff;
+    box-shadow: 0 12px 26px rgba(31, 140, 255, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+
+  .notifications-tab-count {
+    display: inline-flex;
+    min-width: 1.45rem;
+    height: 1.45rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(31, 140, 255, 0.95);
+    color: #ffffff;
+    padding: 0 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 950;
+    line-height: 1;
+  }
+
+  .notifications-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.75rem;
+  }
+
+  .notifications-category-select {
+    position: relative;
+    display: inline-flex;
+    min-width: min(100%, 15rem);
+    align-items: center;
+    border-radius: 8px;
+    border: 1px solid rgba(117, 196, 255, 0.16);
+    background: rgba(255, 255, 255, 0.045);
+    color: #dbeafe;
+  }
+
+  .notifications-category-select svg {
+    pointer-events: none;
+    position: absolute;
+    left: 0.9rem;
+    color: var(--brand);
+  }
+
+  .notifications-category-select select {
+    min-height: 2.65rem;
+    width: 100%;
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0 2.3rem 0 2.45rem;
+    font-size: 0.88rem;
+    font-weight: 800;
+    outline: none;
+  }
+
+  .notifications-category-select::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    right: 0.95rem;
+    width: 0.48rem;
+    height: 0.48rem;
+    border-bottom: 2px solid currentColor;
+    border-right: 2px solid currentColor;
+    transform: translateY(-20%) rotate(45deg);
+    opacity: 0.75;
+  }
+
+  .notifications-category-select select option {
+    background: #071426;
+    color: #f8fbff;
+  }
+
+  .notifications-list-card {
+    overflow: hidden;
+    border-radius: 8px;
+    border: 1px solid rgba(117, 196, 255, 0.16);
+    background:
+      linear-gradient(180deg, rgba(16, 47, 87, 0.82), rgba(7, 20, 38, 0.95)),
+      var(--surface);
+    box-shadow: var(--shadow);
+  }
+
+  .notifications-row {
+    display: grid;
+    grid-template-columns: 1rem 3.25rem minmax(0, 1fr) minmax(10rem, 14rem) minmax(9.5rem, auto);
+    align-items: center;
+    gap: 1.05rem;
+    min-height: 5.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 1rem 1.15rem;
+    transition: background 180ms ease, border-color 180ms ease;
+  }
+
+  .notifications-row:last-child {
+    border-bottom: 0;
+  }
+
+  .notifications-row:hover {
+    background: rgba(56, 189, 248, 0.055);
+  }
+
+  .notifications-row-unread {
+    background: rgba(14, 165, 233, 0.045);
+  }
+
+  .notifications-unread-cell {
+    display: grid;
+    place-items: center;
+  }
+
+  .notifications-unread-dot {
+    display: block;
+    width: 0.62rem;
+    height: 0.62rem;
+    border-radius: 999px;
+    background: #1f8cff;
+    box-shadow: 0 0 0 4px rgba(31, 140, 255, 0.12), 0 0 18px rgba(31, 140, 255, 0.45);
+  }
+
+  .notifications-row-icon {
+    display: grid;
+    width: 3.25rem;
+    height: 3.25rem;
+    place-items: center;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .notifications-row-icon-booking {
+    background: rgba(14, 165, 233, 0.18);
+    color: #7dd3fc;
+  }
+
+  .notifications-row-icon-work-order {
+    background: rgba(124, 58, 237, 0.18);
+    color: #c4b5fd;
+  }
+
+  .notifications-row-icon-invoice {
+    background: rgba(245, 158, 11, 0.17);
+    color: #fbbf24;
+  }
+
+  .notifications-row-icon-payment {
+    background: rgba(16, 185, 129, 0.18);
+    color: #86efac;
+  }
+
+  .notifications-row-icon-amc {
+    background: rgba(217, 119, 6, 0.18);
+    color: #fcd34d;
+  }
+
+  .notifications-row-icon-inventory {
+    background: rgba(37, 99, 235, 0.2);
+    color: #bfdbfe;
+  }
+
+  .notifications-row-icon-quotation {
+    background: rgba(219, 39, 119, 0.18);
+    color: #f9a8d4;
+  }
+
+  .notifications-row-icon-system {
+    background: rgba(100, 116, 139, 0.18);
+    color: #cbd5e1;
+  }
+
+  .notifications-row-copy {
+    min-width: 0;
+  }
+
+  .notifications-row-copy h2 {
+    color: #f8fbff;
+    font-size: 0.96rem;
+    font-weight: 950;
+    letter-spacing: 0;
+    line-height: 1.25;
+  }
+
+  .notifications-row-copy p {
+    margin-top: 0.35rem;
+    color: #c8d8ec;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .notifications-row-meta {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+  }
+
+  .notifications-category-badge {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid rgba(117, 196, 255, 0.16);
+    background: rgba(31, 140, 255, 0.13);
+    color: #bfdbfe;
+    padding: 0.28rem 0.56rem;
+    font-size: 0.72rem;
+    font-weight: 900;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .notifications-category-badge-mobile {
+    display: none;
+  }
+
+  .notifications-time {
+    color: #c8d8ec;
+    font-size: 0.84rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .notifications-action-button {
+    justify-self: end;
+    min-height: 2.38rem;
+    min-width: 8.7rem;
+    border-radius: 8px;
+    border: 1px solid rgba(31, 140, 255, 0.48);
+    background: rgba(31, 140, 255, 0.08);
+    color: #4fb3ff;
+    padding: 0.55rem 0.82rem;
+    font-size: 0.84rem;
+    font-weight: 950;
+    line-height: 1.15;
+    text-align: center;
+    transition: background 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+    white-space: nowrap;
+  }
+
+  .notifications-action-button:hover {
+    border-color: rgba(117, 196, 255, 0.72);
+    background: rgba(31, 140, 255, 0.16);
+    color: #ffffff;
+    box-shadow: 0 10px 24px rgba(31, 140, 255, 0.16);
+  }
+
+  .notifications-loading,
+  .notifications-empty-state {
+    display: grid;
+    min-height: 18rem;
+    place-items: center;
+    gap: 0.8rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  .notifications-empty-state h2 {
+    color: #f8fbff;
+    font-size: 1.1rem;
+    font-weight: 950;
+  }
+
+  .notifications-empty-state p {
+    max-width: 28rem;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+
+  .notifications-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border-radius: 8px;
+    border: 1px solid rgba(117, 196, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 0.8rem 1rem;
+  }
+
+  .notifications-page-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.45rem;
+  }
+
+  .notifications-page-button,
+  .notifications-page-number {
+    display: inline-flex;
+    min-height: 2.3rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    border-radius: 8px;
+    border: 1px solid rgba(117, 196, 255, 0.13);
+    background: rgba(255, 255, 255, 0.045);
+    color: #dbeafe;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.82rem;
+    font-weight: 850;
+  }
+
+  .notifications-page-number {
+    min-width: 2.35rem;
+    padding-inline: 0.65rem;
+  }
+
+  .notifications-page-number-active {
+    border-color: rgba(117, 196, 255, 0.55);
+    background: linear-gradient(135deg, rgba(31, 140, 255, 0.35), rgba(14, 165, 233, 0.12));
+    color: #ffffff;
+  }
+
+  .notifications-page-button:disabled,
+  .notifications-page-number:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  @media (max-width: 1100px) {
+    .notifications-row {
+      grid-template-columns: 0.8rem 3rem minmax(0, 1fr) minmax(7.5rem, 9rem) minmax(8.4rem, auto);
+    }
+
+    .notifications-row-meta {
+      align-items: flex-end;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+  }
+
+  @media (max-width: 860px) {
+    .notifications-hero,
+    .notifications-toolbar,
+    .notifications-pagination {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .notifications-hero-actions,
+    .notifications-toolbar-actions,
+    .notifications-page-buttons {
+      justify-content: flex-start;
+    }
+
+    .notifications-mark-all-button,
+    .notifications-settings-button,
+    .notifications-clear-button,
+    .notifications-category-select {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .notifications-row {
+      position: relative;
+      grid-template-columns: 3rem minmax(0, 1fr);
+      gap: 0.85rem;
+      padding: 1rem;
+      padding-left: 2.7rem;
+    }
+
+    .notifications-unread-cell {
+      position: absolute;
+      left: 1rem;
+      top: 1.45rem;
+    }
+
+    .notifications-row-icon {
+      width: 3rem;
+      height: 3rem;
+    }
+
+    .notifications-row-copy {
+      align-self: center;
+    }
+
+    .notifications-row-meta {
+      grid-column: 1 / -1;
+      align-items: center;
+      flex-direction: row;
+      justify-content: flex-start;
+      padding-left: 0.05rem;
+    }
+
+    .notifications-row-meta .notifications-category-badge {
+      display: none;
+    }
+
+    .notifications-category-badge-mobile {
+      display: inline-flex;
+    }
+
+    .notifications-action-button {
+      grid-column: 1 / -1;
+      justify-self: stretch;
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .notifications-hero,
+    .notifications-list-card,
+    .notifications-pagination {
+      border-radius: 8px;
+    }
+
+    .notifications-hero {
+      padding: 1rem;
+    }
+
+    .notifications-tabs {
+      display: grid;
+      grid-template-columns: 1fr;
+      width: 100%;
+    }
+
+    .notifications-tab {
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .notifications-row {
+      grid-template-columns: 2.75rem minmax(0, 1fr);
+      padding: 0.95rem;
+      padding-left: 2.45rem;
+    }
+
+    .notifications-row-copy h2 {
+      font-size: 0.92rem;
+    }
+
+    .notifications-row-copy p {
+      font-size: 0.84rem;
+    }
+
+    .notifications-page-button span {
+      display: none;
+    }
+  }
+
   .page-header {
     border-bottom: 1px solid rgba(117, 196, 255, 0.12);
     padding-bottom: 1rem;
@@ -6858,6 +7430,57 @@ button:disabled {
   color: var(--app-text) !important;
 }
 
+.theme-light .notifications-hero,
+.theme-light .notifications-list-card,
+.theme-light .notifications-pagination {
+  background: var(--app-card) !important;
+  border-color: var(--app-border) !important;
+  box-shadow: var(--app-shadow-soft) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .notifications-toolbar .notifications-tab,
+.theme-light .notifications-category-select,
+.theme-light .notifications-page-button,
+.theme-light .notifications-page-number {
+  background: var(--app-card-soft) !important;
+  border-color: var(--app-border) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .notifications-tab-active,
+.theme-light .notifications-page-number-active {
+  background: linear-gradient(135deg, rgba(20, 120, 232, 0.16), rgba(239, 246, 255, 0.98)) !important;
+  color: var(--app-primary) !important;
+}
+
+.theme-light .notifications-hero h1,
+.theme-light .notifications-row-copy h2,
+.theme-light .notifications-empty-state h2 {
+  color: var(--app-heading) !important;
+}
+
+.theme-light .notifications-hero p,
+.theme-light .notifications-row-copy p,
+.theme-light .notifications-time,
+.theme-light .notifications-empty-state p {
+  color: var(--app-text-muted) !important;
+}
+
+.theme-light .notifications-row {
+  border-bottom-color: var(--app-border) !important;
+}
+
+.theme-light .notifications-row:hover,
+.theme-light .notifications-row-unread {
+  background: #f1f7ff !important;
+}
+
+.theme-light .notifications-category-select select option {
+  background: #ffffff;
+  color: var(--app-text);
+}
+
 .theme-light .enterprise-quick-actions-menu {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(226, 240, 255, 0.72)),
@@ -7583,6 +8206,12 @@ button:disabled {
 .theme-light .bookings-page,
 .theme-light .work-orders-page {
   color: var(--app-text) !important;
+}
+
+.theme-light .settings-sticky-actions {
+  border-color: rgba(12, 74, 110, 0.16);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.14);
 }
 
 .theme-light :where(.enterprise-main, .enterprise-sidebar, .enterprise-topbar) :where(.text-white, .text-slate-50, .text-slate-100, .text-slate-200) {
@@ -16373,4 +17002,72 @@ a.about-contact-row:focus-visible,
     animation: none;
     opacity: 0;
   }
+}
+
+.public-site-shell {
+  color-scheme: dark;
+  --public-accent-soft: color-mix(in srgb, var(--public-accent, #75c4ff) 20%, transparent);
+}
+
+.public-site-shell .btn-primary,
+.public-site-shell .services-book-button {
+  background: linear-gradient(135deg, var(--public-accent, #75c4ff), #1f8cff);
+}
+
+.public-hero-static::before,
+.public-hero-static::after {
+  animation: none !important;
+}
+
+.public-maintenance-page {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(31, 140, 255, 0.18), transparent 34%),
+    linear-gradient(135deg, #061426 0%, #081d35 52%, #04101d 100%);
+}
+
+.public-maintenance-card,
+.booking-unavailable-card {
+  width: min(720px, 100%);
+  border: 1px solid rgba(148, 198, 255, 0.18);
+  border-radius: 24px;
+  background: rgba(8, 21, 39, 0.78);
+  box-shadow: 0 24px 80px rgba(2, 8, 23, 0.45);
+  padding: clamp(24px, 5vw, 48px);
+  text-align: center;
+  backdrop-filter: blur(22px);
+}
+
+.public-maintenance-icon {
+  display: inline-grid;
+  height: 68px;
+  width: 68px;
+  place-items: center;
+  border-radius: 22px;
+  color: white;
+  background: linear-gradient(135deg, var(--public-accent, #75c4ff), #1f8cff);
+  box-shadow: 0 18px 45px rgba(31, 140, 255, 0.28);
+  margin-bottom: 18px;
+}
+
+.public-maintenance-card h1,
+.booking-unavailable-card h1 {
+  margin-top: 12px;
+  font-size: clamp(2rem, 5vw, 4rem);
+  line-height: 1;
+  font-weight: 900;
+  color: white;
+}
+
+.public-maintenance-card p,
+.booking-unavailable-card p {
+  margin-top: 16px;
+  color: rgb(203 213 225);
+  line-height: 1.75;
+}
+
+.booking-unavailable-card {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  margin: 80px auto;
 }

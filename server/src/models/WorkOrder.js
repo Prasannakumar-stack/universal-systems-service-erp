@@ -84,7 +84,7 @@ const workOrderSchema = new mongoose.Schema(
     timeline: [timelineSchema],
     documentsSent: [
       {
-        type: { type: String, enum: ['quotation', 'work', 'service-completed', 'amc-contract', 'amc-service-visit', 'amc-invoice'], required: true },
+        type: { type: String, enum: ['quotation', 'work', 'service-completed', 'amc-contract', 'amc-service-visit', 'amc-invoice', 'amc-renewal-reminder'], required: true },
         sentVia: { type: String, trim: true, default: 'WhatsApp' },
         sentAt: { type: Date, default: Date.now }
       }

@@ -1,26 +1,18 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { Mail, MapPin, Menu, MessageCircle, Phone, ShieldCheck, X } from 'lucide-react';
-import { company } from '../utils/constants.js';
+import { Mail, MapPin, Menu, MessageCircle, Phone, ShieldCheck, Wrench, X } from 'lucide-react';
+import { PublicWebsiteSettingsProvider, usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
+import { phoneHref, publicAssetUrl, publicPhoneList, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
-const links = [
+const baseLinks = [
   { to: '/', label: 'Home' },
   { to: '/about', label: 'About' },
   { to: '/services', label: 'Services' },
   { to: '/contact', label: 'Contact' },
-  { to: '/book-service', label: 'Book Service' }
+  { to: '/book-service', label: 'Book Service', booking: true }
 ];
 
-const footerServices = [
-  'OS Installation',
-  'Laptop Repair',
-  'Desktop Service',
-  'Printer Service',
-  'CCTV Service',
-  'Networking'
-];
-
-function NavItems({ onClick }) {
+function NavItems({ onClick, links }) {
   return (
     <>
       {links.map((link) => (
@@ -49,11 +41,16 @@ function WhatsAppIcon(props) {
   );
 }
 
-function PublicNavbarLogo() {
+function PublicNavbarLogo({ branding }) {
+  const logoUrl = branding?.useCompanyLogo === false ? '' : publicAssetUrl(branding?.logoUrl || '/logo-icon.png');
   return (
     <span className="public-navbar-brand" aria-hidden="true">
       <span className="public-navbar-icon-crop">
-        <img src="/logo-icon.png" alt="" className="public-navbar-logo-icon" />
+        {logoUrl ? (
+          <img src={logoUrl} alt="" className="public-navbar-logo-icon" />
+        ) : (
+          <Wrench className="h-6 w-6 text-white" />
+        )}
       </span>
       <span className="public-navbar-logo-text">
         <span>Universal</span>
@@ -63,18 +60,76 @@ function PublicNavbarLogo() {
   );
 }
 
-export default function PublicLayout() {
+function PublicMaintenancePage({ settings }) {
+  const contact = settings.contact || {};
+  const phones = publicPhoneList(contact);
+  const primaryPhone = phones[0] || '';
+  return (
+    <div className="public-maintenance-page min-h-screen">
+      <div className="container-page grid min-h-screen place-items-center py-16">
+        <section className="public-maintenance-card">
+          <div className="public-maintenance-icon">
+            <Wrench className="h-8 w-8" />
+          </div>
+          <p className="premium-eyebrow">Universal Systems</p>
+          <h1>Public website is temporarily unavailable</h1>
+          <p>{settings.status?.maintenanceMessage || 'We are updating our public website. Please contact us by phone or WhatsApp for urgent service.'}</p>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            {primaryPhone ? (
+              <a className="btn btn-primary btn-xl" href={phoneHref(primaryPhone)}>
+                <Phone className="h-4 w-4" />
+                Call Now
+              </a>
+            ) : null}
+            {contact.whatsappNumber ? (
+              <a className="btn btn-secondary btn-xl" href={whatsappHref(contact.whatsappNumber)} target="_blank" rel="noreferrer">
+                <MessageCircle className="h-4 w-4" />
+                WhatsApp
+              </a>
+            ) : null}
+            <a className="btn btn-secondary btn-xl" href="/admin/login">
+              <ShieldCheck className="h-4 w-4" />
+              Admin Login
+            </a>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function PublicLayoutShell() {
   const [open, setOpen] = useState(false);
+  const { settings, contact, booking, branding } = usePublicWebsiteSettings();
+  const links = useMemo(
+    () => baseLinks.filter((link) => !link.booking || booking.publicBookingEnabled),
+    [booking.publicBookingEnabled]
+  );
+  const footerServices = useMemo(
+    () => visiblePublicServices(settings).slice(0, 6).map((service) => service.title),
+    [settings]
+  );
+  const phones = publicPhoneList(contact);
+  const primaryPhone = phones[0] || '';
+  const accentColor = branding?.accentColor || '#75c4ff';
+
+  if (!settings.status?.websiteEnabled || settings.status?.maintenanceMode) {
+    return (
+      <div className="public-site-shell" style={{ '--public-accent': accentColor, '--brand': accentColor, '--brand-2': accentColor }}>
+        <PublicMaintenancePage settings={settings} />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen">
+    <div className="public-site-shell min-h-screen" style={{ '--public-accent': accentColor, '--brand': accentColor, '--brand-2': accentColor }}>
       <header className="public-header sticky top-0 z-50 border-b border-[var(--line)] backdrop-blur-xl">
         <div className="container-page flex h-18 items-center justify-between py-3">
           <NavLink to="/" className="public-logo-link flex items-center" aria-label="Universal Systems home">
-            <PublicNavbarLogo />
+            <PublicNavbarLogo branding={branding} />
           </NavLink>
           <nav className="public-nav hidden items-center gap-1 lg:flex">
-            <NavItems />
+            <NavItems links={links} />
           </nav>
           <button className="icon-button h-10 w-10 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" />
@@ -87,14 +142,14 @@ export default function PublicLayout() {
           <div className="public-mobile-drawer ml-auto h-full w-80 max-w-[88vw] p-5 shadow-soft" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between">
               <span className="public-logo-link public-logo-lockup inline-flex items-center">
-                <PublicNavbarLogo />
+                <PublicNavbarLogo branding={branding} />
               </span>
               <button className="icon-button h-9 w-9" onClick={() => setOpen(false)} aria-label="Close menu">
                 <X className="h-5 w-5" />
               </button>
             </div>
             <nav className="flex flex-col gap-2">
-              <NavItems onClick={() => setOpen(false)} />
+              <NavItems links={links} onClick={() => setOpen(false)} />
             </nav>
           </div>
         </div>
@@ -106,7 +161,7 @@ export default function PublicLayout() {
 
       <a
         className="whatsapp-floating fixed bottom-5 right-5 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_28px_rgba(16,185,129,0.45)] transition hover:-translate-y-1 hover:bg-emerald-400"
-        href={`https://wa.me/${company.whatsapp}`}
+        href={whatsappHref(contact.whatsappNumber)}
         target="_blank"
         rel="noreferrer"
         aria-label="WhatsApp Universal Systems"
@@ -118,7 +173,7 @@ export default function PublicLayout() {
       <footer className="public-footer border-t border-[var(--line)] bg-[var(--surface)]">
         <div className="container-page grid gap-8 py-10 md:grid-cols-2 xl:grid-cols-[1.35fr_0.85fr_0.9fr_1fr]">
           <div className="footer-brand-block">
-            <PublicNavbarLogo />
+            <PublicNavbarLogo branding={branding} />
             <p className="muted max-w-md text-sm leading-6">
               Computer repair, OS installation, printer service, software support, data recovery, and maintenance solutions in Mettur Dam.
             </p>
@@ -149,17 +204,19 @@ export default function PublicLayout() {
           <div>
             <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Contact</h3>
             <div className="footer-contact-list space-y-3 text-sm">
-              <a className="flex gap-2 hover:text-[var(--brand-2)]" href={`tel:${company.phones[0].replace(/\s/g, '')}`}>
-                <Phone className="h-4 w-4 shrink-0" /> {company.phones.join(' / ')}
-              </a>
-              <a className="flex gap-2 hover:text-[var(--brand-2)]" href={`https://wa.me/${company.whatsapp}`} target="_blank" rel="noreferrer">
+              {primaryPhone ? (
+                <a className="flex gap-2 hover:text-[var(--brand-2)]" href={phoneHref(primaryPhone)}>
+                  <Phone className="h-4 w-4 shrink-0" /> {contact.phoneNumber}
+                </a>
+              ) : null}
+              <a className="flex gap-2 hover:text-[var(--brand-2)]" href={whatsappHref(contact.whatsappNumber)} target="_blank" rel="noreferrer">
                 <MessageCircle className="h-4 w-4 shrink-0" /> WhatsApp support
               </a>
-              <a className="flex gap-2 hover:text-[var(--brand-2)]" href={`mailto:${company.email}`}>
-                <Mail className="h-4 w-4 shrink-0" /> {company.email}
+              <a className="flex gap-2 hover:text-[var(--brand-2)]" href={`mailto:${contact.email}`}>
+                <Mail className="h-4 w-4 shrink-0" /> {contact.email}
               </a>
               <p className="flex gap-2 leading-6">
-                <MapPin className="mt-1 h-4 w-4 shrink-0" /> {company.address}
+                <MapPin className="mt-1 h-4 w-4 shrink-0" /> {contact.address}
               </p>
             </div>
           </div>
@@ -169,5 +226,13 @@ export default function PublicLayout() {
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function PublicLayout() {
+  return (
+    <PublicWebsiteSettingsProvider>
+      <PublicLayoutShell />
+    </PublicWebsiteSettingsProvider>
   );
 }

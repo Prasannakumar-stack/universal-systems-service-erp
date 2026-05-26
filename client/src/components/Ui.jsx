@@ -67,10 +67,10 @@ export function ConfirmModal({ title, message, onCancel, onConfirm, confirmLabel
         <h2 className="text-lg font-black">{title}</h2>
         <p className="mt-2 text-sm leading-6 muted">{message}</p>
         <div className="mt-5 flex justify-end gap-2">
-          <button className="btn btn-secondary" onClick={onCancel}>
+          <button type="button" className="btn btn-secondary" onClick={onCancel}>
             Cancel
           </button>
-          <button className={`btn ${isDestructive ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm}>
+          <button type="button" className={`btn ${isDestructive ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm}>
             {confirmLabel}
           </button>
         </div>

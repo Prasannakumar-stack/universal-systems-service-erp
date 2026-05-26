@@ -9,6 +9,10 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: SUPPORTED_ROLES, required: true },
     phone: { type: String, trim: true, default: '' },
     email: { type: String, trim: true, default: '' },
+    avatarUrl: { type: String, trim: true, default: '' },
+    lastLoginAt: { type: Date, default: null },
+    lastActivityAt: { type: Date, default: null },
+    lastActivityType: { type: String, trim: true, default: '' },
     active: { type: Boolean, default: true }
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }

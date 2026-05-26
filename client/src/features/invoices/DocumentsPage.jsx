@@ -148,6 +148,7 @@ import {
   buildWhatsappWebUrl,
   documentTypeToPdfType
 } from '../../shared/whatsappPdfMessage.js';
+import { RotateCcw } from 'lucide-react';
 
 function documentLabel(type) {
   if (type === 'invoice') return 'Invoice';
@@ -199,7 +200,7 @@ export function DocumentsPage() {
   });
   const pagination = paginationFrom(data, documents.length, limit);
 
-  async function downloadDocumentPdf(document) {
+  async function downloadDocumentPdf(document, regenerate = false) {
     try {
       const response = await fetch(`${apiBase}/documents/${document.id}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
       const blob = await response.blob();
@@ -212,6 +213,7 @@ export function DocumentsPage() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+      push(regenerate ? 'Fresh PDF regenerated without replacing old files' : 'PDF downloaded');
     } catch (err) {
       push(err.message, 'error');
     }
@@ -282,6 +284,7 @@ export function DocumentsPage() {
                   <div className="flex flex-wrap gap-2">
                     <Link className="btn btn-secondary py-2" to={`/admin/documents/${document.id}`}>Preview</Link>
                     <button type="button" className="btn btn-secondary py-2" onClick={() => downloadDocumentPdf(document)}><Download className="h-4 w-4" />Download</button>
+                    <button type="button" className="btn btn-secondary py-2" onClick={() => downloadDocumentPdf(document, true)}><RotateCcw className="h-4 w-4" />Regenerate PDF</button>
                     {canSendPdfWhatsapp ? <button type="button" className="btn btn-primary py-2" onClick={() => sendWhatsApp(document)}><Send className="h-4 w-4" />WhatsApp</button> : null}
                   </div>
                 </td>
@@ -371,7 +374,7 @@ export function DocumentPreviewPage() {
   const { data, loading, error, reload } = useResource(() => request(`/documents/${id}`), [request, id]);
   const document = data?.document;
 
-  async function downloadPdf(event) {
+  async function downloadPdf(event, regenerate = false) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
     try {
@@ -387,6 +390,7 @@ export function DocumentPreviewPage() {
         anchor.click();
         anchor.remove();
         URL.revokeObjectURL(url);
+        push(regenerate ? 'Fresh PDF regenerated without replacing old files' : 'PDF downloaded');
       });
     } catch (err) {
       push(err.message, 'error');
@@ -533,6 +537,7 @@ export function DocumentPreviewPage() {
             <div className="mt-4 grid gap-2">
               <button type="button" className="btn btn-secondary w-full" onClick={previewPdf}><FileText className="h-4 w-4" />Preview PDF</button>
               <button type="button" className="btn btn-secondary w-full" onClick={downloadPdf}><Download className="h-4 w-4" />Download PDF</button>
+              <button type="button" className="btn btn-secondary w-full" onClick={(event) => downloadPdf(event, true)}><RotateCcw className="h-4 w-4" />Regenerate PDF</button>
               {canSendPdfWhatsapp ? <button type="button" className="btn btn-primary w-full" onClick={sendDocumentWhatsApp}><Send className="h-4 w-4" />Send via WhatsApp</button> : null}
             </div>
           </div>

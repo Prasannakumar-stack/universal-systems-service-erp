@@ -19,6 +19,8 @@ const bookingSchema = new mongoose.Schema(
     },
     device: { type: String, required: true, trim: true },
     issue: { type: String, required: true, trim: true },
+    preferredDate: { type: Date, default: null },
+    preferredTime: { type: String, trim: true, default: '' },
     technicianId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     status: { type: String, enum: ['Pending', 'Converted'], default: 'Pending' },
     workOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'WorkOrder', default: null }

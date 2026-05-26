@@ -11,6 +11,8 @@ import { publicSubmitRateLimit } from './middleware/publicRateLimit.js';
 import { asyncHandler } from './utils/http.js';
 import { create as createBooking } from './controllers/bookingController.js';
 import { create as createCallRequest } from './controllers/callRequestController.js';
+import { publicBookingOpenGate, publicSettings, publicWebsiteOpenGate } from './controllers/publicWebsiteSettingsController.js';
+import { startAutomaticBackupScheduler } from './services/backupService.js';
 import amcRoutes from './routes/amcRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import auditLogRoutes from './routes/auditLogRoutes.js';
@@ -23,6 +25,8 @@ import documentRoutes from './routes/documentRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
 import invoiceRoutes from './routes/invoiceRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
+import pdfTemplateRoutes from './routes/pdfTemplateRoutes.js';
+import publicWebsiteSettingsRoutes from './routes/publicWebsiteSettingsRoutes.js';
 import rolePermissionRoutes from './routes/rolePermissionRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import reminderRoutes from './routes/reminderRoutes.js';
@@ -85,8 +89,9 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, company: COMPANY.name, time: new Date().toISOString() });
 });
 
-app.post('/api/public/bookings', publicSubmitRateLimit, bookingUpload.single('problemImage'), handleUploadErrors, asyncHandler(createBooking));
-app.post('/api/public/contact-requests', publicSubmitRateLimit, asyncHandler(createCallRequest));
+app.get('/api/public/website-settings', asyncHandler(publicSettings));
+app.post('/api/public/bookings', publicSubmitRateLimit, asyncHandler(publicBookingOpenGate), bookingUpload.single('problemImage'), handleUploadErrors, asyncHandler(createBooking));
+app.post('/api/public/contact-requests', publicSubmitRateLimit, asyncHandler(publicWebsiteOpenGate), asyncHandler(createCallRequest));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/amc', amcRoutes);
@@ -101,6 +106,8 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/pdf-templates', pdfTemplateRoutes);
+app.use('/api/settings', publicWebsiteSettingsRoutes);
 app.use('/api/role-permissions', rolePermissionRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/stock-movements', stockMovementRoutes);
@@ -130,6 +137,7 @@ app.use((error, _req, res, _next) => {
 
 try {
   await connectDb();
+  startAutomaticBackupScheduler();
   app.listen(PORT, () => {
     console.log(`Service Management API running on http://localhost:${PORT}`);
   });

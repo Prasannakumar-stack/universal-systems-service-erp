@@ -17,24 +17,19 @@ import {
   Sparkles,
   Store
 } from 'lucide-react';
-import { company, serviceTypes } from '../utils/constants.js';
-import { createContactBooking } from '../utils/publicApi.js';
+import { serviceTypes } from '../utils/constants.js';
+import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
+import { createContactBooking, createContactRequest } from '../utils/publicApi.js';
+import { phoneHref, publicAssetUrl, publicPhoneList, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 import { useToast } from '../context/ToastContext.jsx';
 
 const empty = { name: '', phone: '', serviceInterest: 'OS Installation', message: '' };
-const contactServiceOptions = serviceTypes.includes(empty.serviceInterest) ? serviceTypes : [empty.serviceInterest, ...serviceTypes];
 
 const trustBadges = [
   { label: 'Fast Response', icon: PhoneCall },
   { label: 'WhatsApp Support', icon: MessageCircle },
   { label: 'Local Service', icon: Store },
   { label: 'Clear Communication', icon: CheckCircle2 }
-];
-
-const areaItems = [
-  { label: 'Serving Mettur Dam, Salem Dt and nearby areas', icon: MapPin },
-  { label: company.hours, icon: Clock3 },
-  { label: 'Emergency support available through WhatsApp', icon: LifeBuoy }
 ];
 
 function useContactReveal() {
@@ -90,6 +85,7 @@ function phoneDigits(value) {
 }
 
 export default function Contact() {
+  const { settings, contact, booking } = usePublicWebsiteSettings();
   const [form, setForm] = useState(empty);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -97,24 +93,35 @@ export default function Contact() {
 
   useContactReveal();
 
-  const primaryPhone = company.phones[0];
-  const phoneHref = useMemo(() => `tel:${primaryPhone.replace(/\s/g, '')}`, [primaryPhone]);
-  const whatsappHref = useMemo(() => `https://wa.me/${company.whatsapp}`, []);
-  const landlineHref = useMemo(() => `tel:${company.landline.replace(/[^\d]/g, '')}`, []);
-  const googleMapsHref = useMemo(() => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(company.address)}`, []);
+  const publicServices = useMemo(() => visiblePublicServices(settings).map((service) => service.title), [settings]);
+  const contactServiceOptions = useMemo(() => {
+    const base = publicServices.length ? publicServices : serviceTypes;
+    return base.includes(empty.serviceInterest) ? base : [empty.serviceInterest, ...base];
+  }, [publicServices]);
+  const phones = publicPhoneList(contact);
+  const primaryPhone = phones[0] || '';
+  const contactPhoneHref = useMemo(() => phoneHref(primaryPhone), [primaryPhone]);
+  const contactWhatsappHref = useMemo(() => whatsappHref(contact.whatsappNumber), [contact.whatsappNumber]);
+  const googleMapsHref = contact.googleMapsLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contact.address)}`;
+  const areaItems = useMemo(() => [
+    { label: 'Serving Mettur Dam, Salem Dt and nearby areas', icon: MapPin },
+    { label: contact.businessHours, icon: Clock3 },
+    { label: 'Emergency support available through WhatsApp', icon: LifeBuoy }
+  ], [contact.businessHours]);
+  const heroCardClass = settings.hero.glassmorphismAnimation === false ? 'public-hero-card public-hero-static' : 'public-hero-card public-hero-glass';
 
   const quickActions = [
     {
       title: 'Call Now',
       text: 'Tap to speak with our service team',
-      href: phoneHref,
+      href: contactPhoneHref,
       icon: PhoneCall,
       tone: 'cyan'
     },
     {
       title: 'WhatsApp Support',
       text: 'Message us for quick repair help',
-      href: whatsappHref,
+      href: contactWhatsappHref,
       icon: MessageCircle,
       tone: 'green',
       external: true
@@ -122,7 +129,7 @@ export default function Contact() {
     {
       title: 'Book Service',
       text: 'Create a service request in simple steps',
-      to: '/book-service',
+      to: booking.publicBookingEnabled ? '/book-service' : '/contact',
       icon: CalendarClock,
       tone: 'blue'
     }
@@ -152,7 +159,11 @@ export default function Contact() {
     setSubmitError('');
     setLoading(true);
     try {
-      await createContactBooking({ ...form, phone: digits });
+      if (booking.publicBookingEnabled) {
+        await createContactBooking({ ...form, phone: digits });
+      } else {
+        await createContactRequest({ ...form, phone: digits });
+      }
       push('Request sent successfully. Our team will contact you soon.');
       setForm(empty);
     } catch (error) {
@@ -168,10 +179,10 @@ export default function Contact() {
   return (
     <div className="contact-page section">
       <div className="container-page contact-container">
-        <section className="contact-hero contact-reveal page-hero hero-with-bg public-hero-card public-hero-glass">
+        <section className={`contact-hero contact-reveal page-hero hero-with-bg ${heroCardClass}`}>
           <img
             className="page-hero-bg-image"
-            src="/Contact%20Page%20image.png"
+            src={publicAssetUrl(settings.hero.imageUrl || '/Contact%20Page%20image.png')}
             alt="Universal Systems hero"
           />
           <div className="page-hero-overlay" aria-hidden="true" />
@@ -250,44 +261,37 @@ export default function Contact() {
               </div>
 
               <div className="contact-detail-list">
-                <a className="contact-detail-row" href={phoneHref}>
+                <a className="contact-detail-row" href={contactPhoneHref}>
                   <Phone className="h-4 w-4" />
                   <span>
                     <strong>Phone</strong>
-                    <small>{company.phones.join(' / ')}</small>
+                    <small>{contact.phoneNumber}</small>
                   </span>
                 </a>
-                <a className="contact-detail-row" href={landlineHref}>
-                  <Phone className="h-4 w-4" />
-                  <span>
-                    <strong>Landline</strong>
-                    <small>{company.landline}</small>
-                  </span>
-                </a>
-                <a className="contact-detail-row" href={`mailto:${company.email}`}>
+                <a className="contact-detail-row" href={`mailto:${contact.email}`}>
                   <Mail className="h-4 w-4" />
                   <span>
                     <strong>Email</strong>
-                    <small>{company.email}</small>
+                    <small>{contact.email}</small>
                   </span>
                 </a>
                 <p className="contact-detail-row">
                   <MapPin className="h-4 w-4" />
                   <span>
                     <strong>Address</strong>
-                    <small>{company.address}</small>
+                    <small>{contact.address}</small>
                   </span>
                 </p>
                 <p className="contact-detail-row">
                   <Clock3 className="h-4 w-4" />
                   <span>
                     <strong>Working Hours</strong>
-                    <small>{company.hours}</small>
+                    <small>{contact.businessHours}</small>
                   </span>
                 </p>
               </div>
 
-              <a href={whatsappHref} target="_blank" rel="noreferrer" className="btn btn-primary shine-button contact-full-action">
+              <a href={contactWhatsappHref} target="_blank" rel="noreferrer" className="btn btn-primary shine-button contact-full-action">
                 <MessageCircle className="h-4 w-4" />
                 WhatsApp
               </a>
@@ -396,7 +400,7 @@ export default function Contact() {
                   <strong>Request needs attention</strong>
                   <p>{submitError}</p>
                 </div>
-                <a className="btn btn-secondary contact-error-whatsapp" href={whatsappHref} target="_blank" rel="noreferrer">
+                <a className="btn btn-secondary contact-error-whatsapp" href={contactWhatsappHref} target="_blank" rel="noreferrer">
                   <MessageCircle className="h-4 w-4" />
                   WhatsApp
                 </a>
@@ -432,18 +436,20 @@ export default function Contact() {
             <p>Call or WhatsApp us directly for faster response.</p>
           </div>
           <div className="contact-cta-actions">
-            <a className="btn btn-secondary contact-whatsapp-action" href={whatsappHref} target="_blank" rel="noreferrer">
+            <a className="btn btn-secondary contact-whatsapp-action" href={contactWhatsappHref} target="_blank" rel="noreferrer">
               <MessageCircle className="h-4 w-4" />
               WhatsApp Now
             </a>
-            <a className="btn btn-secondary contact-call-action" href={phoneHref}>
+            <a className="btn btn-secondary contact-call-action" href={contactPhoneHref}>
               <PhoneCall className="h-4 w-4" />
               Call Now
             </a>
-            <Link className="btn btn-primary shine-button contact-book-action" to="/book-service">
-              <CalendarClock className="h-4 w-4" />
-              Book Service
-            </Link>
+            {booking.publicBookingEnabled ? (
+              <Link className="btn btn-primary shine-button contact-book-action" to="/book-service">
+                <CalendarClock className="h-4 w-4" />
+                {booking.bookingButtonText}
+              </Link>
+            ) : null}
           </div>
         </section>
       </div>

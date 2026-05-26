@@ -124,8 +124,19 @@ export const ALL_PERMISSIONS = [
   'view_documents',
   'send_pdf_whatsapp',
   'mark_document_sent',
+  'manage_pdf_templates',
   'view_settings',
   'edit_settings',
+  'manage_company_profile',
+  'manage_public_website_settings',
+  'manage_backup_storage',
+  'manage_document_numbering',
+  'manage_tax_settings',
+  'manage_payment_settings',
+  'manage_notification_templates',
+  'manage_status_workflows',
+  'manage_pdf_terms',
+  'view_system_information',
   'manage_users',
   'manage_roles',
   'view_audit_logs',
@@ -315,7 +326,8 @@ export const permissionMatrixGroups = Object.freeze([
       Object.freeze({ label: 'View Documents', permission: 'view_documents' }),
       Object.freeze({ label: 'Download PDF', permission: 'download_invoice_pdf' }),
       Object.freeze({ label: 'Send PDF WhatsApp', permission: 'send_pdf_whatsapp' }),
-      Object.freeze({ label: 'Mark Document Sent', permission: 'mark_document_sent' })
+      Object.freeze({ label: 'Mark Document Sent', permission: 'mark_document_sent' }),
+      Object.freeze({ label: 'Manage PDF Templates', permission: 'manage_pdf_templates' })
     ])
   }),
   Object.freeze({
@@ -325,6 +337,16 @@ export const permissionMatrixGroups = Object.freeze([
       Object.freeze({ label: 'Edit User Role', permission: 'manage_roles' }),
       Object.freeze({ label: 'View Settings', permission: 'view_settings' }),
       Object.freeze({ label: 'Edit Settings', permission: 'edit_settings' }),
+      Object.freeze({ label: 'Manage Company Profile', permission: 'manage_company_profile' }),
+      Object.freeze({ label: 'Manage Public Website Settings', permission: 'manage_public_website_settings' }),
+      Object.freeze({ label: 'Manage Backup & Storage', permission: 'manage_backup_storage' }),
+      Object.freeze({ label: 'Manage Document Numbering', permission: 'manage_document_numbering' }),
+      Object.freeze({ label: 'Manage Tax / GST Settings', permission: 'manage_tax_settings' }),
+      Object.freeze({ label: 'Manage Payment Settings', permission: 'manage_payment_settings' }),
+      Object.freeze({ label: 'Manage Notification Templates', permission: 'manage_notification_templates' }),
+      Object.freeze({ label: 'Manage Status Workflows', permission: 'manage_status_workflows' }),
+      Object.freeze({ label: 'Manage PDF Terms', permission: 'manage_pdf_terms' }),
+      Object.freeze({ label: 'View System Information', permission: 'view_system_information' }),
       Object.freeze({ label: 'View Audit Logs', permission: 'view_audit_logs' })
     ])
   })

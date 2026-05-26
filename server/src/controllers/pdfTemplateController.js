@@ -1,0 +1,38 @@
+import {
+  generatePdfTemplatePreview,
+  getPdfTemplate,
+  listPdfTemplates,
+  resetPdfTemplate,
+  restorePdfTemplateVersion,
+  updatePdfTemplate
+} from '../services/pdfTemplateService.js';
+
+export async function list(req, res) {
+  const templates = await listPdfTemplates();
+  res.json({ success: true, templates });
+}
+
+export async function getByKey(req, res) {
+  const template = await getPdfTemplate(req.params.key);
+  res.json({ success: true, template });
+}
+
+export async function update(req, res) {
+  const template = await updatePdfTemplate(req.params.key, req.body, req.user);
+  res.json({ success: true, template, message: 'PDF template saved' });
+}
+
+export async function reset(req, res) {
+  const template = await resetPdfTemplate(req.params.key, req.user);
+  res.json({ success: true, template, message: 'PDF template reset to default' });
+}
+
+export async function restore(req, res) {
+  const template = await restorePdfTemplateVersion(req.params.key, req.params.versionId, req.user);
+  res.json({ success: true, template, message: 'PDF template version restored' });
+}
+
+export async function preview(req, res) {
+  const pdf = await generatePdfTemplatePreview(req.params.key);
+  res.download(pdf.filePath, pdf.filename);
+}

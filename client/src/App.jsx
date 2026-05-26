@@ -25,6 +25,7 @@ const DocumentPreviewPage = lazyRoute(() => import('./features/invoices/Document
 const InvoicesPage = lazyRoute(() => import('./features/invoices/InvoicesPage.jsx'), 'InvoicesPage');
 const PaymentsPage = lazyRoute(() => import('./features/payments/PaymentsPage.jsx'), 'PaymentsPage');
 const AuditLogsPage = lazyRoute(() => import('./features/notifications/AuditLogsPage.jsx'), 'AuditLogsPage');
+const NotificationsPage = lazyRoute(() => import('./features/notifications/NotificationsPage.jsx'), 'NotificationsPage');
 const ReportsAnalyticsPage = lazyRoute(() => import('./features/reports/ReportsPage.jsx'), 'ReportsAnalyticsPage');
 const SystemSettingsPage = lazyRoute(() => import('./features/settings/SettingsPage.jsx'), 'SystemSettingsPage');
 const TechnicianDashboard = lazyRoute(() => import('./features/technicians/TechnicianDashboard.jsx'), 'TechnicianDashboard');
@@ -109,7 +110,7 @@ export default function App() {
           <Route path="reports/customers" element={<Navigate to="/admin/reports" replace />} />
           <Route path="inventory-reports" element={<Navigate to="/admin/reports/inventory" replace />} />
           <Route path="payment-reports" element={<Navigate to="/admin/reports/finance" replace />} />
-          <Route path="notifications" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="notifications" element={lazyElement(<NotificationsPage role="admin" />)} />
           <Route path="settings" element={lazyElement(<SystemSettingsPage />)} />
         </Route>
       </Route>

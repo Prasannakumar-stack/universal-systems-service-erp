@@ -9,6 +9,7 @@ export const themePreferenceOptions = [
 ];
 
 const validThemePreferences = new Set(themePreferenceOptions.map((option) => option.value));
+const THEME_CHANGE_EVENT = 'app-theme-change';
 
 function safeThemePreference(value) {
   return validThemePreferences.has(value) ? value : 'system';
@@ -38,18 +39,22 @@ export function resolveThemePreference(preference = getStoredThemePreference()) 
 }
 
 export function applyThemePreference(preference = getStoredThemePreference()) {
-  if (typeof document === 'undefined') return 'dark';
   const safePreference = safeThemePreference(preference);
   const resolvedTheme = resolveThemePreference(safePreference);
-  const targets = [document.documentElement, document.body, document.getElementById('root')].filter(Boolean);
-
-  targets.forEach((target) => {
-    target.dataset.themePreference = safePreference;
-    target.dataset.theme = resolvedTheme;
-    target.classList.toggle('theme-light', resolvedTheme === 'light');
-    target.classList.toggle('theme-dark', resolvedTheme === 'dark');
-  });
-  document.documentElement.style.colorScheme = resolvedTheme;
+  if (typeof document !== 'undefined') {
+    const globalTargets = [document.documentElement, document.body, document.getElementById('root')].filter(Boolean);
+    globalTargets.forEach((target) => {
+      delete target.dataset.themePreference;
+      delete target.dataset.theme;
+      target.classList.remove('theme-light', 'theme-dark');
+    });
+    document.documentElement.style.colorScheme = 'dark';
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, {
+      detail: { preference: safePreference, resolvedTheme }
+    }));
+  }
   return resolvedTheme;
 }
 
@@ -89,12 +94,19 @@ export function useThemePreference() {
       setThemePreferenceState(nextPreference);
       setResolvedTheme(applyThemePreference(nextPreference));
     };
+    const handleThemeChange = (event) => {
+      const nextPreference = safeThemePreference(event.detail?.preference || getStoredThemePreference());
+      setThemePreferenceState(nextPreference);
+      setResolvedTheme(event.detail?.resolvedTheme || resolveThemePreference(nextPreference));
+    };
 
     media?.addEventListener?.('change', handleSystemChange);
     window.addEventListener('storage', handleStorage);
+    window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange);
     return () => {
       media?.removeEventListener?.('change', handleSystemChange);
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange);
     };
   }, [themePreference]);
 

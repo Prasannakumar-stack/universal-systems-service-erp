@@ -13,7 +13,8 @@ import {
   UserCog,
   Wrench
 } from 'lucide-react';
-import { company } from '../utils/constants.js';
+import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
+import { publicAssetUrl, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const categoryChips = [
   'All Services',
@@ -147,23 +148,35 @@ function useServicesReveal(dependency) {
 
 export default function Services() {
   const [activeCategory, setActiveCategory] = useState('All Services');
+  const { settings, contact, booking } = usePublicWebsiteSettings();
+  const servicesFromSettings = useMemo(() => visiblePublicServices(settings), [settings]);
+  const categories = useMemo(() => {
+    const unique = new Set(['All Services']);
+    servicesFromSettings.forEach((service) => (service.categories || []).forEach((category) => unique.add(category)));
+    return Array.from(unique);
+  }, [servicesFromSettings]);
+
+  useEffect(() => {
+    if (!categories.includes(activeCategory)) setActiveCategory('All Services');
+  }, [activeCategory, categories]);
 
   useServicesReveal(activeCategory);
 
   const visibleServices = useMemo(() => {
-    if (activeCategory === 'All Services') return services;
-    return services.filter((service) => service.categories.includes(activeCategory));
-  }, [activeCategory]);
+    if (activeCategory === 'All Services') return servicesFromSettings;
+    return servicesFromSettings.filter((service) => (service.categories || []).includes(activeCategory));
+  }, [activeCategory, servicesFromSettings]);
 
-  const whatsappHref = useMemo(() => `https://wa.me/${company.whatsapp}`, []);
+  const contactWhatsappHref = useMemo(() => whatsappHref(contact.whatsappNumber), [contact.whatsappNumber]);
+  const heroCardClass = settings.hero.glassmorphismAnimation === false ? 'public-hero-card public-hero-static' : 'public-hero-card public-hero-glass';
 
   return (
     <div className="services-page section">
       <div className="container-page">
-        <section className="services-page-hero services-reveal page-hero hero-with-bg public-hero-card public-hero-glass">
+        <section className={`services-page-hero services-reveal page-hero hero-with-bg ${heroCardClass}`}>
           <img
             className="page-hero-bg-image"
-            src="/Service%20page%20image.png"
+            src={publicAssetUrl(settings.hero.imageUrl || '/Service%20page%20image.png')}
             alt="Universal Systems hero"
           />
           <div className="page-hero-overlay" aria-hidden="true" />
@@ -193,7 +206,7 @@ export default function Services() {
 
         <section className="services-control-panel services-reveal" aria-label="Service categories">
           <div className="services-category-chips" role="list">
-            {categoryChips.map((category) => (
+            {categories.map((category) => (
               <button
                 key={category}
                 type="button"
@@ -209,13 +222,15 @@ export default function Services() {
 
         <div className="services-showcase-grid grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {visibleServices.map((service, index) => {
-            const imageLayers = service.fallbackImage ? `url("${service.image}"), url("${service.fallbackImage}")` : `url("${service.image}")`;
+            const imageUrl = publicAssetUrl(service.imageUrl || service.image);
+            const fallbackImage = publicAssetUrl(service.fallbackImage || '');
+            const resolvedImageLayers = fallbackImage ? `url("${imageUrl}"), url("${fallbackImage}")` : `url("${imageUrl}")`;
             return (
               <article
                 key={service.title}
                 className="services-showcase-card public-service-card services-reveal"
                 style={{
-                  '--service-card-image': imageLayers,
+                  '--service-card-image': resolvedImageLayers,
                   '--reveal-delay': `${Math.min(index, 8) * 55}ms`
                 }}
               >
@@ -223,9 +238,9 @@ export default function Services() {
                 <div className="services-card-visual" aria-hidden="true" />
                 <div className="services-card-copy">
                   <h2 className="text-xl font-black">{service.title}</h2>
-                  <p className="mt-2 text-sm leading-6 muted">{service.text}</p>
-                  <Link to={`/book-service?service=${encodeURIComponent(service.title)}`} className="services-book-button mt-5">
-                    Book Now <ArrowRight className="h-4 w-4" />
+                  <p className="mt-2 text-sm leading-6 muted">{service.description || service.text}</p>
+                  <Link to={booking.publicBookingEnabled ? `/book-service?service=${encodeURIComponent(service.title)}` : '/contact'} className="services-book-button mt-5">
+                    {booking.publicBookingEnabled ? 'Book Now' : 'Contact Now'} <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
               </article>
@@ -259,15 +274,17 @@ export default function Services() {
             <p>Tell us the issue — our team will guide you to the right solution.</p>
           </div>
           <div className="services-help-actions">
-            <a href={whatsappHref} target="_blank" rel="noreferrer" className="services-whatsapp-button">
+            <a href={contactWhatsappHref} target="_blank" rel="noreferrer" className="services-whatsapp-button">
               <MessageCircle className="h-5 w-5" />
               WhatsApp Now
             </a>
-            <Link to="/book-service" className="btn btn-primary btn-xl shine-button">
-              <Wrench className="h-5 w-5" />
-              Book a Service
-              <ArrowRight className="btn-arrow h-5 w-5" />
-            </Link>
+            {booking.publicBookingEnabled ? (
+              <Link to="/book-service" className="btn btn-primary btn-xl shine-button">
+                <Wrench className="h-5 w-5" />
+                {booking.bookingButtonText}
+                <ArrowRight className="btn-arrow h-5 w-5" />
+              </Link>
+            ) : null}
           </div>
         </section>
       </div>

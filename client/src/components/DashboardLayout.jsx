@@ -29,6 +29,15 @@ import { company } from '../utils/constants.js';
 import { currency } from '../utils/format.js';
 import { getCustomerDisplayId, getInvoiceDisplayId, getPaymentDisplayId, getWorkOrderDisplayId } from '../shared/idHelpers.js';
 import { adminWorkspaceRoles, can, canAny, canAccessRoles, normalizeRole, roleLabel } from '../utils/roles.js';
+import { useThemePreference } from '../utils/theme.js';
+import {
+  fallbackNotificationRows,
+  markAllFallbackNotificationsRead,
+  markFallbackNotificationRead,
+  normalizeNotification,
+  timeAgo,
+  unreadNotificationCount
+} from '../features/notifications/notificationCenterData.js';
 
 const TopbarBookingModal = lazy(() => import('../features/bookings/BookingsPage.jsx').then((module) => ({ default: module.BookingModal })));
 
@@ -80,6 +89,7 @@ const adminGroups = [
   {
     title: 'System',
     links: [
+      { to: '/admin/notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
       { to: '/admin/technician-panel', label: 'Staff / Technicians', icon: UserRound, permission: 'manage_users' },
       { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity, permission: 'view_audit_logs' },
       { to: '/admin/settings', label: 'Settings', icon: Settings, permission: 'view_settings' }
@@ -143,6 +153,7 @@ const adminRouteAccess = [
   { prefix: '/admin/reports/inventory', permission: 'view_reports' },
   { prefix: '/admin/reports/technicians', permission: 'view_reports' },
   { prefix: '/admin/reports', permission: 'view_reports' },
+  { prefix: '/admin/notifications', roles: adminWorkspaceRoles },
   { prefix: '/admin/audit-logs', permission: 'view_audit_logs' },
   { prefix: '/admin/settings', permission: 'view_settings' }
 ];
@@ -327,7 +338,8 @@ function buildSidebarBadges(dashboardData) {
     workOrders: { value: workOrderBadgeCountFromDashboard(dashboardData), tone: 'blue' },
     lowStock: { value: lowStockCount, tone: Number(alerts.outOfStockItems || stats.lowStockCritical || 0) > 0 ? 'red' : 'orange' },
     pendingPayments: { value: paymentsBadgeCount > 0 ? paymentsBadgeCount : null, tone: 'red' },
-    amcRenewals: { value: amcRenewalBadgeCountFromDashboard(dashboardData), tone: stats.expiredAmcContracts > 0 ? 'red' : 'orange' }
+    amcRenewals: { value: amcRenewalBadgeCountFromDashboard(dashboardData), tone: stats.expiredAmcContracts > 0 ? 'red' : 'orange' },
+    notifications: { value: dashboardData?.notificationsUnreadCount || 0, tone: 'blue' }
   };
 }
 
@@ -446,12 +458,14 @@ function sidebarBadgeKeys(groups) {
 }
 
 function notificationTarget(item, role) {
+  if (item?.target) return item.target;
   const normalizedRole = normalizeRole(role);
   const base = normalizedRole === 'technician' ? '/tech' : '/admin';
   const id = item?.sourceId || '';
   const text = `${item?.type || ''} ${item?.title || ''} ${item?.message || ''}`.toLowerCase();
+  if (text.includes('quotation') || text.includes('quote')) return `${base}/documents?type=quotation`;
   if (text.includes('low stock') || text.includes('stock')) return '/admin/parts';
-  if (text.includes('payment')) return `${base}/payments`;
+  if (text.includes('payment')) return `${base}/invoices`;
   if (text.includes('invoice')) return `${base}/invoices`;
   if (text.includes('amc') || text.includes('renewal')) return normalizedRole === 'technician' ? '/tech/amc-contracts' : '/admin/amc-renewals';
   if (text.includes('booking')) return `${base}/bookings`;
@@ -513,30 +527,55 @@ function AdminSidebar({ close }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [dashboardData, setDashboardData] = useState(null);
+  const [companyProfile, setCompanyProfile] = useState(null);
   const groups = visibleAdminGroups(user);
   const badges = buildSidebarBadges(dashboardData);
+  const displayCompany = companyProfile?.name || company.name;
+  const displayPhone = companyProfile?.phone || company.phones.join(' / ');
+  const displayLocation = companyProfile?.address ? companyProfile.address.split(',').slice(-2).join(',').trim() || companyProfile.address : 'Mettur Dam';
 
   useEffect(() => {
     let mounted = true;
     async function loadSidebarBadges() {
-      const [metricsData, paymentRows] = await Promise.all([
+      const [metricsData, paymentRows, notificationData] = await Promise.all([
         request('/dashboard/metrics').catch(() => null),
-        loadPaymentRowsForPaymentsBadge(request).catch(() => null)
+        loadPaymentRowsForPaymentsBadge(request).catch(() => null),
+        request('/notifications?limit=100').catch(() => null)
       ]);
       if (!mounted) return;
+      const notificationRows = notificationData?.notifications || [];
+      const fallbackRows = notificationData && notificationRows.length ? [] : fallbackNotificationRows();
+      const notificationsUnreadCount = notificationRows.length
+        ? finiteNumber(notificationData?.unreadCount ?? unreadNotificationCount(notificationRows))
+        : unreadNotificationCount(fallbackRows);
       const paymentBadgePatch = { paymentsBadgeCount: paymentsBadgeCountFromRows(paymentRows) };
-      setDashboardData(metricsData ? { ...metricsData, ...paymentBadgePatch } : paymentBadgePatch);
+      const notificationBadgePatch = { notificationsUnreadCount };
+      setDashboardData(metricsData ? { ...metricsData, ...paymentBadgePatch, ...notificationBadgePatch } : { ...paymentBadgePatch, ...notificationBadgePatch });
     }
 
     loadSidebarBadges();
     window.addEventListener('focus', loadSidebarBadges);
     window.addEventListener('us:billing-updated', loadSidebarBadges);
+    window.addEventListener('us:notifications-updated', loadSidebarBadges);
     return () => {
       mounted = false;
       window.removeEventListener('focus', loadSidebarBadges);
       window.removeEventListener('us:billing-updated', loadSidebarBadges);
+      window.removeEventListener('us:notifications-updated', loadSidebarBadges);
     };
   }, [location.pathname, location.search, request]);
+
+  useEffect(() => {
+    let mounted = true;
+    request('/settings/company-profile')
+      .then((result) => {
+        if (mounted) setCompanyProfile(result.company || null);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [request]);
 
   function handleLogout() {
     logout();
@@ -551,13 +590,13 @@ function AdminSidebar({ close }) {
             <Wrench className="h-5 w-5 text-[var(--brand)]" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-lg font-black leading-tight">Universal Systems</h2>
+            <h2 className="text-lg font-black leading-tight">{displayCompany}</h2>
             <p className="text-sm font-bold text-sky-100">Service ERP</p>
           </div>
         </div>
         <div className="mt-4 grid gap-2 rounded-card border border-white/10 bg-white/[0.045] p-3 text-xs text-slate-300">
-          <span className="inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-[var(--brand)]" />Mettur Dam</span>
-          <span className="inline-flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-[var(--brand)]" />{company.phones.join(' / ')}</span>
+          <span className="inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-[var(--brand)]" />{displayLocation}</span>
+          <span className="inline-flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-[var(--brand)]" />{displayPhone}</span>
           <span className="inline-flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 text-[var(--brand)]" />Sales, service, AMC & billing</span>
         </div>
       </div>
@@ -910,11 +949,15 @@ function NotificationCenter({ role }) {
     setLoading(true);
     try {
       const data = await request('/notifications');
-      setNotifications(data.notifications || []);
-      setUnreadCount(data.unreadCount || 0);
+      const remoteRows = data.notifications || [];
+      const rows = remoteRows.length ? remoteRows : normalizeRole(role) === 'technician' ? [] : fallbackNotificationRows();
+      const normalizedRows = rows.map((item) => normalizeNotification(item, role));
+      setNotifications(normalizedRows);
+      setUnreadCount(remoteRows.length ? finiteNumber(data.unreadCount ?? unreadNotificationCount(normalizedRows)) : unreadNotificationCount(normalizedRows));
     } catch {
-      setNotifications([]);
-      setUnreadCount(0);
+      const fallbackRows = (normalizeRole(role) === 'technician' ? [] : fallbackNotificationRows()).map((item) => normalizeNotification(item, role));
+      setNotifications(fallbackRows);
+      setUnreadCount(unreadNotificationCount(fallbackRows));
     } finally {
       setLoading(false);
     }
@@ -949,15 +992,31 @@ function NotificationCenter({ role }) {
 
   async function markAllRead() {
     const unread = notifications.filter((item) => !item.read);
-    await Promise.all(unread.map((item) => request(`/notifications/${item.id}/read`, { method: 'PATCH' }).catch(() => null)));
+    const remoteUnread = unread.filter((item) => !item.isFallback);
+    if (remoteUnread.length) {
+      try {
+        await request('/notifications/read-all', { method: 'PATCH' });
+      } catch {
+        await Promise.all(remoteUnread.map((item) => request(`/notifications/${item.id}/read`, { method: 'PATCH' }).catch(() => null)));
+      }
+    }
+    if (unread.some((item) => item.isFallback)) markAllFallbackNotificationsRead();
+    setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+    setUnreadCount(0);
+    window.dispatchEvent(new Event('us:notifications-updated'));
     loadNotifications();
   }
 
   async function markRead(item) {
     if (!item.read) {
-      await request(`/notifications/${item.id}/read`, { method: 'PATCH' }).catch(() => null);
+      if (item.isFallback) {
+        markFallbackNotificationRead(item.id);
+      } else {
+        await request(`/notifications/${item.id}/read`, { method: 'PATCH' }).catch(() => null);
+      }
       setNotifications((current) => current.map((row) => (row.id === item.id ? { ...row, read: true } : row)));
       setUnreadCount((count) => Math.max(0, count - 1));
+      window.dispatchEvent(new Event('us:notifications-updated'));
     }
   }
 
@@ -991,7 +1050,7 @@ function NotificationCenter({ role }) {
           <div className="notification-drawer-list">
             {loading ? (
               <div className="grid min-h-28 place-items-center"><Loader2 className="h-5 w-5 animate-spin text-[var(--brand)]" /></div>
-            ) : notifications.length ? notifications.map((item) => {
+            ) : notifications.length ? notifications.slice(0, 5).map((item) => {
               const priority = priorityForNotification(item);
               return (
                 <button key={item.id} type="button" className={`mb-3 block w-full rounded-card border p-3 text-left transition hover:border-sky-300/45 hover:bg-sky-400/10 ${item.read ? 'border-white/10 bg-white/[0.035]' : 'border-sky-300/25 bg-sky-400/10'}`} onClick={() => openNotification(item)}>
@@ -1001,7 +1060,7 @@ function NotificationCenter({ role }) {
                   </div>
                   <p className="mt-1 text-sm muted">{item.message}</p>
                   <div className="mt-3 flex items-center justify-between gap-3 text-xs">
-                    <span className="muted">{item.read ? 'Read' : 'Unread'}</span>
+                    <span className="muted">{timeAgo(item.createdAt)}</span>
                     {!item.read ? (
                       <span className="font-black text-sky-100" onClick={(event) => {
                         event.stopPropagation();
@@ -1011,7 +1070,19 @@ function NotificationCenter({ role }) {
                   </div>
                 </button>
               );
-            }) : (
+            }).concat([
+              <button
+                key="view-all-notifications"
+                type="button"
+                className="btn btn-secondary mt-1 w-full justify-center"
+                onClick={() => {
+                  setOpen(false);
+                  navigate(normalizeRole(role) === 'technician' ? '/tech/dashboard' : '/admin/notifications');
+                }}
+              >
+                View all notifications
+              </button>
+            ]) : (
               <div className="grid min-h-32 place-items-center text-center">
                 <div>
                   <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-[var(--brand)]" />
@@ -1095,12 +1166,19 @@ export default function DashboardLayout({ role }) {
   const { user } = useAuth();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const { themePreference, resolvedTheme } = useThemePreference();
+  const shellThemeClass = resolvedTheme === 'light' ? 'theme-light' : 'theme-dark';
+  const shellThemeProps = {
+    'data-theme-preference': themePreference,
+    'data-theme': resolvedTheme,
+    style: { colorScheme: resolvedTheme }
+  };
 
   if (role === 'admin') {
     const allowed = canOpenAdminPath(location.pathname, user || role);
     const auditOnly = location.pathname.startsWith('/admin/audit-logs');
     return (
-      <div className="min-h-screen bg-[var(--bg)]">
+      <div className={`app-shell admin-shell min-h-screen bg-[var(--bg)] ${shellThemeClass}`} {...shellThemeProps}>
         <div className="fixed inset-y-0 left-0 z-40 hidden w-[292px] xl:block">
           <AdminSidebar />
         </div>
@@ -1123,7 +1201,7 @@ export default function DashboardLayout({ role }) {
   }
 
   return (
-    <div className="technician-shell min-h-screen bg-[var(--bg)]">
+    <div className={`app-shell technician-shell min-h-screen bg-[var(--bg)] ${shellThemeClass}`} {...shellThemeProps}>
       <div className="fixed inset-y-0 left-0 z-40 hidden w-[292px] xl:block">
         <TechnicianSidebar />
       </div>

@@ -6,17 +6,24 @@ import Customer from '../models/Customer.js';
 import Document from '../models/Document.js';
 import Invoice from '../models/Invoice.js';
 import WorkOrder from '../models/WorkOrder.js';
-import { COMPANY, PDF_DIR } from '../config.js';
+import { COMPANY, LOGO_FULL_PATH, PDF_DIR } from '../config.js';
 import { assertPermission } from '../permissions.js';
 import { appError, clean, numberValue } from '../utils/http.js';
 import { addDateRange, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 import { logAudit } from './auditService.js';
+import {
+  documentTemplateContext,
+  getTemplateByDocumentType,
+  renderTemplateText,
+  templateAccent
+} from './pdfTemplateService.js';
+import { getCompanyIdentity } from './companyProfileService.js';
 import { getTechnicianScope } from './technicianScopeService.js';
 
 const populateDocument = [
   { path: 'customerId', select: 'name phone address devices' },
   { path: 'workOrderId', select: 'device issue status serviceCharge partsUsed technicianId createdAt', populate: { path: 'technicianId', select: 'name username' } },
-  { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status' }
+  { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status createdAt' }
 ];
 
 function documentTitle(type) {
@@ -141,16 +148,28 @@ export async function getDocument(id, user = null) {
 export async function generateDocumentPdf(id, user = null) {
   const document = await getDocument(id, user);
   fs.mkdirSync(PDF_DIR, { recursive: true });
-  const filename = `${document.type}-${document.id}.pdf`;
+  const filename = `${document.type}-${document.id}-${Date.now()}.pdf`;
   const filePath = path.join(PDF_DIR, filename);
+  const template = await getTemplateByDocumentType(document.type);
+  const templateConfig = template?.config || {};
+  const company = await getCompanyIdentity();
+  const context = documentTemplateContext(document, company);
+  const accent = templateAccent(template);
   const pdf = new PDFDocument({ margin: 48, size: 'A4' });
   const stream = fs.createWriteStream(filePath);
   pdf.pipe(stream);
 
   const title = documentTitle(document.type);
-  pdf.fontSize(20).text(COMPANY.name, { align: 'left' });
-  pdf.fontSize(10).fillColor('#555').text(COMPANY.address).text(`${COMPANY.phones.join(' / ')} | ${COMPANY.email}`);
+  const logoPath = company.logoFilePath || LOGO_FULL_PATH;
+  if (templateConfig.showCompanyLogo !== false && logoPath && fs.existsSync(logoPath)) pdf.image(logoPath, 48, 36, { width: 145 });
+  pdf.fontSize(20).fillColor(accent).text(company.name || COMPANY.name, { align: 'right' });
+  if (templateConfig.showCompanyDetails !== false) {
+    pdf.fontSize(10).fillColor('#555').text(company.address || COMPANY.address, { align: 'right' }).text(`${(company.phones || COMPANY.phones).join(' / ')} | ${company.email || COMPANY.email}`, { align: 'right' });
+  }
   pdf.moveDown();
+  pdf.roundedRect(48, pdf.y + 6, 500, 32, 4).fill(accent);
+  pdf.fillColor('#fff').fontSize(16).text(renderTemplateText(templateConfig.headerTitle || title, context), 60, pdf.y + 15);
+  pdf.moveDown(3);
   pdf.fillColor('#111').fontSize(18).text(title, { align: 'right' });
   pdf.fontSize(10).text(`Date: ${new Date(document.createdAt).toLocaleDateString('en-IN')}`, { align: 'right' });
   pdf.moveDown();
@@ -183,6 +202,28 @@ export async function generateDocumentPdf(id, user = null) {
     pdf.fontSize(12).text('Service Report', { underline: true });
     pdf.fontSize(10).text(`Technician: ${workOrder.technicianId?.name || 'Admin'}`).text(`Resolution Status: ${workOrder.status}`);
   }
+  const templateSections = [
+    ['Notes / Warranty', templateConfig.notesWarrantyText],
+    ['Terms & Conditions', templateConfig.termsAndConditions],
+    ['Payment / Bank Details', templateConfig.paymentBankDetails],
+    ['AMC Terms', templateConfig.amcTerms]
+  ].filter(([, value]) => String(value || '').trim());
+  if (templateSections.length) {
+    pdf.moveDown();
+    templateSections.forEach(([label, value]) => {
+      pdf.fillColor('#111').fontSize(11).text(label, { underline: true });
+      pdf.fillColor('#555').fontSize(9).text(renderTemplateText(value, context), { lineGap: 3 });
+      pdf.moveDown(0.5);
+    });
+  }
+  if (String(templateConfig.signatureSection || '').trim()) {
+    pdf.moveDown();
+    pdf.moveTo(360, pdf.y + 20).lineTo(520, pdf.y + 20).stroke();
+    pdf.moveDown();
+    pdf.fontSize(9).fillColor('#555').text(renderTemplateText(templateConfig.signatureSection, context), 360, pdf.y, { width: 160, align: 'center' });
+  }
+  const footerText = renderTemplateText(templateConfig.footerText || `${company.name || COMPANY.name} | ${(company.phones || COMPANY.phones).join(' / ')} | ${company.email || COMPANY.email}`, context);
+  pdf.fontSize(8).fillColor('#777').text(footerText, 48, 770, { width: 500, align: 'center' });
 
   pdf.end();
   await new Promise((resolve, reject) => {
