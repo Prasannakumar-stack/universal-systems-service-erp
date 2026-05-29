@@ -20,7 +20,9 @@ import {
 import { getCompanyIdentity } from './companyProfileService.js';
 import { getTechnicianScope } from './technicianScopeService.js';
 import { getBusinessSettings } from './businessSettingsService.js';
+import { renderInvoicePdf } from './invoicePdfTemplate.js';
 import { renderQuotationPdf } from './quotationPdfTemplate.js';
+import { renderServiceCompletedPdf } from './serviceCompletedPdfTemplate.js';
 
 const populateDocument = [
   { path: 'customerId', select: 'name phone address devices' },
@@ -216,6 +218,73 @@ export async function generateDocumentPdf(id, user = null) {
         technician: workOrder.technicianId?.name || workOrder.technicianId?.username || '',
         serialNumber: workOrder.serialNumber || workOrder.deviceSerialNumber || workOrder.serialNo || '',
         items
+      }
+    });
+    pdf.end();
+    await new Promise((resolve, reject) => {
+      stream.on('finish', resolve);
+      stream.on('error', reject);
+    });
+    return { filePath, filename };
+  }
+
+  if (document.type === 'invoice') {
+    const customer = document.customerId || {};
+    const workOrder = document.workOrderId || {};
+    const invoice = document.invoiceId || {};
+    const items = [
+      ...(Number(document.serviceCharge || 0) > 0
+        ? [{ description: 'General Service', quantity: 1, unitPrice: document.serviceCharge, total: document.serviceCharge }]
+        : []),
+      ...(document.items || []).map((item) => ({
+        description: item.name,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        total: item.subtotal
+      }))
+    ];
+    const total = Number(invoice.total ?? document.totalAmount ?? items.reduce((sum, item) => sum + Number(item.total || 0), 0));
+    const paidAmount = Number(invoice.paidAmount || 0);
+    renderInvoicePdf(pdf, {
+      company,
+      template,
+      context,
+      invoice: {
+        invoiceNo: invoice.invoiceNumber || context.invoice_number || '-',
+        jobReference: workOrderReference(workOrder),
+        invoiceDate: documentDate(invoice.createdAt || document.createdAt || new Date()),
+        paymentStatus: invoice.status || 'Pending',
+        customerName: customer.name || '-',
+        customerPhone: customer.phone || '-',
+        customerAddress: customer.address || '-',
+        serviceType: workOrder.serviceType || workOrder.device || '-',
+        device: workOrder.device || '-',
+        brandModel: workOrder.brandModel || workOrder.deviceModel || workOrder.model || workOrder.device || '-',
+        problemComplaint: workOrder.issue || '-',
+        technician: workOrder.technicianId?.name || workOrder.technicianId?.username || '',
+        items,
+        subtotal: items.reduce((sum, item) => sum + Number(item.total || 0), 0),
+        finalTotal: total,
+        amountPaid: paidAmount,
+        balance: Number(invoice.balance ?? Math.max(0, total - paidAmount))
+      }
+    });
+    pdf.end();
+    await new Promise((resolve, reject) => {
+      stream.on('finish', resolve);
+      stream.on('error', reject);
+    });
+    return { filePath, filename };
+  }
+
+  if (document.type === 'service') {
+    const customer = document.customerId || {};
+    renderServiceCompletedPdf(pdf, {
+      company,
+      template,
+      context,
+      service: {
+        customerName: customer.name || 'Customer'
       }
     });
     pdf.end();

@@ -231,17 +231,33 @@ function TemplateEditor({ template, draft, setDraft, canEdit, saving, onSave, on
             <span className="font-bold text-slate-100">Company details visibility</span>
             <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={draft.showCompanyDetails !== false} onChange={(event) => update('showCompanyDetails', event.target.checked)} disabled={!canEdit} />
           </label>
-          {template.key === 'quotation' ? (
+          {['quotation', 'amc-contract', 'amc-service-visit'].includes(template.key) ? (
             <>
               <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
                 <span className="font-bold text-slate-100">Technician row visibility</span>
                 <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={draft.showTechnician !== false} onChange={(event) => update('showTechnician', event.target.checked)} disabled={!canEdit} />
               </label>
+            </>
+          ) : null}
+          {['quotation', 'amc-contract'].includes(template.key) ? (
+            <>
               <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
-                <span className="font-bold text-slate-100">Serial number row visibility</span>
+                <span className="font-bold text-slate-100">{template.key === 'amc-contract' ? 'Serial number column visibility' : 'Serial number row visibility'}</span>
                 <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={Boolean(draft.showSerialNumber)} onChange={(event) => update('showSerialNumber', event.target.checked)} disabled={!canEdit} />
               </label>
             </>
+          ) : null}
+          {template.key === 'amc-service-visit' ? (
+            <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
+              <span className="font-bold text-slate-100">Additional charges section visibility</span>
+              <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={draft.showAdditionalCharges !== false} onChange={(event) => update('showAdditionalCharges', event.target.checked)} disabled={!canEdit} />
+            </label>
+          ) : null}
+          {template.key === 'amc-renewal-reminder' ? (
+            <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
+              <span className="font-bold text-slate-100">Renewal amount section visibility</span>
+              <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={draft.showRenewalAmount !== false} onChange={(event) => update('showRenewalAmount', event.target.checked)} disabled={!canEdit} />
+            </label>
           ) : null}
           {editorTextAreas.map((field) => (
             <label key={field.key} className="lg:col-span-2">

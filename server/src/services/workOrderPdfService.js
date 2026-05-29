@@ -6,6 +6,11 @@ import { COMPANY, LOGO_FULL_PATH, PDF_DIR } from '../config.js';
 import { hasPermission } from '../permissions.js';
 import { appError } from '../utils/http.js';
 import { calculateAmcCoverageBreakdown, amcCoverageSummary } from './amcCoverageEngine.js';
+import {
+  renderAmcContractPdf,
+  renderAmcRenewalPdf,
+  renderAmcServiceVisitPdf
+} from './amcPdfTemplates.js';
 import { getBusinessSettings } from './businessSettingsService.js';
 import {
   getTemplateByPdfType,
@@ -14,7 +19,9 @@ import {
   workOrderTemplateContext
 } from './pdfTemplateService.js';
 import { getCompanyIdentity } from './companyProfileService.js';
+import { renderInvoicePdf } from './invoicePdfTemplate.js';
 import { renderQuotationPdf } from './quotationPdfTemplate.js';
+import { renderServiceCompletedPdf } from './serviceCompletedPdfTemplate.js';
 import { technicianCanAccessWorkOrder } from './technicianScopeService.js';
 
 const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
@@ -73,7 +80,7 @@ async function getPdfWorkOrder(workOrderId, user) {
     .populate('bookingId', 'bookingCode serviceType device')
     .populate({
       path: 'amcContractId',
-      select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices serviceFrequency contractValue startDate endDate status includedVisits invoiceId notes visits',
+      select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices serviceFrequency contractValue startDate endDate status includedVisits invoiceId notes visits createdAt',
       populate: { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status title notes createdAt' }
     })
     .populate('invoiceId', 'invoiceNumber total paidAmount balance status title notes createdAt');
@@ -223,12 +230,6 @@ function documentDate(value = new Date()) {
   ].join('-');
 }
 
-function displayDateTime(value = new Date()) {
-  const date = new Date(value || new Date());
-  if (Number.isNaN(date.getTime())) return new Date().toLocaleString('en-IN');
-  return date.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
-}
-
 function addHeader(doc, title, template = null, context = {}, company = COMPANY) {
   registerFonts(doc);
   const currentCompany = companyFallback(company);
@@ -304,51 +305,6 @@ function footer(doc, message = '', template = null, context = {}, company = COMP
   });
 }
 
-function addThankYouHeader(doc, template = null, company = COMPANY) {
-  registerFonts(doc);
-  const currentCompany = companyFallback(company);
-  const config = template?.config || {};
-  const accent = templateAccent(template);
-  if (config.showCompanyLogo !== false && currentCompany.logoFilePath && fs.existsSync(currentCompany.logoFilePath)) {
-    doc.image(currentCompany.logoFilePath, 44, 34, { width: 142 });
-  }
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(17).fillColor('#0f172a').text(currentCompany.name, 306, 34, { width: 240, align: 'right' });
-  if (config.showCompanyDetails !== false) {
-    doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(8.5).fillColor('#475569');
-    doc.text(String(currentCompany.address || '').replace(/\n/g, ', '), 292, 58, { width: 254, align: 'right', lineGap: 1 });
-    doc.text(`Phone: ${currentCompany.phones.join(' / ')}`, 292, 98, { width: 254, align: 'right' });
-    doc.text(`Email: ${currentCompany.email}`, 292, 112, { width: 254, align: 'right' });
-  }
-  doc.strokeColor('#e2e8f0').lineWidth(1).moveTo(44, 132).lineTo(550, 132).stroke();
-  doc.roundedRect(44, 138, 506, 4, 2).fill(accent);
-}
-
-function addThankYouFooter(doc, template = null, context = {}, company = COMPANY) {
-  const currentCompany = companyFallback(company);
-  const whatsapp = currentCompany.whatsappNumber ? ` | WhatsApp: ${currentCompany.whatsappNumber}` : '';
-  const address = String(currentCompany.address || '').replace(/\n/g, ', ');
-  const footerText = [
-    `${currentCompany.name} | Phone: ${currentCompany.phones.join(' / ')}${whatsapp} | Email: ${currentCompany.email}`,
-    address,
-    `Generated: ${displayDateTime(new Date())} | Page 1 of 1`
-  ].filter(Boolean).join('\n');
-  doc.strokeColor('#e2e8f0').lineWidth(0.8).moveTo(44, 742).lineTo(550, 742).stroke();
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(7.5).fillColor('#64748b').text(renderTemplateText(footerText, context), 44, 752, { width: 506, align: 'center', lineGap: 2 });
-}
-
-function summaryCell(doc, label, value, x, y, width) {
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(8).fillColor('#64748b').text(label.toUpperCase(), x, y, { width });
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(10).fillColor('#0f172a').text(value || '-', x, y + 14, { width });
-}
-
-function serviceCompletedWarrantyNote(template, context) {
-  const fallback = 'Warranty, if applicable, is subject to the parts and service terms recorded at the time of service.';
-  const configured = renderTemplateText(template?.config?.notesWarrantyText || '', context).trim();
-  if (!configured) return fallback;
-  if (/dear\s+.+service has been completed successfully/i.test(configured)) return fallback;
-  return configured;
-}
-
 function templateBlock(doc, label, value, x, y, width, template, context) {
   const text = renderTemplateText(value || '', context).trim();
   if (!text) return y;
@@ -416,25 +372,103 @@ function buildQuotation(doc, workOrder, template, context, company, businessSett
   });
 }
 
+function amcPeriod(contract = {}) {
+  return `${documentDate(contract.startDate || new Date())} to ${documentDate(contract.endDate || new Date())}`;
+}
+
+function nextYearDate(value = new Date()) {
+  const date = new Date(value || new Date());
+  const safe = Number.isNaN(date.getTime()) ? new Date() : date;
+  return new Date(safe.getFullYear() + 1, safe.getMonth(), safe.getDate());
+}
+
+function nextAmcVisitDate(contract = {}, fallback = new Date()) {
+  const visits = Array.isArray(contract.visits) ? contract.visits : [];
+  const nextVisit = visits
+    .filter((visit) => visit?.scheduledDate && new Date(visit.scheduledDate).getTime() >= Date.now())
+    .sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate))[0];
+  if (nextVisit?.scheduledDate) return nextVisit.scheduledDate;
+  const date = new Date(fallback || new Date());
+  const safe = Number.isNaN(date.getTime()) ? new Date() : date;
+  safe.setDate(safe.getDate() + 30);
+  return safe;
+}
+
+function coveredItemsForAmc(workOrder = {}) {
+  const contract = workOrder.amcContractId || {};
+  const customer = workOrder.customerId || {};
+  const devices = Array.isArray(customer.devices) && customer.devices.length
+    ? customer.devices
+    : String(contract.coveredDevices || workOrder.device || 'Desktop / Laptop / Computer System')
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  const rows = devices.length ? devices : [workOrder.device || 'Computer System'];
+  return rows.slice(0, 4).map((device, index) => ({
+    device,
+    brandModel: index === 0 ? (workOrder.brandModel || workOrder.deviceModel || workOrder.model || '-') : '-',
+    quantity: 1,
+    coverageNotes: index === 0 ? 'General AMC support' : 'Service support',
+    serialNumber: workOrder.serialNumber || workOrder.deviceSerialNumber || workOrder.serialNo || '-'
+  }));
+}
+
+function latestTechnicianNote(workOrder = {}) {
+  const notes = (workOrder.notes || []).map((note) => note.text).filter(Boolean);
+  return notes.length ? notes.slice(-2).join('\n') : 'AMC visit completed successfully.\nNo major issue found.';
+}
+
+function amcBaseData(workOrder = {}) {
+  const contract = workOrder.amcContractId || {};
+  const customer = workOrder.customerId || {};
+  return {
+    amcReference: contract.contractId || 'AMC-2026-0012',
+    customerName: customer.name || contract.customerName || 'Customer',
+    customerPhone: customer.phone || contract.phone || '-',
+    customerAddress: customer.address || contract.address || '-',
+    planName: contract.coveredService || contract.contractType || 'Computer AMC Support',
+    coverageType: amcCoverageSummary(contract).coverageType || contract.coverageType || 'Service Support',
+    coveredFor: contract.coveredDevices || contract.coveredService || workOrder.device || 'Desktop / Laptop / Computer System',
+    technician: workOrder.technicianId?.name || workOrder.technicianId?.username || ''
+  };
+}
+
 function buildInvoice(doc, workOrder, template, context, company) {
   const isAmcWorkOrder = Boolean(workOrder.amcContractId);
-  addHeader(doc, isAmcWorkOrder ? 'EXTRA PARTS INVOICE' : 'INVOICE', template, context, company);
-  addCustomerDetails(doc, workOrder, 205);
   const rows = buildRows(workOrder, { billingOnly: isAmcWorkOrder });
   const subtotal = rows.reduce((sum, row) => sum + Number(row.total || 0), 0);
   const invoice = workOrder.invoiceId;
   const total = Number(invoice?.total ?? subtotal);
-  let y = table(doc, rows, 315, 'Subtotal');
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#334155');
-  doc.text(`Subtotal: ${money(subtotal)}`, 356, y, { width: 188, align: 'right' });
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a');
-  doc.text(`Total Amount: ${money(total)}`, 356, y + 20, { width: 188, align: 'right' });
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155');
-  doc.text(`Amount in Words: ${amountInWords(total)}`, 52, y + 58, { width: 492 });
-  doc.text(`Payment Status: ${invoice?.status || 'Pending'}`, 52, y + 78);
-  addTemplateNotes(doc, y + 112, template, context, { notes: true, terms: true, payment: true });
-  addTemplateSignature(doc, 710, template, context);
-  footer(doc, `Thank you for choosing ${companyFallback(company).name}.`, template, context, company);
+  const customer = workOrder.customerId || {};
+  renderInvoicePdf(doc, {
+    company,
+    template,
+    context,
+    invoice: {
+      invoiceNo: invoice?.invoiceNumber || context.invoice_number || '-',
+      jobReference: workOrderReference(workOrder),
+      invoiceDate: documentDate(invoice?.createdAt || new Date()),
+      paymentStatus: invoice?.status || 'Pending',
+      customerName: customer.name || '-',
+      customerPhone: customer.phone || '-',
+      customerAddress: customer.address || '-',
+      serviceType: workOrder.serviceType || workOrder.bookingId?.serviceType || serviceType(workOrder),
+      device: workOrder.device || '-',
+      brandModel: workOrder.brandModel || workOrder.deviceModel || workOrder.model || workOrder.device || '-',
+      problemComplaint: workOrder.issue || '-',
+      technician: workOrder.technicianId?.name || workOrder.technicianId?.username || '',
+      items: rows.map((row) => ({
+        description: row.description,
+        quantity: row.quantity,
+        unitPrice: row.price,
+        total: row.total
+      })),
+      subtotal,
+      finalTotal: total,
+      amountPaid: Number(invoice?.paidAmount || 0),
+      balance: Number(invoice?.balance ?? Math.max(0, total - Number(invoice?.paidAmount || 0)))
+    }
+  });
 }
 
 function addAmcContractBlock(doc, workOrder, y, title = 'AMC CONTRACT SUMMARY') {
@@ -466,58 +500,42 @@ function addAmcContractBlock(doc, workOrder, y, title = 'AMC CONTRACT SUMMARY') 
 
 function buildAmcContractPdf(doc, workOrder, template, context, company) {
   const contract = workOrder.amcContractId || {};
-  const coverage = amcCoverageSummary(contract);
-  const coverageLists = amcCoveredNotCovered(contract);
-  addHeader(doc, 'AMC CONTRACT', template, context, company);
-  addCustomerDetails(doc, workOrder, 205);
-  addAmcContractBlock(doc, workOrder, 315);
-  const rows = [
-    { description: contract.contractType || 'AMC Contract', quantity: 1, price: contract.contractValue || 0, total: contract.contractValue || 0 },
-    { description: `Included visits: ${contract.includedVisits || 0}`, quantity: 1, price: 0, total: 0 }
-  ];
-  let y = table(doc, rows, 455, 'Value');
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#334155');
-  doc.text(`Coverage Type: ${coverage.coverageType}`, 52, y, { width: 492 });
-  doc.text(`Coverage Rules: ${coverage.coverageRules.join('; ')}`, 52, y + 18, { width: 492 });
-  doc.text(`Devices / Assets: ${contract.coveredDevices || contract.coveredService || '-'}`, 52, y + 52, { width: 492 });
-  doc.text(`Renewal Terms: Renewal is due before ${contract.endDate ? new Date(contract.endDate).toLocaleDateString('en-IN') : 'contract expiry'} to continue AMC coverage.`, 52, y + 86, { width: 492 });
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text('COVERED', 52, y + 126);
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155').text(coverageLists.covered.map((item) => `\u2714 ${item}`).join('\n') || '-', 52, y + 144, { width: 230, lineGap: 4 });
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text('NOT COVERED', 310, y + 126);
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155').text(coverageLists.notCovered.map((item) => `\u2718 ${item}`).join('\n') || '-', 310, y + 144, { width: 230, lineGap: 4 });
-  const templateY = addTemplateNotes(doc, y + 210, template, context, { notes: true, terms: true, payment: true, amcTerms: true });
-  doc.text(`Terms: ${contract.notes || `AMC coverage is subject to contract value, period, devices, and service terms recorded by ${companyFallback(company).name}.`}`, 52, Math.min(templateY, y + 250), { width: 492 });
-  doc.strokeColor('#94a3b8').lineWidth(0.7).moveTo(70, y + 278).lineTo(230, y + 278).stroke();
-  doc.moveTo(360, y + 278).lineTo(520, y + 278).stroke();
-  doc.fillColor('#334155').text('Customer Signature', 94, y + 286);
-  doc.text(renderTemplateText(template?.config?.signatureSection || 'Authorized Signature', context), 386, y + 286);
-  footer(doc, `AMC coverage is subject to the contract terms recorded by ${companyFallback(company).name}.`, template, context, company);
+  const invoice = contract.invoiceId || {};
+  renderAmcContractPdf(doc, {
+    company,
+    template,
+    context,
+    contract: {
+      ...amcBaseData(workOrder),
+      contractDate: documentDate(contract.createdAt || new Date()),
+      amcPeriod: amcPeriod(contract),
+      status: contractStatus(contract),
+      contractValue: Number(contract.contractValue || invoice.total || 0),
+      paymentStatus: invoice.status || (Number(invoice.paidAmount || 0) > 0 ? 'Paid' : 'Pending'),
+      renewalDate: documentDate(contract.endDate || new Date()),
+      coveredItems: coveredItemsForAmc(workOrder)
+    }
+  });
 }
 
 function buildAmcServiceVisitPdf(doc, workOrder, template, context, company) {
-  addHeader(doc, 'AMC SERVICE VISIT', template, context, company);
-  addCustomerDetails(doc, workOrder, 205);
-  addAmcContractBlock(doc, workOrder, 315, 'AMC INFORMATION');
+  const contract = workOrder.amcContractId || {};
   const breakdown = calculateAmcCoverageBreakdown(workOrder);
-  const rows = buildRows(workOrder);
-  let y = table(doc, rows.length ? rows : [{ description: 'AMC service visit', quantity: 1, price: 0, total: 0 }], 455, 'Payable');
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text('SERVICE NOTES', 52, y);
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155');
-  doc.text(`Issue: ${workOrder.issue || '-'}`, 52, y + 18, { width: 492 });
-  doc.text(`Status: ${workOrder.status || '-'}`, 52, y + 34, { width: 492 });
-  const technicianNotes = (workOrder.notes || []).map((note) => note.text).filter(Boolean).join('; ');
-  doc.text(`Technician Notes: ${technicianNotes || '-'}`, 52, y + 50, { width: 492 });
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text('PARTS SECTION', 52, y + 82);
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155');
-  doc.text(`Covered Parts: ${breakdown.coveredParts.length ? breakdown.coveredParts.map((part) => `${part.name} ${money(part.total)}`).join(', ') : '-'}`, 52, y + 100, { width: 492 });
-  doc.text(`Chargeable Parts: ${breakdown.chargeableParts.length ? breakdown.chargeableParts.map((part) => `${part.name} ${money(part.total)}`).join(', ') : '-'}`, 52, y + 132, { width: 492 });
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text('BILLING SECTION', 52, y + 166);
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#334155');
-  doc.text(`Covered Amount: ${money(breakdown.coveredTotal)}`, 52, y + 184, { width: 240 });
-  doc.text(`Extra Payable Amount: ${money(breakdown.extraPayable)}`, 310, y + 184, { width: 230 });
-  addTemplateNotes(doc, y + 210, template, context, { notes: true, terms: true, payment: false, amcTerms: true });
-  addTemplateSignature(doc, y + 300, template, context);
-  footer(doc, `AMC service visit record from ${companyFallback(company).name}.`, template, context, company);
+  renderAmcServiceVisitPdf(doc, {
+    company,
+    template,
+    context,
+    visit: {
+      ...amcBaseData(workOrder),
+      visitDate: documentDate(workOrder.completedAt || workOrder.updatedAt || new Date()),
+      visitStatus: workOrder.status === 'Delivered' ? 'Completed' : workOrder.status || 'Completed',
+      nextVisitDate: documentDate(nextAmcVisitDate(contract, workOrder.completedAt || workOrder.updatedAt || new Date())),
+      jobReference: workOrderReference(workOrder),
+      amcPeriod: amcPeriod(contract),
+      technicianNotes: latestTechnicianNote(workOrder),
+      additionalCharges: Number(breakdown.extraPayable || 0)
+    }
+  });
 }
 
 function buildAmcInvoicePdf(doc, workOrder, template, context, company) {
@@ -549,61 +567,34 @@ function buildAmcInvoicePdf(doc, workOrder, template, context, company) {
 }
 
 function buildServiceCompleted(doc, workOrder, template, context, company) {
-  const currentCompany = companyFallback(company);
   const customer = workOrder.customerId || {};
-  const accent = templateAccent(template);
-  const invoice = workOrder.invoiceId || {};
-  const completedDate = workOrder.completedAt || workOrder.updatedAt || new Date();
-  const warrantyNote = serviceCompletedWarrantyNote(template, context);
-  addThankYouHeader(doc, template, company);
-
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(25).fillColor('#0f172a')
-    .text('THANK YOU FOR CHOOSING US!', 52, 166, { width: 492, align: 'center' });
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(12).fillColor('#475569')
-    .text('Your service has been completed successfully', 52, 202, { width: 492, align: 'center' });
-
-  doc.roundedRect(54, 244, 488, 92, 10).fill('#f8fafc').strokeColor('#e2e8f0').stroke();
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(12).fillColor('#0f172a')
-    .text(`Dear ${customer.name || 'Customer'},`, 78, 266, { width: 440 });
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(10).fillColor('#334155')
-    .text(`Thank you for choosing ${currentCompany.name}. We appreciate your trust and are happy to confirm that your ${serviceType(workOrder)} service has been completed successfully.`, 78, 288, { width: 440, lineGap: 4 });
-
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(12).fillColor('#0f172a')
-    .text('Service Summary', 54, 368);
-  doc.roundedRect(54, 390, 488, 112, 8).fill('#ffffff').strokeColor('#dbe3ef').stroke();
-  summaryCell(doc, 'Work Order No', customerId(workOrder), 78, 414, 205);
-  summaryCell(doc, 'Service Type', workOrder.serviceType || serviceType(workOrder), 320, 414, 190);
-  summaryCell(doc, 'Completed Date', displayDate(completedDate), 78, 462, 205);
-  summaryCell(doc, 'Payment Status', invoice.status || 'Pending', 320, 462, 190);
-
-  doc.roundedRect(54, 532, 488, 58, 8).fill('#fffdf4').strokeColor('#fde68a').stroke();
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(10).fillColor('#92400e')
-    .text('Warranty Note', 78, 550);
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#78350f')
-    .text(warrantyNote, 78, 568, { width: 440, lineGap: 3 });
-
-  doc.roundedRect(54, 616, 488, 72, 10).fill('#f0f9ff').strokeColor('#bae6fd').stroke();
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(11).fillColor(accent)
-    .text('Keep Your Devices Covered With AMC', 78, 636);
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9.5).fillColor('#334155')
-    .text(`Ask ${currentCompany.name} about Annual Maintenance Contracts for regular checkups, priority support, and easier service planning.`, 78, 656, { width: 330, lineGap: 3 });
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(9).fillColor('#0f172a')
-    .text(`Call: ${currentCompany.phones[0] || '-'}`, 426, 648, { width: 92, align: 'right' });
-
-  addThankYouFooter(doc, template, context, company);
+  renderServiceCompletedPdf(doc, {
+    company,
+    template,
+    context,
+    service: {
+      customerName: customer.name || 'Customer'
+    }
+  });
 }
 
 function buildAmcRenewalReminderPdf(doc, workOrder, template, context, company) {
   const contract = workOrder.amcContractId || {};
-  addHeader(doc, 'AMC RENEWAL REMINDER', template, context, company);
-  addCustomerDetails(doc, workOrder, 205);
-  addAmcContractBlock(doc, workOrder, 315, 'AMC RENEWAL DETAILS');
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(12).fillColor('#0f172a').text('Renewal Reminder', 52, 470);
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(10).fillColor('#334155');
-  doc.text(renderTemplateText(template?.config?.notesWarrantyText || `Your AMC contract will expire on ${contract.endDate ? new Date(contract.endDate).toLocaleDateString('en-IN') : '-'}.`, context), 52, 496, { width: 492, lineGap: 4 });
-  addTemplateNotes(doc, 560, template, context, { notes: false, terms: true, payment: true, amcTerms: true });
-  addTemplateSignature(doc, 710, template, context);
-  footer(doc, `AMC renewal reminder from ${companyFallback(company).name}.`, template, context, company);
+  const expiryDate = contract.endDate || new Date();
+  renderAmcRenewalPdf(doc, {
+    company,
+    template,
+    context,
+    renewal: {
+      ...amcBaseData(workOrder),
+      reminderDate: documentDate(new Date()),
+      expiryDate: documentDate(expiryDate),
+      renewalStatus: 'Renewal Due',
+      currentPeriod: amcPeriod(contract),
+      renewalPeriod: `${documentDate(expiryDate)} to ${documentDate(nextYearDate(expiryDate))}`,
+      renewalAmount: Number(contract.contractValue || contract.invoiceId?.total || 0)
+    }
+  });
 }
 
 function buildPdf(doc, type, workOrder, template, company, businessSettings = null) {

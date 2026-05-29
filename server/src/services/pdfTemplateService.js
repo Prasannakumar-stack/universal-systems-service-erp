@@ -8,7 +8,17 @@ import { appError, clean } from '../utils/http.js';
 import { logAudit } from './auditService.js';
 import { getCompanyIdentity } from './companyProfileService.js';
 import { getBusinessSettings } from './businessSettingsService.js';
+import {
+  renderAmcContractPdf,
+  renderAmcRenewalPdf,
+  renderAmcServiceVisitPdf,
+  sampleAmcContractData,
+  sampleAmcRenewalData,
+  sampleAmcVisitData
+} from './amcPdfTemplates.js';
+import { renderInvoicePdf, sampleInvoiceData } from './invoicePdfTemplate.js';
 import { renderQuotationPdf, sampleQuotationData } from './quotationPdfTemplate.js';
+import { renderServiceCompletedPdf, sampleServiceCompletedData } from './serviceCompletedPdfTemplate.js';
 
 export const PDF_TEMPLATE_PLACEHOLDERS = [
   '{{customer_name}}',
@@ -45,11 +55,12 @@ export const PDF_TEMPLATE_DEFINITIONS = [
       headerTitle: 'INVOICE',
       showCompanyLogo: true,
       showCompanyDetails: true,
-      footerText: 'Thank you for choosing {{company_name}}.',
-      termsAndConditions: 'Payment is due before product delivery. Warranty is subject to service notes and parts terms.',
-      paymentBankDetails: 'Payment can be made by Cash or UPI. Please quote {{invoice_number}} while making payment.',
-      signatureSection: 'Authorized Signature',
-      notesWarrantyText: 'Service completed for {{customer_name}}. Total payable: {{total_amount}}.',
+      showTechnician: true,
+      footerText: 'Thank you for your business. We look forward to serving you again.',
+      termsAndConditions: 'Payment is required before delivery or as per company policy.\nWarranty, if applicable, covers only the parts or services mentioned in this invoice.\nProducts once delivered should be checked and verified by the customer.\nAdditional work or parts not mentioned in this invoice will be charged separately.',
+      paymentBankDetails: '',
+      signatureSection: '',
+      notesWarrantyText: '',
       amcTerms: '',
       colorAccent: '#0f2a52'
     }
@@ -80,14 +91,14 @@ export const PDF_TEMPLATE_DEFINITIONS = [
     name: 'Thank You / Service Completed PDF',
     description: 'Simple thank-you PDF issued after a service is completed.',
     defaults: {
-      headerTitle: 'THANK YOU FOR CHOOSING US!',
+      headerTitle: 'SERVICE COMPLETED!',
       showCompanyLogo: true,
       showCompanyDetails: true,
-      footerText: '{{company_name}} | {{company_phone}} | {{company_email}}',
+      footerText: 'We appreciate your business. Visit us again!',
       termsAndConditions: '',
       paymentBankDetails: '',
       signatureSection: '',
-      notesWarrantyText: 'Warranty, if applicable, is subject to the parts and service terms recorded at the time of service.',
+      notesWarrantyText: '',
       amcTerms: '',
       colorAccent: '#0f2a52'
     }
@@ -101,12 +112,14 @@ export const PDF_TEMPLATE_DEFINITIONS = [
       headerTitle: 'AMC CONTRACT',
       showCompanyLogo: true,
       showCompanyDetails: true,
-      footerText: 'AMC coverage is subject to the contract terms recorded by {{company_name}}.',
-      termsAndConditions: 'Coverage applies only during {{amc_start_date}} to {{amc_end_date}}.',
-      paymentBankDetails: 'AMC payment should be completed as per the invoice terms.',
-      signatureSection: 'Customer Signature / Authorized Signature',
-      notesWarrantyText: 'AMC contract for {{customer_name}} covering {{service_name}}.',
-      amcTerms: 'Renewal is due before {{amc_end_date}} to continue AMC coverage.',
+      showTechnician: true,
+      showSerialNumber: false,
+      footerText: 'Thank you for choosing Universal Systems AMC support.',
+      termsAndConditions: '',
+      paymentBankDetails: '',
+      signatureSection: '',
+      notesWarrantyText: '',
+      amcTerms: '',
       colorAccent: '#0f2a52'
     }
   },
@@ -116,15 +129,17 @@ export const PDF_TEMPLATE_DEFINITIONS = [
     name: 'AMC Visit / Service Report PDF',
     description: 'AMC service visit report template for completed visits.',
     defaults: {
-      headerTitle: 'AMC SERVICE VISIT',
+      headerTitle: 'AMC SERVICE VISIT REPORT',
       showCompanyLogo: true,
       showCompanyDetails: true,
-      footerText: 'AMC service visit record from {{company_name}}.',
-      termsAndConditions: 'This visit is recorded against the active AMC contract.',
+      showTechnician: true,
+      showAdditionalCharges: true,
+      footerText: 'Thank you for choosing Universal Systems AMC support.',
+      termsAndConditions: '',
       paymentBankDetails: '',
-      signatureSection: 'Customer Signature',
-      notesWarrantyText: 'AMC visit completed by {{technician_name}} for {{customer_name}}.',
-      amcTerms: 'Next scheduled service date: {{next_service_date}}.',
+      signatureSection: '',
+      notesWarrantyText: '',
+      amcTerms: '',
       colorAccent: '#0f2a52'
     }
   },
@@ -137,12 +152,13 @@ export const PDF_TEMPLATE_DEFINITIONS = [
       headerTitle: 'AMC RENEWAL REMINDER',
       showCompanyLogo: true,
       showCompanyDetails: true,
-      footerText: 'Please contact {{company_name}} to renew AMC coverage.',
-      termsAndConditions: 'Renewal keeps coverage active after {{amc_end_date}}.',
-      paymentBankDetails: 'Renewal payment details will be shared after confirmation.',
-      signatureSection: 'Authorized Signature',
-      notesWarrantyText: 'Dear {{customer_name}}, your AMC for {{service_name}} expires on {{amc_end_date}}.',
-      amcTerms: 'Book renewal before expiry to avoid service coverage interruption.',
+      showRenewalAmount: true,
+      footerText: 'We value your trust. Stay connected for the best service!',
+      termsAndConditions: '',
+      paymentBankDetails: '',
+      signatureSection: '',
+      notesWarrantyText: '',
+      amcTerms: '',
       colorAccent: '#0f2a52'
     }
   }
@@ -202,6 +218,8 @@ function sanitizeConfig(payload = {}, key = '') {
   sanitized.showCompanyDetails = Boolean(base.showCompanyDetails);
   sanitized.showTechnician = base.showTechnician !== undefined ? Boolean(base.showTechnician) : key === 'quotation';
   sanitized.showSerialNumber = Boolean(base.showSerialNumber);
+  sanitized.showAdditionalCharges = base.showAdditionalCharges !== undefined ? Boolean(base.showAdditionalCharges) : key === 'amc-service-visit';
+  sanitized.showRenewalAmount = base.showRenewalAmount !== undefined ? Boolean(base.showRenewalAmount) : key === 'amc-renewal-reminder';
   sanitized.colorAccent = sanitizeColor(base.colorAccent, defaultConfigFor(key).colorAccent || '#0f2a52');
   return sanitized;
 }
@@ -509,80 +527,27 @@ function sampleContextFor(key, company = COMPANY) {
   }, company);
 }
 
-function previewDateTime(value = new Date()) {
-  const date = new Date(value || new Date());
-  if (Number.isNaN(date.getTime())) return new Date().toLocaleString('en-IN');
-  return date.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
-}
-
-function drawPreviewSummaryCell(doc, label, value, x, y, width) {
-  doc.fontSize(8).fillColor('#64748b').text(label.toUpperCase(), x, y, { width });
-  doc.fontSize(10).fillColor('#0f172a').text(value || '-', x, y + 14, { width });
-}
-
-function previewWarrantyNote(template, context) {
-  const fallback = 'Warranty, if applicable, is subject to the parts and service terms recorded at the time of service.';
-  const configured = renderTemplateText(template?.config?.notesWarrantyText || '', context).trim();
-  if (!configured) return fallback;
-  if (/dear\s+.+service has been completed successfully/i.test(configured)) return fallback;
-  return configured;
-}
-
-function drawServiceCompletedPreviewPdf(doc, template, company = COMPANY) {
-  const currentCompany = fallbackCompany(company);
-  const config = template.config || {};
-  const context = sampleContextFor(template.key, currentCompany);
-  const accent = templateAccent(template);
-  const logoPath = currentCompany.logoFilePath || LOGO_FULL_PATH;
-  if (config.showCompanyLogo !== false && logoPath && fs.existsSync(logoPath)) doc.image(logoPath, 44, 34, { width: 142 });
-  doc.fontSize(17).fillColor('#0f172a').text(currentCompany.name, 306, 34, { width: 240, align: 'right' });
-  if (config.showCompanyDetails !== false) {
-    doc.fontSize(8.5).fillColor('#475569').text(String(currentCompany.address || '').replace(/\n/g, ', '), 292, 58, { width: 254, align: 'right', lineGap: 1 });
-    doc.text(`Phone: ${currentCompany.phones.join(' / ')}`, 292, 98, { width: 254, align: 'right' });
-    doc.text(`Email: ${currentCompany.email}`, 292, 112, { width: 254, align: 'right' });
-  }
-  doc.strokeColor('#e2e8f0').lineWidth(1).moveTo(44, 132).lineTo(550, 132).stroke();
-  doc.roundedRect(44, 138, 506, 4, 2).fill(accent);
-
-  doc.fontSize(25).fillColor('#0f172a').text('THANK YOU FOR CHOOSING US!', 52, 166, { width: 492, align: 'center' });
-  doc.fontSize(12).fillColor('#475569').text('Your service has been completed successfully', 52, 202, { width: 492, align: 'center' });
-  doc.roundedRect(54, 244, 488, 92, 10).fill('#f8fafc').strokeColor('#e2e8f0').stroke();
-  doc.fontSize(12).fillColor('#0f172a').text(`Dear ${context.customer_name},`, 78, 266, { width: 440 });
-  doc.fontSize(10).fillColor('#334155').text(`Thank you for choosing ${currentCompany.name}. We appreciate your trust and are happy to confirm that your ${context.service_name} service has been completed successfully.`, 78, 288, { width: 440, lineGap: 4 });
-
-  doc.fontSize(12).fillColor('#0f172a').text('Service Summary', 54, 368);
-  doc.roundedRect(54, 390, 488, 112, 8).fill('#ffffff').strokeColor('#dbe3ef').stroke();
-  drawPreviewSummaryCell(doc, 'Work Order No', context.work_order_id, 78, 414, 205);
-  drawPreviewSummaryCell(doc, 'Service Type', context.service_name, 320, 414, 190);
-  drawPreviewSummaryCell(doc, 'Completed Date', context.invoice_date, 78, 462, 205);
-  drawPreviewSummaryCell(doc, 'Payment Status', 'Paid', 320, 462, 190);
-
-  doc.roundedRect(54, 532, 488, 58, 8).fill('#fffdf4').strokeColor('#fde68a').stroke();
-  doc.fontSize(10).fillColor('#92400e').text('Warranty Note', 78, 550);
-  doc.fontSize(9).fillColor('#78350f').text(previewWarrantyNote(template, context), 78, 568, { width: 440, lineGap: 3 });
-
-  doc.roundedRect(54, 616, 488, 72, 10).fill('#f0f9ff').strokeColor('#bae6fd').stroke();
-  doc.fontSize(11).fillColor(accent).text('Keep Your Devices Covered With AMC', 78, 636);
-  doc.fontSize(9.5).fillColor('#334155').text(`Ask ${currentCompany.name} about Annual Maintenance Contracts for regular checkups, priority support, and easier service planning.`, 78, 656, { width: 330, lineGap: 3 });
-  doc.fontSize(9).fillColor('#0f172a').text(`Call: ${currentCompany.phones[0] || '-'}`, 426, 648, { width: 92, align: 'right' });
-
-  const whatsapp = currentCompany.whatsappNumber ? ` | WhatsApp: ${currentCompany.whatsappNumber}` : '';
-  const footerText = [
-    `${currentCompany.name} | Phone: ${currentCompany.phones.join(' / ')}${whatsapp} | Email: ${currentCompany.email}`,
-    String(currentCompany.address || '').replace(/\n/g, ', '),
-    `Generated: ${previewDateTime(new Date())} | Page 1 of 1`
-  ].filter(Boolean).join('\n');
-  doc.strokeColor('#e2e8f0').lineWidth(0.8).moveTo(44, 742).lineTo(550, 742).stroke();
-  doc.fontSize(7.5).fillColor('#64748b').text(footerText, 44, 752, { width: 506, align: 'center', lineGap: 2 });
-}
-
 function drawPreviewPdf(doc, template, company = COMPANY, businessSettings = null) {
   const currentCompany = fallbackCompany(company);
   const config = template.config || {};
   const context = sampleContextFor(template.key, currentCompany);
   const accent = templateAccent(template);
   if (template.key === 'service-completed') {
-    drawServiceCompletedPreviewPdf(doc, template, company);
+    renderServiceCompletedPdf(doc, {
+      company: currentCompany,
+      template,
+      context,
+      service: sampleServiceCompletedData()
+    });
+    return;
+  }
+  if (template.key === 'invoice') {
+    renderInvoicePdf(doc, {
+      company: currentCompany,
+      template,
+      context,
+      invoice: sampleInvoiceData()
+    });
     return;
   }
   if (template.key === 'quotation') {
@@ -592,6 +557,33 @@ function drawPreviewPdf(doc, template, company = COMPANY, businessSettings = nul
       context,
       taxSettings: businessSettings?.taxGst || {},
       quotation: sampleQuotationData()
+    });
+    return;
+  }
+  if (template.key === 'amc-contract') {
+    renderAmcContractPdf(doc, {
+      company: currentCompany,
+      template,
+      context,
+      contract: sampleAmcContractData()
+    });
+    return;
+  }
+  if (template.key === 'amc-service-visit') {
+    renderAmcServiceVisitPdf(doc, {
+      company: currentCompany,
+      template,
+      context,
+      visit: sampleAmcVisitData()
+    });
+    return;
+  }
+  if (template.key === 'amc-renewal-reminder') {
+    renderAmcRenewalPdf(doc, {
+      company: currentCompany,
+      template,
+      context,
+      renewal: sampleAmcRenewalData()
     });
     return;
   }
