@@ -3574,8 +3574,121 @@ button:disabled {
     backdrop-filter: blur(16px);
   }
 
+  .settings-overview-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 28rem) auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .settings-overview-count {
+    justify-self: end;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .settings-category-section {
+    min-width: 0;
+  }
+
+  .settings-category-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
   .settings-overview-card {
-    min-height: 15rem;
+    min-height: 16rem;
+    display: flex;
+    flex-direction: column;
+    appearance: none;
+    color: inherit;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+
+  .settings-overview-card:hover,
+  .settings-overview-card:focus-visible {
+    transform: translateY(-2px);
+    border-color: rgba(117, 196, 255, 0.28);
+    background:
+      linear-gradient(145deg, rgba(117, 196, 255, 0.08), rgba(255, 255, 255, 0.035)),
+      var(--surface);
+    box-shadow: 0 22px 58px rgba(0, 8, 22, 0.22);
+    outline: none;
+  }
+
+  .settings-status-badge {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.28rem 0.62rem;
+    font-size: 0.68rem;
+    font-weight: 950;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .settings-status-configured {
+    border-color: rgba(52, 211, 153, 0.28);
+    background: rgba(16, 185, 129, 0.12);
+    color: #bbf7d0;
+  }
+
+  .settings-status-needs-setup {
+    border-color: rgba(251, 191, 36, 0.32);
+    background: rgba(245, 158, 11, 0.12);
+    color: #fde68a;
+  }
+
+  .settings-status-coming-soon {
+    border-color: rgba(167, 139, 250, 0.32);
+    background: rgba(124, 58, 237, 0.12);
+    color: #ddd6fe;
+  }
+
+  .settings-status-active {
+    border-color: rgba(117, 196, 255, 0.34);
+    background: rgba(56, 189, 248, 0.12);
+    color: #bae6fd;
+  }
+
+  .settings-card-tag {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 0.28rem 0.62rem;
+    color: #dbeafe;
+    font-size: 0.72rem;
+    font-weight: 850;
+    line-height: 1;
+  }
+
+  .settings-card-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #dff3ff;
+    font-size: 0.84rem;
+    font-weight: 950;
+  }
+
+  .settings-coming-soon-state {
+    min-height: 16rem;
+  }
+
+  .settings-coming-soon-icon {
+    background: rgba(124, 58, 237, 0.14);
+    border-color: rgba(167, 139, 250, 0.28);
   }
 
   .settings-preference-card {
@@ -5024,6 +5137,20 @@ button:disabled {
 
     .settings-hero-actions {
       justify-content: flex-start;
+    }
+
+    .settings-overview-toolbar {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+
+    .settings-overview-count {
+      justify-self: start;
+    }
+
+    .settings-category-header {
+      align-items: flex-start;
+      flex-direction: column;
     }
 
     .technician-hero-side {
@@ -8272,6 +8399,47 @@ button:disabled {
 
 .theme-light .booking-source-badge {
   border-color: rgba(22, 74, 132, 0.14) !important;
+}
+
+.theme-light .settings-overview-card:hover,
+.theme-light .settings-overview-card:focus-visible {
+  background: #f8fbff !important;
+  border-color: rgba(20, 120, 232, 0.24) !important;
+  box-shadow: 0 18px 44px rgba(32, 86, 146, 0.16) !important;
+}
+
+.theme-light .settings-status-configured {
+  background: #dcfce7 !important;
+  border-color: rgba(4, 120, 87, 0.22) !important;
+  color: #047857 !important;
+}
+
+.theme-light .settings-status-needs-setup {
+  background: #fef3c7 !important;
+  border-color: rgba(180, 83, 9, 0.22) !important;
+  color: #92400e !important;
+}
+
+.theme-light .settings-status-coming-soon {
+  background: #ede9fe !important;
+  border-color: rgba(109, 40, 217, 0.2) !important;
+  color: #6d28d9 !important;
+}
+
+.theme-light .settings-status-active {
+  background: #dbeafe !important;
+  border-color: rgba(20, 120, 232, 0.2) !important;
+  color: #075985 !important;
+}
+
+.theme-light .settings-card-tag {
+  background: #f1f5f9 !important;
+  border-color: rgba(22, 74, 132, 0.14) !important;
+  color: #334155 !important;
+}
+
+.theme-light .settings-card-action {
+  color: #075985 !important;
 }
 
 .theme-light .work-orders-more-button {

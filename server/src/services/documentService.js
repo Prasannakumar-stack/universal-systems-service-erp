@@ -19,10 +19,12 @@ import {
 } from './pdfTemplateService.js';
 import { getCompanyIdentity } from './companyProfileService.js';
 import { getTechnicianScope } from './technicianScopeService.js';
+import { getBusinessSettings } from './businessSettingsService.js';
+import { renderQuotationPdf } from './quotationPdfTemplate.js';
 
 const populateDocument = [
   { path: 'customerId', select: 'name phone address devices' },
-  { path: 'workOrderId', select: 'device issue status serviceCharge partsUsed technicianId createdAt', populate: { path: 'technicianId', select: 'name username' } },
+  { path: 'workOrderId', select: 'device issue status serviceType serviceCharge partsUsed technicianId createdAt brandModel deviceModel model serialNumber deviceSerialNumber serialNo', populate: { path: 'technicianId', select: 'name username' } },
   { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status createdAt' }
 ];
 
@@ -34,6 +36,25 @@ function documentTitle(type) {
 
 function invoiceNumber() {
   return `INV-${new Date().getFullYear()}-${randomUUID().slice(0, 7).toUpperCase()}`;
+}
+
+function documentDate(value = new Date()) {
+  const date = new Date(value || new Date());
+  const safe = Number.isNaN(date.getTime()) ? new Date() : date;
+  return [
+    String(safe.getDate()).padStart(2, '0'),
+    String(safe.getMonth() + 1).padStart(2, '0'),
+    safe.getFullYear()
+  ].join('-');
+}
+
+function workOrderReference(workOrder = {}) {
+  const existing = [workOrder.workOrderNumber, workOrder.workOrderId, workOrder.displayId]
+    .find(Boolean);
+  if (existing) return String(existing).trim().toUpperCase();
+  const date = workOrder.createdAt ? new Date(workOrder.createdAt) : new Date();
+  const year = Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getFullYear();
+  return `WO-${year}-${String(workOrder._id || workOrder.id || '').slice(-6).toUpperCase()}`;
 }
 
 export async function createDocument(payload, user = null) {
@@ -152,12 +173,58 @@ export async function generateDocumentPdf(id, user = null) {
   const filePath = path.join(PDF_DIR, filename);
   const template = await getTemplateByDocumentType(document.type);
   const templateConfig = template?.config || {};
-  const company = await getCompanyIdentity();
+  const [company, businessSettings] = await Promise.all([
+    getCompanyIdentity(),
+    getBusinessSettings().catch(() => null)
+  ]);
   const context = documentTemplateContext(document, company);
   const accent = templateAccent(template);
   const pdf = new PDFDocument({ margin: 48, size: 'A4' });
   const stream = fs.createWriteStream(filePath);
   pdf.pipe(stream);
+
+  if (document.type === 'quotation') {
+    const customer = document.customerId || {};
+    const workOrder = document.workOrderId || {};
+    const items = [
+      ...(Number(document.serviceCharge || 0) > 0
+        ? [{ description: 'General Service', quantity: 1, unitPrice: document.serviceCharge, total: document.serviceCharge }]
+        : []),
+      ...(document.items || []).map((item) => ({
+        description: item.name,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        total: item.subtotal
+      }))
+    ];
+    renderQuotationPdf(pdf, {
+      company,
+      template,
+      context,
+      taxSettings: businessSettings?.taxGst || {},
+      quotation: {
+        jobReference: workOrderReference(workOrder),
+        quotationDate: documentDate(document.createdAt || new Date()),
+        quotationStatus: 'Pending Approval',
+        customerName: customer.name || '-',
+        customerPhone: customer.phone || '-',
+        customerAddress: customer.address || '-',
+        serviceType: workOrder.serviceType || workOrder.device || '-',
+        device: workOrder.device || '-',
+        brandModel: workOrder.brandModel || workOrder.deviceModel || workOrder.model || workOrder.device || '-',
+        problemComplaint: workOrder.issue || '-',
+        technician: workOrder.technicianId?.name || workOrder.technicianId?.username || '',
+        serialNumber: workOrder.serialNumber || workOrder.deviceSerialNumber || workOrder.serialNo || '',
+        items
+      }
+    });
+    pdf.end();
+    await new Promise((resolve, reject) => {
+      stream.on('finish', resolve);
+      stream.on('error', reject);
+    });
+    return { filePath, filename };
+  }
 
   const title = documentTitle(document.type);
   const logoPath = company.logoFilePath || LOGO_FULL_PATH;

@@ -313,6 +313,236 @@ const rolePresetButtons = [
   { label: 'Viewer Read Only', role: 'viewer', sourceRole: 'viewer' }
 ];
 
+const settingsStatusToneClass = {
+  Configured: 'settings-status-configured',
+  'Needs Setup': 'settings-status-needs-setup',
+  'Coming Soon': 'settings-status-coming-soon',
+  Active: 'settings-status-active'
+};
+
+const settingsOverviewGroups = [
+  {
+    id: 'organizationAccess',
+    title: 'Organization & Access',
+    description: 'Manage organization details, admin profile, users, roles, and security.',
+    cards: [
+      {
+        id: 'companyProfile',
+        tabId: 'companyProfile',
+        icon: Building2,
+        title: 'Company Profile',
+        description: 'Company identity, logo, address, GST/PAN, and contact details used across the admin system.',
+        status: 'Configured',
+        tags: ['organization', 'company', 'logo', 'gst', 'pan', 'contact']
+      },
+      {
+        id: 'adminProfile',
+        tabId: 'adminProfile',
+        icon: UserRound,
+        title: 'Admin Profile',
+        description: 'Admin account details, avatar, password access, and recent activity.',
+        status: 'Configured',
+        tags: ['admin', 'profile', 'avatar', 'password', 'activity']
+      },
+      {
+        id: 'usersRoles',
+        tabId: 'usersRoles',
+        icon: Users,
+        title: 'Users & Roles',
+        description: 'Team accounts, role presets, permissions, and access audit controls.',
+        status: 'Configured',
+        tags: ['users', 'roles', 'permissions', 'team', 'access']
+      },
+      {
+        id: 'security',
+        tabId: 'security',
+        icon: ShieldCheck,
+        title: 'Security',
+        description: 'Password policy, session handling, login safety, and audit trail status.',
+        status: 'Configured',
+        tags: ['security', 'password', 'sessions', 'login', 'audit']
+      }
+    ]
+  },
+  {
+    id: 'businessOperations',
+    title: 'Business & Operations',
+    description: 'Configure daily service operations and workflow behavior.',
+    cards: [
+      {
+        id: 'bookings',
+        route: '/admin/bookings',
+        icon: BookOpenCheck,
+        title: 'Bookings',
+        description: 'Open live service intake, customer requests, and booking operations.',
+        status: 'Active',
+        actionLabel: 'Open',
+        tags: ['bookings', 'service intake', 'requests', 'customers', 'operations']
+      },
+      {
+        id: 'workOrders',
+        route: '/admin/work-orders',
+        icon: Wrench,
+        title: 'Work Orders',
+        description: 'Open live job execution, dispatch, technician assignment, and service workflow pages.',
+        status: 'Active',
+        actionLabel: 'Open',
+        tags: ['work orders', 'jobs', 'dispatch', 'technicians', 'service']
+      },
+      {
+        id: 'statusWorkflow',
+        tabId: 'statusWorkflow',
+        icon: Workflow,
+        title: 'Status Workflow',
+        description: 'Prepare stored status flows for bookings, work orders, invoices, and AMC.',
+        status: 'Coming Soon',
+        tags: ['status', 'workflow', 'bookings', 'work orders', 'invoice', 'amc']
+      },
+      {
+        id: 'preferences',
+        tabId: 'preferences',
+        icon: Palette,
+        title: 'Preferences',
+        description: 'Admin theme, notifications, dashboard focus, and document defaults.',
+        status: 'Configured',
+        tags: ['preferences', 'theme', 'notifications', 'dashboard', 'documents']
+      }
+    ]
+  },
+  {
+    id: 'documentsCommunication',
+    title: 'Documents & Communication',
+    description: 'Manage PDFs, document templates, message templates, and numbering.',
+    cards: [
+      {
+        id: 'pdfTemplates',
+        tabId: 'pdfTemplates',
+        icon: FileText,
+        title: 'PDF / Document Templates',
+        description: 'Reusable PDF content, template variables, previews, and reset tools.',
+        status: 'Configured',
+        tags: ['pdf', 'documents', 'templates', 'variables', 'preview']
+      },
+      {
+        id: 'notificationTemplates',
+        tabId: 'notificationTemplates',
+        icon: MessageSquareText,
+        title: 'Notification Templates',
+        description: 'Reusable message text and variables for future customer communication.',
+        status: 'Coming Soon',
+        tags: ['notifications', 'messages', 'templates', 'whatsapp', 'email', 'sms']
+      },
+      {
+        id: 'documentNumbering',
+        tabId: 'documentNumbering',
+        icon: Hash,
+        title: 'Document Numbering',
+        description: 'Future prefixes and next numbers for invoices, quotations, work orders, AMC, and receipts.',
+        status: 'Coming Soon',
+        tags: ['numbering', 'prefix', 'invoice', 'quotation', 'work order', 'amc']
+      },
+      {
+        id: 'pdfTerms',
+        tabId: 'pdfTerms',
+        icon: FileCog,
+        title: 'PDF Terms & Conditions',
+        description: 'Reusable legal notes, warranty text, footer notes, and document terms.',
+        status: 'Coming Soon',
+        tags: ['pdf', 'terms', 'conditions', 'warranty', 'footer', 'legal']
+      }
+    ]
+  },
+  {
+    id: 'financeCompliance',
+    title: 'Finance & Compliance',
+    description: 'Manage tax, payments, invoice defaults, and compliance settings.',
+    cards: [
+      {
+        id: 'taxGst',
+        tabId: 'taxGst',
+        icon: Percent,
+        title: 'Tax / GST',
+        description: 'Future GST defaults, tax label, CGST/SGST split, and invoice display settings.',
+        status: 'Coming Soon',
+        tags: ['tax', 'gst', 'cgst', 'sgst', 'invoice', 'compliance']
+      },
+      {
+        id: 'paymentSettings',
+        tabId: 'paymentSettings',
+        icon: WalletCards,
+        title: 'Payment Settings',
+        description: 'Accepted methods, payment terms, UPI, and bank details for future documents.',
+        status: 'Coming Soon',
+        tags: ['payments', 'upi', 'bank', 'terms', 'methods']
+      },
+      {
+        id: 'invoices',
+        route: '/admin/invoices',
+        icon: ReceiptText,
+        title: 'Invoices',
+        description: 'Open live invoice records, payment status, balances, and finance activity.',
+        status: 'Active',
+        actionLabel: 'Open',
+        tags: ['invoices', 'billing', 'payments', 'balance', 'finance']
+      },
+      {
+        id: 'systemInformation',
+        tabId: 'systemInformation',
+        icon: Info,
+        title: 'System Information',
+        description: 'Read-only app, database, API, storage, and backup health details.',
+        status: 'Active',
+        tags: ['system', 'database', 'api', 'storage', 'version', 'health']
+      }
+    ]
+  },
+  {
+    id: 'publicWebsite',
+    title: 'Public Website',
+    description: 'Manage public website content, branding, SEO, booking visibility, and services.',
+    cards: [
+      {
+        id: 'publicWebsite',
+        tabId: 'publicWebsite',
+        icon: Globe2,
+        title: 'Public Website Settings',
+        description: 'Public website content, branding, SEO, services, booking visibility, and contact display.',
+        status: 'Configured',
+        tags: ['public website', 'branding', 'seo', 'services', 'booking', 'content']
+      }
+    ]
+  },
+  {
+    id: 'systemData',
+    title: 'System & Data',
+    description: 'Manage backups, storage, restore tools, and data safety.',
+    cards: [
+      {
+        id: 'backupStorage',
+        tabId: 'backupStorage',
+        icon: DatabaseBackup,
+        title: 'Backup & Storage',
+        description: 'Backup exports, storage usage, upload safety, and restore-ready archive tools.',
+        status: 'Needs Setup',
+        tags: ['backup', 'storage', 'exports', 'uploads', 'restore']
+      },
+      {
+        id: 'dataRecovery',
+        icon: ArchiveRestore,
+        title: 'Data Recovery',
+        description: 'Recovery checkpoints, restore workflows, and protected data safety controls.',
+        status: 'Coming Soon',
+        actionLabel: 'View Status',
+        tags: ['data recovery', 'restore', 'recovery', 'rollback', 'safety']
+      }
+    ]
+  }
+];
+
+function settingsCardSearchText(card) {
+  return [card.title, card.description, ...(card.tags || [])].join(' ').toLowerCase();
+}
+
 function SettingsInfoCard({ title, icon: Icon, children, action = null, className = '' }) {
   return (
     <div className={`surface admin-control-card p-5 ${className}`}>
@@ -2424,46 +2654,100 @@ function SystemInformationSection() {
 }
 
 function SettingsOverviewSection({ onManage }) {
-  const modules = [
-    { id: 'companyProfile', icon: Building2, title: 'Company Profile', description: 'Business identity for PDFs and public contact.', items: ['Logo', 'GST/PAN', 'Contact'] },
-    { id: 'adminProfile', icon: UserRound, title: 'Admin Profile', description: 'Admin account, avatar, password, activity.', items: ['Avatar', 'Password', 'Last login'] },
-    { id: 'security', icon: ShieldCheck, title: 'Security', description: 'Password policy, sessions, login safety.', items: ['Audit trail', '2FA future', 'Sessions'] },
-    { id: 'usersRoles', icon: Users, title: 'Users & Roles', description: 'Role matrix and team access controls.', items: ['Presets', 'Permissions', 'Audit'] },
-    { id: 'pdfTemplates', icon: FileText, title: 'PDF Templates', description: 'Template text and sample PDF tools.', items: ['Variables', 'Preview', 'Reset'] },
-    { id: 'publicWebsite', icon: Globe2, title: 'Public Website', description: 'Hero, services, booking, SEO, branding.', items: ['Services', 'Booking', 'SEO'] },
-    { id: 'backupStorage', icon: DatabaseBackup, title: 'Backup & Storage', description: 'MongoDB data, uploads, generated PDFs.', items: ['Backups', 'Restore', 'Storage'] },
-    { id: 'preferences', icon: Palette, title: 'Preferences', description: 'Admin theme and dashboard defaults.', items: ['Theme', 'Notifications', 'Documents'] },
-    { id: 'documentNumbering', icon: Hash, title: 'Document Numbering', description: 'Future prefixes and next numbers.', items: ['Invoice', 'Work Order', 'AMC'] },
-    { id: 'taxGst', icon: Percent, title: 'Tax / GST', description: 'Future GST display defaults.', items: ['GST %', 'CGST/SGST', 'Label'] },
-    { id: 'paymentSettings', icon: WalletCards, title: 'Payment Settings', description: 'Future payment and invoice footer defaults.', items: ['UPI', 'Bank', 'Terms'] },
-    { id: 'notificationTemplates', icon: MessageSquareText, title: 'Notification Templates', description: 'Reusable message templates and variables.', items: ['Booking', 'Invoice', 'AMC'] },
-    { id: 'statusWorkflow', icon: Workflow, title: 'Status Workflow', description: 'Preview stored workflow steps safely.', items: ['Booking', 'Work Order', 'Invoice'] },
-    { id: 'pdfTerms', icon: FileCog, title: 'PDF Terms & Conditions', description: 'Future terms for new PDFs only.', items: ['Invoice', 'Quotation', 'Warranty'] },
-    { id: 'systemInformation', icon: Info, title: 'System Information', description: 'Read-only app, DB, API, and storage status.', items: ['Version', 'Database', 'Storage'] }
-  ];
+  const [search, setSearch] = useState('');
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredGroups = useMemo(() => settingsOverviewGroups
+    .map((group) => ({
+      ...group,
+      cards: normalizedSearch
+        ? group.cards.filter((card) => settingsCardSearchText(card).includes(normalizedSearch))
+        : group.cards
+    }))
+    .filter((group) => group.cards.length), [normalizedSearch]);
+  const visibleCount = filteredGroups.reduce((sum, group) => sum + group.cards.length, 0);
+  const totalCount = settingsOverviewGroups.reduce((sum, group) => sum + group.cards.length, 0);
+
   return (
-    <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-      {modules.map((module) => {
-        const Icon = module.icon;
-        return (
-          <article key={module.id} className="surface admin-control-card settings-overview-card p-5">
-            <div className="flex items-start gap-3">
-              <div className="admin-control-icon"><Icon className="h-5 w-5" /></div>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-lg font-black">{module.title}</h2>
-                <p className="mt-2 text-sm leading-6 muted">{module.description}</p>
+    <div className="settings-overview-shell grid gap-6">
+      <div className="surface admin-filter-bar settings-overview-toolbar p-4">
+        <SearchBox value={search} onChange={setSearch} placeholder="Search settings" />
+        <span className="settings-overview-count">{visibleCount} of {totalCount} settings</span>
+      </div>
+
+      {filteredGroups.length ? filteredGroups.map((group) => (
+        <section key={group.id} className="settings-category-section">
+          <div className="settings-category-header">
+            <div>
+              <h2 className="text-xl font-black">{group.title}</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 muted">{group.description}</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {group.cards.map((module) => {
+              const Icon = module.icon;
+              return (
+                <button key={module.id} type="button" className="surface admin-control-card settings-overview-card w-full p-5 text-left" onClick={() => onManage(module)}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="admin-control-icon"><Icon className="h-5 w-5" /></div>
+                    <span className={`settings-status-badge ${settingsStatusToneClass[module.status] || ''}`}>{module.status}</span>
+                  </div>
+                  <div className="mt-4 min-w-0">
+                    <h3 className="text-lg font-black">{module.title}</h3>
+                    <p className="mt-2 text-sm leading-6 muted">{module.description}</p>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {module.tags.slice(0, 3).map((item) => <span key={item} className="settings-card-tag">{item}</span>)}
+                  </div>
+                  <span className="settings-card-action mt-auto pt-5">
+                    {module.actionLabel || 'Manage'}
+                    <ChevronRight className="h-4 w-4" />
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )) : (
+        <EmptyState
+          icon={Filter}
+          title="No settings found"
+          message="No settings cards match the current search."
+          action={<button type="button" className="btn btn-secondary" onClick={() => setSearch('')}>Clear Search</button>}
+        />
+      )}
+    </div>
+  );
+}
+
+function SettingsComingSoonState({ module, onBack }) {
+  const Icon = module?.icon || Info;
+  const tags = module?.tags || [];
+  return (
+    <section className="surface admin-control-card settings-coming-soon-state p-6">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 items-start gap-4">
+          <div className="admin-control-icon settings-coming-soon-icon"><Icon className="h-5 w-5" /></div>
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="settings-status-badge settings-status-coming-soon">Coming Soon</span>
+              <span className="admin-premium-badge">PLANNED SETTINGS AREA</span>
+            </div>
+            <h2 className="text-2xl font-black">{module?.title || 'Settings Area'}</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">
+              {module?.description || 'This settings area is planned for a future release.'} This placeholder keeps admins inside a clean settings experience until the full controls are ready.
+            </p>
+            {tags.length ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {tags.slice(0, 5).map((item) => <span key={item} className="settings-card-tag">{item}</span>)}
               </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {module.items.map((item) => <span key={item} className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs font-bold text-slate-200">{item}</span>)}
-            </div>
-            <button type="button" className="btn btn-primary mt-5 w-full justify-center" onClick={() => onManage(module.id)}>
-              Manage
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </article>
-        );
-      })}
+            ) : null}
+          </div>
+        </div>
+        <button type="button" className="btn btn-primary admin-compact-button" onClick={onBack}>
+          Back to Overview
+          <ChevronRight className="h-4 w-4 rotate-180" />
+        </button>
+      </div>
     </section>
   );
 }
@@ -2496,8 +2780,10 @@ function AccountStatusPill({ active }) {
 
 export function SystemSettingsPage() {
   const { push } = useToast();
+  const navigate = useNavigate();
   const { themePreference, resolvedTheme, setThemePreference } = useThemePreference();
   const [activeTab, setActiveTab] = useState('overview');
+  const [comingSoonModule, setComingSoonModule] = useState(null);
   const [dirtyTabs, setDirtyTabs] = useState({});
   const [preferences, setPreferences] = useState({
     defaultNotifications: true,
@@ -2528,11 +2814,42 @@ export function SystemSettingsPage() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  function changeTab(tabId) {
-    if (tabId === activeTab) return;
-    if (dirtyTabs[activeTab] && !window.confirm('You have unsaved changes in this settings tab. Leave without saving?')) return;
+  function canLeaveActiveTab() {
+    return !(dirtyTabs[activeTab] && !window.confirm('You have unsaved changes in this settings tab. Leave without saving?'));
+  }
+
+  function clearActiveDirtyFlag() {
+    if (!dirtyTabs[activeTab]) return;
     setDirtyTabs((current) => ({ ...current, [activeTab]: false }));
+  }
+
+  function changeTab(tabId) {
+    if (tabId === activeTab && !comingSoonModule) return;
+    if (!canLeaveActiveTab()) return;
+    clearActiveDirtyFlag();
+    setComingSoonModule(null);
     setActiveTab(tabId);
+  }
+
+  function openComingSoon(module) {
+    if (activeTab === `comingSoon:${module.id}`) return;
+    if (!canLeaveActiveTab()) return;
+    clearActiveDirtyFlag();
+    setComingSoonModule(module);
+    setActiveTab(`comingSoon:${module.id}`);
+  }
+
+  function handleOverviewManage(module) {
+    if (module.route) {
+      if (!canLeaveActiveTab()) return;
+      navigate(module.route);
+      return;
+    }
+    if (module.tabId) {
+      changeTab(module.tabId);
+      return;
+    }
+    openComingSoon(module);
   }
 
   function exportSettings() {
@@ -2613,7 +2930,11 @@ export function SystemSettingsPage() {
 
       <div className="mt-5">
         {activeTab === 'overview' ? (
-          <SettingsOverviewSection onManage={changeTab} />
+          <SettingsOverviewSection onManage={handleOverviewManage} />
+        ) : null}
+
+        {activeTab.startsWith('comingSoon:') ? (
+          <SettingsComingSoonState module={comingSoonModule} onBack={() => changeTab('overview')} />
         ) : null}
 
         {activeTab === 'companyProfile' ? (

@@ -6,6 +6,7 @@ import { COMPANY, LOGO_FULL_PATH, PDF_DIR } from '../config.js';
 import { hasPermission } from '../permissions.js';
 import { appError } from '../utils/http.js';
 import { calculateAmcCoverageBreakdown, amcCoverageSummary } from './amcCoverageEngine.js';
+import { getBusinessSettings } from './businessSettingsService.js';
 import {
   getTemplateByPdfType,
   renderTemplateText,
@@ -13,6 +14,7 @@ import {
   workOrderTemplateContext
 } from './pdfTemplateService.js';
 import { getCompanyIdentity } from './companyProfileService.js';
+import { renderQuotationPdf } from './quotationPdfTemplate.js';
 import { technicianCanAccessWorkOrder } from './technicianScopeService.js';
 
 const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
@@ -96,6 +98,19 @@ function isAllowed(type, workOrder) {
 
 function customerId(workOrder) {
   return workOrder.bookingId?.bookingCode || `WO-${String(workOrder._id).slice(-6).toUpperCase()}`;
+}
+
+function workOrderReference(workOrder) {
+  const existing = [
+    workOrder.workOrderNumber,
+    workOrder.workOrderId,
+    workOrder.displayId,
+    /^WO-/i.test(workOrder.bookingId?.bookingCode || '') ? workOrder.bookingId.bookingCode : ''
+  ].find(Boolean);
+  if (existing) return String(existing).trim().toUpperCase();
+  const date = workOrder.createdAt ? new Date(workOrder.createdAt) : new Date();
+  const year = Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getFullYear();
+  return `WO-${year}-${String(workOrder._id || '').slice(-6).toUpperCase()}`;
 }
 
 function serviceType(workOrder) {
@@ -196,6 +211,16 @@ function displayDate(value = new Date()) {
   const date = new Date(value || new Date());
   if (Number.isNaN(date.getTime())) return new Date().toLocaleDateString('en-IN');
   return date.toLocaleDateString('en-IN');
+}
+
+function documentDate(value = new Date()) {
+  const date = new Date(value || new Date());
+  const safe = Number.isNaN(date.getTime()) ? new Date() : date;
+  return [
+    String(safe.getDate()).padStart(2, '0'),
+    String(safe.getMonth() + 1).padStart(2, '0'),
+    safe.getFullYear()
+  ].join('-');
 }
 
 function displayDateTime(value = new Date()) {
@@ -354,21 +379,41 @@ function addTemplateSignature(doc, y, template, context, options = {}) {
   doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#334155').text(label, left + 20, y + 8, { width: right - left - 20, align: 'center' });
 }
 
-function buildQuotation(doc, workOrder, template, context, company) {
-  addHeader(doc, 'QUOTATION', template, context, company);
-  addCustomerDetails(doc, workOrder, 205);
+function quotationApprovalStatus(workOrder) {
+  if (workOrder.approvalStatus === 'approved') return 'Approved';
+  if (workOrder.approvalStatus === 'denied') return 'Denied';
+  return 'Pending Approval';
+}
+
+function buildQuotation(doc, workOrder, template, context, company, businessSettings = null) {
+  const customer = workOrder.customerId || {};
   const rows = buildRows(workOrder);
-  const partsTotal = (workOrder.partsUsed || []).reduce((sum, part) => sum + Number(part.total || 0), 0);
-  const productsTotal = Number(workOrder.serviceCharge || 0);
-  const finalTotal = rows.reduce((sum, row) => sum + Number(row.total || 0), 0);
-  let y = table(doc, rows, 315, 'Total');
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#334155');
-  doc.text(`Parts Total: ${money(partsTotal)}`, 356, y, { width: 188, align: 'right' });
-  doc.text(`Products Total: ${money(productsTotal)}`, 356, y + 16, { width: 188, align: 'right' });
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fillColor('#0f172a').text(`Final Total: ${money(finalTotal)}`, 356, y + 36, { width: 188, align: 'right' });
-  y += 82;
-  addTemplateNotes(doc, y, template, context, { notes: true, terms: true, payment: true });
-  footer(doc, '', template, context, company);
+  renderQuotationPdf(doc, {
+    company,
+    template,
+    context,
+    taxSettings: businessSettings?.taxGst || {},
+    quotation: {
+      jobReference: workOrderReference(workOrder),
+      quotationDate: documentDate(new Date()),
+      quotationStatus: quotationApprovalStatus(workOrder),
+      customerName: customer.name || '-',
+      customerPhone: customer.phone || '-',
+      customerAddress: customer.address || '-',
+      serviceType: workOrder.serviceType || workOrder.bookingId?.serviceType || serviceType(workOrder),
+      device: workOrder.device || '-',
+      brandModel: workOrder.brandModel || workOrder.deviceModel || workOrder.model || workOrder.device || '-',
+      problemComplaint: workOrder.issue || '-',
+      technician: workOrder.technicianId?.name || workOrder.technicianId?.username || '',
+      serialNumber: workOrder.serialNumber || workOrder.deviceSerialNumber || workOrder.serialNo || '',
+      items: rows.map((row) => ({
+        description: row.description,
+        quantity: row.quantity,
+        unitPrice: row.price,
+        total: row.total
+      }))
+    }
+  });
 }
 
 function buildInvoice(doc, workOrder, template, context, company) {
@@ -561,9 +606,9 @@ function buildAmcRenewalReminderPdf(doc, workOrder, template, context, company) 
   footer(doc, `AMC renewal reminder from ${companyFallback(company).name}.`, template, context, company);
 }
 
-function buildPdf(doc, type, workOrder, template, company) {
+function buildPdf(doc, type, workOrder, template, company, businessSettings = null) {
   const context = workOrderTemplateContext(workOrder, company);
-  if (type === 'quotation') buildQuotation(doc, workOrder, template, context, company);
+  if (type === 'quotation') buildQuotation(doc, workOrder, template, context, company, businessSettings);
   if (type === 'work') buildInvoice(doc, workOrder, template, context, company);
   if (type === 'service-completed') buildServiceCompleted(doc, workOrder, template, context, company);
   if (type === 'amc-contract') buildAmcContractPdf(doc, workOrder, template, context, company);
@@ -593,7 +638,10 @@ export async function generateWorkOrderPdf({ workOrderId, type, user }) {
   const workOrder = await getPdfWorkOrder(workOrderId, user);
   if (!isAllowed(type, workOrder)) throw appError('Available after status change', 409);
   const template = await getTemplateByPdfType(type);
-  const company = await getCompanyIdentity();
+  const [company, businessSettings] = await Promise.all([
+    getCompanyIdentity(),
+    getBusinessSettings().catch(() => null)
+  ]);
 
   fs.mkdirSync(PDF_DIR, { recursive: true });
   const filename = `${customerId(workOrder)}-${cleanFilePart(type)}-${Date.now()}.pdf`;
@@ -603,7 +651,7 @@ export async function generateWorkOrderPdf({ workOrderId, type, user }) {
     const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: false });
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
-    buildPdf(doc, type, workOrder, template, company);
+    buildPdf(doc, type, workOrder, template, company, businessSettings);
     doc.end();
     stream.on('finish', resolve);
     stream.on('error', reject);

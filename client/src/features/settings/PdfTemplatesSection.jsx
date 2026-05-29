@@ -231,6 +231,18 @@ function TemplateEditor({ template, draft, setDraft, canEdit, saving, onSave, on
             <span className="font-bold text-slate-100">Company details visibility</span>
             <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={draft.showCompanyDetails !== false} onChange={(event) => update('showCompanyDetails', event.target.checked)} disabled={!canEdit} />
           </label>
+          {template.key === 'quotation' ? (
+            <>
+              <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
+                <span className="font-bold text-slate-100">Technician row visibility</span>
+                <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={draft.showTechnician !== false} onChange={(event) => update('showTechnician', event.target.checked)} disabled={!canEdit} />
+              </label>
+              <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
+                <span className="font-bold text-slate-100">Serial number row visibility</span>
+                <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={Boolean(draft.showSerialNumber)} onChange={(event) => update('showSerialNumber', event.target.checked)} disabled={!canEdit} />
+              </label>
+            </>
+          ) : null}
           {editorTextAreas.map((field) => (
             <label key={field.key} className="lg:col-span-2">
               <span className="label">{field.label}</span>

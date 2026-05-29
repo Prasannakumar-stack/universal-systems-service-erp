@@ -7,6 +7,8 @@ import { hasRole } from '../permissions.js';
 import { appError, clean } from '../utils/http.js';
 import { logAudit } from './auditService.js';
 import { getCompanyIdentity } from './companyProfileService.js';
+import { getBusinessSettings } from './businessSettingsService.js';
+import { renderQuotationPdf, sampleQuotationData } from './quotationPdfTemplate.js';
 
 export const PDF_TEMPLATE_PLACEHOLDERS = [
   '{{customer_name}}',
@@ -61,11 +63,13 @@ export const PDF_TEMPLATE_DEFINITIONS = [
       headerTitle: 'QUOTATION',
       showCompanyLogo: true,
       showCompanyDetails: true,
-      footerText: '{{company_name}} | {{customer_phone}} | Estimate valid for approval.',
-      termsAndConditions: '1. This is not an invoice, only an estimate.\n2. Payment is required before delivery.\n3. Prices may change if additional faults are found.',
-      paymentBankDetails: 'Advance payment can be collected after customer approval.',
+      showTechnician: true,
+      showSerialNumber: false,
+      footerText: 'We appreciate your trust in Universal Systems. We are always here to help!',
+      termsAndConditions: '1. This quotation is not an invoice; it is only an estimate for the mentioned goods/services.\n2. This quotation is valid for 7 days from the quotation date.\n3. Work will start only after customer approval.\n4. Payment is required before delivery or as per company policy.\n5. Final price may change if additional faults, parts, or services are found.\n6. Warranty, if applicable, covers only the parts or services mentioned in this quotation.',
+      paymentBankDetails: '',
       signatureSection: 'Prepared By',
-      notesWarrantyText: 'Quotation prepared for {{service_name}}.',
+      notesWarrantyText: '',
       amcTerms: '',
       colorAccent: '#0f2a52'
     }
@@ -196,6 +200,8 @@ function sanitizeConfig(payload = {}, key = '') {
   });
   sanitized.showCompanyLogo = Boolean(base.showCompanyLogo);
   sanitized.showCompanyDetails = Boolean(base.showCompanyDetails);
+  sanitized.showTechnician = base.showTechnician !== undefined ? Boolean(base.showTechnician) : key === 'quotation';
+  sanitized.showSerialNumber = Boolean(base.showSerialNumber);
   sanitized.colorAccent = sanitizeColor(base.colorAccent, defaultConfigFor(key).colorAccent || '#0f2a52');
   return sanitized;
 }
@@ -570,13 +576,23 @@ function drawServiceCompletedPreviewPdf(doc, template, company = COMPANY) {
   doc.fontSize(7.5).fillColor('#64748b').text(footerText, 44, 752, { width: 506, align: 'center', lineGap: 2 });
 }
 
-function drawPreviewPdf(doc, template, company = COMPANY) {
+function drawPreviewPdf(doc, template, company = COMPANY, businessSettings = null) {
   const currentCompany = fallbackCompany(company);
   const config = template.config || {};
   const context = sampleContextFor(template.key, currentCompany);
   const accent = templateAccent(template);
   if (template.key === 'service-completed') {
     drawServiceCompletedPreviewPdf(doc, template, company);
+    return;
+  }
+  if (template.key === 'quotation') {
+    renderQuotationPdf(doc, {
+      company: currentCompany,
+      template,
+      context,
+      taxSettings: businessSettings?.taxGst || {},
+      quotation: sampleQuotationData()
+    });
     return;
   }
   doc.fillColor(accent);
@@ -623,7 +639,10 @@ function drawPreviewPdf(doc, template, company = COMPANY) {
 
 export async function generatePdfTemplatePreview(key) {
   const template = await getPdfTemplate(key);
-  const company = await getCompanyIdentity();
+  const [company, businessSettings] = await Promise.all([
+    getCompanyIdentity(),
+    getBusinessSettings().catch(() => null)
+  ]);
   fs.mkdirSync(PDF_DIR, { recursive: true });
   const filename = `${template.key}-template-preview-${Date.now()}.pdf`;
   const filePath = path.join(PDF_DIR, filename);
@@ -631,7 +650,7 @@ export async function generatePdfTemplatePreview(key) {
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
-    drawPreviewPdf(doc, template, company);
+    drawPreviewPdf(doc, template, company, businessSettings);
     doc.end();
     stream.on('finish', resolve);
     stream.on('error', reject);
