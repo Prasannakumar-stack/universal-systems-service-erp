@@ -25,6 +25,7 @@ const ONE_PAGE_AMOUNT_Y = 498;
 const BOTTOM_STRIP_Y = 813;
 const NON_FINAL_TABLE_LIMIT = 800;
 const FINAL_SECTIONS_HEIGHT = 316;
+const FINAL_SECTIONS_BOTTOM = 770;
 
 const INVOICE_COMPANY = {
   name: 'Universal Systems',
@@ -80,6 +81,24 @@ function renderText(value = '', context = {}) {
     if (Object.prototype.hasOwnProperty.call(context, key)) return context[key];
     return match;
   });
+}
+
+function cfgSection(config = {}, key = '') {
+  return config.sections?.[key] || {};
+}
+
+function visibleFlag(source = {}, key = 'show', fallback = true) {
+  return source[key] !== undefined ? source[key] !== false : fallback;
+}
+
+function cfgList(value = [], fallback = []) {
+  const source = Array.isArray(value) ? value : String(value || '').split('\n');
+  const rows = source.map((line) => String(line || '').trim()).filter(Boolean);
+  return rows.length ? rows : fallback;
+}
+
+function cfgLabel(config = {}, key = '', fallback = '') {
+  return cleanText(cfgSection(config, 'itemTable').labels?.[key], fallback);
 }
 
 function money(value) {
@@ -268,29 +287,40 @@ function drawColonValue(doc, label, value, x, y, widths = {}) {
     .text(cleanText(value), colonX + 18, y, { width: valueWidth, lineGap: 2 });
 }
 
-function drawInvoiceDetailsCard(doc, invoice) {
+function drawInvoiceDetailsCard(doc, invoice, config = {}) {
   const y = 154;
+  const invoiceDetails = cfgSection(config, 'invoiceDetails');
+  const customerDetails = cfgSection(config, 'customerDetails');
   drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 132);
   drawLine(doc, 304, y + 12, 304, y + 121, '#9bb4df', 0.8);
 
   const leftRows = [
-    ['invoice', 'Invoice No', invoice.invoiceNo],
-    ['work', 'Job Reference', invoice.jobReference],
-    ['date', 'Invoice Date', invoice.invoiceDate],
-    ['status', 'Payment Status', invoice.paymentStatus]
-  ];
-  const rowY = [176, 203, 230, 257];
+    visibleFlag(invoiceDetails, 'showInvoiceNumber') ? ['invoice', 'Invoice No', invoice.invoiceNo] : null,
+    visibleFlag(invoiceDetails, 'showJobReference') ? ['work', 'Job Reference', invoice.jobReference] : null,
+    visibleFlag(invoiceDetails, 'showInvoiceDate') ? ['date', 'Invoice Date', invoice.invoiceDate] : null,
+    visibleFlag(invoiceDetails, 'showPaymentStatus') ? ['status', 'Payment Status', invoice.paymentStatus] : null
+  ].filter(Boolean);
+  const rowY = leftRows.length > 3 ? [176, 203, 230, 257] : [180, 209, 238];
   leftRows.forEach(([icon, label, value], index) => {
     drawSmallIcon(doc, icon, 42, rowY[index] - 5);
     drawColonValue(doc, label, value, 78, rowY[index], { label: 128, value: 68 });
   });
 
-  drawColonValue(doc, 'Customer Name', invoice.customerName, 330, 176, { label: 93, value: 103 });
-  drawColonValue(doc, 'Phone Number', invoice.customerPhone, 330, 203, { label: 93, value: 103 });
-  doc.font(boldFont()).fontSize(8.8).fillColor(TEXT).text('Address', 330, 230, { width: 93 });
-  doc.text(':', 428, 230, { width: 10, align: 'center' });
-  doc.font(bodyFont()).fontSize(8.8).fillColor(TEXT)
-    .text(cleanText(invoice.customerAddress), 448, 230, { width: 94, lineGap: 2 });
+  let rightY = 176;
+  if (visibleFlag(customerDetails, 'showCustomerName')) {
+    drawColonValue(doc, 'Customer Name', invoice.customerName, 330, rightY, { label: 93, value: 103 });
+    rightY += 27;
+  }
+  if (visibleFlag(customerDetails, 'showPhoneNumber')) {
+    drawColonValue(doc, 'Phone Number', invoice.customerPhone, 330, rightY, { label: 93, value: 103 });
+    rightY += 27;
+  }
+  if (visibleFlag(customerDetails, 'showAddress')) {
+    doc.font(boldFont()).fontSize(8.8).fillColor(TEXT).text('Address', 330, rightY, { width: 93 });
+    doc.text(':', 428, rightY, { width: 10, align: 'center' });
+    doc.font(bodyFont()).fontSize(8.8).fillColor(TEXT)
+      .text(cleanText(invoice.customerAddress), 448, rightY, { width: 94, lineGap: 2 });
+  }
 }
 
 function drawKeyValue(doc, label, value, x, y, options = {}) {
@@ -306,38 +336,61 @@ function drawKeyValue(doc, label, value, x, y, options = {}) {
 
 function drawServiceDetailsCard(doc, invoice, config = {}) {
   const y = 294;
+  const serviceDetails = cfgSection(config, 'serviceDetails');
   doc.roundedRect(PAGE_X + 0.5, y + 0.5, CONTENT_WIDTH - 1, 25, 6).fill(LIGHT_BLUE);
   doc.rect(PAGE_X + 0.5, y + 14, CONTENT_WIDTH - 1, 11.5).fill(LIGHT_BLUE);
   drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 108);
   doc.font(boldFont()).fontSize(10.6).fillColor(NAVY).text('SERVICE DETAILS', 40, y + 10);
   drawLine(doc, 304, y + 32, 304, y + 97, '#9bb4df', 0.8);
 
-  drawKeyValue(doc, 'Service Type', invoice.serviceType, 45, y + 41, { labelWidth: 99, valueWidth: 118 });
-  drawKeyValue(doc, 'Device', invoice.device, 45, y + 64, { labelWidth: 99, valueWidth: 118 });
-  drawKeyValue(doc, 'Brand / Model', invoice.brandModel, 45, y + 87, { labelWidth: 99, valueWidth: 118 });
+  let leftY = y + 41;
+  if (visibleFlag(serviceDetails, 'showServiceType')) {
+    drawKeyValue(doc, 'Service Type', invoice.serviceType, 45, leftY, { labelWidth: 99, valueWidth: 118 });
+    leftY += 23;
+  }
+  if (visibleFlag(serviceDetails, 'showDevice')) {
+    drawKeyValue(doc, 'Device', invoice.device, 45, leftY, { labelWidth: 99, valueWidth: 118 });
+    leftY += 23;
+  }
+  if (visibleFlag(serviceDetails, 'showBrandModel')) {
+    drawKeyValue(doc, 'Brand / Model', invoice.brandModel, 45, leftY, { labelWidth: 99, valueWidth: 118 });
+  }
 
-  doc.font(boldFont()).fontSize(8.8).fillColor(TEXT).text('Problem / Complaint', 330, y + 41, { width: 105 });
-  doc.text(':', 437, y + 41, { width: 9, align: 'center' });
-  doc.font(bodyFont()).fontSize(8.8).fillColor(NAVY)
-    .text(cleanText(invoice.problemComplaint), 454, y + 41, { width: 82, lineGap: 2 });
+  let rightY = y + 41;
+  if (visibleFlag(serviceDetails, 'showProblemComplaint')) {
+    doc.font(boldFont()).fontSize(8.8).fillColor(TEXT).text('Problem / Complaint', 330, rightY, { width: 105 });
+    doc.text(':', 437, rightY, { width: 9, align: 'center' });
+    doc.font(bodyFont()).fontSize(8.8).fillColor(NAVY)
+      .text(cleanText(invoice.problemComplaint), 454, rightY, { width: 82, lineGap: 2 });
+    rightY += 35;
+  }
 
-  if (config.showTechnician !== false && cleanText(invoice.technician, '') !== '') {
-    drawKeyValue(doc, 'Technician', invoice.technician, 330, y + 76, { labelWidth: 92, valueWidth: 86 });
+  if (visibleFlag(serviceDetails, 'showTechnician') && cleanText(invoice.technician, '') !== '') {
+    drawKeyValue(doc, 'Technician', invoice.technician, 330, rightY, { labelWidth: 92, valueWidth: 86 });
   }
 }
 
-function tableColumns() {
-  return [
-    { label: 'S.No.', width: 61, align: 'center' },
-    { label: 'Description', width: 167, align: 'left' },
-    { label: 'Qty', width: 88, align: 'center' },
-    { label: 'Unit Price (\u20b9)', width: 116, align: 'right' },
-    { label: 'Total (\u20b9)', width: CONTENT_WIDTH - 61 - 167 - 88 - 116, align: 'right' }
-  ];
+function tableColumns(config = {}) {
+  const table = cfgSection(config, 'itemTable');
+  const wanted = [
+    { key: 'sno', label: cfgLabel(config, 'sno', 'S.No.'), weight: 48, align: 'center', show: visibleFlag(table, 'showSno') },
+    { key: 'description', label: cfgLabel(config, 'description', 'Description'), weight: 176, align: 'left', show: true },
+    { key: 'quantity', label: cfgLabel(config, 'quantity', 'Qty'), weight: 72, align: 'center', show: visibleFlag(table, 'showQuantity') },
+    { key: 'unitPrice', label: cfgLabel(config, 'unitPrice', 'Unit Price (\u20b9)'), weight: 108, align: 'right', show: visibleFlag(table, 'showUnitPrice') },
+    { key: 'tax', label: cfgLabel(config, 'tax', 'Tax (\u20b9)'), weight: 78, align: 'right', show: table.showTaxColumn === true },
+    { key: 'total', label: cfgLabel(config, 'total', 'Total (\u20b9)'), weight: 108, align: 'right', show: visibleFlag(table, 'showTotal') }
+  ].filter((column) => column.show);
+  const totalWeight = wanted.reduce((sum, column) => sum + column.weight, 0) || 1;
+  let used = 0;
+  return wanted.map((column, index) => {
+    const width = index === wanted.length - 1 ? CONTENT_WIDTH - used : Math.round((column.weight / totalWeight) * CONTENT_WIDTH);
+    used += width;
+    return { ...column, width };
+  });
 }
 
-function drawItemsHeader(doc, y) {
-  const columns = tableColumns();
+function drawItemsHeader(doc, y, config = {}) {
+  const columns = tableColumns(config);
   const headerHeight = 24;
   let x = PAGE_X;
   doc.roundedRect(PAGE_X, y, CONTENT_WIDTH, headerHeight, 6).fill(NAVY);
@@ -355,25 +408,29 @@ function drawItemsHeader(doc, y) {
   return y + headerHeight;
 }
 
-function rowHeight(doc, item) {
+function rowHeight(doc, item, config = {}) {
+  const descriptionColumn = tableColumns(config).find((column) => column.key === 'description');
+  const descriptionWidth = Math.max(120, (descriptionColumn?.width || 176) - 12);
   doc.font(bodyFont()).fontSize(8.8);
-  return Math.max(26, doc.heightOfString(cleanText(item.description, 'Service'), { width: 154 }) + 14);
+  return Math.max(26, doc.heightOfString(cleanText(item.description, 'Service'), { width: descriptionWidth, lineGap: 1.2 }) + 14);
 }
 
-function drawItemRow(doc, item, index, y, height) {
-  const columns = tableColumns();
+function drawItemRow(doc, item, index, y, height, config = {}) {
+  const columns = tableColumns(config);
   let x = PAGE_X;
   doc.rect(PAGE_X, y, CONTENT_WIDTH, height).fill(index % 2 ? '#f9fbff' : '#ffffff');
   drawLine(doc, PAGE_X, y, PAGE_RIGHT, y, '#cad8f0', 0.55);
   doc.font(bodyFont()).fontSize(8.8).fillColor(TEXT);
-  [
-    String(index + 1),
-    cleanText(item.description, 'Service'),
-    String(item.quantity || 1),
-    amount(item.unitPrice),
-    amount(item.total)
-  ].forEach((value, cellIndex) => {
-    const column = columns[cellIndex];
+  const values = {
+    sno: String(index + 1),
+    description: cleanText(item.description, 'Service'),
+    quantity: String(item.quantity || 1),
+    unitPrice: amount(item.unitPrice),
+    tax: amount(item.tax || 0),
+    total: amount(item.total)
+  };
+  columns.forEach((column) => {
+    const value = values[column.key] || '';
     doc.text(value, x + 6, y + 8, { width: column.width - 12, align: column.align, lineGap: 1.2 });
     x += column.width;
   });
@@ -422,32 +479,32 @@ function drawItemsTable(doc, items, title, company, config) {
   let index = 0;
   let tableStartedY = y;
   let pageBreaks = 0;
-  y = drawItemsHeader(doc, y);
+  y = drawItemsHeader(doc, y, config);
   doc.roundedRect(PAGE_X, tableStartedY, CONTENT_WIDTH, 24, 6).strokeColor(BORDER).lineWidth(0.7).stroke();
 
   while (index < rows.length) {
-    const remainingHeight = rows.slice(index).reduce((sum, item) => sum + rowHeight(doc, item), 0);
+    const remainingHeight = rows.slice(index).reduce((sum, item) => sum + rowHeight(doc, item, config), 0);
     const canFinishHere = remainingHeight + FINAL_SECTIONS_HEIGHT <= NON_FINAL_TABLE_LIMIT - y;
 
-    if (!canFinishHere && y + rowHeight(doc, rows[index]) > NON_FINAL_TABLE_LIMIT) {
+    if (!canFinishHere && y + rowHeight(doc, rows[index], config) > NON_FINAL_TABLE_LIMIT) {
       pageBreaks += 1;
       y = drawContinuationPage(doc, title, company, config);
       tableStartedY = y;
-      y = drawItemsHeader(doc, y);
+      y = drawItemsHeader(doc, y, config);
       doc.roundedRect(PAGE_X, tableStartedY, CONTENT_WIDTH, 24, 6).strokeColor(BORDER).lineWidth(0.7).stroke();
       continue;
     }
 
-    const height = rowHeight(doc, rows[index]);
-    drawItemRow(doc, rows[index], index, y, height);
+    const height = rowHeight(doc, rows[index], config);
+    drawItemRow(doc, rows[index], index, y, height, config);
     y += height;
     index += 1;
 
-    if (index < rows.length && !canFinishHere && y + rowHeight(doc, rows[index]) > NON_FINAL_TABLE_LIMIT) {
+    if (index < rows.length && !canFinishHere && y + rowHeight(doc, rows[index], config) > NON_FINAL_TABLE_LIMIT) {
       pageBreaks += 1;
       y = drawContinuationPage(doc, title, company, config);
       tableStartedY = y;
-      y = drawItemsHeader(doc, y);
+      y = drawItemsHeader(doc, y, config);
       doc.roundedRect(PAGE_X, tableStartedY, CONTENT_WIDTH, 24, 6).strokeColor(BORDER).lineWidth(0.7).stroke();
     }
   }
@@ -464,22 +521,25 @@ function drawRupeeIcon(doc, x, y) {
 }
 
 function drawAmountSection(doc, y, totals) {
+  const summary = cfgSection(totals.config || {}, 'amountSummary');
   const leftWidth = 248;
   const rightX = 330;
   const rightWidth = PAGE_RIGHT - rightX;
   const height = 104;
 
-  drawCard(doc, PAGE_X, y, leftWidth, height);
-  drawRupeeIcon(doc, 57, y + 31);
-  doc.font(boldFont()).fontSize(9.7).fillColor(NAVY).text('Amount in Words', 112, y + 41, { width: 126 });
-  doc.font(bodyFont()).fontSize(8.3).fillColor(TEXT).text(totals.words, 112, y + 61, { width: 144, lineGap: 2 });
+  if (visibleFlag(summary, 'showAmountInWords')) {
+    drawCard(doc, PAGE_X, y, leftWidth, height);
+    drawRupeeIcon(doc, 57, y + 31);
+    doc.font(boldFont()).fontSize(9.7).fillColor(NAVY).text('Amount in Words', 112, y + 41, { width: 126 });
+    doc.font(bodyFont()).fontSize(8.3).fillColor(TEXT).text(totals.words, 112, y + 61, { width: 144, lineGap: 2 });
+  }
 
   drawCard(doc, rightX, y, rightWidth, height);
   const rows = [
-    ['Sub Total', money(totals.subtotal), false],
-    ['Final Total', money(totals.finalTotal), true],
-    ['Amount Paid', money(totals.amountPaid), false]
-  ];
+    visibleFlag(summary, 'showSubtotal') ? ['Sub Total', money(totals.subtotal), false] : null,
+    visibleFlag(summary, 'showFinalTotal') ? ['Final Total', money(totals.finalTotal), true] : null,
+    visibleFlag(summary, 'showAmountPaid') ? ['Amount Paid', money(totals.amountPaid), false] : null
+  ].filter(Boolean);
   rows.forEach(([label, value, bold], index) => {
     const rowY = y + 14 + index * 26;
     doc.font(bold ? boldFont() : boldFont()).fontSize(bold ? 10.4 : 8.9).fillColor(bold ? NAVY : TEXT)
@@ -497,11 +557,13 @@ function drawAmountSection(doc, y, totals) {
     }
   });
 
-  doc.roundedRect(rightX + 0.5, y + 77, rightWidth - 1, 26.5, 5).fill(NAVY);
-  doc.rect(rightX + 0.5, y + 77, rightWidth - 1, 9).fill(NAVY);
-  doc.font(boldFont()).fontSize(9.7).fillColor('#ffffff').text('Balance Due', rightX + 14, y + 84, { width: 83 });
-  doc.text(':', rightX + 98, y + 84, { width: 10, align: 'center' });
-  doc.text(money(totals.balance), rightX + 124, y + 84, { width: rightWidth - 139, align: 'right' });
+  if (visibleFlag(summary, 'showBalanceDue')) {
+    doc.roundedRect(rightX + 0.5, y + 77, rightWidth - 1, 26.5, 5).fill(NAVY);
+    doc.rect(rightX + 0.5, y + 77, rightWidth - 1, 9).fill(NAVY);
+    doc.font(boldFont()).fontSize(9.7).fillColor('#ffffff').text('Balance Due', rightX + 14, y + 84, { width: 83 });
+    doc.text(':', rightX + 98, y + 84, { width: 10, align: 'center' });
+    doc.text(money(totals.balance), rightX + 124, y + 84, { width: rightWidth - 139, align: 'right' });
+  }
 }
 
 function drawCheckDot(doc, x, y, color = GREEN) {
@@ -520,17 +582,21 @@ function drawCompletionBadge(doc, x, y) {
   doc.restore();
 }
 
-function drawWorkNotice(doc, y) {
+function drawWorkNotice(doc, y, config = {}) {
+  const notice = cfgSection(config, 'workCompletionNotice');
+  if (notice.show === false) return 0;
+  const lines = cfgList(notice.messageLines, DEFAULT_NOTICE);
   drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 67, { fill: GREEN_LIGHT, stroke: GREEN_BORDER });
   drawCompletionBadge(doc, 58, y + 10);
   drawLine(doc, 112, y + 12, 112, y + 56, GREEN_BORDER, 0.8);
-  doc.font(boldFont()).fontSize(10.3).fillColor(GREEN).text('WORK COMPLETION NOTICE', 130, y + 13, { width: 310 });
+  doc.font(boldFont()).fontSize(10.3).fillColor(GREEN).text(cleanText(notice.title, 'WORK COMPLETION NOTICE'), 130, y + 13, { width: 310 });
   let lineY = y + 36;
-  DEFAULT_NOTICE.forEach((line) => {
+  lines.slice(0, 3).forEach((line) => {
     drawCheckDot(doc, 130, lineY + 1, GREEN);
     doc.font(bodyFont()).fontSize(8.45).fillColor(TEXT).text(line, 146, lineY, { width: 365, lineGap: 1.4 });
     lineY += line.includes('arrange') ? 20 : 13;
   });
+  return 67;
 }
 
 function drawDocumentIcon(doc, x, y) {
@@ -544,7 +610,8 @@ function drawDocumentIcon(doc, x, y) {
 }
 
 function invoiceTerms(config = {}, context = {}) {
-  const configured = renderText(config.termsAndConditions || '', context).trim();
+  const terms = cfgSection(config, 'terms');
+  const configured = renderText(terms.text || config.termsAndConditions || '', context).trim();
   const oldDefault = /Payment is due before product delivery\.\s*Warranty is subject/i;
   if (!configured || oldDefault.test(configured)) return DEFAULT_TERMS;
   return configured
@@ -555,16 +622,19 @@ function invoiceTerms(config = {}, context = {}) {
 }
 
 function drawTerms(doc, y, config = {}, context = {}) {
+  const terms = cfgSection(config, 'terms');
+  if (terms.show === false) return 0;
   drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 73);
   drawDocumentIcon(doc, 51, y + 15);
   drawLine(doc, 105, y + 12, 105, y + 61, NAVY, 0.8);
-  doc.font(boldFont()).fontSize(9.8).fillColor(NAVY).text('TERMS & CONDITIONS', 128, y + 12, { width: 210 });
+  doc.font(boldFont()).fontSize(9.8).fillColor(NAVY).text(cleanText(terms.title, 'TERMS & CONDITIONS'), 128, y + 12, { width: 210 });
   let lineY = y + 31;
   invoiceTerms(config, context).forEach((term) => {
     drawCheckDot(doc, 129, lineY + 0.5, NAVY);
     doc.font(bodyFont()).fontSize(7.7).fillColor(TEXT).text(term, 145, lineY, { width: 389, lineGap: 0.6 });
     lineY += 11.6;
   });
+  return 73;
 }
 
 function drawFooterIcon(doc, type, x, y) {
@@ -573,15 +643,17 @@ function drawFooterIcon(doc, type, x, y) {
   }
 }
 
-function drawFooterContacts(doc, y, company) {
+function drawFooterContacts(doc, y, company, config = {}) {
   const currentCompany = invoiceCompany(company);
+  const footer = config.footer || {};
   const columns = [
-    ['phone', 'Call / WhatsApp', currentCompany.phones.join(' / ')],
-    ['email', 'Email', currentCompany.email],
-    ['website', 'Website', currentCompany.website],
-    ['address', 'Address', currentCompany.footerAddressLines.join('\n')]
-  ];
-  const columnWidth = CONTENT_WIDTH / 4;
+    footer.showCallWhatsapp !== false ? ['phone', 'Call / WhatsApp', currentCompany.phones.join(' / ')] : null,
+    footer.showEmail !== false ? ['email', 'Email', currentCompany.email] : null,
+    footer.showWebsite !== false ? ['website', 'Website', currentCompany.website] : null,
+    footer.showAddress !== false ? ['address', 'Address', currentCompany.footerAddressLines.join('\n')] : null
+  ].filter(Boolean);
+  if (!columns.length) return;
+  const columnWidth = CONTENT_WIDTH / columns.length;
   columns.forEach(([icon, label, value], index) => {
     const x = PAGE_X + index * columnWidth;
     if (index > 0) drawLine(doc, x, y + 2, x, y + 29, NAVY, 0.65);
@@ -605,12 +677,13 @@ function drawHandshakeIcon(doc, x, y) {
   doc.restore();
 }
 
-function drawBottomStrip(doc) {
+function drawBottomStrip(doc, config = {}) {
+  const message = cleanText(config.footer?.thankYouMessage || config.footerText, 'Thank you for your business. We look forward to serving you again.');
   doc.roundedRect(PAGE_X, BOTTOM_STRIP_Y, CONTENT_WIDTH, 24, 4).fill(NAVY);
   drawHandshakeIcon(doc, 78, BOTTOM_STRIP_Y + 1);
   drawLine(doc, 129, BOTTOM_STRIP_Y + 5, 129, BOTTOM_STRIP_Y + 20, '#ffffff', 0.6);
   doc.font(boldFont()).fontSize(9.5).fillColor('#ffffff')
-    .text('Thank you for your business. We look forward to serving you again.', 147, BOTTOM_STRIP_Y + 8, {
+    .text(message, 147, BOTTOM_STRIP_Y + 8, {
       width: 330,
       align: 'center'
     });
@@ -619,11 +692,41 @@ function drawBottomStrip(doc) {
 }
 
 function drawFinalSections(doc, startY, totals, config, context, company) {
-  drawAmountSection(doc, startY, totals);
-  drawWorkNotice(doc, startY + 116);
-  drawTerms(doc, startY + 190, config, context);
-  drawFooterContacts(doc, startY + 273, company);
-  drawBottomStrip(doc);
+  let y = startY;
+  drawAmountSection(doc, y, { ...totals, config });
+  y += 116;
+  const noticeHeight = drawWorkNotice(doc, y, config);
+  if (noticeHeight) y += noticeHeight + 7;
+  const termsHeight = drawTerms(doc, y, config, context);
+  if (termsHeight) y += termsHeight + 10;
+  drawFooterContacts(doc, Math.min(y, 770), company, config);
+  drawBottomStrip(doc, config);
+}
+
+function finalSectionsDrawHeight(config = {}) {
+  let height = 116;
+  if (cfgSection(config, 'workCompletionNotice').show !== false) height += 74;
+  if (cfgSection(config, 'terms').show !== false) height += 73;
+  return height;
+}
+
+function ensureFinalSectionStart(doc, y, title, company, config = {}) {
+  if (y + finalSectionsDrawHeight(config) <= FINAL_SECTIONS_BOTTOM) return y;
+  return drawContinuationPage(doc, title, company, config);
+}
+
+function drawPageNumbers(doc, config = {}) {
+  if (config.pageBreaks?.showPageNumbers === false) return;
+  try {
+    const range = doc.bufferedPageRange();
+    for (let pageIndex = range.start; pageIndex < range.start + range.count; pageIndex += 1) {
+      doc.switchToPage(pageIndex);
+      doc.font(bodyFont()).fontSize(7.5).fillColor(MUTED)
+        .text(`Page ${pageIndex - range.start + 1} of ${range.count}`, PAGE_RIGHT - 75, 57, { width: 70, align: 'right' });
+    }
+  } catch {
+    // Page numbers require buffered pages. Existing non-buffered callers can still render PDFs.
+  }
 }
 
 function blankInvoiceData() {
@@ -706,10 +809,12 @@ export function renderInvoicePdf(doc, options = {}) {
   drawHeader(doc, company, config);
   drawTitle(doc, title);
   drawWatermark(doc);
-  drawInvoiceDetailsCard(doc, invoice);
+  drawInvoiceDetailsCard(doc, invoice, config);
   drawServiceDetailsCard(doc, invoice, config);
   const table = drawItemsTable(doc, items, title, company, config);
-  const finalY = table.pageBreaks > 0 ? table.y + 6 : Math.max(ONE_PAGE_AMOUNT_Y, table.y + 6);
+  const preferredFinalY = table.pageBreaks > 0 ? table.y + 6 : Math.max(ONE_PAGE_AMOUNT_Y, table.y + 6);
+  const finalY = ensureFinalSectionStart(doc, preferredFinalY, title, company, config);
   drawFinalSections(doc, finalY, totals, config, context, company);
+  drawPageNumbers(doc, config);
   return { subtotal, finalTotal, amountPaid, balance };
 }

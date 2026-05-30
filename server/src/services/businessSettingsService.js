@@ -52,6 +52,7 @@ const defaultBusinessSettings = Object.freeze({
   },
   taxGst: {
     enabled: false,
+    gstEnabledManual: false,
     defaultPercentage: 18,
     splitCgstSgst: true,
     taxLabel: 'GST',
@@ -157,6 +158,7 @@ function sanitizeTaxGst(payload = {}) {
   if (percentage < 0 || percentage > 100) throw appError('Default GST percentage must be between 0 and 100', 400);
   return {
     enabled: Boolean(base.enabled),
+    gstEnabledManual: Boolean(base.gstEnabledManual),
     defaultPercentage: percentage,
     splitCgstSgst: Boolean(base.splitCgstSgst),
     taxLabel: cleanText(base.taxLabel, 'GST', 40),

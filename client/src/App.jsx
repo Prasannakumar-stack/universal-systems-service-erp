@@ -112,6 +112,9 @@ export default function App() {
           <Route path="payment-reports" element={<Navigate to="/admin/reports/finance" replace />} />
           <Route path="notifications" element={lazyElement(<NotificationsPage role="admin" />)} />
           <Route path="settings" element={lazyElement(<SystemSettingsPage />)} />
+          <Route path="settings/documents-pdfs" element={lazyElement(<SystemSettingsPage initialTab="documentsPdfs" standaloneTab />)} />
+          <Route path="settings/tax-gst" element={lazyElement(<SystemSettingsPage initialTab="taxGst" standaloneTab />)} />
+          <Route path="settings/payment-settings" element={lazyElement(<SystemSettingsPage initialTab="paymentSettings" standaloneTab />)} />
         </Route>
       </Route>
 

@@ -639,7 +639,7 @@ export async function generateWorkOrderPdf({ workOrderId, type, user }) {
   const filePath = path.join(PDF_DIR, filename);
 
   await new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: false });
+    const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
     buildPdf(doc, type, workOrder, template, company, businessSettings);

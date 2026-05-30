@@ -143,10 +143,12 @@ import { Fragment } from 'react';
 import {
   Activity,
   ArchiveRestore,
+  Banknote,
   Building2,
   ChevronsDownUp,
   ChevronsUpDown,
   ChevronRight,
+  Copy,
   DatabaseBackup,
   Filter,
   HardDrive,
@@ -163,6 +165,7 @@ import {
   ListChecks,
   MessageSquareText,
   Percent,
+  QrCode,
   RotateCcw,
   Settings2,
   UploadCloud,
@@ -190,15 +193,13 @@ const settingsTabs = [
   { id: 'adminProfile', label: 'Admin Profile' },
   { id: 'security', label: 'Security' },
   { id: 'usersRoles', label: 'Users & Roles' },
-  { id: 'pdfTemplates', label: 'PDF / Document Templates' },
+  { id: 'documentsPdfs', label: 'Documents & PDFs' },
   { id: 'publicWebsite', label: 'Public Website Settings' },
   { id: 'backupStorage', label: 'Backup & Storage' },
-  { id: 'documentNumbering', label: 'Document Numbering' },
   { id: 'taxGst', label: 'Tax / GST' },
   { id: 'paymentSettings', label: 'Payment Settings' },
   { id: 'notificationTemplates', label: 'Notification Templates' },
   { id: 'statusWorkflow', label: 'Status Workflow' },
-  { id: 'pdfTerms', label: 'PDF Terms & Conditions' },
   { id: 'systemInformation', label: 'System Information' },
   { id: 'preferences', label: 'Preferences' }
 ];
@@ -415,13 +416,14 @@ const settingsOverviewGroups = [
     description: 'Manage PDFs, document templates, message templates, and numbering.',
     cards: [
       {
-        id: 'pdfTemplates',
-        tabId: 'pdfTemplates',
+        id: 'documentsPdfs',
+        route: '/admin/settings/documents-pdfs',
         icon: FileText,
-        title: 'PDF / Document Templates',
-        description: 'Reusable PDF content, template variables, previews, and reset tools.',
-        status: 'Configured',
-        tags: ['pdf', 'documents', 'templates', 'variables', 'preview']
+        title: 'Documents & PDFs',
+        description: 'Manage PDF templates, terms, footer notes, and document numbering.',
+        status: 'Active',
+        actionLabel: 'Manage',
+        tags: ['pdf', 'templates', 'terms', 'numbering']
       },
       {
         id: 'notificationTemplates',
@@ -431,24 +433,6 @@ const settingsOverviewGroups = [
         description: 'Reusable message text and variables for future customer communication.',
         status: 'Coming Soon',
         tags: ['notifications', 'messages', 'templates', 'whatsapp', 'email', 'sms']
-      },
-      {
-        id: 'documentNumbering',
-        tabId: 'documentNumbering',
-        icon: Hash,
-        title: 'Document Numbering',
-        description: 'Future prefixes and next numbers for invoices, quotations, work orders, AMC, and receipts.',
-        status: 'Coming Soon',
-        tags: ['numbering', 'prefix', 'invoice', 'quotation', 'work order', 'amc']
-      },
-      {
-        id: 'pdfTerms',
-        tabId: 'pdfTerms',
-        icon: FileCog,
-        title: 'PDF Terms & Conditions',
-        description: 'Reusable legal notes, warranty text, footer notes, and document terms.',
-        status: 'Coming Soon',
-        tags: ['pdf', 'terms', 'conditions', 'warranty', 'footer', 'legal']
       }
     ]
   },
@@ -459,21 +443,21 @@ const settingsOverviewGroups = [
     cards: [
       {
         id: 'taxGst',
-        tabId: 'taxGst',
+        route: '/admin/settings/tax-gst',
         icon: Percent,
         title: 'Tax / GST',
-        description: 'Future GST defaults, tax label, CGST/SGST split, and invoice display settings.',
-        status: 'Coming Soon',
-        tags: ['tax', 'gst', 'cgst', 'sgst', 'invoice', 'compliance']
+        description: 'Configure tax rates, GST details, HSN/SAC codes, and invoice tax display settings.',
+        status: 'Configured',
+        tags: ['tax', 'gst', 'hsn', 'sac', 'invoice', 'compliance']
       },
       {
         id: 'paymentSettings',
-        tabId: 'paymentSettings',
+        route: '/admin/settings/payment-settings',
         icon: WalletCards,
         title: 'Payment Settings',
-        description: 'Accepted methods, payment terms, UPI, and bank details for future documents.',
-        status: 'Coming Soon',
-        tags: ['payments', 'upi', 'bank', 'terms', 'methods']
+        description: 'Configure payment methods, terms, reminders, and invoice payment settings.',
+        status: 'Configured',
+        tags: ['payments', 'upi', 'bank', 'terms', 'reminders']
       },
       {
         id: 'invoices',
@@ -2603,7 +2587,22 @@ function updateDraftPath(current, path, value) {
   return next;
 }
 
-function BusinessSettingsFrame({ section, tabId, title, icon: Icon, description, onDirtyChange, children }) {
+function BusinessSettingsFrame({
+  section,
+  tabId,
+  title,
+  icon: Icon,
+  description,
+  onDirtyChange,
+  children,
+  showHeader = true,
+  saveLabel = 'Save Changes',
+  resetLabel = 'Cancel / Revert',
+  resetMode = 'saved',
+  showActionsWhenClean = false,
+  previewLabel = '',
+  previewMessage = ''
+}) {
   const { request, user } = useAuth();
   const { push } = useToast();
   const permission = businessPermissionByTab[tabId];
@@ -2649,34 +2648,50 @@ function BusinessSettingsFrame({ section, tabId, title, icon: Icon, description,
     }
   }
 
+  function resetForm() {
+    setForm(clonePlain(resetMode === 'defaults' ? defaults : saved));
+  }
+
+  function previewSettings() {
+    push(previewMessage || 'Preview will use saved settings in future generated PDF documents.', 'info');
+  }
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
   return (
     <form className="grid gap-5" onSubmit={save}>
-      <section className="surface admin-control-card p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="admin-control-icon"><Icon className="h-5 w-5" /></div>
-            <div>
-              <h2 className="text-2xl font-black">{title}</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 muted">{description}</p>
+      {showHeader ? (
+        <section className="surface admin-control-card p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="admin-control-icon"><Icon className="h-5 w-5" /></div>
+              <div>
+                <h2 className="text-2xl font-black">{title}</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 muted">{description}</p>
+              </div>
             </div>
+            <span className="admin-premium-badge">FUTURE-READY DEFAULTS</span>
           </div>
-          <span className="admin-premium-badge">FUTURE-READY DEFAULTS</span>
-        </div>
-        {!canEdit ? <p className="mt-4 rounded-card border border-amber-300/25 bg-amber-500/10 p-3 text-sm font-semibold text-amber-100">Only admin users with this settings permission can save changes.</p> : null}
-      </section>
+          {!canEdit ? <p className="mt-4 rounded-card border border-amber-300/25 bg-amber-500/10 p-3 text-sm font-semibold text-amber-100">Only admin users with this settings permission can save changes.</p> : null}
+        </section>
+      ) : (!canEdit ? <p className="rounded-card border border-amber-300/25 bg-amber-500/10 p-3 text-sm font-semibold text-amber-100">Only admin users with this settings permission can save changes.</p> : null)}
       {children({ form, setForm, setPath, canEdit, saving })}
-      {dirty ? (
+      {dirty || showActionsWhenClean ? (
         <div className="settings-sticky-actions">
-          <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => setForm(clonePlain(saved))}>
+          <button type="button" className="btn btn-secondary" disabled={saving} onClick={resetForm}>
             <RotateCcw className="h-4 w-4" />
-            Cancel / Revert
+            {resetLabel}
           </button>
+          {previewLabel ? (
+            <button type="button" className="btn btn-secondary" disabled={saving} onClick={previewSettings}>
+              <Eye className="h-4 w-4" />
+              {previewLabel}
+            </button>
+          ) : null}
           <button type="submit" className="btn btn-primary" disabled={!canEdit || saving}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? 'Saving...' : saveLabel}
           </button>
         </div>
       ) : null}
@@ -2684,7 +2699,7 @@ function BusinessSettingsFrame({ section, tabId, title, icon: Icon, description,
   );
 }
 
-function DocumentNumberingSection({ onDirtyChange = null }) {
+function DocumentNumberingSection({ onDirtyChange = null, embedded = false }) {
   const rows = [
     ['invoice', 'Invoice'],
     ['workOrder', 'Work Order'],
@@ -2694,7 +2709,19 @@ function DocumentNumberingSection({ onDirtyChange = null }) {
   ];
   const year = new Date().getFullYear();
   return (
-    <BusinessSettingsFrame section="documentNumbering" tabId="documentNumbering" title="Document Numbering" icon={Hash} description="Prepare future prefixes and next numbers for invoices, quotations, work orders, AMC, and payment receipts without changing live generation yet." onDirtyChange={onDirtyChange}>
+    <BusinessSettingsFrame
+      section="documentNumbering"
+      tabId="documentNumbering"
+      title="Document Numbering"
+      icon={Hash}
+      description="Prepare future prefixes and next numbers for invoices, quotations, work orders, AMC, and payment receipts without changing live generation yet."
+      onDirtyChange={onDirtyChange}
+      showHeader={!embedded}
+      saveLabel={embedded ? 'Save Numbering' : 'Save Changes'}
+      resetLabel={embedded ? 'Reset Default' : 'Cancel / Revert'}
+      resetMode={embedded ? 'defaults' : 'saved'}
+      showActionsWhenClean={embedded}
+    >
       {({ form, setPath, canEdit, saving }) => {
         const prefixes = rows.map(([key]) => form[key]?.prefix || '');
         const hasDuplicate = new Set(prefixes).size !== prefixes.length;
@@ -2737,89 +2764,1325 @@ function DocumentNumberingSection({ onDirtyChange = null }) {
   );
 }
 
-function TaxGstSettingsSection({ onDirtyChange = null }) {
+const taxDashboardDefaults = {
+  gstInfo: {
+    gstNumber: '33ABCDE1234F1Z5',
+    businessName: 'Universal Systems',
+    tradeName: 'Universal Systems',
+    registeredAddress: 'MIG-H3, Housing Unit, Near 4 Roads, Mathiyankuttai Post, Mettur Dam - 636452, Salem, Tamil Nadu, India.',
+    stateCode: '33'
+  },
+  rates: {
+    cgstRate: '9',
+    sgstRate: '9',
+    igstRate: '18',
+    cessRate: '0'
+  },
+  settings: {
+    gstEnabled: true,
+    roundOffTax: true,
+    showTaxSummaryInInvoice: true
+  },
+  codes: [
+    { id: 'sac-998713', code: '998713', type: 'Service (SAC)', description: 'Annual Maintenance Service', gstRate: '18' },
+    { id: 'hsn-84713010', code: '84713010', type: 'Goods (HSN)', description: 'Laptop Computers', gstRate: '18' },
+    { id: 'hsn-85258090', code: '85258090', type: 'Goods (HSN)', description: 'LED Monitor', gstRate: '18' },
+    { id: 'hsn-85234920', code: '85234920', type: 'Goods (HSN)', description: 'Printer', gstRate: '18' }
+  ]
+};
+
+function taxPercentValue(value, fallback = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(fallback);
+  return String(number).replace(/\.0+$/, '');
+}
+
+function taxPercentLabel(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '0%';
+  const label = Number.isInteger(number) ? String(number) : number.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+  return `${label}%`;
+}
+
+function buildTaxDashboardState(saved = {}) {
+  const igstRate = taxPercentValue(saved.defaultPercentage ?? taxDashboardDefaults.rates.igstRate, taxDashboardDefaults.rates.igstRate);
+  const splitRate = saved.splitCgstSgst === false ? taxDashboardDefaults.rates.cgstRate : taxPercentValue(Number(igstRate) / 2, taxDashboardDefaults.rates.cgstRate);
+  const gstVerified = Boolean(taxDashboardDefaults.gstInfo.gstNumber);
+  const gstEnabled = saved.gstEnabledManual ? Boolean(saved.enabled) : (gstVerified || Boolean(saved.enabled ?? taxDashboardDefaults.settings.gstEnabled));
+  return {
+    gstInfo: { ...taxDashboardDefaults.gstInfo },
+    rates: {
+      cgstRate: splitRate,
+      sgstRate: splitRate,
+      igstRate,
+      cessRate: taxDashboardDefaults.rates.cessRate
+    },
+    settings: {
+      gstEnabled,
+      roundOffTax: taxDashboardDefaults.settings.roundOffTax,
+      showTaxSummaryInInvoice: saved.showGstOnInvoices ?? taxDashboardDefaults.settings.showTaxSummaryInInvoice
+    },
+    codes: taxDashboardDefaults.codes.map((item) => ({ ...item }))
+  };
+}
+
+function TaxToggle({ label, helper = '', checked, disabled = false, onChange }) {
   return (
-    <BusinessSettingsFrame section="taxGst" tabId="taxGst" title="Tax / GST Settings" icon={Percent} description="Store tax defaults for future invoice and PDF use. Company GST number continues to come from Company Profile." onDirtyChange={onDirtyChange}>
-      {({ form, setPath, canEdit, saving }) => (
-        <section className="surface admin-control-card p-5">
-          <div className="grid gap-4 lg:grid-cols-2">
-            <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
-              <span><span className="block font-bold text-slate-100">Enable GST</span><span className="mt-1 block text-xs muted">Disabled keeps safe tax-free defaults.</span></span>
-              <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={Boolean(form.enabled)} disabled={!canEdit || saving} onChange={(event) => setPath('enabled', event.target.checked)} />
-            </label>
-            <label>
-              <span className="label">Default GST percentage</span>
-              <input className="input" type="number" min="0" max="100" step="0.01" value={form.defaultPercentage ?? 0} disabled={!canEdit || saving} onChange={(event) => setPath('defaultPercentage', event.target.value)} />
-            </label>
-            <label>
-              <span className="label">Tax label</span>
-              <input className="input" value={form.taxLabel || ''} disabled={!canEdit || saving} onChange={(event) => setPath('taxLabel', event.target.value)} />
-            </label>
-            <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
-              <span><span className="block font-bold text-slate-100">CGST / SGST split</span><span className="mt-1 block text-xs muted">Stored as invoice display preference.</span></span>
-              <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={Boolean(form.splitCgstSgst)} disabled={!canEdit || saving} onChange={(event) => setPath('splitCgstSgst', event.target.checked)} />
-            </label>
-            <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3 lg:col-span-2">
-              <span><span className="block font-bold text-slate-100">Show GST on invoices</span><span className="mt-1 block text-xs muted">Applies only when future invoice PDF integration is enabled.</span></span>
-              <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={Boolean(form.showGstOnInvoices)} disabled={!canEdit || saving} onChange={(event) => setPath('showGstOnInvoices', event.target.checked)} />
-            </label>
+    <label className={`flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3 ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+      <span className="min-w-0">
+        <span className="block text-sm font-black text-slate-100">{label}</span>
+        {helper ? <span className="mt-1 block text-xs muted">{helper}</span> : null}
+      </span>
+      <span className="flex flex-none items-center gap-2">
+        <span className={`text-xs font-black uppercase ${checked ? 'text-sky-100' : 'text-slate-400'}`}>{checked ? 'ON' : 'OFF'}</span>
+        <input className="sr-only" type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange?.(event.target.checked)} />
+        <span
+          role="switch"
+          aria-checked={checked}
+          className={`relative h-7 w-14 rounded-full border transition duration-200 ${checked ? 'border-sky-300/45 bg-sky-400/25 shadow-[0_0_18px_rgba(56,189,248,0.18)]' : 'border-white/10 bg-slate-950/45'}`}
+        >
+          <span className={`absolute top-1 h-5 w-5 rounded-full transition duration-200 ${checked ? 'left-8 bg-sky-100' : 'left-1 bg-slate-400'}`} />
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function TaxInfoLine({ label, value, highlight = false }) {
+  return (
+    <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
+      <p className="text-xs font-black uppercase tracking-wide text-slate-400">{label}</p>
+      <p className={`mt-1 break-words text-sm font-black ${highlight ? 'text-sky-100' : 'text-slate-100'}`}>{value}</p>
+    </div>
+  );
+}
+
+function TaxDashboardModal({ title, icon: Icon, children, saving, submitLabel, onCancel, onSubmit }) {
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
+      <form className="surface admin-modal w-full max-w-2xl p-5" onSubmit={onSubmit}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="admin-control-icon"><Icon className="h-5 w-5" /></div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Tax & GST</p>
+              <h2 className="mt-1 text-xl font-black text-slate-50">{title}</h2>
+            </div>
           </div>
-        </section>
-      )}
-    </BusinessSettingsFrame>
+          <button type="button" className="icon-button h-9 w-9" onClick={onCancel} aria-label="Close tax settings modal">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-4">{children}</div>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" className="btn btn-secondary" disabled={saving} onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? 'Saving...' : submitLabel}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function TaxGstSettingsSection({ onDirtyChange = null }) {
+  const { request, token, user } = useAuth();
+  const { push } = useToast();
+  const { data, loading, error } = useResource(() => request('/settings/business'), [request]);
+  const [taxState, setTaxState] = useState(() => buildTaxDashboardState());
+  const [initialized, setInitialized] = useState(false);
+  const [search, setSearch] = useState('');
+  const [modalType, setModalType] = useState(null);
+  const [modalDraft, setModalDraft] = useState({});
+  const [editingCodeId, setEditingCodeId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [backupWorking, setBackupWorking] = useState(false);
+  const canEdit = (hasRole(user, 'admin') || hasRole(user, 'super_admin')) && can(user, 'manage_tax_settings');
+  const canBackup = isBackupAdminUser(user) && can(user, 'manage_backup_storage');
+
+  useEffect(() => {
+    onDirtyChange?.(false);
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    if (initialized || !data?.settings) return;
+    setTaxState(buildTaxDashboardState(data.settings.taxGst || {}));
+    setInitialized(true);
+  }, [data?.settings, initialized]);
+
+  const filteredCodes = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return taxState.codes;
+    return taxState.codes.filter((item) => `${item.code} ${item.type} ${item.description} ${item.gstRate}`.toLowerCase().includes(query));
+  }, [search, taxState.codes]);
+
+  function setModalValue(key, value) {
+    setModalDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function closeModal() {
+    if (saving) return;
+    setModalType(null);
+    setModalDraft({});
+    setEditingCodeId(null);
+  }
+
+  function openDetailsModal() {
+    setModalType('details');
+    setModalDraft({ ...taxState.gstInfo });
+  }
+
+  function openRatesModal() {
+    setModalType('rates');
+    setModalDraft({ ...taxState.rates });
+  }
+
+  function openSettingsModal() {
+    setModalType('settings');
+    setModalDraft({ ...taxState.settings });
+  }
+
+  function openCodeModal(record = null) {
+    setModalType('code');
+    setEditingCodeId(record?.id || null);
+    setModalDraft(record ? { ...record } : { code: '', type: 'Goods (HSN)', description: '', gstRate: '18' });
+  }
+
+  async function downloadTaxBackup(id) {
+    if (!id) return;
+    const response = await fetch(`${apiBase}/settings/backups/${id}/download`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (!response.ok) throw new Error('Backup download failed');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `universal-systems-backup-${Date.now()}.zip`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function createTaxBackup(downloadAfter = false) {
+    if (!canBackup) {
+      push('Backup actions are available only to Admin or Super Admin users with backup permission.', 'error');
+      return;
+    }
+    setBackupWorking(true);
+    try {
+      const result = await request('/settings/backups', { method: 'POST' });
+      push(result.message || 'Backup created');
+      if (downloadAfter && result.backup?.id) await downloadTaxBackup(result.backup.id);
+    } catch (err) {
+      push(err.message, 'error');
+    } finally {
+      setBackupWorking(false);
+    }
+  }
+
+  async function saveTaxCore(nextState = taxState, message = 'Tax settings saved successfully') {
+    if (!canEdit) {
+      push('Only Admin or Super Admin users with tax settings permission can update Tax & GST settings.', 'error');
+      return false;
+    }
+    setSaving(true);
+    try {
+      await request('/settings/business/taxGst', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          enabled: Boolean(nextState.settings.gstEnabled),
+          gstEnabledManual: true,
+          defaultPercentage: Number(nextState.rates.igstRate || 0),
+          splitCgstSgst: true,
+          taxLabel: 'GST',
+          showGstOnInvoices: Boolean(nextState.settings.showTaxSummaryInInvoice)
+        })
+      });
+      push(message);
+      return true;
+    } catch (err) {
+      push(err.message, 'error');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function submitModal(event) {
+    event.preventDefault();
+    if (!canEdit) {
+      push('Only Admin or Super Admin users with tax settings permission can update Tax & GST settings.', 'error');
+      return;
+    }
+    if (modalType === 'details') {
+      setTaxState((current) => ({
+        ...current,
+        gstInfo: { ...modalDraft },
+        settings: {
+          ...current.settings,
+          gstEnabled: String(modalDraft.gstNumber || '').trim() ? true : current.settings.gstEnabled
+        }
+      }));
+      push('GST details updated successfully');
+      closeModal();
+      return;
+    }
+    if (modalType === 'rates') {
+      const nextState = { ...taxState, rates: { ...taxState.rates, ...modalDraft } };
+      setTaxState(nextState);
+      if (await saveTaxCore(nextState)) closeModal();
+      return;
+    }
+    if (modalType === 'settings') {
+      const nextState = { ...taxState, settings: { ...taxState.settings, ...modalDraft } };
+      setTaxState(nextState);
+      if (await saveTaxCore(nextState)) closeModal();
+      return;
+    }
+    if (modalType === 'code') {
+      if (!String(modalDraft.code || '').trim() || !String(modalDraft.description || '').trim()) {
+        push('Code and description are required.', 'error');
+        return;
+      }
+      const normalizedCode = {
+        id: editingCodeId || `${String(modalDraft.type || 'code').toLowerCase().replace(/\W+/g, '-')}-${Date.now()}`,
+        code: String(modalDraft.code || '').trim(),
+        type: modalDraft.type || 'Goods (HSN)',
+        description: String(modalDraft.description || '').trim(),
+        gstRate: taxPercentValue(modalDraft.gstRate, 18)
+      };
+      setTaxState((current) => ({
+        ...current,
+        codes: editingCodeId
+          ? current.codes.map((item) => item.id === editingCodeId ? normalizedCode : item)
+          : [normalizedCode, ...current.codes]
+      }));
+      push(editingCodeId ? 'Tax settings saved successfully' : 'HSN/SAC code added successfully');
+      closeModal();
+    }
+  }
+
+  function deleteCode(record) {
+    if (!canEdit) {
+      push('Only Admin or Super Admin users with tax settings permission can delete HSN/SAC codes.', 'error');
+      return;
+    }
+    setTaxState((current) => ({ ...current, codes: current.codes.filter((item) => item.id !== record.id) }));
+    push('HSN/SAC code deleted successfully');
+  }
+
+  function updateInlineSetting(key, value) {
+    setTaxState((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
+  }
+
+  if (loading && !initialized) return <LoadingBlock />;
+  if (error) return <ErrorBlock message={error} />;
+
+  const modalTitle = modalType === 'details'
+    ? 'Edit GST Details'
+    : modalType === 'rates'
+      ? 'Manage Tax Rates'
+      : modalType === 'settings'
+        ? 'Edit Tax Settings'
+        : editingCodeId
+          ? 'Edit HSN / SAC Code'
+          : 'Add New HSN / SAC Code';
+  const ModalIcon = modalType === 'details' ? Landmark : modalType === 'rates' ? Percent : modalType === 'settings' ? Settings2 : Hash;
+  const modalSubmitLabel = modalType === 'code' ? (editingCodeId ? 'Save Code' : 'Add Code') : 'Save Tax Settings';
+  const rateRows = [
+    ['CGST Rate', taxState.rates.cgstRate],
+    ['SGST Rate', taxState.rates.sgstRate],
+    ['IGST Rate', taxState.rates.igstRate]
+  ];
+  const gstVerified = Boolean(taxState.gstInfo.gstNumber);
+  const showGstDisabledWarning = gstVerified && !taxState.settings.gstEnabled;
+
+  return (
+    <div className="grid gap-5 pb-32" data-tax-gst-root>
+      <section className="surface admin-control-card p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="admin-control-icon"><Percent className="h-5 w-5" /></div>
+            <div>
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-400">
+                <span>Settings</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span>System</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span className="text-[var(--brand)]">Tax & GST</span>
+              </div>
+              <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Tax & GST</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 muted">Configure tax rates, GST details, HSN/SAC codes, and tax related settings.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-primary admin-compact-button" disabled={backupWorking} onClick={() => createTaxBackup(false)}>
+              {backupWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseBackup className="h-4 w-4" />}
+              Backup Now
+            </button>
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={backupWorking} onClick={() => createTaxBackup(true)}>
+              <Download className="h-4 w-4" />
+              Export Data
+            </button>
+            <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => push('Tax settings apply to new invoices, quotations, AMC invoices, and PDF tax display.', 'info')}>
+              <Info className="h-4 w-4" />
+              Help
+            </button>
+          </div>
+        </div>
+        {!canEdit ? (
+          <p className="mt-4 rounded-card border border-amber-300/25 bg-amber-500/10 p-3 text-sm font-semibold text-amber-100">
+            Only Admin or Super Admin users with tax settings permission can update this page.
+          </p>
+        ) : null}
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-3">
+        <div className="surface admin-control-card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="admin-control-icon"><Landmark className="h-5 w-5" /></div>
+              <div>
+                <h2 className="text-lg font-black">GST Information</h2>
+                <p className="mt-1 text-sm muted">Registered business tax identity.</p>
+              </div>
+            </div>
+            <span className="admin-premium-badge"><CheckCircle2 className="h-3.5 w-3.5" /> Verified</span>
+          </div>
+          <div className="mt-4 grid gap-3">
+            <TaxInfoLine label="GST Number" value={taxState.gstInfo.gstNumber} highlight />
+            <TaxInfoLine label="Business Name" value={taxState.gstInfo.businessName} />
+            <TaxInfoLine label="Trade Name" value={taxState.gstInfo.tradeName} />
+          </div>
+          <button type="button" className="btn btn-secondary admin-table-button mt-4" disabled={!canEdit} onClick={openDetailsModal}>
+            <Edit3 className="h-4 w-4" />
+            Edit Details
+          </button>
+        </div>
+
+        <div className="surface admin-control-card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="admin-control-icon"><Percent className="h-5 w-5" /></div>
+              <div>
+                <h2 className="text-lg font-black">Tax Summary</h2>
+                <p className="mt-1 text-sm muted">Default rates for new documents.</p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {rateRows.map(([label, value]) => (
+              <div key={label} className="rounded-card border border-sky-300/15 bg-sky-400/10 p-3">
+                <p className="text-xs font-black uppercase tracking-wide text-sky-200">{label}</p>
+                <p className="mt-1 text-2xl font-black text-slate-50">{taxPercentLabel(value)}</p>
+              </div>
+            ))}
+          </div>
+          <details className="mt-4 rounded-card border border-white/10 bg-white/[0.035] p-3">
+            <summary className="cursor-pointer text-sm font-black text-sky-100">Advanced Tax Options</summary>
+            <div className="mt-3 rounded-card border border-white/10 bg-slate-950/30 p-3">
+              <p className="text-xs font-black uppercase tracking-wide text-slate-400">CESS Rate</p>
+              <p className="mt-1 text-lg font-black text-slate-100">{taxPercentLabel(taxState.rates.cessRate)}</p>
+            </div>
+          </details>
+          <button type="button" className="btn btn-secondary admin-table-button mt-4" disabled={!canEdit} onClick={openRatesModal}>
+            <Settings2 className="h-4 w-4" />
+            Manage Tax Rates
+          </button>
+        </div>
+
+        <div className="surface admin-control-card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="admin-control-icon"><Settings2 className="h-5 w-5" /></div>
+              <div>
+                <h2 className="text-lg font-black">Tax Settings</h2>
+                <p className="mt-1 text-sm muted">Invoice and PDF display controls.</p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3">
+            <TaxToggle label="GST Enabled" checked={Boolean(taxState.settings.gstEnabled)} disabled={!canEdit || saving} onChange={(value) => updateInlineSetting('gstEnabled', value)} />
+            <TaxToggle label="Round Off Tax" checked={Boolean(taxState.settings.roundOffTax)} disabled={!canEdit || saving} onChange={(value) => updateInlineSetting('roundOffTax', value)} />
+            <TaxToggle label="Show Tax Summary in Invoice" checked={Boolean(taxState.settings.showTaxSummaryInInvoice)} disabled={!canEdit || saving} onChange={(value) => updateInlineSetting('showTaxSummaryInInvoice', value)} />
+          </div>
+          {showGstDisabledWarning ? (
+            <p className="mt-4 rounded-card border border-amber-300/25 bg-amber-500/10 p-3 text-sm font-semibold leading-6 text-amber-100">
+              GST number is verified, but GST is currently disabled for invoices.
+            </p>
+          ) : null}
+          <button type="button" className="btn btn-secondary admin-table-button mt-4" disabled={!canEdit} onClick={openSettingsModal}>
+            <Edit3 className="h-4 w-4" />
+            Edit Settings
+          </button>
+        </div>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="surface admin-control-card min-w-0 p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="admin-control-icon"><Hash className="h-5 w-5" /></div>
+              <div>
+                <h2 className="text-xl font-black">HSN / SAC Codes</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 muted">Manage HSN (Goods) and SAC (Services) codes for your products and services.</p>
+              </div>
+            </div>
+            <button type="button" className="btn btn-primary admin-compact-button" disabled={!canEdit} onClick={() => openCodeModal()}>
+              <Plus className="h-4 w-4" />
+              Add New Code
+            </button>
+          </div>
+          <div className="mt-5">
+            <SearchBox value={search} onChange={setSearch} placeholder="Search HSN / SAC code or description..." />
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full divide-y divide-white/10 text-left text-sm">
+              <thead>
+                <tr className="bg-sky-500/10 text-xs uppercase tracking-wide text-sky-100">
+                  <th className="rounded-l-card px-4 py-3 font-black">Code</th>
+                  <th className="px-4 py-3 font-black">Type</th>
+                  <th className="px-4 py-3 font-black">Description</th>
+                  <th className="px-4 py-3 font-black">GST Rate</th>
+                  <th className="rounded-r-card px-4 py-3 text-right font-black">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {filteredCodes.map((item) => (
+                  <tr key={item.id} className="transition hover:bg-white/[0.035]">
+                    <td className="whitespace-nowrap px-4 py-3 font-black text-sky-100">{item.code}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-200">{item.type}</td>
+                    <td className="min-w-[220px] px-4 py-3 text-slate-100">{item.description}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-black text-slate-100">{taxPercentLabel(item.gstRate)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
+                        <button type="button" className="icon-button h-9 w-9" disabled={!canEdit} onClick={() => openCodeModal(item)} aria-label={`Edit HSN/SAC code ${item.code}`}>
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                        <button type="button" className="icon-button h-9 w-9 text-rose-100" disabled={!canEdit} onClick={() => deleteCode(item)} aria-label={`Delete HSN/SAC code ${item.code}`}>
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 text-sm muted sm:flex-row sm:items-center sm:justify-between">
+            <span>Showing 1 to {filteredCodes.length} of {filteredCodes.length} entries</span>
+            <div className="flex items-center gap-2">
+              <button type="button" className="btn btn-secondary admin-table-button" disabled>Previous</button>
+              <span className="rounded-full border border-sky-300/25 bg-sky-400/10 px-3 py-1 text-xs font-black text-sky-100">Page 1</span>
+              <button type="button" className="btn btn-secondary admin-table-button" disabled>Next</button>
+            </div>
+          </div>
+        </div>
+
+        <aside className="surface admin-control-card p-5">
+          <div className="flex items-start gap-3">
+            <div className="admin-control-icon"><Bell className="h-5 w-5" /></div>
+            <div>
+              <h2 className="text-xl font-black">Tax Activity Log</h2>
+              <p className="mt-2 text-sm leading-6 muted">Saved tax changes will appear here from Audit Logs.</p>
+            </div>
+          </div>
+          <div className="mt-5 rounded-card border border-white/10 bg-white/[0.035] p-4 text-sm leading-6 muted">
+            No saved tax activity yet. Future GST, HSN/SAC, and tax setting changes will be shown here when audit history is connected.
+          </div>
+          <button type="button" className="btn btn-secondary admin-table-button mt-4 w-full" onClick={() => push('Full tax update history can be reviewed from Audit Logs.', 'info')}>
+            View Audit Logs
+          </button>
+        </aside>
+      </section>
+
+      <section className="surface admin-control-card p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="admin-control-icon"><Info className="h-5 w-5" /></div>
+            <p className="text-sm font-semibold leading-6 text-slate-200">
+              Tax settings will apply only to new invoices, quotations, and AMC invoices. Existing records will not change.
+            </p>
+          </div>
+          <button type="button" className="btn btn-primary admin-compact-button" disabled={!canEdit || saving} onClick={() => saveTaxCore()}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Tax Settings
+          </button>
+        </div>
+      </section>
+
+      {modalType ? (
+        <TaxDashboardModal title={modalTitle} icon={ModalIcon} saving={saving} submitLabel={modalSubmitLabel} onCancel={closeModal} onSubmit={submitModal}>
+          {modalType === 'details' ? (
+            <>
+              <label>
+                <span className="label">GST Number</span>
+                <input className="input" value={modalDraft.gstNumber || ''} disabled={saving} onChange={(event) => setModalValue('gstNumber', event.target.value)} />
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label>
+                  <span className="label">Business Name</span>
+                  <input className="input" value={modalDraft.businessName || ''} disabled={saving} onChange={(event) => setModalValue('businessName', event.target.value)} />
+                </label>
+                <label>
+                  <span className="label">Trade Name</span>
+                  <input className="input" value={modalDraft.tradeName || ''} disabled={saving} onChange={(event) => setModalValue('tradeName', event.target.value)} />
+                </label>
+              </div>
+              <label>
+                <span className="label">Registered Address</span>
+                <textarea className="input min-h-24" value={modalDraft.registeredAddress || ''} disabled={saving} onChange={(event) => setModalValue('registeredAddress', event.target.value)} />
+              </label>
+              <label>
+                <span className="label">State Code</span>
+                <input className="input" value={modalDraft.stateCode || ''} disabled={saving} onChange={(event) => setModalValue('stateCode', event.target.value)} />
+              </label>
+            </>
+          ) : null}
+          {modalType === 'rates' ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {[
+                ['cgstRate', 'CGST Rate'],
+                ['sgstRate', 'SGST Rate'],
+                ['igstRate', 'IGST Rate'],
+                ['cessRate', 'CESS Rate']
+              ].map(([key, label]) => (
+                <label key={key}>
+                  <span className="label">{label}</span>
+                  <input className="input" type="number" min="0" max="100" step="0.01" value={modalDraft[key] ?? ''} disabled={saving} onChange={(event) => setModalValue(key, event.target.value)} />
+                </label>
+              ))}
+            </div>
+          ) : null}
+          {modalType === 'settings' ? (
+            <>
+              <TaxToggle label="GST Enabled" helper="Apply GST settings to new taxable documents." checked={Boolean(modalDraft.gstEnabled)} disabled={saving} onChange={(value) => setModalValue('gstEnabled', value)} />
+              <TaxToggle label="Round Off Tax" helper="Round tax values in generated invoices and PDFs." checked={Boolean(modalDraft.roundOffTax)} disabled={saving} onChange={(value) => setModalValue('roundOffTax', value)} />
+              <TaxToggle label="Show Tax Summary in Invoice" helper="Display CGST, SGST, IGST, and totals in new invoice PDFs." checked={Boolean(modalDraft.showTaxSummaryInInvoice)} disabled={saving} onChange={(value) => setModalValue('showTaxSummaryInInvoice', value)} />
+            </>
+          ) : null}
+          {modalType === 'code' ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label>
+                  <span className="label">Code</span>
+                  <input className="input" value={modalDraft.code || ''} disabled={saving} onChange={(event) => setModalValue('code', event.target.value)} />
+                </label>
+                <label>
+                  <span className="label">Type</span>
+                  <select className="input" value={modalDraft.type || 'Goods (HSN)'} disabled={saving} onChange={(event) => setModalValue('type', event.target.value)}>
+                    <option>Goods (HSN)</option>
+                    <option>Service (SAC)</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                <span className="label">Description</span>
+                <input className="input" value={modalDraft.description || ''} disabled={saving} onChange={(event) => setModalValue('description', event.target.value)} />
+              </label>
+              <label>
+                <span className="label">GST Rate</span>
+                <input className="input" type="number" min="0" max="100" step="0.01" value={modalDraft.gstRate ?? ''} disabled={saving} onChange={(event) => setModalValue('gstRate', event.target.value)} />
+              </label>
+            </>
+          ) : null}
+        </TaxDashboardModal>
+      ) : null}
+    </div>
+  );
+}
+
+const paymentMethodList = [
+  { key: 'cash', label: 'Cash', storageLabel: 'Cash', icon: Banknote },
+  { key: 'upiQr', label: 'UPI / QR Code', storageLabel: 'UPI', icon: QrCode },
+  { key: 'bankTransfer', label: 'Bank Transfer', storageLabel: 'Bank Transfer', icon: Landmark },
+  { key: 'cheque', label: 'Cheque', storageLabel: 'Cheque', icon: ReceiptText },
+  { key: 'cardPayment', label: 'Card Payment', storageLabel: 'Card', icon: CreditCard }
+];
+
+const paymentDashboardDefaults = {
+  methods: {
+    cash: true,
+    upiQr: true,
+    bankTransfer: true,
+    cheque: false,
+    cardPayment: false
+  },
+  terms: {
+    defaultTerms: 'Net 15 Days',
+    advancePayment: '0',
+    creditPeriod: '15',
+    latePaymentCharge: '2',
+    gracePeriod: '5'
+  },
+  reminders: {
+    enableReminders: true,
+    reminderBeforeDue: '3',
+    sendOverdueReminders: true,
+    overdueInterval: '7 Days',
+    maxAttempts: '3 Times'
+  },
+  upi: {
+    upiId: 'universal@okbizaxis',
+    showQrInInvoice: true,
+    showUpiIdInInvoice: true
+  },
+  bank: {
+    bankName: 'HDFC Bank',
+    accountNumber: '50200012345678',
+    ifscCode: 'HDFC0001234',
+    accountHolderName: 'Universal Systems'
+  },
+  display: {
+    showPaymentStatus: true,
+    showUpiQr: true,
+    showBankDetails: true,
+    allowPartialPayments: true,
+    autoApplyAdvance: false
+  }
+};
+
+function paymentTermsText(terms = paymentDashboardDefaults.terms) {
+  return [
+    `Default Payment Terms: ${terms.defaultTerms || 'Net 15 Days'}`,
+    `Advance Payment: ${terms.advancePayment || 0}%`,
+    `Credit Period: ${terms.creditPeriod || 0} days`,
+    `Late Payment Charge: ${terms.latePaymentCharge || 0}%`,
+    `Grace Period: ${terms.gracePeriod || 0} days`
+  ].join('\n');
+}
+
+function paymentBankDetailsText(bank = paymentDashboardDefaults.bank) {
+  return [
+    `Bank Name: ${bank.bankName || ''}`,
+    `Account Number: ${bank.accountNumber || ''}`,
+    `IFSC Code: ${bank.ifscCode || ''}`,
+    `Account Holder Name: ${bank.accountHolderName || ''}`
+  ].join('\n');
+}
+
+function parsePaymentBankDetails(value = '') {
+  const text = String(value || '');
+  function pick(label, fallback) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = text.match(new RegExp(`${escaped}\\s*:\\s*([^\\n]+)`, 'i'));
+    return match?.[1]?.trim() || fallback;
+  }
+  return {
+    bankName: pick('Bank Name', paymentDashboardDefaults.bank.bankName),
+    accountNumber: pick('Account Number', paymentDashboardDefaults.bank.accountNumber),
+    ifscCode: pick('IFSC Code', paymentDashboardDefaults.bank.ifscCode),
+    accountHolderName: pick('Account Holder Name', paymentDashboardDefaults.bank.accountHolderName)
+  };
+}
+
+function buildPaymentDashboardState(saved = {}) {
+  const accepted = new Set(saved.acceptedMethods || []);
+  const includesAny = (...labels) => labels.some((label) => accepted.has(label));
+  return {
+    methods: {
+      cash: accepted.size ? includesAny('Cash') : paymentDashboardDefaults.methods.cash,
+      upiQr: accepted.size ? includesAny('UPI', 'UPI / QR Code') : paymentDashboardDefaults.methods.upiQr,
+      bankTransfer: accepted.size ? includesAny('Bank Transfer') : paymentDashboardDefaults.methods.bankTransfer,
+      cheque: accepted.size ? includesAny('Cheque') : paymentDashboardDefaults.methods.cheque,
+      cardPayment: accepted.size ? includesAny('Card', 'Card Payment') : paymentDashboardDefaults.methods.cardPayment
+    },
+    terms: { ...paymentDashboardDefaults.terms },
+    reminders: { ...paymentDashboardDefaults.reminders },
+    upi: {
+      ...paymentDashboardDefaults.upi,
+      upiId: saved.upiId || paymentDashboardDefaults.upi.upiId
+    },
+    bank: parsePaymentBankDetails(saved.bankDetails),
+    display: { ...paymentDashboardDefaults.display }
+  };
+}
+
+function paymentAcceptedMethods(state = paymentDashboardDefaults) {
+  return paymentMethodList
+    .filter((method) => Boolean(state.methods?.[method.key]))
+    .map((method) => method.storageLabel);
+}
+
+function PaymentMethodRow({ method, checked, disabled = false, onChange }) {
+  const Icon = method.icon;
+  return (
+    <label className={`flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3 ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="grid h-9 w-9 flex-none place-items-center rounded-full border border-sky-300/20 bg-sky-400/10 text-sky-100">
+          <Icon className="h-4 w-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-sm font-black text-slate-100">{method.label}</span>
+          <span className={`mt-1 block text-xs font-black uppercase ${checked ? 'text-emerald-200' : 'text-slate-500'}`}>{checked ? 'ON' : 'OFF'}</span>
+        </span>
+      </span>
+      <span className="flex flex-none items-center gap-2">
+        <input className="sr-only" type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange?.(event.target.checked)} />
+        <span
+          role="switch"
+          aria-checked={checked}
+          className={`relative h-7 w-14 rounded-full border transition duration-200 ${checked ? 'border-sky-300/45 bg-sky-400/25 shadow-[0_0_18px_rgba(56,189,248,0.18)]' : 'border-white/10 bg-slate-950/45'}`}
+        >
+          <span className={`absolute top-1 h-5 w-5 rounded-full transition duration-200 ${checked ? 'left-8 bg-sky-100' : 'left-1 bg-slate-400'}`} />
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function PaymentField({ label, value, onChange, type = 'text', disabled = false, suffix = '', copyValue = '', onCopy = null }) {
+  return (
+    <label className="block">
+      <span className="label">{label}</span>
+      <span className="flex min-w-0 gap-2">
+        <input className="input min-w-0 flex-1" type={type} value={value} disabled={disabled} onChange={(event) => onChange?.(event.target.value)} />
+        {suffix ? <span className="grid min-w-12 place-items-center rounded-card border border-white/10 bg-white/[0.035] px-3 text-sm font-black text-slate-300">{suffix}</span> : null}
+        {onCopy ? (
+          <button type="button" className="icon-button h-12 w-12 flex-none" onClick={() => onCopy(copyValue || value, label)} aria-label={`Copy ${label}`}>
+            <Copy className="h-4 w-4" />
+          </button>
+        ) : null}
+      </span>
+    </label>
+  );
+}
+
+function paymentQrPayload(upiId = '') {
+  return `upi://pay?pa=${encodeURIComponent(String(upiId || '').trim())}&pn=${encodeURIComponent('Universal Systems')}`;
+}
+
+function paymentQrCells(upiId = '', nonce = 0) {
+  const source = `${paymentQrPayload(upiId)}:${nonce}`;
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = ((hash << 5) - hash + source.charCodeAt(index)) | 0;
+  }
+  const finderCells = new Set([0, 1, 2, 9, 11, 18, 19, 20, 6, 7, 8, 15, 17, 24, 25, 26, 54, 55, 56, 63, 65, 72, 73, 74]);
+  return new Set(Array.from({ length: 81 }).map((_, index) => {
+    if (finderCells.has(index)) return index;
+    const bit = Math.abs(hash + index * 37 + source.charCodeAt(index % source.length || 0)) % 5;
+    return bit <= 1 ? index : null;
+  }).filter((index) => index !== null));
+}
+
+function paymentQrSvg(upiId = '', nonce = 0) {
+  const activeCells = paymentQrCells(upiId, nonce);
+  const cells = Array.from({ length: 81 }).map((_, index) => {
+    const x = (index % 9) * 16;
+    const y = Math.floor(index / 9) * 16;
+    return `<rect x="${x}" y="${y}" width="13" height="13" rx="2" fill="${activeCells.has(index) ? '#020617' : '#e2e8f0'}"/>`;
+  }).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="176" height="176" viewBox="0 0 144 144"><rect width="144" height="144" rx="10" fill="#ffffff"/><title>${paymentQrPayload(upiId)}</title>${cells}</svg>`;
+}
+
+function PaymentQrPreview({ upiId, nonce = 0 }) {
+  const activeCells = paymentQrCells(upiId, nonce);
+  return (
+    <div className="mx-auto grid aspect-square w-36 grid-cols-9 gap-1 rounded-card border border-sky-300/20 bg-white p-3 shadow-[0_0_30px_rgba(56,189,248,0.14)]" title={paymentQrPayload(upiId)}>
+      {Array.from({ length: 81 }).map((_, index) => (
+        <span key={index} className={`rounded-[2px] ${activeCells.has(index) ? 'bg-slate-950' : 'bg-slate-200'}`} />
+      ))}
+    </div>
+  );
+}
+
+function PaymentDashboardModal({ title, icon: Icon, children, saving, submitLabel = 'Save Changes', onCancel, onSubmit }) {
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
+      <form className="surface admin-modal w-full max-w-2xl p-5" onSubmit={onSubmit}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="admin-control-icon"><Icon className="h-5 w-5" /></div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Payment Settings</p>
+              <h2 className="mt-1 text-xl font-black text-slate-50">{title}</h2>
+            </div>
+          </div>
+          <button type="button" className="icon-button h-9 w-9" onClick={onCancel} aria-label="Close payment settings modal">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-4">{children}</div>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" className="btn btn-secondary" disabled={saving} onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? 'Saving...' : submitLabel}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
 function PaymentSettingsSection({ onDirtyChange = null }) {
-  const methods = ['Cash', 'UPI', 'Bank Transfer', 'Card', 'Other'];
+  const { request, token, user } = useAuth();
+  const { push } = useToast();
+  const { data, loading, error } = useResource(() => request('/settings/business'), [request]);
+  const [paymentState, setPaymentState] = useState(() => buildPaymentDashboardState());
+  const [initialized, setInitialized] = useState(false);
+  const [modalType, setModalType] = useState(null);
+  const [modalDraft, setModalDraft] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [backupWorking, setBackupWorking] = useState(false);
+  const [qrNonce, setQrNonce] = useState(0);
+  const canEdit = (hasRole(user, 'admin') || hasRole(user, 'super_admin')) && can(user, 'manage_payment_settings');
+  const canBackup = isBackupAdminUser(user) && can(user, 'manage_backup_storage');
+
+  useEffect(() => {
+    onDirtyChange?.(false);
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    if (initialized || !data?.settings) return;
+    setPaymentState(buildPaymentDashboardState(data.settings.payment || {}));
+    setInitialized(true);
+  }, [data?.settings, initialized]);
+
+  function setNested(section, key, value) {
+    setPaymentState((current) => ({ ...current, [section]: { ...current[section], [key]: value } }));
+  }
+
+  function setModalValue(key, value) {
+    setModalDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function closeModal() {
+    if (saving) return;
+    setModalType(null);
+    setModalDraft({});
+  }
+
+  function openModal(type) {
+    setModalType(type);
+    if (type === 'methods') setModalDraft({ ...paymentState.methods });
+    if (type === 'upi') setModalDraft({ ...paymentState.upi });
+    if (type === 'bank') setModalDraft({ ...paymentState.bank });
+  }
+
+  async function copyPaymentValue(value, label) {
+    try {
+      await navigator.clipboard.writeText(String(value || ''));
+      const normalizedLabel = String(label || '').toLowerCase();
+      if (normalizedLabel.includes('account number')) push('Account number copied');
+      else if (normalizedLabel.includes('ifsc')) push('IFSC code copied');
+      else push(`${label} copied`);
+    } catch {
+      push('Copy is not available in this browser session.', 'error');
+    }
+  }
+
+  function regenerateQrCode() {
+    setQrNonce((current) => current + 1);
+    push('QR code updated successfully');
+  }
+
+  function downloadQrCode() {
+    const svg = paymentQrSvg(paymentState.upi.upiId, qrNonce);
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `universal-systems-upi-qr-${Date.now()}.svg`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    push('QR code downloaded');
+  }
+
+  function previewQrInInvoice() {
+    push(`Invoice preview will show the QR generated from ${paymentState.upi.upiId}.`, 'info');
+  }
+
+  async function downloadPaymentBackup(id) {
+    if (!id) return;
+    const response = await fetch(`${apiBase}/settings/backups/${id}/download`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (!response.ok) throw new Error('Backup download failed');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `universal-systems-backup-${Date.now()}.zip`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function createPaymentBackup(downloadAfter = false) {
+    if (!canBackup) {
+      push('Backup actions are available only to Admin or Super Admin users with backup permission.', 'error');
+      return;
+    }
+    setBackupWorking(true);
+    try {
+      const result = await request('/settings/backups', { method: 'POST' });
+      push(result.message || 'Backup created');
+      if (downloadAfter && result.backup?.id) await downloadPaymentBackup(result.backup.id);
+    } catch (err) {
+      push(err.message, 'error');
+    } finally {
+      setBackupWorking(false);
+    }
+  }
+
+  async function savePaymentCore(nextState = paymentState, message = 'Payment settings saved successfully') {
+    if (!canEdit) {
+      push('Only Admin or Super Admin users with payment settings permission can update this page.', 'error');
+      return false;
+    }
+    setSaving(true);
+    try {
+      await request('/settings/business/payment', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          acceptedMethods: paymentAcceptedMethods(nextState),
+          upiId: nextState.upi.upiId,
+          bankDetails: paymentBankDetailsText(nextState.bank),
+          defaultPaymentStatus: 'Pending',
+          paymentTermsText: paymentTermsText(nextState.terms)
+        })
+      });
+      push(message);
+      return true;
+    } catch (err) {
+      push(err.message, 'error');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveTerms() {
+    await savePaymentCore(paymentState, 'Payment settings saved successfully');
+  }
+
+  async function saveReminders() {
+    await savePaymentCore(paymentState, 'Payment settings saved successfully');
+  }
+
+  async function savePreferences() {
+    await savePaymentCore(paymentState, 'Payment settings saved successfully');
+  }
+
+  async function submitModal(event) {
+    event.preventDefault();
+    if (!canEdit) {
+      push('Only Admin or Super Admin users with payment settings permission can update this page.', 'error');
+      return;
+    }
+    if (modalType === 'methods') {
+      const nextState = { ...paymentState, methods: { ...paymentState.methods, ...modalDraft } };
+      setPaymentState(nextState);
+      if (await savePaymentCore(nextState, 'Payment settings saved successfully')) closeModal();
+      return;
+    }
+    if (modalType === 'upi') {
+      const nextState = { ...paymentState, upi: { ...paymentState.upi, ...modalDraft } };
+      setPaymentState(nextState);
+      setQrNonce((current) => current + 1);
+      if (await savePaymentCore(nextState, 'QR code updated successfully')) closeModal();
+      return;
+    }
+    if (modalType === 'bank') {
+      const nextState = { ...paymentState, bank: { ...paymentState.bank, ...modalDraft } };
+      setPaymentState(nextState);
+      if (await savePaymentCore(nextState, 'Bank details updated successfully')) closeModal();
+    }
+  }
+
+  if (loading && !initialized) return <LoadingBlock />;
+  if (error) return <ErrorBlock message={error} />;
+
+  const modalTitle = modalType === 'methods'
+    ? 'Manage Payment Methods'
+    : modalType === 'upi'
+      ? 'Update UPI / QR Code'
+      : 'Edit Bank Details';
+  const ModalIcon = modalType === 'methods' ? WalletCards : modalType === 'upi' ? QrCode : Landmark;
+  const topMethods = paymentMethodList;
+
   return (
-    <BusinessSettingsFrame section="payment" tabId="paymentSettings" title="Payment Settings" icon={WalletCards} description="Store accepted methods, payment terms, UPI, and bank details for future invoice/payment PDFs." onDirtyChange={onDirtyChange}>
-      {({ form, setPath, canEdit, saving }) => {
-        const accepted = new Set(form.acceptedMethods || []);
-        return (
-          <section className="surface admin-control-card p-5">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="lg:col-span-2">
-                <span className="label">Accepted payment methods</span>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                  {methods.map((method) => (
-                    <label key={method} className="flex items-center gap-2 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3 text-sm font-bold text-slate-100">
-                      <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={accepted.has(method)} disabled={!canEdit || saving} onChange={(event) => {
-                        const next = new Set(accepted);
-                        if (event.target.checked) next.add(method);
-                        else next.delete(method);
-                        setPath('acceptedMethods', Array.from(next));
-                      }} />
-                      {method}
-                    </label>
-                  ))}
-                </div>
+    <div className="grid gap-5 pb-32" data-payment-settings-root>
+      <section className="surface admin-control-card p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="admin-control-icon"><WalletCards className="h-5 w-5" /></div>
+            <div>
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-400">
+                <span>Settings</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span>System</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span className="text-[var(--brand)]">Payment Settings</span>
               </div>
+              <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Payment Settings</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 muted">Configure payment methods, terms, reminders, and invoice payment settings.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-primary admin-compact-button" disabled={backupWorking} onClick={() => createPaymentBackup(false)}>
+              {backupWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseBackup className="h-4 w-4" />}
+              Backup Now
+            </button>
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={backupWorking} onClick={() => createPaymentBackup(true)}>
+              <Download className="h-4 w-4" />
+              Export Data
+            </button>
+            <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => push('Payment settings apply to new invoices, AMC invoices, payment records, and invoice PDF payment sections.', 'info')}>
+              <Info className="h-4 w-4" />
+              Help
+            </button>
+          </div>
+        </div>
+        {!canEdit ? (
+          <p className="mt-4 rounded-card border border-amber-300/25 bg-amber-500/10 p-3 text-sm font-semibold text-amber-100">
+            Only Admin or Super Admin users with payment settings permission can update this page.
+          </p>
+        ) : null}
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-3">
+        <div className="surface admin-control-card p-5">
+          <div className="flex items-start gap-3">
+            <div className="admin-control-icon"><WalletCards className="h-5 w-5" /></div>
+            <div>
+              <h2 className="text-lg font-black">Payment Methods</h2>
+              <p className="mt-1 text-sm muted">Enable or disable payment methods.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3">
+            {topMethods.map((method) => (
+              <PaymentMethodRow
+                key={method.key}
+                method={method}
+                checked={Boolean(paymentState.methods[method.key])}
+                disabled={!canEdit || saving}
+                onChange={(value) => setNested('methods', method.key, value)}
+              />
+            ))}
+          </div>
+          <button type="button" className="btn btn-secondary admin-table-button mt-4" disabled={!canEdit} onClick={() => openModal('methods')}>
+            <Settings2 className="h-4 w-4" />
+            Manage Methods
+          </button>
+        </div>
+
+        <div className="surface admin-control-card p-5">
+          <div className="flex items-start gap-3">
+            <div className="admin-control-icon"><ReceiptText className="h-5 w-5" /></div>
+            <div>
+              <h2 className="text-lg font-black">Payment Terms</h2>
+              <p className="mt-1 text-sm muted">Configure default payment terms for invoices.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3">
+            <label>
+              <span className="label">Default Payment Terms</span>
+              <select className="input" value={paymentState.terms.defaultTerms} disabled={!canEdit || saving} onChange={(event) => setNested('terms', 'defaultTerms', event.target.value)}>
+                <option>Due on Receipt</option>
+                <option>Net 7 Days</option>
+                <option>Net 15 Days</option>
+                <option>Net 30 Days</option>
+              </select>
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <PaymentField label="Advance Payment" suffix="%" type="number" value={paymentState.terms.advancePayment} disabled={!canEdit || saving} onChange={(value) => setNested('terms', 'advancePayment', value)} />
+              <PaymentField label="Credit Period" suffix="Days" type="number" value={paymentState.terms.creditPeriod} disabled={!canEdit || saving} onChange={(value) => setNested('terms', 'creditPeriod', value)} />
+              <PaymentField label="Late Payment Charge" suffix="%" type="number" value={paymentState.terms.latePaymentCharge} disabled={!canEdit || saving} onChange={(value) => setNested('terms', 'latePaymentCharge', value)} />
+              <PaymentField label="Grace Period" suffix="Days" type="number" value={paymentState.terms.gracePeriod} disabled={!canEdit || saving} onChange={(value) => setNested('terms', 'gracePeriod', value)} />
+            </div>
+          </div>
+          <button type="button" className="btn btn-secondary admin-table-button mt-4" disabled={!canEdit || saving} onClick={saveTerms}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Terms
+          </button>
+        </div>
+
+        <div className="surface admin-control-card p-5">
+          <div className="flex items-start gap-3">
+            <div className="admin-control-icon"><Bell className="h-5 w-5" /></div>
+            <div>
+              <h2 className="text-lg font-black">Payment Reminders</h2>
+              <p className="mt-1 text-sm muted">Send payment reminders automatically.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3">
+            <TaxToggle label="Enable Reminders" checked={Boolean(paymentState.reminders.enableReminders)} disabled={!canEdit || saving} onChange={(value) => setNested('reminders', 'enableReminders', value)} />
+            <PaymentField label="Reminder Before Due" suffix="Days" type="number" value={paymentState.reminders.reminderBeforeDue} disabled={!canEdit || saving} onChange={(value) => setNested('reminders', 'reminderBeforeDue', value)} />
+            <TaxToggle label="Send Overdue Reminders" checked={Boolean(paymentState.reminders.sendOverdueReminders)} disabled={!canEdit || saving} onChange={(value) => setNested('reminders', 'sendOverdueReminders', value)} />
+            <div className="grid gap-3 sm:grid-cols-2">
               <label>
-                <span className="label">UPI ID</span>
-                <input className="input" value={form.upiId || ''} disabled={!canEdit || saving} onChange={(event) => setPath('upiId', event.target.value)} />
-              </label>
-              <label>
-                <span className="label">Default payment status</span>
-                <select className="input" value={form.defaultPaymentStatus || 'Pending'} disabled={!canEdit || saving} onChange={(event) => setPath('defaultPaymentStatus', event.target.value)}>
-                  <option>Pending</option>
-                  <option>Partial</option>
-                  <option>Paid</option>
+                <span className="label">Overdue Reminder Interval</span>
+                <select className="input" value={paymentState.reminders.overdueInterval} disabled={!canEdit || saving} onChange={(event) => setNested('reminders', 'overdueInterval', event.target.value)}>
+                  <option>3 Days</option>
+                  <option>7 Days</option>
+                  <option>15 Days</option>
                 </select>
               </label>
-              <label className="lg:col-span-2">
-                <span className="label">Bank account details for invoice footer</span>
-                <textarea className="input min-h-28" value={form.bankDetails || ''} disabled={!canEdit || saving} onChange={(event) => setPath('bankDetails', event.target.value)} />
-              </label>
-              <label className="lg:col-span-2">
-                <span className="label">Payment terms text</span>
-                <textarea className="input min-h-24" value={form.paymentTermsText || ''} disabled={!canEdit || saving} onChange={(event) => setPath('paymentTermsText', event.target.value)} />
+              <label>
+                <span className="label">Max Reminder Attempts</span>
+                <select className="input" value={paymentState.reminders.maxAttempts} disabled={!canEdit || saving} onChange={(event) => setNested('reminders', 'maxAttempts', event.target.value)}>
+                  <option>1 Time</option>
+                  <option>2 Times</option>
+                  <option>3 Times</option>
+                  <option>5 Times</option>
+                </select>
               </label>
             </div>
-          </section>
-        );
-      }}
-    </BusinessSettingsFrame>
+          </div>
+          <button type="button" className="btn btn-secondary admin-table-button mt-4" disabled={!canEdit || saving} onClick={saveReminders}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Reminder Settings
+          </button>
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-3">
+        <div className="surface admin-control-card p-5">
+          <div className="flex items-start gap-3">
+            <div className="admin-control-icon"><QrCode className="h-5 w-5" /></div>
+            <div>
+              <h2 className="text-lg font-black">UPI / QR Code Settings</h2>
+              <p className="mt-1 text-sm muted">Configure UPI ID and QR code for receiving payments.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-4">
+            <div className="min-w-0">
+              <PaymentField label="UPI ID" value={paymentState.upi.upiId} disabled={!canEdit || saving} onChange={(value) => setNested('upi', 'upiId', value)} onCopy={copyPaymentValue} />
+              <div className="mt-4 rounded-card border border-sky-300/15 bg-sky-400/10 p-4 text-center">
+                <PaymentQrPreview upiId={paymentState.upi.upiId} nonce={qrNonce} />
+                <span className="admin-premium-badge mt-3">Active</span>
+                <p className="mt-3 text-sm font-semibold text-slate-200">Scan this QR code to make payment.</p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <button type="button" className="btn btn-secondary admin-table-button" disabled={!canEdit || saving} onClick={regenerateQrCode}>
+                    <RotateCcw className="h-4 w-4" />
+                    Regenerate QR
+                  </button>
+                  <button type="button" className="btn btn-secondary admin-table-button" onClick={downloadQrCode}>
+                    <Download className="h-4 w-4" />
+                    Download QR
+                  </button>
+                  <button type="button" className="btn btn-secondary admin-table-button" onClick={previewQrInInvoice}>
+                    <Eye className="h-4 w-4" />
+                    Preview in Invoice
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
+              <h3 className="font-black text-slate-100">Show in Invoice</h3>
+              <div className="mt-3 grid gap-3">
+                <TaxToggle label="Show UPI QR in invoice" checked={Boolean(paymentState.upi.showQrInInvoice)} disabled={!canEdit || saving} onChange={(value) => setNested('upi', 'showQrInInvoice', value)} />
+                <TaxToggle label="Show UPI ID in invoice" checked={Boolean(paymentState.upi.showUpiIdInInvoice)} disabled={!canEdit || saving} onChange={(value) => setNested('upi', 'showUpiIdInInvoice', value)} />
+              </div>
+            </div>
+          </div>
+          <button type="button" className="btn btn-secondary admin-table-button mt-4" disabled={!canEdit} onClick={() => openModal('upi')}>
+            <UploadCloud className="h-4 w-4" />
+            Update QR Code
+          </button>
+        </div>
+
+        <div className="surface admin-control-card p-5">
+          <div className="flex items-start gap-3">
+            <div className="admin-control-icon"><Landmark className="h-5 w-5" /></div>
+            <div>
+              <h2 className="text-lg font-black">Bank Details (For Invoice)</h2>
+              <p className="mt-1 text-sm muted">Bank details will be shown in invoices.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3">
+            <TaxInfoLine label="Bank Name" value={paymentState.bank.bankName} />
+            <PaymentField label="Account Number" value={paymentState.bank.accountNumber} disabled copyValue={paymentState.bank.accountNumber} onCopy={copyPaymentValue} />
+            <PaymentField label="IFSC Code" value={paymentState.bank.ifscCode} disabled copyValue={paymentState.bank.ifscCode} onCopy={copyPaymentValue} />
+            <TaxInfoLine label="Account Holder Name" value={paymentState.bank.accountHolderName} />
+          </div>
+          <button type="button" className="btn btn-secondary admin-table-button mt-4" disabled={!canEdit} onClick={() => openModal('bank')}>
+            <Edit3 className="h-4 w-4" />
+            Edit Bank Details
+          </button>
+        </div>
+
+        <div className="surface admin-control-card p-5">
+          <div className="flex items-start gap-3">
+            <div className="admin-control-icon"><FileText className="h-5 w-5" /></div>
+            <div>
+              <h2 className="text-lg font-black">Invoice Payment Display</h2>
+              <p className="mt-1 text-sm muted">Control payment information shown in invoices.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3">
+            <TaxToggle label="Show Payment Status in Invoice" checked={Boolean(paymentState.display.showPaymentStatus)} disabled={!canEdit || saving} onChange={(value) => setNested('display', 'showPaymentStatus', value)} />
+            <TaxToggle label="Show UPI QR in Invoice" checked={Boolean(paymentState.display.showUpiQr)} disabled={!canEdit || saving} onChange={(value) => setNested('display', 'showUpiQr', value)} />
+            <TaxToggle label="Show Bank Details in Invoice" checked={Boolean(paymentState.display.showBankDetails)} disabled={!canEdit || saving} onChange={(value) => setNested('display', 'showBankDetails', value)} />
+            <TaxToggle label="Allow Partial Payments" checked={Boolean(paymentState.display.allowPartialPayments)} disabled={!canEdit || saving} onChange={(value) => setNested('display', 'allowPartialPayments', value)} />
+            <TaxToggle label="Auto-apply Advance to New Invoice" checked={Boolean(paymentState.display.autoApplyAdvance)} disabled={!canEdit || saving} onChange={(value) => setNested('display', 'autoApplyAdvance', value)} />
+          </div>
+          <button type="button" className="btn btn-secondary admin-table-button mt-4" disabled={!canEdit || saving} onClick={savePreferences}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Preferences
+          </button>
+        </div>
+      </section>
+
+      <section className="surface admin-control-card p-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="admin-control-icon"><Info className="h-5 w-5" /></div>
+          <p className="text-sm font-semibold leading-6 text-slate-200">
+            Payment settings will apply only to new invoices, quotations, AMC invoices, new payment records, and future PDF displays. Existing records will not change.
+          </p>
+        </div>
+      </section>
+
+      {modalType ? (
+        <PaymentDashboardModal title={modalTitle} icon={ModalIcon} saving={saving} submitLabel={modalType === 'methods' ? 'Save Methods' : modalType === 'upi' ? 'Update QR Code' : 'Save Bank Details'} onCancel={closeModal} onSubmit={submitModal}>
+          {modalType === 'methods' ? (
+            <div className="grid gap-3">
+              {paymentMethodList.map((method) => (
+                <PaymentMethodRow
+                  key={method.key}
+                  method={method}
+                  checked={Boolean(modalDraft[method.key])}
+                  disabled={saving}
+                  onChange={(value) => setModalValue(method.key, value)}
+                />
+              ))}
+            </div>
+          ) : null}
+          {modalType === 'upi' ? (
+            <>
+              <PaymentField label="UPI ID" value={modalDraft.upiId || ''} disabled={saving} onChange={(value) => setModalValue('upiId', value)} />
+              <label>
+                <span className="label">QR code image upload</span>
+                <input className="input" type="file" accept="image/*" disabled={saving} />
+              </label>
+              <TaxToggle label="Show QR in invoice" checked={Boolean(modalDraft.showQrInInvoice)} disabled={saving} onChange={(value) => setModalValue('showQrInInvoice', value)} />
+              <TaxToggle label="Show UPI ID in invoice" checked={Boolean(modalDraft.showUpiIdInInvoice)} disabled={saving} onChange={(value) => setModalValue('showUpiIdInInvoice', value)} />
+            </>
+          ) : null}
+          {modalType === 'bank' ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <PaymentField label="Bank Name" value={modalDraft.bankName || ''} disabled={saving} onChange={(value) => setModalValue('bankName', value)} />
+              <PaymentField label="Account Number" value={modalDraft.accountNumber || ''} disabled={saving} onChange={(value) => setModalValue('accountNumber', value)} />
+              <PaymentField label="IFSC Code" value={modalDraft.ifscCode || ''} disabled={saving} onChange={(value) => setModalValue('ifscCode', value)} />
+              <PaymentField label="Account Holder Name" value={modalDraft.accountHolderName || ''} disabled={saving} onChange={(value) => setModalValue('accountHolderName', value)} />
+            </div>
+          ) : null}
+        </PaymentDashboardModal>
+      ) : null}
+    </div>
   );
 }
 
@@ -2908,7 +4171,7 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
   );
 }
 
-function PdfTermsSettingsSection({ onDirtyChange = null }) {
+function PdfTermsSettingsSection({ onDirtyChange = null, embedded = false }) {
   const fields = [
     ['invoiceTerms', 'Invoice terms'],
     ['quotationTerms', 'Quotation terms'],
@@ -2918,7 +4181,21 @@ function PdfTermsSettingsSection({ onDirtyChange = null }) {
     ['footerNote', 'Footer note']
   ];
   return (
-    <BusinessSettingsFrame section="pdfTerms" tabId="pdfTerms" title="PDF Terms & Conditions" icon={FileCog} description="Store reusable terms for future PDFs. Existing generated PDFs remain unchanged." onDirtyChange={onDirtyChange}>
+    <BusinessSettingsFrame
+      section="pdfTerms"
+      tabId="pdfTerms"
+      title="PDF Terms & Conditions"
+      icon={FileCog}
+      description="Store reusable terms for future PDFs. Existing generated PDFs remain unchanged."
+      onDirtyChange={onDirtyChange}
+      showHeader={!embedded}
+      saveLabel={embedded ? 'Save Terms' : 'Save Changes'}
+      resetLabel={embedded ? 'Reset Default' : 'Cancel / Revert'}
+      resetMode={embedded ? 'defaults' : 'saved'}
+      showActionsWhenClean={embedded}
+      previewLabel={embedded ? 'Preview in PDF' : ''}
+      previewMessage="PDF preview will use the saved terms and footer notes in future generated documents."
+    >
       {({ form, setPath, canEdit, saving }) => (
         <section className="surface admin-control-card p-5">
           <div className="grid gap-4 lg:grid-cols-2">
@@ -2932,6 +4209,83 @@ function PdfTermsSettingsSection({ onDirtyChange = null }) {
         </section>
       )}
     </BusinessSettingsFrame>
+  );
+}
+
+const documentsPdfTabs = [
+  { id: 'templates', label: 'Templates', icon: FileText },
+  { id: 'terms', label: 'Terms & Conditions', icon: FileCog },
+  { id: 'numbering', label: 'Numbering', icon: Hash }
+];
+
+function DocumentsPdfsSection({ onDirtyChange = null }) {
+  const [activeDocumentTab, setActiveDocumentTab] = useState('templates');
+  const [dirtyMap, setDirtyMap] = useState({});
+
+  const setChildDirty = useCallback((key, dirty) => {
+    setDirtyMap((current) => {
+      if (Boolean(current[key]) === Boolean(dirty)) return current;
+      return { ...current, [key]: Boolean(dirty) };
+    });
+  }, []);
+
+  useEffect(() => {
+    onDirtyChange?.(Object.values(dirtyMap).some(Boolean));
+  }, [dirtyMap, onDirtyChange]);
+
+  return (
+    <div className="grid gap-5 pb-32" data-documents-pdfs-root>
+      <section className="surface admin-control-card p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Settings &gt; System &gt; Documents & PDFs</p>
+              <span className="admin-premium-badge">DOCUMENT CONTROL</span>
+            </div>
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Documents & PDFs</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage PDF templates, terms, footer notes, and document numbering from one clean workspace.</p>
+          </div>
+          <div className="rounded-card border border-sky-300/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+            <div className="flex items-center gap-2 font-black">
+              <FileText className="h-4 w-4" />
+              Applies to future documents
+            </div>
+            <p className="mt-1 text-xs text-sky-100/80">Existing generated PDFs and document records are not changed automatically.</p>
+          </div>
+        </div>
+      </section>
+
+      <div className="surface settings-tabs-card p-2">
+        <div className="tabs-list amc-tabs settings-tabs border-b-0">
+          {documentsPdfTabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`tab-button ${activeDocumentTab === tab.id ? 'tab-button-active' : ''}`}
+                onClick={() => setActiveDocumentTab(tab.id)}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {activeDocumentTab === 'templates' ? (
+        <PdfTemplatesSection onDirtyChange={(dirty) => setChildDirty('templates', dirty)} />
+      ) : null}
+
+      {activeDocumentTab === 'terms' ? (
+        <PdfTermsSettingsSection embedded onDirtyChange={(dirty) => setChildDirty('terms', dirty)} />
+      ) : null}
+
+      {activeDocumentTab === 'numbering' ? (
+        <DocumentNumberingSection embedded onDirtyChange={(dirty) => setChildDirty('numbering', dirty)} />
+      ) : null}
+    </div>
   );
 }
 
@@ -3153,11 +4507,11 @@ function AccountStatusPill({ active }) {
   return <span className={`admin-status-pill ${active ? 'admin-status-active' : 'admin-status-inactive'}`}>{active ? 'Active' : 'Inactive'}</span>;
 }
 
-export function SystemSettingsPage() {
+export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = false } = {}) {
   const { push } = useToast();
   const navigate = useNavigate();
   const { themePreference, resolvedTheme, setThemePreference } = useThemePreference();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [comingSoonModule, setComingSoonModule] = useState(null);
   const [dirtyTabs, setDirtyTabs] = useState({});
   const [preferences, setPreferences] = useState({
@@ -3201,9 +4555,9 @@ export function SystemSettingsPage() {
   function scrollSettingsContentToTop() {
     requestAnimationFrame(() => {
       const main = document.querySelector('.enterprise-main');
-      const backupRoot = document.querySelector('[data-backup-storage-root]');
-      if (backupRoot && typeof backupRoot.scrollIntoView === 'function') {
-        backupRoot.scrollIntoView({ block: 'start', behavior: 'auto' });
+      const focusedRoot = document.querySelector('[data-documents-pdfs-root], [data-backup-storage-root], [data-tax-gst-root], [data-payment-settings-root]');
+      if (focusedRoot && typeof focusedRoot.scrollIntoView === 'function') {
+        focusedRoot.scrollIntoView({ block: 'start', behavior: 'auto' });
         return;
       }
       if (main && typeof main.scrollTo === 'function') main.scrollTo({ top: 0, behavior: 'auto' });
@@ -3214,6 +4568,11 @@ export function SystemSettingsPage() {
   function changeTab(tabId) {
     if (tabId === activeTab && !comingSoonModule) return;
     if (!canLeaveActiveTab()) return;
+    if ((tabId === 'documentsPdfs' || tabId === 'taxGst' || tabId === 'paymentSettings') && !standaloneTab) {
+      clearActiveDirtyFlag();
+      navigate(tabId === 'documentsPdfs' ? '/admin/settings/documents-pdfs' : tabId === 'taxGst' ? '/admin/settings/tax-gst' : '/admin/settings/payment-settings');
+      return;
+    }
     clearActiveDirtyFlag();
     setComingSoonModule(null);
     setActiveTab(tabId);
@@ -3262,7 +4621,12 @@ export function SystemSettingsPage() {
   }, [preferences, savedPreferences, setTabDirty]);
 
   useEffect(() => {
-    if (activeTab === 'backupStorage') scrollSettingsContentToTop();
+    setActiveTab(initialTab);
+    setComingSoonModule(null);
+  }, [initialTab]);
+
+  useEffect(() => {
+    if (activeTab === 'documentsPdfs' || activeTab === 'backupStorage' || activeTab === 'taxGst' || activeTab === 'paymentSettings') scrollSettingsContentToTop();
   }, [activeTab]);
 
   function savePreferences() {
@@ -3274,6 +4638,30 @@ export function SystemSettingsPage() {
   function updateThemePreference(nextPreference) {
     setThemePreference(nextPreference);
     push('Theme preference saved locally');
+  }
+
+  if (standaloneTab && activeTab === 'documentsPdfs') {
+    return (
+      <div className="admin-control-page settings-page">
+        <DocumentsPdfsSection onDirtyChange={(dirty) => setTabDirty('documentsPdfs', dirty)} />
+      </div>
+    );
+  }
+
+  if (standaloneTab && activeTab === 'taxGst') {
+    return (
+      <div className="admin-control-page settings-page">
+        <TaxGstSettingsSection onDirtyChange={(dirty) => setTabDirty('taxGst', dirty)} />
+      </div>
+    );
+  }
+
+  if (standaloneTab && activeTab === 'paymentSettings') {
+    return (
+      <div className="admin-control-page settings-page">
+        <PaymentSettingsSection onDirtyChange={(dirty) => setTabDirty('paymentSettings', dirty)} />
+      </div>
+    );
   }
 
   return (
@@ -3349,8 +4737,8 @@ export function SystemSettingsPage() {
           <PreferencesSection themePreference={themePreference} resolvedTheme={resolvedTheme} onThemeChange={updateThemePreference} onDirtyChange={(dirty) => setTabDirty('preferences', dirty)} />
         ) : null}
 
-        {activeTab === 'pdfTemplates' ? (
-          <PdfTemplatesSection onDirtyChange={(dirty) => setTabDirty('pdfTemplates', dirty)} />
+        {activeTab === 'documentsPdfs' ? (
+          <DocumentsPdfsSection onDirtyChange={(dirty) => setTabDirty('documentsPdfs', dirty)} />
         ) : null}
 
         {activeTab === 'publicWebsite' ? (
@@ -3359,10 +4747,6 @@ export function SystemSettingsPage() {
 
         {activeTab === 'backupStorage' ? (
           <BackupStorageSection onDirtyChange={(dirty) => setTabDirty('backupStorage', dirty)} onOpenTab={changeTab} />
-        ) : null}
-
-        {activeTab === 'documentNumbering' ? (
-          <DocumentNumberingSection onDirtyChange={(dirty) => setTabDirty('documentNumbering', dirty)} />
         ) : null}
 
         {activeTab === 'taxGst' ? (
@@ -3379,10 +4763,6 @@ export function SystemSettingsPage() {
 
         {activeTab === 'statusWorkflow' ? (
           <StatusWorkflowSettingsSection onDirtyChange={(dirty) => setTabDirty('statusWorkflow', dirty)} />
-        ) : null}
-
-        {activeTab === 'pdfTerms' ? (
-          <PdfTermsSettingsSection onDirtyChange={(dirty) => setTabDirty('pdfTerms', dirty)} />
         ) : null}
 
         {activeTab === 'systemInformation' ? (

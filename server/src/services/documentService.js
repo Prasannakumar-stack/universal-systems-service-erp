@@ -181,7 +181,7 @@ export async function generateDocumentPdf(id, user = null) {
   ]);
   const context = documentTemplateContext(document, company);
   const accent = templateAccent(template);
-  const pdf = new PDFDocument({ margin: 48, size: 'A4' });
+  const pdf = new PDFDocument({ margin: 48, size: 'A4', bufferPages: true });
   const stream = fs.createWriteStream(filePath);
   pdf.pipe(stream);
 

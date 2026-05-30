@@ -33,6 +33,7 @@ const businessSettingsSchema = new mongoose.Schema(
     },
     taxGst: {
       enabled: { type: Boolean, default: false },
+      gstEnabledManual: { type: Boolean, default: false },
       defaultPercentage: { type: Number, min: 0, max: 100, default: 18 },
       splitCgstSgst: { type: Boolean, default: true },
       taxLabel: { type: String, trim: true, default: 'GST' },

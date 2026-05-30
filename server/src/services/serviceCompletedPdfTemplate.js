@@ -60,6 +60,16 @@ function renderText(value = '', context = {}) {
   });
 }
 
+function cfgSection(config = {}, key = '') {
+  return config.sections?.[key] || {};
+}
+
+function cfgList(value = [], fallback = []) {
+  const source = Array.isArray(value) ? value : String(value || '').split('\n');
+  const rows = source.map((line) => String(line || '').trim()).filter(Boolean);
+  return rows.length ? rows : fallback;
+}
+
 function thankYouCompany(company = {}) {
   return {
     ...THANK_YOU_COMPANY,
@@ -160,12 +170,14 @@ function drawStar(doc, x, y) {
   doc.restore();
 }
 
-function drawHighlights(doc, y) {
-  const points = [
+function drawHighlights(doc, y, config = {}) {
+  const support = cfgSection(config, 'supportMessage');
+  if (support.show === false) return;
+  const points = cfgList(support.highlightLines, [
     'Your satisfaction is our priority',
     'Quality service you can trust',
     'We are always here to help'
-  ];
+  ]);
   points.forEach((point, index) => {
     const rowY = y + index * 26;
     drawStar(doc, 72, rowY + 1);
@@ -183,65 +195,94 @@ function drawShieldIcon(doc, x, y) {
   doc.restore();
 }
 
-function drawAmcCard(doc, y) {
+function drawAmcCard(doc, y, config = {}) {
+  const support = cfgSection(config, 'supportMessage');
+  if (support.show === false) return;
   doc.roundedRect(58, y, 479, 86, 8).fillAndStroke(LIGHT_BLUE, BLUE_BORDER);
   drawShieldIcon(doc, 76, y + 19);
   drawLine(doc, 142, y + 15, 142, y + 71, '#93bee9', 0.9);
   doc.font(boldFont()).fontSize(12.2).fillColor(NAVY)
-    .text('Need regular service support?', 164, y + 18, { width: 310 });
+    .text(cleanText(support.amcTitle, 'Need regular service support?'), 164, y + 18, { width: 310 });
   doc.font(bodyFont()).fontSize(10.2).fillColor(TEXT)
-    .text('Universal Systems also provides AMC plans for regular maintenance and priority service.', 164, y + 39, {
+    .text(cleanText(support.amcText, 'Universal Systems also provides AMC plans for regular maintenance and priority service.'), 164, y + 39, {
       width: 325,
       lineGap: 2
     });
   doc.font(boldFont()).fontSize(10.3).fillColor(NAVY)
-    .text('Contact us anytime to know more.', 164, y + 66, { width: 310 });
+    .text(cleanText(support.amcFinalLine, 'Contact us anytime to know more.'), 164, y + 66, { width: 310 });
 }
 
 function drawPhoneIcon(doc, x, y) {
   drawHeaderIcon(doc, 'phone', x, y, NAVY);
 }
 
-function drawBottomStrip(doc) {
+function drawBottomStrip(doc, config = {}) {
+  if (cfgSection(config, 'thankYouFooter').show === false) return;
   doc.roundedRect(PAGE_X, 796, CONTENT_WIDTH, 31, 5).fill(NAVY);
   doc.font(boldFont()).fontSize(12).fillColor('#ffffff')
-    .text('We appreciate your business. Visit us again!', PAGE_X + 24, 805, {
+    .text(cleanText(config.footer?.thankYouMessage || config.footerText, 'We appreciate your business. Visit us again!'), PAGE_X + 24, 805, {
       width: CONTENT_WIDTH - 48,
       align: 'center'
     });
 }
 
-function drawLetterBody(doc, service, company) {
+function drawTermsCard(doc, y, config = {}, context = {}) {
+  const terms = cfgSection(config, 'terms');
+  if (terms.show !== true) return 0;
+  const text = renderText(terms.text || config.termsAndConditions || '', context).trim();
+  if (!text) return 0;
+  const rows = text.split('\n').map((line) => line.replace(/^[-*\u2022]?\s*\d*\.?\s*/, '').trim()).filter(Boolean).slice(0, 3);
+  doc.roundedRect(58, y, 479, 58, 8).fillAndStroke('#ffffff', BLUE_BORDER);
+  doc.font(boldFont()).fontSize(10).fillColor(NAVY).text(cleanText(terms.title, 'TERMS'), 78, y + 11, { width: 140 });
+  let lineY = y + 28;
+  rows.forEach((row) => {
+    doc.font(bodyFont()).fontSize(7.8).fillColor(TEXT).text(row, 78, lineY, { width: 430, lineGap: 0.8 });
+    lineY += 11;
+  });
+  return 58;
+}
+
+function drawLetterBody(doc, service, company, config = {}, context = {}) {
   const currentCompany = thankYouCompany(company);
   const customerName = cleanText(service.customerName, 'Rahul Kumar');
 
-  doc.font(boldFont()).fontSize(13).fillColor(TEXT)
-    .text(`Dear ${customerName},`, 58, 232, { width: 430 });
+  const customerDetails = cfgSection(config, 'customerDetails');
+  if (customerDetails.show !== false && customerDetails.showCustomerName !== false) {
+    doc.font(boldFont()).fontSize(13).fillColor(TEXT)
+      .text(`Dear ${customerName},`, 58, 232, { width: 430 });
+  }
 
-  const paragraphs = [
+  const paragraphs = cfgList(cfgSection(config, 'whatWeDid').messageLines, [
     `Thank you for choosing ${currentCompany.name}.`,
     'We are delighted to have successfully completed your service and handed over your product.',
     'Your trust and support mean a lot to us.',
     'We look forward to serving you again in the future.',
     'If you need any assistance or service, feel free to contact us anytime.'
-  ];
+  ]);
   doc.font(bodyFont()).fontSize(12).fillColor(TEXT);
   let y = 271;
-  paragraphs.forEach((paragraph) => {
-    doc.text(paragraph, 58, y, { width: 466, lineGap: 4 });
-    y += Math.max(25, doc.heightOfString(paragraph, { width: 466, lineGap: 4 }) + 16);
-  });
+  if (cfgSection(config, 'whatWeDid').show !== false) {
+    paragraphs.forEach((paragraph) => {
+      doc.text(paragraph, 58, y, { width: 466, lineGap: 4 });
+      y += Math.max(25, doc.heightOfString(paragraph, { width: 466, lineGap: 4 }) + 16);
+    });
+  }
 
-  drawHighlights(doc, 444);
-  drawAmcCard(doc, 534);
+  drawHighlights(doc, 444, config);
+  drawAmcCard(doc, 534, config);
+  const termsHeight = drawTermsCard(doc, 628, config, context);
+  const closingY = termsHeight ? 704 : 655;
 
-  doc.font(bodyFont()).fontSize(12).fillColor(TEXT)
-    .text('Warm Regards,', 58, 655, { width: 250 });
-  doc.font(boldFont()).fontSize(13.2).fillColor(NAVY)
-    .text(currentCompany.name, 58, 678, { width: 250 });
-  drawPhoneIcon(doc, 58, 710);
-  doc.font(boldFont()).fontSize(11).fillColor(NAVY)
-    .text(`Contact: ${currentCompany.phones[0] || '98427 81971'}`, 84, 711, { width: 220 });
+  if (cfgSection(config, 'thankYouFooter').show !== false) {
+    doc.font(bodyFont()).fontSize(12).fillColor(TEXT)
+      .text('Warm Regards,', 58, closingY, { width: 250 });
+    doc.font(boldFont()).fontSize(13.2).fillColor(NAVY)
+      .text(currentCompany.name, 58, closingY + 23, { width: 250 });
+    drawPhoneIcon(doc, 58, closingY + 55);
+    const contactLabel = cleanText(cfgSection(config, 'thankYouFooter').contactLabel, 'Contact');
+    doc.font(boldFont()).fontSize(11).fillColor(NAVY)
+      .text(`${contactLabel}: ${currentCompany.phones[0] || '98427 81971'}`, 84, closingY + 56, { width: 220 });
+  }
 }
 
 function blankServiceCompletedData() {
@@ -271,12 +312,13 @@ export function renderServiceCompletedPdf(doc, options = {}) {
     ...blankServiceCompletedData(),
     ...(options.service || {})
   };
-  const title = cleanText(renderText(config.headerTitle || 'SERVICE COMPLETED!', context), 'SERVICE COMPLETED!').toUpperCase();
+  const summary = cfgSection(config, 'serviceSummary');
+  const title = cleanText(renderText(summary.title || config.headerTitle || 'SERVICE COMPLETED!', context), 'SERVICE COMPLETED!').toUpperCase();
 
   doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT).fill('#ffffff');
   drawHeader(doc, company, config);
   drawWatermark(doc);
-  drawTitle(doc, title);
-  drawLetterBody(doc, service, company);
-  drawBottomStrip(doc);
+  if (summary.show !== false) drawTitle(doc, title);
+  drawLetterBody(doc, service, company, config, context);
+  drawBottomStrip(doc, config);
 }

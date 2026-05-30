@@ -68,6 +68,14 @@ function renderText(value = '', context = {}) {
   });
 }
 
+function cfgSection(config = {}, key = '') {
+  return config.sections?.[key] || {};
+}
+
+function visibleFlag(source = {}, key = 'show', fallback = true) {
+  return source[key] !== undefined ? source[key] !== false : fallback;
+}
+
 function money(value) {
   return `\u20b9${Number(value || 0).toLocaleString('en-IN', {
     minimumFractionDigits: 2,
@@ -232,6 +240,10 @@ function drawTwoColumnDetails(doc, y, height, leftRows, rightRows) {
       boldValue: index < 2
     });
   });
+}
+
+function includeRow(section, flag, row) {
+  return visibleFlag(section, flag) ? [row] : [];
 }
 
 function drawSectionHeaderCard(doc, y, height, title, leftRows, rightRows) {
@@ -425,15 +437,17 @@ function drawTermsCard(doc, y, items) {
   });
 }
 
-function drawFooterContacts(doc, y, company) {
+function drawFooterContacts(doc, y, company, config = {}) {
   const currentCompany = amcCompany(company);
+  const footer = config.footer || {};
   const columns = [
-    ['phone', 'Call / WhatsApp', currentCompany.phones.join(' / ')],
-    ['email', 'Email', currentCompany.email],
-    ['website', 'Website', currentCompany.website],
-    ['address', 'Address', currentCompany.footerAddressLines.join('\n')]
-  ];
-  const columnWidth = CONTENT_WIDTH / 4;
+    footer.showCallWhatsapp !== false ? ['phone', 'Call / WhatsApp', currentCompany.phones.join(' / ')] : null,
+    footer.showEmail !== false ? ['email', 'Email', currentCompany.email] : null,
+    footer.showWebsite !== false ? ['website', 'Website', currentCompany.website] : null,
+    footer.showAddress !== false ? ['address', 'Address', currentCompany.footerAddressLines.join('\n')] : null
+  ].filter(Boolean);
+  if (!columns.length) return;
+  const columnWidth = CONTENT_WIDTH / columns.length;
   columns.forEach(([icon, label, value], index) => {
     const x = PAGE_X + index * columnWidth;
     if (index > 0) drawLine(doc, x, y + 2, x, y + 29, NAVY, 0.65);
@@ -469,9 +483,18 @@ function drawBottomStrip(doc, text) {
   doc.circle(533, 826, 2.6).fillColor('#ffffff').fill();
 }
 
-function drawFooter(doc, company, stripText) {
-  drawFooterContacts(doc, 770, company);
-  drawBottomStrip(doc, stripText);
+function drawFooter(doc, company, stripText, config = {}) {
+  drawFooterContacts(doc, 770, company, config);
+  drawBottomStrip(doc, cleanText(config.footer?.thankYouMessage || stripText, stripText));
+}
+
+function drawSignatureLine(doc, y, config = {}) {
+  const signature = cfgSection(config, 'signature');
+  if (signature.show === false) return;
+  const label = cleanText(signature.label || config.signatureSection, '');
+  if (!label) return;
+  doc.strokeColor('#94a3b8').lineWidth(0.7).moveTo(384, y).lineTo(540, y).stroke();
+  doc.font(bodyFont()).fontSize(8.2).fillColor(MUTED).text(label, 384, y + 8, { width: 156, align: 'center' });
 }
 
 function contractTerms() {
@@ -482,6 +505,14 @@ function contractTerms() {
     'Any additional parts, products, or services outside AMC scope will be charged separately.',
     'Warranty, if applicable, is subject to company/manufacturer policy.'
   ];
+}
+
+function termsFromConfig(config = {}, fallback = []) {
+  const text = cfgSection(config, 'amcTerms').text || config.amcTerms || config.termsAndConditions || '';
+  const rows = String(text || '').split('\n')
+    .map((line) => line.replace(/^[-*\u2022]?\s*\d*\.?\s*/, '').trim())
+    .filter(Boolean);
+  return rows.length ? rows.slice(0, 5) : fallback;
 }
 
 export function sampleAmcContractData() {
@@ -558,25 +589,33 @@ export function renderAmcContractPdf(doc, options = {}) {
   const title = cleanText(renderText(config.headerTitle || 'AMC CONTRACT', context), 'AMC CONTRACT').toUpperCase();
   drawPageBase(doc, title, company, config);
 
+  const customerDetails = cfgSection(config, 'customerDetails');
+  const amcPeriod = cfgSection(config, 'amcPeriod');
+  const visitFrequency = cfgSection(config, 'visitFrequency');
+  const coveredDevices = cfgSection(config, 'coveredDevices');
+  const paymentDetails = cfgSection(config, 'paymentDetails');
   drawTwoColumnDetails(doc, 155, 91, [
-    { label: 'AMC Reference', value: data.amcReference },
-    { label: 'Contract Date', value: data.contractDate },
-    { label: 'AMC Period', value: data.amcPeriod },
-    { label: 'Status', value: data.status }
+    ...includeRow(amcPeriod, 'showAmcReference', { label: 'AMC Reference', value: data.amcReference }),
+    ...includeRow(amcPeriod, 'showContractDate', { label: 'Contract Date', value: data.contractDate }),
+    ...includeRow(amcPeriod, 'showAmcPeriod', { label: 'AMC Period', value: data.amcPeriod }),
+    ...includeRow(amcPeriod, 'showStatus', { label: 'Status', value: data.status })
   ], [
-    { label: 'Customer Name', value: data.customerName },
-    { label: 'Phone Number', value: data.customerPhone },
-    { label: 'Address', value: data.customerAddress }
+    ...includeRow(customerDetails, 'showCustomerName', { label: 'Customer Name', value: data.customerName }),
+    ...includeRow(customerDetails, 'showPhoneNumber', { label: 'Phone Number', value: data.customerPhone }),
+    ...includeRow(customerDetails, 'showAddress', { label: 'Address', value: data.customerAddress })
   ]);
 
-  const planRightRows = [{ label: 'Covered For', value: data.coveredFor, labelWidth: 84 }];
-  if (config.showTechnician !== false && cleanText(data.technician, '') !== '') planRightRows.push({ label: 'Technician', value: data.technician, labelWidth: 84 });
-  drawSectionHeaderCard(doc, 253, 78, 'AMC PLAN DETAILS', [
-    { label: 'Plan Name', value: data.planName, labelWidth: 92 },
-    { label: 'Coverage Type', value: data.coverageType, labelWidth: 92 }
-  ], planRightRows);
+  const planRightRows = [];
+  if (visibleFlag(coveredDevices, 'showCoveredFor')) planRightRows.push({ label: 'Covered For', value: data.coveredFor, labelWidth: 84 });
+  if (visibleFlag(visitFrequency, 'showTechnician') && cleanText(data.technician, '') !== '') planRightRows.push({ label: 'Technician', value: data.technician, labelWidth: 84 });
+  if (visitFrequency.show !== false) {
+    drawSectionHeaderCard(doc, 253, 78, 'AMC PLAN DETAILS', [
+      ...includeRow(visitFrequency, 'showPlanName', { label: 'Plan Name', value: data.planName, labelWidth: 92 }),
+      ...includeRow(visitFrequency, 'showCoverageType', { label: 'Coverage Type', value: data.coverageType, labelWidth: 92 })
+    ], planRightRows);
+  }
 
-  const showSerial = config.showSerialNumber === true;
+  const showSerial = coveredDevices.showSerialNumber === true;
   const columns = showSerial
     ? [
       { key: 'sno', label: 'S.No', width: 36, align: 'center' },
@@ -593,20 +632,28 @@ export function renderAmcContractPdf(doc, options = {}) {
       { key: 'quantity', label: 'Qty', width: 48, align: 'center' },
       { key: 'coverageNotes', label: 'Coverage Notes', width: CONTENT_WIDTH - 347 }
     ];
-  drawTable(doc, PAGE_X, 344, CONTENT_WIDTH, columns, (data.coveredItems || []).map((item, index) => ({
-    sno: index + 1,
-    device: item.device,
-    brandModel: item.brandModel,
-    serialNumber: item.serialNumber,
-    quantity: item.quantity || 1,
-    coverageNotes: item.coverageNotes
-  })), { title: 'COVERED ITEMS', rowHeight: 23, fontSize: 7.5 });
+  if (coveredDevices.show !== false) {
+    drawTable(doc, PAGE_X, 344, CONTENT_WIDTH, columns, (data.coveredItems || []).map((item, index) => ({
+      sno: index + 1,
+      device: item.device,
+      brandModel: item.brandModel,
+      serialNumber: item.serialNumber,
+      quantity: item.quantity || 1,
+      coverageNotes: item.coverageNotes
+    })), { title: 'COVERED ITEMS', rowHeight: 23, fontSize: 7.5 });
+  }
 
-  drawCard(doc, PAGE_X, 439, CONTENT_WIDTH, 45);
-  drawRupeeIcon(doc, 50, 443);
-  doc.font(boldFont()).fontSize(10.2).fillColor(NAVY).text(`AMC Contract Value: ${money(data.contractValue)}`, 95, 456, { width: 210 });
-  drawPaymentIcon(doc, 332, 443);
-  doc.font(boldFont()).fontSize(10.2).fillColor(NAVY).text(`Payment Status: ${data.paymentStatus}`, 377, 456, { width: 160 });
+  if (paymentDetails.show !== false) {
+    drawCard(doc, PAGE_X, 439, CONTENT_WIDTH, 45);
+    if (visibleFlag(paymentDetails, 'showContractValue')) {
+      drawRupeeIcon(doc, 50, 443);
+      doc.font(boldFont()).fontSize(10.2).fillColor(NAVY).text(`AMC Contract Value: ${money(data.contractValue)}`, 95, 456, { width: 210 });
+    }
+    if (visibleFlag(paymentDetails, 'showPaymentStatus')) {
+      drawPaymentIcon(doc, 332, 443);
+      doc.font(boldFont()).fontSize(10.2).fillColor(NAVY).text(`Payment Status: ${data.paymentStatus}`, 377, 456, { width: 160 });
+    }
+  }
 
   drawInfoListCard(doc, PAGE_X, 494, 261, 108, 'COVERAGE INCLUDES', 'shield', [
     'Regular maintenance support',
@@ -622,14 +669,17 @@ export function renderAmcContractPdf(doc, options = {}) {
     'Additional work outside AMC scope will be charged separately'
   ], { cross: true, titleColor: ORANGE, lineStep: 15 });
 
-  drawTermsCard(doc, 611, contractTerms());
+  if (cfgSection(config, 'amcTerms').show !== false) {
+    drawTermsCard(doc, 611, termsFromConfig(config, contractTerms()));
+  }
   drawCard(doc, PAGE_X, 690, CONTENT_WIDTH, 58, { fill: LIGHT_GREEN, stroke: GREEN_BORDER });
   drawCalendarIcon(doc, 50, 702);
   doc.font(boldFont()).fontSize(10.2).fillColor(GREEN).text('RENEWAL REMINDER', 96, 704, { width: 210 });
   doc.font(bodyFont()).fontSize(8.7).fillColor(TEXT)
     .text(`Your AMC renewal is due before ${data.renewalDate}.`, 96, 722, { width: 360 })
     .text('Renew on time to continue uninterrupted service support.', 96, 736, { width: 360 });
-  drawFooter(doc, company, 'Thank you for choosing Universal Systems AMC support.');
+  drawSignatureLine(doc, 754, config);
+  drawFooter(doc, company, 'Thank you for choosing Universal Systems AMC support.', config);
 }
 
 export function renderAmcServiceVisitPdf(doc, options = {}) {
@@ -642,41 +692,50 @@ export function renderAmcServiceVisitPdf(doc, options = {}) {
   const title = configuredTitle === 'AMC SERVICE VISIT' ? 'AMC SERVICE VISIT REPORT' : configuredTitle;
   drawPageBase(doc, title, company, config);
 
+  const visitDetails = cfgSection(config, 'visitDetails');
+  const customerDetails = cfgSection(config, 'customerDetails');
+  const deviceChecked = cfgSection(config, 'deviceChecked');
   drawTwoColumnDetails(doc, 155, 111, [
-    { label: 'AMC Reference', value: data.amcReference },
-    { label: 'Visit Date', value: data.visitDate },
-    { label: 'Visit Status', value: data.visitStatus },
-    { label: 'Next Visit Date', value: data.nextVisitDate },
-    { label: 'Job Reference', value: data.jobReference }
+    ...includeRow(visitDetails, 'showAmcReference', { label: 'AMC Reference', value: data.amcReference }),
+    ...includeRow(visitDetails, 'showVisitDate', { label: 'Visit Date', value: data.visitDate }),
+    ...includeRow(visitDetails, 'showVisitStatus', { label: 'Visit Status', value: data.visitStatus }),
+    ...includeRow(visitDetails, 'showNextVisitDate', { label: 'Next Visit Date', value: data.nextVisitDate }),
+    ...includeRow(visitDetails, 'showJobReference', { label: 'Job Reference', value: data.jobReference })
   ], [
-    { label: 'Customer Name', value: data.customerName },
-    { label: 'Phone Number', value: data.customerPhone },
-    { label: 'Address', value: data.customerAddress }
+    ...includeRow(customerDetails, 'showCustomerName', { label: 'Customer Name', value: data.customerName }),
+    ...includeRow(customerDetails, 'showPhoneNumber', { label: 'Phone Number', value: data.customerPhone }),
+    ...includeRow(customerDetails, 'showAddress', { label: 'Address', value: data.customerAddress })
   ]);
 
-  const planRightRows = [{ label: 'Covered For', value: data.coveredFor, labelWidth: 84 }];
-  if (config.showTechnician !== false && cleanText(data.technician, '') !== '') planRightRows.push({ label: 'Technician', value: data.technician, labelWidth: 84 });
-  drawSectionHeaderCard(doc, 274, 78, 'AMC PLAN DETAILS', [
-    { label: 'Plan Name', value: data.planName, labelWidth: 92 },
-    { label: 'AMC Period', value: data.amcPeriod, labelWidth: 92 }
-  ], planRightRows);
+  const planRightRows = [];
+  if (visibleFlag(deviceChecked, 'showCoveredFor')) planRightRows.push({ label: 'Covered For', value: data.coveredFor, labelWidth: 84 });
+  if (visibleFlag(deviceChecked, 'showTechnician') && cleanText(data.technician, '') !== '') planRightRows.push({ label: 'Technician', value: data.technician, labelWidth: 84 });
+  if (deviceChecked.show !== false) {
+    drawSectionHeaderCard(doc, 274, 78, 'AMC PLAN DETAILS', [
+      ...includeRow(deviceChecked, 'showPlanName', { label: 'Plan Name', value: data.planName, labelWidth: 92 }),
+      ...includeRow(deviceChecked, 'showAmcPeriod', { label: 'AMC Period', value: data.amcPeriod, labelWidth: 92 })
+    ], planRightRows);
+  }
 
-  drawTable(doc, PAGE_X, 364, CONTENT_WIDTH, [
-    { key: 'sno', label: 'S.No', width: 45, align: 'center' },
-    { key: 'work', label: 'Work Done / Checkup Details', width: 370 },
-    { key: 'status', label: 'Status', width: CONTENT_WIDTH - 415, statusCheck: true }
-  ], (data.workItems || []).map((item, index) => ({
-    sno: index + 1,
-    work: item.work,
-    status: item.status || 'Done'
-  })), { title: 'VISIT WORK DETAILS', rowHeight: 22, fontSize: 7.8 });
+  if (cfgSection(config, 'workCompleted').show !== false) {
+    drawTable(doc, PAGE_X, 364, CONTENT_WIDTH, [
+      { key: 'sno', label: 'S.No', width: 45, align: 'center' },
+      { key: 'work', label: 'Work Done / Checkup Details', width: 370 },
+      { key: 'status', label: 'Status', width: CONTENT_WIDTH - 415, statusCheck: true }
+    ], (data.workItems || []).map((item, index) => ({
+      sno: index + 1,
+      work: item.work,
+      status: item.status || 'Done'
+    })), { title: 'VISIT WORK DETAILS', rowHeight: 22, fontSize: 7.8 });
+  }
 
   drawCard(doc, PAGE_X, 499, CONTENT_WIDTH, 53, { fill: LIGHT_GREEN, stroke: GREEN_BORDER });
   drawDocumentIcon(doc, 49, 508, GREEN);
   doc.font(boldFont()).fontSize(10.2).fillColor(GREEN).text('TECHNICIAN NOTES', 95, 511, { width: 210 });
   doc.font(bodyFont()).fontSize(8.7).fillColor(TEXT).text(cleanText(data.technicianNotes), 95, 530, { width: 390, lineGap: 1.2 });
 
-  const showAdditional = config.showAdditionalCharges !== false && (Number(data.additionalCharges || 0) > 0 || config.showAdditionalCharges === true);
+  const partsUsed = cfgSection(config, 'partsUsed');
+  const showAdditional = partsUsed.show !== false && (Number(data.additionalCharges || 0) > 0 || config.showAdditionalCharges === true);
   let nextY = 562;
   if (showAdditional) {
     drawCard(doc, PAGE_X, nextY, CONTENT_WIDTH, 38);
@@ -690,12 +749,21 @@ export function renderAmcServiceVisitPdf(doc, options = {}) {
     'Spare parts or additional work outside AMC scope will be charged separately.',
     'Next scheduled service date may change based on availability.'
   ], { numbered: true, lineStep: 17 });
-  drawInfoListCard(doc, 306, nextY, 261, 88, 'NEXT VISIT REMINDER', 'calendar', [
-    `Your next AMC visit is scheduled on ${data.nextVisitDate}.`,
-    'We will reach you before the visit date.'
-  ], { lineStep: 17 });
+  if (cfgSection(config, 'nextVisitNote').show !== false) {
+    drawInfoListCard(doc, 306, nextY, 261, 88, 'NEXT VISIT REMINDER', 'calendar', [
+      `Your next AMC visit is scheduled on ${data.nextVisitDate}.`,
+      'We will reach you before the visit date.'
+    ], { lineStep: 17 });
+  }
 
-  drawFooter(doc, company, 'Thank you for choosing Universal Systems AMC support.');
+  const acknowledgement = cfgSection(config, 'customerAcknowledgement');
+  if (acknowledgement.show === true) {
+    drawCard(doc, PAGE_X, nextY + 100, CONTENT_WIDTH, 42, { fill: '#ffffff' });
+    doc.font(boldFont()).fontSize(9).fillColor(NAVY).text('CUSTOMER ACKNOWLEDGEMENT', 48, nextY + 112, { width: 190 });
+    doc.font(bodyFont()).fontSize(8).fillColor(TEXT).text(cleanText(acknowledgement.text, 'Customer has acknowledged this AMC service visit.'), 247, nextY + 111, { width: 285 });
+  }
+
+  drawFooter(doc, company, 'Thank you for choosing Universal Systems AMC support.', config);
 }
 
 export function renderAmcRenewalPdf(doc, options = {}) {
@@ -707,27 +775,31 @@ export function renderAmcRenewalPdf(doc, options = {}) {
   const title = cleanText(renderText(config.headerTitle || 'AMC RENEWAL REMINDER', context), 'AMC RENEWAL REMINDER').toUpperCase();
   drawPageBase(doc, title, company, config);
 
+  const amcExpiryDetails = cfgSection(config, 'amcExpiryDetails');
+  const customerDetails = cfgSection(config, 'customerDetails');
+  const planDetails = cfgSection(config, 'planDetails');
+  const renewalMessage = cfgSection(config, 'renewalMessage');
   drawTwoColumnDetails(doc, 155, 91, [
-    { label: 'AMC Reference', value: data.amcReference },
-    { label: 'Reminder Date', value: data.reminderDate },
-    { label: 'AMC Expiry Date', value: data.expiryDate, valueColor: '#d01818' },
-    { label: 'Renewal Status', value: data.renewalStatus, valueColor: ORANGE }
+    ...includeRow(amcExpiryDetails, 'showAmcReference', { label: 'AMC Reference', value: data.amcReference }),
+    ...includeRow(amcExpiryDetails, 'showReminderDate', { label: 'Reminder Date', value: data.reminderDate }),
+    ...includeRow(amcExpiryDetails, 'showExpiryDate', { label: 'AMC Expiry Date', value: data.expiryDate, valueColor: '#d01818' }),
+    ...includeRow(amcExpiryDetails, 'showRenewalStatus', { label: 'Renewal Status', value: data.renewalStatus, valueColor: ORANGE })
   ], [
-    { label: 'Customer Name', value: data.customerName },
-    { label: 'Phone Number', value: data.customerPhone },
-    { label: 'Address', value: data.customerAddress }
+    ...includeRow(customerDetails, 'showCustomerName', { label: 'Customer Name', value: data.customerName }),
+    ...includeRow(customerDetails, 'showPhoneNumber', { label: 'Phone Number', value: data.customerPhone }),
+    ...includeRow(customerDetails, 'showAddress', { label: 'Address', value: data.customerAddress })
   ]);
 
   drawSectionHeaderCard(doc, 253, 78, 'AMC PLAN DETAILS', [
-    { label: 'Plan Name', value: data.planName, labelWidth: 92 },
-    { label: 'Current Period', value: data.currentPeriod, labelWidth: 92 }
+    ...includeRow(planDetails, 'showPlanName', { label: 'Plan Name', value: data.planName, labelWidth: 92 }),
+    ...includeRow(planDetails, 'showCurrentPeriod', { label: 'Current Period', value: data.currentPeriod, labelWidth: 92 })
   ], [
-    { label: 'Renewal Period', value: data.renewalPeriod, labelWidth: 92 },
-    { label: 'Covered For', value: data.coveredFor, labelWidth: 92 }
+    ...includeRow(planDetails, 'showRenewalPeriod', { label: 'Renewal Period', value: data.renewalPeriod, labelWidth: 92 }),
+    ...includeRow(planDetails, 'showCoveredFor', { label: 'Covered For', value: data.coveredFor, labelWidth: 92 })
   ]);
 
   let y = 342;
-  if (config.showRenewalAmount !== false) {
+  if (visibleFlag(cfgSection(config, 'renewalAmount'))) {
     drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 56, { fill: LIGHT_GREEN, stroke: GREEN_BORDER });
     drawRupeeIcon(doc, 55, y + 10, GREEN);
     doc.font(boldFont()).fontSize(10).fillColor(GREEN).text('RENEWAL AMOUNT', 108, y + 16, { width: 170 });
@@ -735,16 +807,18 @@ export function renderAmcRenewalPdf(doc, options = {}) {
     y += 68;
   }
 
-  drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 72, { fill: ORANGE_LIGHT, stroke: ORANGE_BORDER });
-  drawBellIcon(doc, 53, y + 17);
-  doc.font(boldFont()).fontSize(11).fillColor(ORANGE).text('YOUR AMC PLAN IS EXPIRING SOON!', 102, y + 16, { width: 340 });
-  doc.font(bodyFont()).fontSize(9).fillColor(TEXT).text('Renew your AMC before ', 102, y + 38, { continued: true });
-  doc.font(boldFont()).fontSize(9).fillColor('#d01818').text(data.expiryDate, { continued: true });
-  doc.font(bodyFont()).fontSize(9).fillColor(TEXT).text(' to continue uninterrupted service support, priority assistance, and regular maintenance coverage.', {
-    width: 385,
-    lineGap: 1.3
-  });
-  y += 84;
+  if (renewalMessage.show !== false) {
+    drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 72, { fill: ORANGE_LIGHT, stroke: ORANGE_BORDER });
+    drawBellIcon(doc, 53, y + 17);
+    doc.font(boldFont()).fontSize(11).fillColor(ORANGE).text(cleanText(renewalMessage.title, 'YOUR AMC PLAN IS EXPIRING SOON!'), 102, y + 16, { width: 340 });
+    doc.font(bodyFont()).fontSize(9).fillColor(TEXT).text('Renew your AMC before ', 102, y + 38, { continued: true });
+    doc.font(boldFont()).fontSize(9).fillColor('#d01818').text(data.expiryDate, { continued: true });
+    doc.font(bodyFont()).fontSize(9).fillColor(TEXT).text(' to continue uninterrupted service support, priority assistance, and regular maintenance coverage.', {
+      width: 385,
+      lineGap: 1.3
+    });
+    y += 84;
+  }
 
   drawInfoListCard(doc, PAGE_X, y, 261, 100, 'CONTINUE AMC BENEFITS', 'shield', [
     'Priority service support',
@@ -760,17 +834,20 @@ export function renderAmcRenewalPdf(doc, options = {}) {
   ], { numbered: true, lineStep: 14 });
   y += 112;
 
-  drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 92, { fill: LIGHT_BLUE, stroke: '#b8daf7' });
-  drawHeadsetIcon(doc, 52, y + 24);
-  drawLine(doc, 116, y + 16, 116, y + 76, '#93bee9', 0.85);
-  doc.font(boldFont()).fontSize(11.2).fillColor(NAVY).text('READY TO RENEW?', 138, y + 15, { width: 210 });
-  doc.font(bodyFont()).fontSize(8.6).fillColor(TEXT)
-    .text('To continue AMC support, contact Universal Systems or confirm renewal through WhatsApp.', 138, y + 34, { width: 360, lineGap: 1.2 });
-  drawHeaderIcon(doc, 'whatsapp', 138, y + 59, NAVY);
-  doc.font(boldFont()).fontSize(8).fillColor(NAVY).text(AMC_COMPANY.phones[0], 162, y + 60, { width: 92 });
-  drawHeaderIcon(doc, 'email', 260, y + 59, NAVY);
-  doc.text(AMC_COMPANY.email, 285, y + 60, { width: 130 });
-  doc.font(boldFont()).fontSize(8.3).fillColor(NAVY).text('Thank you for choosing Universal Systems AMC support.', 138, y + 77, { width: 330 });
+  const contactMessage = cfgSection(config, 'contactWhatsappMessage');
+  if (contactMessage.show !== false) {
+    drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 92, { fill: LIGHT_BLUE, stroke: '#b8daf7' });
+    drawHeadsetIcon(doc, 52, y + 24);
+    drawLine(doc, 116, y + 16, 116, y + 76, '#93bee9', 0.85);
+    doc.font(boldFont()).fontSize(11.2).fillColor(NAVY).text(cleanText(contactMessage.title, 'READY TO RENEW?'), 138, y + 15, { width: 210 });
+    doc.font(bodyFont()).fontSize(8.6).fillColor(TEXT)
+      .text(cleanText(contactMessage.text, 'To continue AMC support, contact Universal Systems or confirm renewal through WhatsApp.'), 138, y + 34, { width: 360, lineGap: 1.2 });
+    drawHeaderIcon(doc, 'whatsapp', 138, y + 59, NAVY);
+    doc.font(boldFont()).fontSize(8).fillColor(NAVY).text(AMC_COMPANY.phones[0], 162, y + 60, { width: 92 });
+    drawHeaderIcon(doc, 'email', 260, y + 59, NAVY);
+    doc.text(AMC_COMPANY.email, 285, y + 60, { width: 130 });
+    doc.font(boldFont()).fontSize(8.3).fillColor(NAVY).text(cleanText(contactMessage.finalLine, 'Thank you for choosing Universal Systems AMC support.'), 138, y + 77, { width: 330 });
+  }
 
-  drawFooter(doc, company, 'We value your trust. Stay connected for the best service!');
+  drawFooter(doc, company, 'We value your trust. Stay connected for the best service!', config);
 }

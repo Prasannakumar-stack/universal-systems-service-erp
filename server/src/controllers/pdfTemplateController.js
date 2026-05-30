@@ -33,6 +33,8 @@ export async function restore(req, res) {
 }
 
 export async function preview(req, res) {
-  const pdf = await generatePdfTemplatePreview(req.params.key);
+  const pdf = await generatePdfTemplatePreview(req.params.key, {
+    config: req.body?.config
+  });
   res.download(pdf.filePath, pdf.filename);
 }

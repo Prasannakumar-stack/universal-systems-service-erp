@@ -166,6 +166,334 @@ export const PDF_TEMPLATE_DEFINITIONS = [
 
 const definitionsByKey = new Map(PDF_TEMPLATE_DEFINITIONS.map((definition) => [definition.key, definition]));
 
+function isPlainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function clonePlain(value) {
+  return JSON.parse(JSON.stringify(value || {}));
+}
+
+function deepMerge(base = {}, source = {}) {
+  const next = clonePlain(base);
+  Object.entries(source || {}).forEach(([key, value]) => {
+    if (isPlainObject(value) && isPlainObject(next[key])) {
+      next[key] = deepMerge(next[key], value);
+      return;
+    }
+    next[key] = Array.isArray(value) ? value.slice() : value;
+  });
+  return next;
+}
+
+function boolValue(value, fallback = true) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function stringList(value = [], fallback = []) {
+  const source = Array.isArray(value) ? value : String(value || '').split('\n');
+  const rows = source.map((item) => cleanText(item, '', 800).trim()).filter(Boolean);
+  return rows.length ? rows.slice(0, 12) : fallback.slice();
+}
+
+function termsList(value = '', fallback = []) {
+  return stringList(value, fallback).map((line) => line.replace(/^[-*\u2022]?\s*\d*\.?\s*/, '').trim()).filter(Boolean);
+}
+
+function commonStructuredConfig(key, flat = {}) {
+  return {
+    layoutVersion: 2,
+    header: {
+      showLogo: flat.showCompanyLogo !== false,
+      showCompanyDetails: flat.showCompanyDetails !== false,
+      title: flat.headerTitle || defaultConfigFor(key).headerTitle || '',
+      accentColor: flat.colorAccent || defaultConfigFor(key).colorAccent || '#0f2a52'
+    },
+    footer: {
+      showCallWhatsapp: true,
+      showEmail: true,
+      showWebsite: true,
+      showAddress: true,
+      thankYouMessage: flat.footerText || defaultConfigFor(key).footerText || ''
+    },
+    pageBreaks: {
+      repeatTableHeader: true,
+      keepAmountSummaryTogether: true,
+      keepWorkNoticeTogether: true,
+      keepTermsTogether: true,
+      keepFooterAtBottom: true,
+      showPageNumbers: true
+    },
+    sections: {}
+  };
+}
+
+function structuredDefaultsFor(key) {
+  const flat = defaultConfigFor(key);
+  const config = commonStructuredConfig(key, flat);
+  if (key === 'invoice') {
+    config.sections = {
+      invoiceDetails: {
+        showInvoiceNumber: true,
+        showJobReference: true,
+        showInvoiceDate: true,
+        showPaymentStatus: true
+      },
+      customerDetails: {
+        showCustomerName: true,
+        showPhoneNumber: true,
+        showAddress: true
+      },
+      serviceDetails: {
+        showServiceType: true,
+        showDevice: true,
+        showBrandModel: true,
+        showProblemComplaint: true,
+        showTechnician: flat.showTechnician !== false
+      },
+      itemTable: {
+        labels: {
+          sno: 'S.No.',
+          description: 'Description',
+          quantity: 'Qty',
+          unitPrice: 'Unit Price (\u20b9)',
+          total: 'Total (\u20b9)',
+          tax: 'Tax (\u20b9)'
+        },
+        showSno: true,
+        showQuantity: true,
+        showUnitPrice: true,
+        showTotal: true,
+        showTaxColumn: false
+      },
+      amountSummary: {
+        showAmountInWords: true,
+        showSubtotal: true,
+        showFinalTotal: true,
+        showAmountPaid: true,
+        showBalanceDue: true
+      },
+      workCompletionNotice: {
+        show: true,
+        title: 'WORK COMPLETION NOTICE',
+        messageLines: [
+          'Service completed successfully.',
+          'You may visit our store to collect your product or arrange for delivery as per your convenience.'
+        ]
+      },
+      terms: {
+        show: true,
+        title: 'TERMS & CONDITIONS',
+        text: flat.termsAndConditions || ''
+      }
+    };
+  } else if (key === 'quotation') {
+    config.sections = {
+      quotationDetails: {
+        showJobReference: true,
+        showQuotationDate: true,
+        showQuotationStatus: true
+      },
+      customerDetails: {
+        showCustomerName: true,
+        showPhoneNumber: true,
+        showAddress: true
+      },
+      serviceDeviceDetails: {
+        showServiceType: true,
+        showDevice: true,
+        showBrandModel: true,
+        showTechnician: flat.showTechnician !== false,
+        showSerialNumber: flat.showSerialNumber === true
+      },
+      problemComplaint: {
+        show: true,
+        label: 'Problem / Complaint'
+      },
+      itemTable: {
+        labels: {
+          sno: 'S.No',
+          description: 'Description',
+          quantity: 'Qty',
+          unitPrice: 'Unit Price (\u20b9)',
+          total: 'Total (\u20b9)',
+          tax: 'Tax (\u20b9)'
+        },
+        showSno: true,
+        showQuantity: true,
+        showUnitPrice: true,
+        showTotal: true,
+        showTaxColumn: false
+      },
+      totalSummary: {
+        show: true,
+        showSubtotal: true,
+        showTax: true,
+        showFinalTotal: true
+      },
+      validityNote: {
+        show: true,
+        text: 'This quotation is valid for 7 days from the quotation date.'
+      },
+      whatsappApprovalMessage: {
+        show: true,
+        title: 'READY TO PROCEED?',
+        messageLines: [
+          'Please review this quotation carefully.',
+          'To continue with the service, tap "Approve Quotation" in WhatsApp.',
+          'For any questions or changes, contact us before approval.'
+        ]
+      },
+      terms: {
+        show: true,
+        title: 'TERMS & CONDITIONS',
+        text: flat.termsAndConditions || ''
+      }
+    };
+  } else if (key === 'service-completed') {
+    config.sections = {
+      customerDetails: { show: true, showCustomerName: true },
+      serviceSummary: { show: true, title: 'SERVICE COMPLETED!' },
+      whatWeDid: {
+        show: true,
+        messageLines: [
+          'Thank you for choosing Universal Systems.',
+          'We are delighted to have successfully completed your service and handed over your product.',
+          'Your trust and support mean a lot to us.',
+          'We look forward to serving you again in the future.',
+          'If you need any assistance or service, feel free to contact us anytime.'
+        ]
+      },
+      supportMessage: {
+        show: true,
+        highlightLines: [
+          'Your satisfaction is our priority',
+          'Quality service you can trust',
+          'We are always here to help'
+        ],
+        amcTitle: 'Need regular service support?',
+        amcText: 'Universal Systems also provides AMC plans for regular maintenance and priority service.',
+        amcFinalLine: 'Contact us anytime to know more.'
+      },
+      terms: { show: false, title: 'TERMS', text: flat.termsAndConditions || '' },
+      thankYouFooter: { show: true, contactLabel: 'Contact' }
+    };
+  } else if (key === 'amc-contract') {
+    config.sections = {
+      customerDetails: { showCustomerName: true, showPhoneNumber: true, showAddress: true },
+      amcPeriod: { showAmcReference: true, showContractDate: true, showAmcPeriod: true, showStatus: true },
+      coveredDevices: { show: true, showCoveredFor: true, showSerialNumber: flat.showSerialNumber === true },
+      visitFrequency: { show: true, showPlanName: true, showCoverageType: true, showTechnician: flat.showTechnician !== false },
+      paymentDetails: { show: true, showContractValue: true, showPaymentStatus: true },
+      amcTerms: { show: true, text: flat.amcTerms || flat.termsAndConditions || '' },
+      signature: { show: Boolean(flat.signatureSection), label: flat.signatureSection || 'Authorized Signature' }
+    };
+  } else if (key === 'amc-service-visit') {
+    config.sections = {
+      visitDetails: {
+        showAmcReference: true,
+        showVisitDate: true,
+        showVisitStatus: true,
+        showNextVisitDate: true,
+        showJobReference: true
+      },
+      customerDetails: { showCustomerName: true, showPhoneNumber: true, showAddress: true },
+      deviceChecked: { show: true, showPlanName: true, showAmcPeriod: true, showCoveredFor: true, showTechnician: flat.showTechnician !== false },
+      workCompleted: { show: true },
+      partsUsed: { show: flat.showAdditionalCharges !== false },
+      nextVisitNote: { show: true },
+      customerAcknowledgement: { show: false, text: flat.signatureSection || '' }
+    };
+  } else if (key === 'amc-renewal-reminder') {
+    config.sections = {
+      customerDetails: { showCustomerName: true, showPhoneNumber: true, showAddress: true },
+      amcExpiryDetails: {
+        showAmcReference: true,
+        showReminderDate: true,
+        showExpiryDate: true,
+        showRenewalStatus: true
+      },
+      renewalMessage: { show: true, title: 'YOUR AMC PLAN IS EXPIRING SOON!' },
+      planDetails: { showPlanName: true, showCurrentPeriod: true, showRenewalPeriod: true, showCoveredFor: true },
+      renewalAmount: { show: flat.showRenewalAmount !== false },
+      contactWhatsappMessage: {
+        show: true,
+        title: 'READY TO RENEW?',
+        text: 'To continue AMC support, contact Universal Systems or confirm renewal through WhatsApp.',
+        finalLine: 'Thank you for choosing Universal Systems AMC support.'
+      }
+    };
+  }
+  return config;
+}
+
+function legacyStructuredOverrides(payload = {}, key = '') {
+  const overrides = {};
+  if (!payload || !isPlainObject(payload)) return overrides;
+  if ('headerTitle' in payload || 'showCompanyLogo' in payload || 'showCompanyDetails' in payload || 'colorAccent' in payload) {
+    overrides.header = {
+      title: payload.headerTitle,
+      showLogo: payload.showCompanyLogo,
+      showCompanyDetails: payload.showCompanyDetails,
+      accentColor: payload.colorAccent
+    };
+  }
+  if ('footerText' in payload) {
+    overrides.footer = { thankYouMessage: payload.footerText };
+  }
+  if ('termsAndConditions' in payload) {
+    overrides.sections = { terms: { text: payload.termsAndConditions } };
+  }
+  if ('showTechnician' in payload) {
+    overrides.sections = overrides.sections || {};
+    if (key === 'invoice') overrides.sections.serviceDetails = { showTechnician: payload.showTechnician };
+    if (key === 'quotation') overrides.sections.serviceDeviceDetails = { showTechnician: payload.showTechnician };
+    if (key === 'amc-contract') overrides.sections.visitFrequency = { showTechnician: payload.showTechnician };
+    if (key === 'amc-service-visit') overrides.sections.deviceChecked = { showTechnician: payload.showTechnician };
+  }
+  if ('showSerialNumber' in payload) {
+    overrides.sections = overrides.sections || {};
+    if (key === 'quotation') overrides.sections.serviceDeviceDetails = { ...(overrides.sections.serviceDeviceDetails || {}), showSerialNumber: payload.showSerialNumber };
+    if (key === 'amc-contract') overrides.sections.coveredDevices = { showSerialNumber: payload.showSerialNumber };
+  }
+  if ('showAdditionalCharges' in payload && key === 'amc-service-visit') {
+    overrides.sections = overrides.sections || {};
+    overrides.sections.partsUsed = { show: payload.showAdditionalCharges };
+  }
+  if ('showRenewalAmount' in payload && key === 'amc-renewal-reminder') {
+    overrides.sections = overrides.sections || {};
+    overrides.sections.renewalAmount = { show: payload.showRenewalAmount };
+  }
+  if ('amcTerms' in payload && key === 'amc-contract') {
+    overrides.sections = overrides.sections || {};
+    overrides.sections.amcTerms = { text: payload.amcTerms };
+  }
+  if ('signatureSection' in payload && key === 'amc-contract') {
+    overrides.sections = overrides.sections || {};
+    overrides.sections.signature = { label: payload.signatureSection, show: Boolean(payload.signatureSection) };
+  }
+  if (key === 'amc-contract' && isPlainObject(payload.sections?.amcPeriod)) {
+    overrides.sections = overrides.sections || {};
+    overrides.sections.amcPeriod = {
+      showAmcReference: payload.sections.amcPeriod.showAmcReference ?? payload.sections.amcPeriod.showReference,
+      showAmcPeriod: payload.sections.amcPeriod.showAmcPeriod ?? payload.sections.amcPeriod.showPeriod
+    };
+  }
+  return overrides;
+}
+
+function sanitizeStrings(value) {
+  if (Array.isArray(value)) return value.map((item) => sanitizeStrings(item));
+  if (isPlainObject(value)) {
+    return Object.entries(value).reduce((next, [key, item]) => {
+      next[key] = sanitizeStrings(item);
+      return next;
+    }, {});
+  }
+  if (typeof value === 'string') return cleanText(value, '', 5000);
+  return value;
+}
+
 export function templateKeyForPdfType(type = '') {
   if (type === 'work' || type === 'amc-invoice') return 'invoice';
   if (type === 'quotation') return 'quotation';
@@ -209,18 +537,73 @@ function sanitizeColor(value, fallback = '#0f2a52') {
 }
 
 function sanitizeConfig(payload = {}, key = '') {
-  const base = { ...defaultConfigFor(key), ...(payload || {}) };
-  const sanitized = {};
-  textFields.forEach((field) => {
-    sanitized[field] = cleanText(base[field], defaultConfigFor(key)[field] || '');
+  const defaults = structuredDefaultsFor(key);
+  let sanitized = deepMerge(defaults, legacyStructuredOverrides(payload, key));
+  sanitized = deepMerge(sanitized, payload || {});
+  sanitized = sanitizeStrings(sanitized);
+  sanitized.layoutVersion = 2;
+  sanitized.header = sanitized.header || defaults.header;
+  sanitized.footer = sanitized.footer || defaults.footer;
+  sanitized.pageBreaks = sanitized.pageBreaks || defaults.pageBreaks;
+  sanitized.sections = sanitized.sections || defaults.sections;
+  sanitized.header.showLogo = boolValue(sanitized.header.showLogo, defaults.header.showLogo);
+  sanitized.header.showCompanyDetails = boolValue(sanitized.header.showCompanyDetails, defaults.header.showCompanyDetails);
+  sanitized.header.title = cleanText(sanitized.header.title, defaults.header.title, 120);
+  sanitized.header.accentColor = sanitizeColor(sanitized.header.accentColor, defaults.header.accentColor);
+  sanitized.footer.showCallWhatsapp = boolValue(sanitized.footer.showCallWhatsapp, true);
+  sanitized.footer.showEmail = boolValue(sanitized.footer.showEmail, true);
+  sanitized.footer.showWebsite = boolValue(sanitized.footer.showWebsite, true);
+  sanitized.footer.showAddress = boolValue(sanitized.footer.showAddress, true);
+  sanitized.footer.thankYouMessage = cleanText(sanitized.footer.thankYouMessage, defaults.footer.thankYouMessage, 500);
+  Object.keys(defaults.pageBreaks).forEach((field) => {
+    sanitized.pageBreaks[field] = boolValue(sanitized.pageBreaks[field], defaults.pageBreaks[field]);
   });
-  sanitized.showCompanyLogo = Boolean(base.showCompanyLogo);
-  sanitized.showCompanyDetails = Boolean(base.showCompanyDetails);
-  sanitized.showTechnician = base.showTechnician !== undefined ? Boolean(base.showTechnician) : key === 'quotation';
-  sanitized.showSerialNumber = Boolean(base.showSerialNumber);
-  sanitized.showAdditionalCharges = base.showAdditionalCharges !== undefined ? Boolean(base.showAdditionalCharges) : key === 'amc-service-visit';
-  sanitized.showRenewalAmount = base.showRenewalAmount !== undefined ? Boolean(base.showRenewalAmount) : key === 'amc-renewal-reminder';
-  sanitized.colorAccent = sanitizeColor(base.colorAccent, defaultConfigFor(key).colorAccent || '#0f2a52');
+
+  if (key === 'invoice') {
+    sanitized.sections.workCompletionNotice.messageLines = stringList(sanitized.sections.workCompletionNotice.messageLines, defaults.sections.workCompletionNotice.messageLines);
+    sanitized.sections.terms.text = cleanText(sanitized.sections.terms.text, defaults.sections.terms.text, 5000);
+  }
+  if (key === 'quotation') {
+    sanitized.sections.whatsappApprovalMessage.messageLines = stringList(sanitized.sections.whatsappApprovalMessage.messageLines, defaults.sections.whatsappApprovalMessage.messageLines);
+    sanitized.sections.terms.text = cleanText(sanitized.sections.terms.text, defaults.sections.terms.text, 5000);
+  }
+  if (key === 'service-completed') {
+    sanitized.sections.whatWeDid.messageLines = stringList(sanitized.sections.whatWeDid.messageLines, defaults.sections.whatWeDid.messageLines);
+    sanitized.sections.supportMessage.highlightLines = stringList(sanitized.sections.supportMessage.highlightLines, defaults.sections.supportMessage.highlightLines);
+    sanitized.sections.terms.text = cleanText(sanitized.sections.terms.text, defaults.sections.terms.text, 5000);
+  }
+  if (key === 'amc-contract') {
+    sanitized.sections.amcTerms.text = cleanText(sanitized.sections.amcTerms.text, defaults.sections.amcTerms.text, 5000);
+  }
+
+  sanitized.headerTitle = sanitized.header.title;
+  sanitized.showCompanyLogo = sanitized.header.showLogo;
+  sanitized.showCompanyDetails = sanitized.header.showCompanyDetails;
+  sanitized.colorAccent = sanitized.header.accentColor;
+  sanitized.footerText = sanitized.footer.thankYouMessage;
+  sanitized.termsAndConditions = cleanText(sanitized.sections.terms?.text ?? sanitized.termsAndConditions ?? defaultConfigFor(key).termsAndConditions ?? '', '', 5000);
+  sanitized.paymentBankDetails = cleanText(sanitized.paymentBankDetails, defaultConfigFor(key).paymentBankDetails || '', 5000);
+  sanitized.notesWarrantyText = cleanText(sanitized.notesWarrantyText, defaultConfigFor(key).notesWarrantyText || '', 5000);
+  sanitized.amcTerms = cleanText(sanitized.sections.amcTerms?.text ?? sanitized.amcTerms ?? defaultConfigFor(key).amcTerms ?? '', '', 5000);
+  sanitized.signatureSection = cleanText(sanitized.sections.signature?.label ?? sanitized.signatureSection ?? defaultConfigFor(key).signatureSection ?? '', '', 500);
+  sanitized.showTechnician = Boolean(
+    sanitized.sections.serviceDetails?.showTechnician
+    ?? sanitized.sections.serviceDeviceDetails?.showTechnician
+    ?? sanitized.sections.visitFrequency?.showTechnician
+    ?? sanitized.sections.deviceChecked?.showTechnician
+    ?? defaultConfigFor(key).showTechnician
+  );
+  sanitized.showSerialNumber = Boolean(
+    sanitized.sections.serviceDeviceDetails?.showSerialNumber
+    ?? sanitized.sections.coveredDevices?.showSerialNumber
+    ?? defaultConfigFor(key).showSerialNumber
+  );
+  sanitized.showAdditionalCharges = Boolean(sanitized.sections.partsUsed?.show ?? defaultConfigFor(key).showAdditionalCharges ?? key === 'amc-service-visit');
+  sanitized.showRenewalAmount = Boolean(sanitized.sections.renewalAmount?.show ?? defaultConfigFor(key).showRenewalAmount ?? key === 'amc-renewal-reminder');
+
+  textFields.forEach((field) => {
+    sanitized[field] = cleanText(sanitized[field], defaultConfigFor(key)[field] || '');
+  });
   return sanitized;
 }
 
@@ -254,14 +637,14 @@ function userSummary(user) {
   };
 }
 
-function serializeVersion(version) {
+function serializeVersion(version, key = '') {
   return {
     id: String(version._id || ''),
     version: version.version,
     editedAt: version.editedAt,
     editedBy: userSummary(version.editedBy),
     action: version.action || 'updated',
-    config: version.config || {}
+    config: sanitizeConfig(version.config || {}, key)
   };
 }
 
@@ -278,7 +661,7 @@ function serializeTemplate(template) {
     config: sanitizeConfig(item.config || {}, item.key),
     lastEditedDate: item.updatedAt || item.createdAt,
     lastEditedBy: userSummary(item.lastEditedBy),
-    versions: (item.versions || []).map(serializeVersion).sort((a, b) => b.version - a.version),
+    versions: (item.versions || []).map((version) => serializeVersion(version, item.key)).sort((a, b) => b.version - a.version),
     updatedAt: item.updatedAt,
     createdAt: item.createdAt
   };
@@ -304,11 +687,11 @@ function addVersionSnapshot(template, action = 'updated') {
 
 export async function listPdfTemplates() {
   await ensurePdfTemplates();
-  const rows = await PdfTemplate.find({})
+  const order = PDF_TEMPLATE_DEFINITIONS.map((definition) => definition.key);
+  const rows = await PdfTemplate.find({ key: { $in: order } })
     .populate('lastEditedBy', 'name username role')
     .populate('versions.editedBy', 'name username role')
     .sort({ category: -1, name: 1 });
-  const order = PDF_TEMPLATE_DEFINITIONS.map((definition) => definition.key);
   return rows.map(serializeTemplate).sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
 }
 
@@ -629,8 +1012,11 @@ function drawPreviewPdf(doc, template, company = COMPANY, businessSettings = nul
   doc.fontSize(8).fillColor('#64748b').text(renderTemplateText(config.footerText, context), 40, 778, { width: 515, align: 'center' });
 }
 
-export async function generatePdfTemplatePreview(key) {
+export async function generatePdfTemplatePreview(key, options = {}) {
   const template = await getPdfTemplate(key);
+  if (options.config && isPlainObject(options.config)) {
+    template.config = sanitizeConfig(options.config, template.key);
+  }
   const [company, businessSettings] = await Promise.all([
     getCompanyIdentity(),
     getBusinessSettings().catch(() => null)
@@ -639,7 +1025,7 @@ export async function generatePdfTemplatePreview(key) {
   const filename = `${template.key}-template-preview-${Date.now()}.pdf`;
   const filePath = path.join(PDF_DIR, filename);
   await new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
     drawPreviewPdf(doc, template, company, businessSettings);
