@@ -14,6 +14,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
+import { ServiceBrandChips } from '../components/PublicBrandSupport.jsx';
 import { publicAssetUrl, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const categoryChips = [
@@ -239,6 +240,7 @@ export default function Services() {
                 <div className="services-card-copy">
                   <h2 className="text-xl font-black">{service.title}</h2>
                   <p className="mt-2 text-sm leading-6 muted">{service.description || service.text}</p>
+                  <ServiceBrandChips serviceTitle={service.title} />
                   <Link to={booking.publicBookingEnabled ? `/book-service?service=${encodeURIComponent(service.title)}` : '/contact'} className="services-book-button mt-5">
                     {booking.publicBookingEnabled ? 'Book Now' : 'Contact Now'} <ArrowRight className="h-4 w-4" />
                   </Link>

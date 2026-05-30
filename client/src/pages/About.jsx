@@ -20,6 +20,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
+import { BrandLogoStrip } from '../components/PublicBrandSupport.jsx';
 import { phoneHref, publicAssetUrl, publicPhoneList, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const serviceFocus = [
@@ -211,6 +212,13 @@ export default function About() {
             })}
           </div>
         </section>
+
+        <BrandLogoStrip
+          className="about-brand-support about-reveal"
+          size="medium"
+          heading="Experience Across Popular Brands"
+          subtitle="Our team works with commonly used computer, printer, CCTV, and IT equipment brands."
+        />
 
         <section className="about-main-grid about-reveal">
           <div className="about-info-panel">

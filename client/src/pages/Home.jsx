@@ -20,6 +20,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
+import { BrandLogoStrip } from '../components/PublicBrandSupport.jsx';
 import { phoneHref, publicAssetUrl, publicPhoneList, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const steps = [
@@ -248,6 +249,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <BrandLogoStrip as="div" className="home-section public-brand-home reveal-on-scroll" size="large" />
 
       <section className="home-section premium-section-alt">
         <div className="container-page">

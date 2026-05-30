@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { serviceTypes } from '../utils/constants.js';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
+import { BrandLogoStrip } from '../components/PublicBrandSupport.jsx';
 import { createContactBooking, createContactRequest } from '../utils/publicApi.js';
 import { phoneHref, publicAssetUrl, publicPhoneList, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 import { useToast } from '../context/ToastContext.jsx';
@@ -425,6 +426,13 @@ export default function Contact() {
             );
           })}
         </section>
+
+        <BrandLogoStrip
+          className="contact-brand-support contact-reveal"
+          size="small"
+          heading="Need support for these brands?"
+          subtitle=""
+        />
 
         <section className="contact-urgent-cta contact-reveal">
           <div>

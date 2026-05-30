@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { serviceTypes } from '../utils/constants.js';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
+import { BookingBrandSupport } from '../components/PublicBrandSupport.jsx';
 import { createBooking } from '../utils/publicApi.js';
 import { publicAssetUrl, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 import { useToast } from '../context/ToastContext.jsx';
@@ -431,6 +432,7 @@ export default function BookService() {
                   <FieldError id="booking-service-type-error" message={fieldErrors.serviceType} />
                   </div>
                 ) : null}
+                <BookingBrandSupport serviceTitle={form.serviceType} />
                 <div className="booking-field">
                   <label className="label" htmlFor="booking-device">Device</label>
                   <input
