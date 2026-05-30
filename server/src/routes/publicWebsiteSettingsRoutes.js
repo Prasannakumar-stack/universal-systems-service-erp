@@ -16,12 +16,12 @@ router.patch('/company-profile', requireRole('admin'), requirePermission('manage
 router.post('/company-profile/logo', requireRole('admin'), requirePermission('manage_company_profile'), companyLogoUpload.single('logo'), handleUploadErrors, asyncHandler(uploadLogo));
 router.delete('/company-profile/logo', requireRole('admin'), requirePermission('manage_company_profile'), asyncHandler(deleteLogo));
 router.get('/backup-storage', requirePermission('view_settings'), asyncHandler(getStorage));
-router.patch('/backup-storage', requireRole('admin'), requirePermission('manage_backup_storage'), asyncHandler(updateStorage));
-router.post('/backups', requireRole('admin'), requirePermission('manage_backup_storage'), asyncHandler(create));
-router.get('/backups/:id/download', requireRole('admin'), requirePermission('manage_backup_storage'), asyncHandler(download));
-router.post('/backups/:id/restore', requireRole('admin'), requirePermission('manage_backup_storage'), asyncHandler(validateExisting));
-router.delete('/backups/:id', requireRole('admin'), requirePermission('manage_backup_storage'), asyncHandler(remove));
-router.post('/backups/restore', requireRole('admin'), requirePermission('manage_backup_storage'), backupUpload.single('backup'), handleUploadErrors, asyncHandler(restore));
+router.patch('/backup-storage', requireRole('admin', 'super_admin'), requirePermission('manage_backup_storage'), asyncHandler(updateStorage));
+router.post('/backups', requireRole('admin', 'super_admin'), requirePermission('manage_backup_storage'), asyncHandler(create));
+router.get('/backups/:id/download', requireRole('admin', 'super_admin'), requirePermission('manage_backup_storage'), asyncHandler(download));
+router.post('/backups/:id/restore', requireRole('admin', 'super_admin'), requirePermission('manage_backup_storage'), asyncHandler(validateExisting));
+router.delete('/backups/:id', requireRole('admin', 'super_admin'), requirePermission('manage_backup_storage'), asyncHandler(remove));
+router.post('/backups/restore', requireRole('admin', 'super_admin'), requirePermission('manage_backup_storage'), backupUpload.single('backup'), handleUploadErrors, asyncHandler(restore));
 router.get('/business', requirePermission('view_settings'), asyncHandler(getBusiness));
 router.patch('/business/:section', requireRole('admin'), requirePermission('edit_settings'), asyncHandler(updateBusinessSection));
 router.get('/system-info', requireRole('admin'), requirePermission('view_system_information'), asyncHandler(systemInfo));

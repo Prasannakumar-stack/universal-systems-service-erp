@@ -41,7 +41,7 @@ import {
 
 const TopbarBookingModal = lazy(() => import('../features/bookings/BookingsPage.jsx').then((module) => ({ default: module.BookingModal })));
 
-const fullAccessRoles = ['admin'];
+const fullAccessRoles = ['admin', 'super_admin'];
 
 const adminGroups = [
   {

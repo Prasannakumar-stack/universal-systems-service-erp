@@ -9,6 +9,7 @@ export const supportedRoles = [
 ];
 
 export const adminWorkspaceRoles = [
+  'super_admin',
   'admin',
   'manager',
   'receptionist',
@@ -18,6 +19,7 @@ export const adminWorkspaceRoles = [
 ];
 
 export const roleLabels = {
+  super_admin: 'Super Admin',
   admin: 'Admin',
   manager: 'Manager',
   receptionist: 'Receptionist',
@@ -379,12 +381,12 @@ export function hasRole(userOrRole, role) {
 
 export function can(userOrRole, permission) {
   if (!permission) return false;
+  const role = roleFrom(userOrRole);
+  if (role === 'admin' || role === 'super_admin') return true;
   const permissionMap = permissionMapFrom(userOrRole);
   if (permissionMap && Object.prototype.hasOwnProperty.call(permissionMap, permission)) {
     return Boolean(permissionMap[permission]);
   }
-  const role = roleFrom(userOrRole);
-  if (role === 'admin') return true;
   return Boolean(ROLE_PERMISSIONS[role]?.includes(permission));
 }
 

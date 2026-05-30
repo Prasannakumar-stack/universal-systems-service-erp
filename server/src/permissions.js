@@ -12,6 +12,7 @@ export const SUPPORTED_ROLES = [
 ];
 
 export const ADMIN_WORKSPACE_ROLES = [
+  'super_admin',
   'admin',
   'manager',
   'receptionist',
@@ -337,7 +338,7 @@ export function hasRole(userOrRole, role) {
 
 export function hasPermission(userOrRole, permission) {
   const role = normalizeRole(typeof userOrRole === 'string' ? userOrRole : userOrRole?.role);
-  if (role === 'admin') return true;
+  if (role === 'admin' || role === 'super_admin') return true;
   if (typeof userOrRole === 'object' && userOrRole?._effectivePermissions) {
     return Boolean(permission && userOrRole._effectivePermissions[permission]);
   }

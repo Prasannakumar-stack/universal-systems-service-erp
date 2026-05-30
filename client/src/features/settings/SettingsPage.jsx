@@ -484,15 +484,6 @@ const settingsOverviewGroups = [
         status: 'Active',
         actionLabel: 'Open',
         tags: ['invoices', 'billing', 'payments', 'balance', 'finance']
-      },
-      {
-        id: 'systemInformation',
-        tabId: 'systemInformation',
-        icon: Info,
-        title: 'System Information',
-        description: 'Read-only app, database, API, storage, and backup health details.',
-        status: 'Active',
-        tags: ['system', 'database', 'api', 'storage', 'version', 'health']
       }
     ]
   },
@@ -522,18 +513,9 @@ const settingsOverviewGroups = [
         tabId: 'backupStorage',
         icon: DatabaseBackup,
         title: 'Backup & Storage',
-        description: 'Backup exports, storage usage, upload safety, and restore-ready archive tools.',
+        description: 'Manage storage usage, create backups, export data, and restore system data safely.',
         status: 'Needs Setup',
-        tags: ['backup', 'storage', 'exports', 'uploads', 'restore']
-      },
-      {
-        id: 'dataRecovery',
-        icon: ArchiveRestore,
-        title: 'Data Recovery',
-        description: 'Recovery checkpoints, restore workflows, and protected data safety controls.',
-        status: 'Coming Soon',
-        actionLabel: 'View Status',
-        tags: ['data recovery', 'restore', 'recovery', 'rollback', 'safety']
+        tags: ['backup', 'restore', 'storage', 'export']
       }
     ]
   }
@@ -1379,14 +1361,19 @@ export function ResetPasswordModal({ technician, onClose, onSubmit }) {
   );
 }
 
-function AdminMetricCard({ icon: Icon, label, value, helper, tone = 'blue' }) {
+function AdminMetricCard({ icon: Icon, label, value, helper, tone = 'blue', actionLabel = '', onAction = null, actionDisabled = false }) {
   return (
     <div className={`admin-metric-card admin-metric-${tone}`}>
       <div className="admin-metric-icon"><Icon className="h-4 w-4" /></div>
-      <div className="min-w-0">
+      <div className="flex min-w-0 flex-1 flex-col">
         <p className="admin-metric-label">{label}</p>
         <p className="admin-metric-value">{value}</p>
         <p className="admin-metric-helper">{helper}</p>
+        {actionLabel && onAction ? (
+          <button type="button" className="btn btn-secondary admin-table-button mt-auto w-fit" disabled={actionDisabled} onClick={onAction}>
+            {actionLabel}
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -1938,16 +1925,158 @@ function AdminProfileSection({ onDirtyChange = null }) {
   );
 }
 
-function BackupStorageSection({ onDirtyChange = null }) {
+function isBackupAdminUser(user) {
+  return hasRole(user, 'admin') || hasRole(user, 'super_admin');
+}
+
+function backupNextRunLabel(settings = {}) {
+  if (!settings.automaticBackupEnabled) return 'Automatic backup disabled';
+  if (!settings.lastBackupAt) return 'Due after first automatic backup';
+  const next = new Date(settings.lastBackupAt);
+  if (Number.isNaN(next.getTime())) return 'Schedule pending';
+  if (settings.backupFrequency === 'Daily') next.setDate(next.getDate() + 1);
+  else if (settings.backupFrequency === 'Monthly') next.setMonth(next.getMonth() + 1);
+  else next.setDate(next.getDate() + 7);
+  return formatDate(next);
+}
+
+function backupCreatedBy(record = {}) {
+  return record.createdBy?.name || record.createdBy?.username || 'System';
+}
+
+function backupDisplayTitle(record = {}) {
+  const kind = String(record.kind || '').replace(/[_-]+/g, ' ').trim().toLowerCase();
+  if (kind === 'manual') return 'Manual Backup';
+  if (kind === 'automatic') return 'Automatic Backup';
+  if (kind === 'pre restore') return 'Pre Restore Backup';
+  if (kind === 'restore upload') return 'Restore Backup';
+  if (!record.kind) return 'Backup File';
+  return `${titleCase(record.kind)} Backup`;
+}
+
+function backupMetadata(record = {}) {
+  return {
+    date: record.createdAt ? formatDate(record.createdAt) : '-',
+    size: formatBytes(record.size),
+    createdBy: backupCreatedBy(record)
+  };
+}
+
+function backupCreatedAtTime(record = {}) {
+  if (!record.createdAt) return '-';
+  const date = new Date(record.createdAt);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function BackupFileDetails({ record }) {
+  if (!record) return null;
+  return (
+    <details className="mt-3 text-xs text-slate-300">
+      <summary className="inline-flex cursor-pointer items-center rounded-full border border-sky-300/20 bg-sky-400/10 px-2.5 py-1 font-black text-sky-100 transition hover:border-sky-300/40 hover:bg-sky-400/15">
+        View file details
+      </summary>
+      <div className="mt-3 grid gap-2 rounded-card border border-white/10 bg-slate-950/30 p-3">
+        <div><span className="font-black text-slate-400">Full ZIP file name: </span><span className="break-all text-slate-100">{record.filename || 'Backup ZIP file'}</span></div>
+        <div><span className="font-black text-slate-400">Backup type: </span><span className="text-slate-100">{backupDisplayTitle(record)}</span></div>
+        <div><span className="font-black text-slate-400">Backup size: </span><span className="text-slate-100">{formatBytes(record.size)}</span></div>
+        <div><span className="font-black text-slate-400">Created date/time: </span><span className="text-slate-100">{backupCreatedAtTime(record)}</span></div>
+        <div><span className="font-black text-slate-400">Created by: </span><span className="text-slate-100">{backupCreatedBy(record)}</span></div>
+        <div><span className="font-black text-slate-400">Backup status: </span><span className="text-slate-100">{titleCase(record.status || 'Unknown')}</span></div>
+      </div>
+    </details>
+  );
+}
+
+function RestoreConfirmationModal({ confirmText, working, onChange, onCancel, onConfirm }) {
+  const canConfirm = confirmText === 'RESTORE' && !working;
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="surface admin-modal w-full max-w-lg p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-rose-200">Final restore confirmation</p>
+            <h2 className="mt-1 text-xl font-black text-slate-50">Confirm Restore</h2>
+          </div>
+          <button type="button" className="icon-button h-9 w-9" onClick={onCancel} aria-label="Close restore confirmation">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <p className="mt-4 rounded-card border border-rose-300/25 bg-rose-500/10 p-3 text-sm font-semibold leading-6 text-rose-100">
+          Are you sure you want to restore this backup? This will replace current data and cannot be undone. Type RESTORE to continue.
+        </p>
+        <label className="mt-4 block">
+          <span className="label">Confirmation text</span>
+          <input className="input" value={confirmText} onChange={(event) => onChange(event.target.value)} placeholder="Type RESTORE" autoFocus />
+        </label>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" className="btn btn-secondary" disabled={working} onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="btn btn-danger" disabled={!canConfirm} onClick={onConfirm}>
+            {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArchiveRestore className="h-4 w-4" />}
+            Confirm Restore
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteBackupModal({ working, onCancel, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
+      <div className="surface w-full max-w-md p-5">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 flex-none place-items-center rounded-full border border-rose-300/25 bg-rose-500/10 text-rose-100">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-black">Delete backup?</h2>
+            <p className="mt-2 text-sm leading-6 muted">This will permanently remove the backup ZIP file and its record. You cannot restore using this backup after deletion.</p>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className="btn btn-secondary" disabled={working} onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="btn btn-danger" disabled={working} onClick={onConfirm}>
+            {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Delete Backup
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BackupStorageSection({ onDirtyChange = null, onOpenTab = null }) {
   const { request, token, user } = useAuth();
   const { push } = useToast();
-  const canEdit = hasRole(user, 'admin') && can(user, 'manage_backup_storage');
+  const navigate = useNavigate();
+  const storageOverviewRef = useRef(null);
+  const backupSettingsRef = useRef(null);
+  const recentBackupsRef = useRef(null);
+  const restoreSectionRef = useRef(null);
+  const canEdit = isBackupAdminUser(user) && can(user, 'manage_backup_storage');
   const { data, loading, error, reload } = useResource(() => request('/settings/backup-storage'), [request]);
   const [settings, setSettings] = useState({ automaticBackupEnabled: false, backupFrequency: 'Weekly' });
   const [saving, setSaving] = useState(false);
   const [working, setWorking] = useState(false);
   const [restoreFile, setRestoreFile] = useState(null);
+  const [restoreFileInputKey, setRestoreFileInputKey] = useState(0);
+  const [restoreValidationStatus, setRestoreValidationStatus] = useState('idle');
   const [restoreValidation, setRestoreValidation] = useState(null);
+  const [restoreSourceLabel, setRestoreSourceLabel] = useState('');
+  const [selectedRestoreBackup, setSelectedRestoreBackup] = useState(null);
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
+  const [restoreConfirmText, setRestoreConfirmText] = useState('');
   const [deleteBackupCandidate, setDeleteBackupCandidate] = useState(null);
   const saved = data?.settings || {};
   const dirty = stableJson(settings) !== stableJson({
@@ -1965,6 +2094,49 @@ function BackupStorageSection({ onDirtyChange = null }) {
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
+
+  function resetRestoreFlow() {
+    setRestoreFile(null);
+    setRestoreValidation(null);
+    setRestoreValidationStatus('idle');
+    setRestoreSourceLabel('');
+    setSelectedRestoreBackup(null);
+    setRestoreConfirmOpen(false);
+    setRestoreConfirmText('');
+    setRestoreFileInputKey((current) => current + 1);
+  }
+
+  function selectExistingBackupForRestore(record) {
+    if (!record?.id) return;
+    restoreSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setRestoreFile(null);
+    setRestoreFileInputKey((current) => current + 1);
+    setRestoreValidation(null);
+    setRestoreValidationStatus('selected');
+    setRestoreSourceLabel(record.filename || 'Selected backup');
+    setSelectedRestoreBackup(record);
+  }
+
+  function handleRestoreFileChange(event) {
+    const file = event.target.files?.[0] || null;
+    setRestoreValidation(null);
+    setRestoreSourceLabel('');
+    setSelectedRestoreBackup(null);
+    if (!file) {
+      setRestoreFile(null);
+      setRestoreValidationStatus('idle');
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      setRestoreFile(null);
+      setRestoreValidationStatus('invalid');
+      setRestoreFileInputKey((current) => current + 1);
+      push('Invalid backup file. Select a .zip backup file.', 'error');
+      return;
+    }
+    setRestoreFile(file);
+    setRestoreValidationStatus('idle');
+  }
 
   async function saveSettings(event) {
     event.preventDefault();
@@ -1985,12 +2157,13 @@ function BackupStorageSection({ onDirtyChange = null }) {
   }
 
   async function createBackup(downloadAfter = false) {
+    if (!canEdit) return;
     setWorking(true);
     try {
       const result = await request('/settings/backups', { method: 'POST' });
       push(result.message || 'Backup created');
       await reload({ silent: true });
-      if (downloadAfter && result.backup?.id) downloadBackup(result.backup.id);
+      if (downloadAfter && result.backup?.id) await downloadBackup(result.backup.id);
     } catch (err) {
       push(err.message, 'error');
     } finally {
@@ -2004,8 +2177,8 @@ function BackupStorageSection({ onDirtyChange = null }) {
       const response = await fetch(`${apiBase}/settings/backups/${id}/download`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
-      const blob = await response.blob();
       if (!response.ok) throw new Error('Backup download failed');
+      const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -2020,32 +2193,49 @@ function BackupStorageSection({ onDirtyChange = null }) {
   }
 
   async function validateRestore() {
+    if (!canEdit) return;
     if (!restoreFile) {
       push('Choose a backup ZIP file first', 'error');
       return;
     }
     const body = new FormData();
     body.append('backup', restoreFile);
+    setRestoreValidationStatus('validating');
     setWorking(true);
     try {
       const result = await request('/settings/backups/restore', { method: 'POST', body });
       setRestoreValidation(result);
+      setRestoreSourceLabel(restoreFile.name);
+      setRestoreValidationStatus('verified');
       push(result.message || 'Backup validated', 'info');
     } catch (err) {
+      setRestoreValidation(null);
+      setRestoreValidationStatus('invalid');
       push(err.message, 'error');
     } finally {
       setWorking(false);
     }
   }
 
-  async function validateExistingBackup(id) {
+  async function validateExistingBackup(id = selectedRestoreBackup?.id) {
+    if (!canEdit) return;
     if (!id) return;
+    const source = (data?.records || []).find((record) => record.id === id);
+    restoreSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setRestoreFile(null);
+    setRestoreFileInputKey((current) => current + 1);
+    setRestoreValidationStatus('validating');
+    setRestoreSourceLabel(source?.filename || 'Selected backup');
+    setSelectedRestoreBackup(source || null);
     setWorking(true);
     try {
       const result = await request(`/settings/backups/${id}/restore`, { method: 'POST' });
       setRestoreValidation(result);
+      setRestoreValidationStatus('verified');
       push(result.message || 'Backup validated', 'info');
     } catch (err) {
+      setRestoreValidation(null);
+      setRestoreValidationStatus('invalid');
       push(err.message, 'error');
     } finally {
       setWorking(false);
@@ -2060,15 +2250,29 @@ function BackupStorageSection({ onDirtyChange = null }) {
         method: 'POST',
         body: JSON.stringify({ restoreToken: restoreValidation.restoreToken, confirmRestore: true })
       });
-      push(result.message || 'Backup restored');
-      setRestoreValidation(null);
-      setRestoreFile(null);
+      push(result.message || 'Backup restored successfully');
+      resetRestoreFlow();
       await reload({ silent: true });
     } catch (err) {
       push(err.message, 'error');
     } finally {
       setWorking(false);
     }
+  }
+
+  function showRestoreConfirmation() {
+    if (!restoreValidation?.restoreToken || restoreValidationStatus !== 'verified') return;
+    setRestoreConfirmText('');
+    setRestoreConfirmOpen(true);
+  }
+
+  function showHelp() {
+    restoreSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    push('Validate a backup ZIP before restore. A pre-restore backup is created automatically before data is replaced.', 'info');
+  }
+
+  function scrollToSection(ref) {
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   async function deleteBackup(record) {
@@ -2090,17 +2294,58 @@ function BackupStorageSection({ onDirtyChange = null }) {
   if (error) return <ErrorBlock message={error} />;
 
   const storage = data?.storage || {};
-  const latestBackup = (data?.records || [])[0];
+  const records = data?.records || [];
+  const latestBackup = records[0];
+  const nextBackup = backupNextRunLabel(saved);
+  const lastBackupStatus = latestBackup ? titleCase(latestBackup.status) : 'No backup yet';
+  const restoreReady = restoreValidationStatus === 'verified' && Boolean(restoreValidation?.restoreToken);
+  const validationLabel = restoreValidationStatus === 'validating'
+    ? 'Validating'
+    : restoreValidationStatus === 'verified'
+      ? 'Backup verified'
+      : restoreValidationStatus === 'selected'
+        ? 'Selected backup ready for validation.'
+        : restoreValidationStatus === 'invalid'
+          ? 'Invalid backup file'
+          : 'Not validated yet';
+  const validationTone = restoreValidationStatus === 'verified'
+    ? 'border-emerald-300/25 bg-emerald-500/10 text-emerald-100'
+    : restoreValidationStatus === 'invalid'
+      ? 'border-rose-300/25 bg-rose-500/10 text-rose-100'
+      : restoreValidationStatus === 'validating'
+        ? 'border-sky-300/25 bg-sky-500/10 text-sky-100'
+        : restoreValidationStatus === 'selected'
+          ? 'border-amber-300/25 bg-amber-500/10 text-amber-100'
+          : 'border-white/10 bg-white/[0.035] text-slate-300';
+  const restoreSteps = [
+    ['1', 'Choose backup ZIP file', UploadCloud],
+    ['2', 'Validate backup', ShieldCheck],
+    ['3', 'Create pre-restore backup', DatabaseBackup],
+    ['4', 'Confirm restore', ArchiveRestore]
+  ];
+  const quickNavItems = [
+    ['Storage Overview', storageOverviewRef],
+    ['Backup Settings', backupSettingsRef],
+    ['Recent Backups', recentBackupsRef],
+    ['Restore / Data Recovery', restoreSectionRef]
+  ];
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="grid gap-5 pb-24" data-backup-storage-root>
       <section className="surface admin-control-card p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
             <div className="admin-control-icon"><DatabaseBackup className="h-5 w-5" /></div>
             <div>
-              <h2 className="text-2xl font-black">Backup & Storage</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 muted">Backups include MongoDB collections, uploaded images, and generated PDFs.</p>
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-400">
+                <span>Settings</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span>System</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span className="text-[var(--brand)]">Backup & Storage</span>
+              </div>
+              <h2 className="text-2xl font-black tracking-tight sm:text-3xl">Backup & Storage</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage storage usage, create backups, export data, and restore system data safely.</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -2108,106 +2353,255 @@ function BackupStorageSection({ onDirtyChange = null }) {
               {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseBackup className="h-4 w-4" />}
               Backup Now
             </button>
-            <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || working} onClick={() => latestBackup?.id ? downloadBackup(latestBackup.id) : createBackup(true)}>
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || working} onClick={() => createBackup(true)}>
               <Download className="h-4 w-4" />
               Export Data
             </button>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <AdminMetricCard icon={HardDrive} label="Storage Used" value={formatBytes(storage.storageUsed)} helper="Uploads, PDFs, backups" tone="blue" />
-          <AdminMetricCard icon={FileText} label="Uploaded Documents" value={formatBytes(storage.uploadedDocumentsStorage)} helper={`${storage.uploadedDocumentCount || 0} generated PDFs`} tone="cyan" />
-          <AdminMetricCard icon={ImageUp} label="Image Uploads" value={formatBytes(storage.imageUploadStorage)} helper={`${storage.imageUploadCount || 0} uploaded images`} tone="green" />
-          <AdminMetricCard icon={DatabaseBackup} label="Backup Files" value={formatBytes(storage.backupStorage)} helper={`${storage.backupCount || 0} backup bundles`} tone="amber" />
-        </div>
-
-        <form className="mt-6 grid gap-4 rounded-card border border-white/10 bg-white/[0.035] p-4 lg:grid-cols-2" onSubmit={saveSettings}>
-          <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
-            <span>
-              <span className="block font-bold text-slate-100">Automatic backup</span>
-              <span className="mt-1 block text-xs muted">Stores the preference for scheduled backup automation.</span>
-            </span>
-            <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={settings.automaticBackupEnabled} disabled={!canEdit || saving} onChange={(event) => setSettings((current) => ({ ...current, automaticBackupEnabled: event.target.checked }))} />
-          </label>
-          <label>
-            <span className="label">Backup frequency</span>
-            <select className="input" value={settings.backupFrequency} disabled={!canEdit || saving} onChange={(event) => setSettings((current) => ({ ...current, backupFrequency: event.target.value }))}>
-              <option>Daily</option>
-              <option>Weekly</option>
-              <option>Monthly</option>
-            </select>
-          </label>
-          <div className="flex flex-col-reverse gap-2 lg:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm muted">Last backup: {saved.lastBackupAt ? formatDate(saved.lastBackupAt) : 'No backup yet'}</p>
-            <button className="btn btn-primary" disabled={!canEdit || !dirty || saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save Backup Settings
+            <button type="button" className="btn btn-secondary admin-compact-button" onClick={showHelp}>
+              <Info className="h-4 w-4" />
+              Help
             </button>
           </div>
-        </form>
-
-        <section className="mt-6 rounded-card border border-rose-300/20 bg-rose-500/10 p-4">
-          <div className="flex items-start gap-3">
-            <ArchiveRestore className="mt-1 h-5 w-5 text-rose-100" />
-            <div className="min-w-0 flex-1">
-              <h3 className="font-black text-rose-50">Restore Backup</h3>
-              <p className="mt-1 text-sm leading-6 text-rose-100/85">Restore validates the ZIP and manifest first. Confirming restore creates a pre-restore backup before replacing data and files.</p>
-              <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-                <input className="input" type="file" accept=".zip,application/zip" disabled={!canEdit || working} onChange={(event) => setRestoreFile(event.target.files?.[0] || null)} />
-                <button type="button" className="btn btn-secondary" disabled={!canEdit || working || !restoreFile} onClick={validateRestore}>
-                  {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArchiveRestore className="h-4 w-4" />}
-                  Validate Restore
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
+        </div>
+        {!canEdit ? (
+          <p className="mt-4 rounded-card border border-amber-300/25 bg-amber-500/10 p-3 text-sm font-semibold text-amber-100">
+            Backup and restore actions are available only to Admin or Super Admin users with backup storage permission.
+          </p>
+        ) : null}
+        <div className="mt-5 flex flex-wrap gap-2">
+          {quickNavItems.map(([label, ref]) => (
+            <button key={label} type="button" className="btn btn-secondary admin-table-button" onClick={() => scrollToSection(ref)}>
+              {label}
+            </button>
+          ))}
+        </div>
       </section>
 
-      <aside className="surface admin-control-card p-5">
-        <h3 className="text-xl font-black">Recent Backups</h3>
-        <div className="admin-table-wrap mt-4">
-          {(data?.records || []).length ? (
-            <table className="data-table">
-              <thead><tr><th>Date</th><th>Type</th><th>Size</th><th>Status</th><th>Created By</th><th className="text-center">Actions</th></tr></thead>
-              <tbody>
-                {data.records.map((record) => (
-                  <tr key={record.id}>
-                    <td>{record.createdAt ? formatDate(record.createdAt) : '-'}</td>
-                    <td>{titleCase(record.kind)}</td>
-                    <td>{formatBytes(record.size)}</td>
-                    <td>{titleCase(record.status)}</td>
-                    <td>{record.createdBy?.name || record.createdBy?.username || 'System'}</td>
-                    <td>
-                      <div className="flex flex-wrap justify-center gap-2">
-                        <button type="button" className="btn btn-secondary admin-table-button" disabled={!canEdit || working} onClick={() => downloadBackup(record.id)}>Download</button>
-                        <button type="button" className="btn btn-secondary admin-table-button" disabled={!canEdit || working} onClick={() => validateExistingBackup(record.id)}>Restore</button>
-                        <button type="button" className="btn btn-secondary admin-table-button text-rose-100" disabled={!canEdit || working} onClick={() => setDeleteBackupCandidate(record)}>Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : <p className="rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm muted">No backup files yet.</p>}
+      <section ref={storageOverviewRef}>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <AdminMetricCard icon={HardDrive} label="Storage Used" value={formatBytes(storage.storageUsed)} helper="Uploads, PDFs, backups" tone="blue" />
+          <AdminMetricCard icon={FileText} label="Uploaded Documents" value={formatBytes(storage.uploadedDocumentsStorage)} helper={`${storage.uploadedDocumentCount || 0} generated PDFs`} tone="cyan" actionLabel="View Documents" onAction={() => navigate('/admin/documents')} />
+          <AdminMetricCard icon={ImageUp} label="Image Uploads" value={formatBytes(storage.imageUploadStorage)} helper={`${storage.imageUploadCount || 0} uploaded images`} tone="green" actionLabel="View Images" onAction={() => onOpenTab ? onOpenTab('publicWebsite') : push('Open Public Website Settings to review uploaded images.', 'info')} />
+          <AdminMetricCard icon={DatabaseBackup} label="Backup Files" value={formatBytes(storage.backupStorage)} helper={`${storage.backupCount || 0} backup bundles`} tone="amber" actionLabel="View Backups" onAction={() => recentBackupsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
         </div>
-      </aside>
+      </section>
 
-      {restoreValidation ? (
-        <ConfirmModal
-          title="Restore backup?"
-          message={`This will restore ${restoreValidation.summary?.collections || 0} collections, ${restoreValidation.summary?.uploadFiles || 0} uploaded files, and ${restoreValidation.summary?.pdfFiles || 0} PDF files. A pre-restore backup will be created first.`}
-          confirmLabel="Restore Backup"
-          onCancel={() => setRestoreValidation(null)}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="grid min-w-0 gap-5">
+          <section ref={backupSettingsRef} className="surface admin-control-card p-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="admin-control-icon"><Settings2 className="h-5 w-5" /></div>
+                <div>
+                  <h3 className="text-xl font-black">Backup Settings</h3>
+                  <p className="mt-2 text-sm leading-6 muted">Automatic backups help protect your system data daily/weekly.</p>
+                </div>
+              </div>
+            </div>
+
+            <form className="mt-5 grid gap-4 lg:grid-cols-2" onSubmit={saveSettings}>
+              <div className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
+                <span>
+                  <span className="block font-bold text-slate-100">Automatic Backup</span>
+                  <span className="mt-1 block text-xs muted">Turn on scheduled backup protection.</span>
+                </span>
+                <label className={`flex items-center gap-3 ${!canEdit || saving ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={settings.automaticBackupEnabled}
+                    disabled={!canEdit || saving}
+                    onChange={(event) => setSettings((current) => ({ ...current, automaticBackupEnabled: event.target.checked }))}
+                  />
+                  <span
+                    role="switch"
+                    aria-checked={settings.automaticBackupEnabled}
+                    className={`relative h-8 w-16 rounded-full border transition duration-200 ${settings.automaticBackupEnabled ? 'border-sky-300/45 bg-sky-400/25 shadow-[0_0_22px_rgba(56,189,248,0.18)]' : 'border-white/10 bg-slate-950/45'}`}
+                  >
+                    <span className={`absolute top-1 h-6 w-6 rounded-full transition-all duration-200 ${settings.automaticBackupEnabled ? 'left-9 bg-sky-200 shadow-[0_0_18px_rgba(186,230,253,0.42)]' : 'left-1 bg-slate-500/90'}`} />
+                  </span>
+                  <span className={`min-w-8 text-xs font-black uppercase ${settings.automaticBackupEnabled ? 'text-sky-100' : 'text-slate-300'}`}>{settings.automaticBackupEnabled ? 'ON' : 'OFF'}</span>
+                </label>
+              </div>
+              <label>
+                <span className="label">Backup Frequency</span>
+                <select className="input" value={settings.backupFrequency} disabled={!canEdit || saving} onChange={(event) => setSettings((current) => ({ ...current, backupFrequency: event.target.value }))}>
+                  <option>Daily</option>
+                  <option>Weekly</option>
+                  <option>Monthly</option>
+                </select>
+              </label>
+              <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
+                <p className="text-xs font-black uppercase text-slate-400">Next backup date/time</p>
+                <p className="mt-1 font-bold text-slate-100">{nextBackup}</p>
+              </div>
+              <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
+                <p className="text-xs font-black uppercase text-slate-400">Last backup status</p>
+                <p className="mt-1 font-bold text-slate-100">{lastBackupStatus}</p>
+                <p className="mt-1 text-xs muted">{saved.lastBackupAt ? formatDate(saved.lastBackupAt) : 'No backup yet'}</p>
+              </div>
+              <div className="flex flex-col-reverse gap-2 lg:col-span-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm muted">Save changes after updating automatic backup preferences.</p>
+                <button className="btn btn-primary" disabled={!canEdit || !dirty || saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save Backup Settings
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section ref={restoreSectionRef} className="surface admin-control-card border-rose-300/20 p-5">
+            <div className="flex items-start gap-3">
+              <div className="grid h-11 w-11 flex-none place-items-center rounded-full border border-rose-300/25 bg-rose-500/10 text-rose-100">
+                <ArchiveRestore className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-xl font-black text-rose-50">Restore / Data Recovery</h3>
+                <div className="mt-2 flex items-start gap-3 rounded-card border border-rose-300/40 bg-rose-500/10 p-3 text-sm font-semibold leading-6 text-rose-100 shadow-[0_0_28px_rgba(244,63,94,0.12)]">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 flex-none text-rose-100" />
+                  <p>Restoring backup will replace current data. Create a backup before restoring. This action cannot be undone.</p>
+                </div>
+              </div>
+            </div>
+
+            {selectedRestoreBackup ? (() => {
+              const meta = backupMetadata(selectedRestoreBackup);
+              return (
+                <div className="mt-5 rounded-card border border-sky-300/25 bg-sky-400/10 p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black uppercase tracking-wide text-sky-100">Selected Backup</p>
+                      <h4 className="mt-1 font-black text-slate-50">{backupDisplayTitle(selectedRestoreBackup)}</h4>
+                      <p className="mt-1 text-sm muted">{meta.date} <span aria-hidden="true">&bull;</span> {meta.size} <span aria-hidden="true">&bull;</span> Created by {meta.createdBy}</p>
+                    </div>
+                    <span className="admin-premium-badge">{validationLabel}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" className="btn btn-secondary admin-table-button" disabled={working} onClick={resetRestoreFlow}>
+                      Change Backup
+                    </button>
+                    <button type="button" className="btn btn-secondary admin-table-button" disabled={!canEdit || working} onClick={() => validateExistingBackup(selectedRestoreBackup.id)}>
+                      {restoreValidationStatus === 'validating' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                      Validate Backup
+                    </button>
+                  </div>
+                  <BackupFileDetails record={selectedRestoreBackup} />
+                </div>
+              );
+            })() : null}
+
+            <ol className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {restoreSteps.map(([step, label, Icon]) => (
+                <li key={step} className="rounded-card border border-white/10 bg-white/[0.035] p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded-full bg-sky-400/15 text-xs font-black text-sky-100">{step}</span>
+                    <Icon className="h-4 w-4 text-[var(--brand)]" />
+                  </div>
+                  <p className="mt-2 text-sm font-bold text-slate-100">{label}</p>
+                </li>
+              ))}
+            </ol>
+
+            <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
+              {selectedRestoreBackup ? (
+                <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
+                  <p className="text-xs font-black uppercase tracking-wide text-slate-400">Restore source</p>
+                  <p className="mt-1 text-sm font-bold text-slate-100">Using selected Recent Backups file.</p>
+                </div>
+              ) : (
+                <label className="min-w-0">
+                  <span className="label">Select Backup File (ZIP)</span>
+                  <input key={restoreFileInputKey} className="input" type="file" accept=".zip" disabled={!canEdit || working} onChange={handleRestoreFileChange} />
+                  <span className="mt-1 block break-words text-xs muted">{restoreSourceLabel || restoreFile?.name || 'Choose a Universal Systems backup .zip file.'}</span>
+                </label>
+              )}
+              <div className={`rounded-card border p-3 ${validationTone}`}>
+                <p className="text-xs font-black uppercase tracking-wide opacity-80">Validation status</p>
+                <div className="mt-2 flex items-center gap-2 font-black">
+                  {restoreValidationStatus === 'validating' ? <Loader2 className="h-4 w-4 animate-spin" /> : restoreValidationStatus === 'verified' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                  {validationLabel}
+                </div>
+                {restoreValidation?.summary ? (
+                  <p className="mt-2 text-xs leading-5 opacity-85">
+                    {restoreValidation.summary.collections || 0} collections, {restoreValidation.summary.uploadFiles || 0} uploaded files, {restoreValidation.summary.pdfFiles || 0} PDF files.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" className="btn btn-secondary" disabled={working && restoreValidationStatus === 'validating'} onClick={resetRestoreFlow}>
+                Cancel
+              </button>
+              {!selectedRestoreBackup ? <button type="button" className="btn btn-secondary" disabled={!canEdit || working || !restoreFile} onClick={validateRestore}>
+                {restoreValidationStatus === 'validating' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                Validate Backup
+              </button> : null}
+              <button type="button" className="btn btn-danger" disabled={!canEdit || working || !restoreReady} onClick={showRestoreConfirmation}>
+                <ArchiveRestore className="h-4 w-4" />
+                Start Restore
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <aside ref={recentBackupsRef} className="surface admin-control-card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-black">Recent Backups</h3>
+              <p className="mt-1 text-sm muted">Recent backup files available for download or restore validation.</p>
+            </div>
+            <DatabaseBackup className="h-5 w-5 text-[var(--brand)]" />
+          </div>
+          <div className="mt-4 grid gap-3">
+            {records.length ? records.map((record) => {
+              const meta = backupMetadata(record);
+              return (
+                <article key={record.id} className="rounded-card border border-white/10 bg-white/[0.035] p-3" title={record.filename || ''}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-black text-slate-100">{backupDisplayTitle(record)}</p>
+                      <p className="mt-1 text-xs muted">
+                        {meta.date} <span aria-hidden="true">&bull;</span> {meta.size} <span aria-hidden="true">&bull;</span> Created by {meta.createdBy}
+                      </p>
+                    </div>
+                    <span className="admin-premium-badge">{titleCase(record.status)}</span>
+                  </div>
+                  <BackupFileDetails record={record} />
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <button type="button" className="btn btn-secondary admin-table-button w-full justify-center" disabled={!canEdit || working} onClick={() => downloadBackup(record.id)}>Download</button>
+                    <button type="button" className="btn btn-secondary admin-table-button w-full justify-center" disabled={!canEdit || working} onClick={() => selectExistingBackupForRestore(record)}>Use for Restore</button>
+                    <button type="button" className="btn btn-secondary admin-table-button w-full justify-center text-rose-100" disabled={!canEdit || working} onClick={() => setDeleteBackupCandidate(record)}>Delete</button>
+                  </div>
+                </article>
+              );
+            }) : (
+              <div className="rounded-card border border-dashed border-white/15 bg-white/[0.035] p-5 text-center">
+                <DatabaseBackup className="mx-auto h-9 w-9 text-[var(--brand)]" />
+                <p className="mt-3 font-black text-slate-100">No backup files yet.</p>
+                <p className="mt-2 text-sm leading-6 muted">Create your first backup to enable restore options.</p>
+              </div>
+            )}
+          </div>
+        </aside>
+      </div>
+
+      {restoreConfirmOpen ? (
+        <RestoreConfirmationModal
+          confirmText={restoreConfirmText}
+          working={working}
+          onChange={setRestoreConfirmText}
+          onCancel={() => {
+            if (working) return;
+            setRestoreConfirmOpen(false);
+            setRestoreConfirmText('');
+          }}
           onConfirm={confirmRestore}
         />
       ) : null}
       {deleteBackupCandidate ? (
-        <ConfirmModal
-          title="Delete backup?"
-          message={`Delete ${deleteBackupCandidate.filename || 'this backup'}? This removes the backup ZIP file and its record.`}
-          confirmLabel="Delete Backup"
+        <DeleteBackupModal
+          working={working}
           onCancel={() => setDeleteBackupCandidate(null)}
           onConfirm={() => deleteBackup(deleteBackupCandidate)}
         />
@@ -2823,6 +3217,19 @@ export function SystemSettingsPage() {
     setDirtyTabs((current) => ({ ...current, [activeTab]: false }));
   }
 
+  function scrollSettingsContentToTop() {
+    requestAnimationFrame(() => {
+      const main = document.querySelector('.enterprise-main');
+      const backupRoot = document.querySelector('[data-backup-storage-root]');
+      if (backupRoot && typeof backupRoot.scrollIntoView === 'function') {
+        backupRoot.scrollIntoView({ block: 'start', behavior: 'auto' });
+        return;
+      }
+      if (main && typeof main.scrollTo === 'function') main.scrollTo({ top: 0, behavior: 'auto' });
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    });
+  }
+
   function changeTab(tabId) {
     if (tabId === activeTab && !comingSoonModule) return;
     if (!canLeaveActiveTab()) return;
@@ -2872,6 +3279,10 @@ export function SystemSettingsPage() {
   useEffect(() => {
     setTabDirty('preferences', stableJson(preferences) !== stableJson(savedPreferences));
   }, [preferences, savedPreferences, setTabDirty]);
+
+  useEffect(() => {
+    if (activeTab === 'backupStorage') scrollSettingsContentToTop();
+  }, [activeTab]);
 
   function savePreferences() {
     setSavedPreferences(preferences);
@@ -2966,7 +3377,7 @@ export function SystemSettingsPage() {
         ) : null}
 
         {activeTab === 'backupStorage' ? (
-          <BackupStorageSection onDirtyChange={(dirty) => setTabDirty('backupStorage', dirty)} />
+          <BackupStorageSection onDirtyChange={(dirty) => setTabDirty('backupStorage', dirty)} onOpenTab={changeTab} />
         ) : null}
 
         {activeTab === 'documentNumbering' ? (

@@ -17,7 +17,7 @@ const BACKUP_VERSION = 1;
 const RESTORE_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 function assertAdmin(user) {
-  if (!hasRole(user, 'admin')) throw appError('Only admin users can manage backups', 403);
+  if (!hasRole(user, 'admin') && !hasRole(user, 'super_admin')) throw appError('Only Admin or Super Admin users can manage backups', 403);
 }
 
 function backupFilename(kind = 'manual') {
