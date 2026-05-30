@@ -2060,8 +2060,6 @@ function BackupStorageSection({ onDirtyChange = null, onOpenTab = null }) {
   const { request, token, user } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
-  const storageOverviewRef = useRef(null);
-  const backupSettingsRef = useRef(null);
   const recentBackupsRef = useRef(null);
   const restoreSectionRef = useRef(null);
   const canEdit = isBackupAdminUser(user) && can(user, 'manage_backup_storage');
@@ -2271,10 +2269,6 @@ function BackupStorageSection({ onDirtyChange = null, onOpenTab = null }) {
     push('Validate a backup ZIP before restore. A pre-restore backup is created automatically before data is replaced.', 'info');
   }
 
-  function scrollToSection(ref) {
-    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
   async function deleteBackup(record) {
     if (!record?.id) return;
     setWorking(true);
@@ -2323,15 +2317,8 @@ function BackupStorageSection({ onDirtyChange = null, onOpenTab = null }) {
     ['3', 'Create pre-restore backup', DatabaseBackup],
     ['4', 'Confirm restore', ArchiveRestore]
   ];
-  const quickNavItems = [
-    ['Storage Overview', storageOverviewRef],
-    ['Backup Settings', backupSettingsRef],
-    ['Recent Backups', recentBackupsRef],
-    ['Restore / Data Recovery', restoreSectionRef]
-  ];
-
   return (
-    <div className="grid gap-5 pb-24" data-backup-storage-root>
+    <div className="grid gap-5 pb-32" data-backup-storage-root>
       <section className="surface admin-control-card p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
@@ -2368,16 +2355,9 @@ function BackupStorageSection({ onDirtyChange = null, onOpenTab = null }) {
             Backup and restore actions are available only to Admin or Super Admin users with backup storage permission.
           </p>
         ) : null}
-        <div className="mt-5 flex flex-wrap gap-2">
-          {quickNavItems.map(([label, ref]) => (
-            <button key={label} type="button" className="btn btn-secondary admin-table-button" onClick={() => scrollToSection(ref)}>
-              {label}
-            </button>
-          ))}
-        </div>
       </section>
 
-      <section ref={storageOverviewRef}>
+      <section>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <AdminMetricCard icon={HardDrive} label="Storage Used" value={formatBytes(storage.storageUsed)} helper="Uploads, PDFs, backups" tone="blue" />
           <AdminMetricCard icon={FileText} label="Uploaded Documents" value={formatBytes(storage.uploadedDocumentsStorage)} helper={`${storage.uploadedDocumentCount || 0} generated PDFs`} tone="cyan" actionLabel="View Documents" onAction={() => navigate('/admin/documents')} />
@@ -2388,7 +2368,7 @@ function BackupStorageSection({ onDirtyChange = null, onOpenTab = null }) {
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="grid min-w-0 gap-5">
-          <section ref={backupSettingsRef} className="surface admin-control-card p-5">
+          <section className="surface admin-control-card p-5">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="flex min-w-0 items-start gap-3">
                 <div className="admin-control-icon"><Settings2 className="h-5 w-5" /></div>
@@ -2473,6 +2453,7 @@ function BackupStorageSection({ onDirtyChange = null, onOpenTab = null }) {
                       <p className="text-xs font-black uppercase tracking-wide text-sky-100">Selected Backup</p>
                       <h4 className="mt-1 font-black text-slate-50">{backupDisplayTitle(selectedRestoreBackup)}</h4>
                       <p className="mt-1 text-sm muted">{meta.date} <span aria-hidden="true">&bull;</span> {meta.size} <span aria-hidden="true">&bull;</span> Created by {meta.createdBy}</p>
+                      <p className="mt-2 text-xs font-black uppercase tracking-wide text-slate-300">Backup status: {titleCase(selectedRestoreBackup.status || 'Unknown')}</p>
                     </div>
                     <span className="admin-premium-badge">{validationLabel}</span>
                   </div>
