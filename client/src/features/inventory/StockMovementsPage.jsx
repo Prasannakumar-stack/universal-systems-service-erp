@@ -144,7 +144,7 @@ import {
 } from '../../shared/phase1Shared.jsx';
 import { can } from '../../utils/roles.js';
 
-export function StockMovementsPage() {
+export function StockMovementsPage({ embedded = false }) {
   const { request, user } = useAuth();
   const location = useLocation();
   const canEditStock = can(user, 'edit_stock');
@@ -267,7 +267,7 @@ export function StockMovementsPage() {
 
   return (
     <div className="stock-movements-page">
-      <section className="erp-page-header inventory-erp-header mb-5">
+      {!embedded ? <section className="erp-page-header inventory-erp-header mb-5">
         <div className="relative z-[1] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">Inventory Audit</p>
@@ -276,13 +276,13 @@ export function StockMovementsPage() {
           </div>
           {canExportReports ? <button type="button" className="btn btn-secondary h-10 px-4" onClick={exportCsv}><Download className="h-4 w-4" />Export CSV</button> : null}
         </div>
-      </section>
-      <div className="surface mb-5 p-3">
+      </section> : null}
+      {!embedded ? <div className="surface mb-5 p-3">
         <div className="tabs-list inventory-tabs border-b-0">
           <Link className="tab-button" to="/admin/parts">Products / Parts</Link>
           <Link className="tab-button tab-button-active" to="/admin/stock-movements">Stock Movements</Link>
         </div>
-      </div>
+      </div> : null}
       <div className="inventory-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {ledgerKpis.map((item) => <LedgerMetricCard key={item.label} {...item} />)}
       </div>
@@ -292,7 +292,7 @@ export function StockMovementsPage() {
         </div>
         <select className="input" value={movementType} onChange={(event) => setMovementType(event.target.value)}>
           <option value="">All types</option>
-          {movementTypes.map((type) => <option key={type}>{type}</option>)}
+          {movementTypes.map((type) => <option key={type} value={type}>{type === 'ADJUST' ? 'ADJUSTMENT' : type}</option>)}
         </select>
         <select className="input" value={partId} onChange={(event) => setPartId(event.target.value)}>
           <option value="">All parts</option>
@@ -345,7 +345,7 @@ export function StockMovementsPage() {
         <label>
           <span className="label">Movement Type</span>
           <select className="input" value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}>
-            {movementTypes.map((type) => <option key={type}>{type}</option>)}
+            {movementTypes.map((type) => <option key={type} value={type}>{type === 'ADJUST' ? 'ADJUSTMENT' : type}</option>)}
           </select>
         </label>
         <label>
@@ -418,12 +418,15 @@ export function StockMovementsPage() {
             {filteredMovements.map((movement) => {
               const sourceId = recordId(movement.sourceId) || movement.sourceId;
               const sourceLabel = sourceId ? `WO-${String(sourceId).slice(-6).toUpperCase()}` : '-';
+              const isPurchaseMovement = movement.sourceType === 'PurchaseImport';
+              const sourceHref = isPurchaseMovement ? `/admin/parts?tab=purchases&purchaseId=${sourceId}` : `/admin/work-orders/${sourceId}`;
+              const movementLabel = isPurchaseMovement && movement.type === 'ADD' ? 'PURCHASED' : movement.type;
               return (
                 <tr key={movement.id}>
                   <td>{formatDate(movement.createdAt)}</td>
                   <td className="font-bold">{movement.partId?.partName || '-'}</td>
                   <td>
-                    <LedgerMovementBadge type={movement.type} />
+                    <LedgerMovementBadge type={movementLabel} />
                   </td>
                   <td>
                     <div className="stock-movement-stack">
@@ -433,8 +436,8 @@ export function StockMovementsPage() {
                   </td>
                   <td>
                     <div className="stock-movement-stack">
-                      {sourceId ? <Link className="stock-source-link" to={`/admin/work-orders/${sourceId}`}>{movement.source || sourceLabel}</Link> : <span className="font-semibold text-slate-100">{movement.source || '-'}</span>}
-                      {sourceId ? <Link className="stock-source-link" to={`/admin/work-orders/${sourceId}`}>{sourceLabel}</Link> : <span className="muted">—</span>}
+                      {sourceId ? <Link className="stock-source-link" to={sourceHref}>{movement.source || sourceLabel}</Link> : <span className="font-semibold text-slate-100">{movement.source || '-'}</span>}
+                      {sourceId ? <Link className="stock-source-link" to={sourceHref}>{isPurchaseMovement ? 'Purchase Import' : sourceLabel}</Link> : <span className="muted">—</span>}
                     </div>
                   </td>
                   <td><span className="stock-movement-note" title={movement.note || '-'}>{movement.note || '-'}</span></td>
@@ -468,6 +471,7 @@ function LedgerMetricCard({ icon: Icon, label, value, helper, tone = 'blue' }) {
 function LedgerMovementBadge({ type }) {
   const tone = {
     ADD: 'border-emerald-300/25 bg-emerald-400/15 text-emerald-100',
+    PURCHASED: 'border-cyan-300/25 bg-cyan-400/15 text-cyan-100',
     USED: 'border-sky-300/25 bg-sky-400/15 text-sky-100',
     RETURN: 'border-cyan-300/25 bg-cyan-400/15 text-cyan-100',
     ADJUST: 'border-amber-300/25 bg-amber-400/15 text-amber-100',

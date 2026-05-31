@@ -27,10 +27,12 @@ import invoiceRoutes from './routes/invoiceRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import pdfTemplateRoutes from './routes/pdfTemplateRoutes.js';
 import publicWebsiteSettingsRoutes from './routes/publicWebsiteSettingsRoutes.js';
+import purchaseImportRoutes from './routes/purchaseImportRoutes.js';
 import rolePermissionRoutes from './routes/rolePermissionRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import reminderRoutes from './routes/reminderRoutes.js';
 import stockMovementRoutes from './routes/stockMovementRoutes.js';
+import supplierRoutes from './routes/supplierRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import workOrderRoutes from './routes/workOrderRoutes.js';
 
@@ -107,10 +109,12 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/pdf-templates', pdfTemplateRoutes);
+app.use('/api/purchase-imports', purchaseImportRoutes);
 app.use('/api/settings', publicWebsiteSettingsRoutes);
 app.use('/api/role-permissions', rolePermissionRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/stock-movements', stockMovementRoutes);
+app.use('/api/suppliers', supplierRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/work-orders', workOrderRoutes);
 

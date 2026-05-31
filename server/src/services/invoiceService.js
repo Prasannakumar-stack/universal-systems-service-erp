@@ -6,6 +6,7 @@ import { assertPermission } from '../permissions.js';
 import { appError, clean, numberValue } from '../utils/http.js';
 import { calculateAmcCoverageBreakdown, amcCoverageSummary } from './amcCoverageEngine.js';
 import { logAudit } from './auditService.js';
+import { allocatePurchaseUsage } from './purchaseImportService.js';
 import { applyStockMovement } from './stockMovementService.js';
 
 function invoiceNumber() {
@@ -85,7 +86,15 @@ async function applyWorkOrderInvoiceStock(workOrder, invoice, user) {
       quantity: part.quantity,
       source: invoice.invoiceNumber,
       sourceId: workOrder._id,
+      sourceType: 'WorkOrder',
       note: `Billed for ${workOrder.device}`,
+      userId: user?._id || user?.id || null
+    });
+    await allocatePurchaseUsage({
+      inventoryPartId: part.inventoryPartId,
+      workOrderId: workOrder._id,
+      workOrderPartId: part._id,
+      quantity: part.quantity,
       userId: user?._id || user?.id || null
     });
     part.stockDeducted = true;

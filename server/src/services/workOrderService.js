@@ -11,6 +11,7 @@ import { addDateRange, paginationMeta, parsePagination, searchRegex, validObject
 import { logAudit } from './auditService.js';
 import { AUTO_AMC_PART_CHARGE_MODE, AUTO_AMC_PART_CHARGE_TYPE, MANUAL_AMC_PART_CHARGE_MODE, amcPartChargeType } from './amcCoverageEngine.js';
 import { createNotification } from './notificationService.js';
+import { allocatePurchaseUsage, releasePurchaseUsage } from './purchaseImportService.js';
 import { applyStockMovement, syncPartAvailability } from './stockMovementService.js';
 import { technicianCanAccessWorkOrder, technicianWorkOrderScope } from './technicianScopeService.js';
 
@@ -136,7 +137,7 @@ async function assertInventoryStockAvailable(inventoryPartId, quantity) {
   return part;
 }
 
-async function deductPartsUsedStock({ workOrder, inventoryPartId, name, quantity, user }) {
+async function deductPartsUsedStock({ workOrder, inventoryPartId, workOrderPartId, name, quantity, user }) {
   const qty = Math.max(1, numberValue(quantity, 1));
   await assertInventoryStockAvailable(inventoryPartId, qty);
   await applyStockMovement({
@@ -145,9 +146,19 @@ async function deductPartsUsedStock({ workOrder, inventoryPartId, name, quantity
     quantity: qty,
     source: workOrderStockSource(workOrder),
     sourceId: workOrder._id,
+    sourceType: 'WorkOrder',
     note: `Parts Used: ${workOrder.device || name}`,
     userId: user._id
   });
+  if (workOrderPartId) {
+    await allocatePurchaseUsage({
+      inventoryPartId,
+      workOrderId: workOrder._id,
+      workOrderPartId,
+      quantity: qty,
+      userId: user._id
+    });
+  }
   workOrder.timeline.push({
     status: workOrder.status,
     message: `Stock deducted: ${name} x${qty} added to Parts Used`,
@@ -155,7 +166,7 @@ async function deductPartsUsedStock({ workOrder, inventoryPartId, name, quantity
   });
 }
 
-async function restorePartsUsedStock({ workOrder, inventoryPartId, name, quantity, user }) {
+async function restorePartsUsedStock({ workOrder, inventoryPartId, workOrderPartId, name, quantity, user }) {
   const qty = Math.max(1, numberValue(quantity, 1));
   await applyStockMovement({
     partId: inventoryPartId,
@@ -163,9 +174,18 @@ async function restorePartsUsedStock({ workOrder, inventoryPartId, name, quantit
     quantity: qty,
     source: workOrderStockSource(workOrder),
     sourceId: workOrder._id,
+    sourceType: 'WorkOrder',
     note: `Parts Used: ${workOrder.device || name}`,
     userId: user._id
   });
+  if (workOrderPartId) {
+    await releasePurchaseUsage({
+      inventoryPartId,
+      workOrderId: workOrder._id,
+      workOrderPartId,
+      quantity: qty
+    });
+  }
   workOrder.timeline.push({
     status: workOrder.status,
     message: `Stock restored: ${name} x${qty} removed from Parts Used`,
@@ -449,8 +469,8 @@ export async function addPart(id, payload, user) {
   }
 
   if (inventoryPartId && stockQtyToDeduct > 0) {
-    await deductPartsUsedStock({ workOrder, inventoryPartId, name, quantity: stockQtyToDeduct, user });
     const row = findUsedInventoryRow(workOrder, inventoryPartId, chargeType);
+    await deductPartsUsedStock({ workOrder, inventoryPartId, workOrderPartId: row?._id, name, quantity: stockQtyToDeduct, user });
     if (row) markPartStockDeducted(row);
   }
 
@@ -497,6 +517,7 @@ export async function updatePart(id, partId, payload, user) {
       await deductPartsUsedStock({
         workOrder,
         inventoryPartId: part.inventoryPartId,
+        workOrderPartId: part._id,
         name: part.name,
         quantity: delta,
         user
@@ -505,6 +526,7 @@ export async function updatePart(id, partId, payload, user) {
       await restorePartsUsedStock({
         workOrder,
         inventoryPartId: part.inventoryPartId,
+        workOrderPartId: part._id,
         name: part.name,
         quantity: -delta,
         user
@@ -543,6 +565,7 @@ export async function removePart(id, partId, user) {
     await restorePartsUsedStock({
       workOrder,
       inventoryPartId: part.inventoryPartId,
+      workOrderPartId: part._id,
       name: part.name,
       quantity: part.quantity,
       user

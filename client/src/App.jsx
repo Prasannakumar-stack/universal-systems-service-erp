@@ -93,7 +93,7 @@ export default function App() {
           <Route path="payments" element={lazyElement(<PaymentsPage />)} />
           <Route path="parts" element={lazyElement(<InventoryPage />)} />
           <Route path="stock-management" element={<Navigate to="/admin/parts" replace />} />
-          <Route path="stock-movements" element={lazyElement(<StockMovementsPage />)} />
+          <Route path="stock-movements" element={lazyElement(<InventoryPage />)} />
           <Route path="amc-contracts" element={lazyElement(<AMCContractsPage />)} />
           <Route path="amc-schedule" element={lazyElement(<AMCSchedulePage />)} />
           <Route path="amc-renewals" element={lazyElement(<AMCRenewalsPage />)} />

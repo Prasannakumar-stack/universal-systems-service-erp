@@ -143,12 +143,16 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 import { can } from '../../utils/roles.js';
+import { AddStockChoiceModal, InventoryModuleTabs, PurchaseImportModal, PurchaseRegisterTab, SuppliersTab } from './PurchaseImportComponents.jsx';
+import { StockMovementsPage } from './StockMovementsPage.jsx';
 
 const inventoryUnitTypes = ['Piece', 'Box', 'Meter', 'Pack'];
 
-export function InventoryPage() {
+export function InventoryPage({ role = 'admin' }) {
   const { request, user } = useAuth();
   const { push } = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
   const canCreatePart = can(user, 'create_part');
   const canEditStock = can(user, 'edit_stock');
   const canViewStockMovements = can(user, 'view_stock_movements');
@@ -160,8 +164,18 @@ export function InventoryPage() {
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState(null);
   const [quickStockPart, setQuickStockPart] = useState(null);
+  const [stockChoicePart, setStockChoicePart] = useState(null);
+  const [purchasePart, setPurchasePart] = useState(null);
   const [deletePart, setDeletePart] = useState(null);
   const limit = 10;
+  const isTechnician = role === 'technician';
+  const requestedTab = useMemo(() => new URLSearchParams(location.search).get('tab') || '', [location.search]);
+  const activeTab = useMemo(() => {
+    if (isTechnician) return 'parts';
+    if (location.pathname.includes('/stock-movements')) return 'stock-movements';
+    if (['stock-movements', 'purchases', 'suppliers'].includes(requestedTab)) return requestedTab;
+    return 'parts';
+  }, [isTechnician, location.pathname, requestedTab]);
   const debouncedSearch = useDebouncedValue(search);
   const query = useMemo(() => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
@@ -308,15 +322,18 @@ export function InventoryPage() {
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Inventory / Stock Management</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Track stock availability, reserved quantity, low stock, value, and movement history.</p>
           </div>
-          {canCreatePart ? <button type="button" className="btn btn-primary h-10 px-4" onClick={() => setEditor({})}><Plus className="h-4 w-4" />Add Part</button> : null}
+          {canCreatePart && activeTab === 'parts' ? <button type="button" className="btn btn-primary h-10 px-4" onClick={() => setEditor({})}><Plus className="h-4 w-4" />Add Part</button> : null}
         </div>
       </section>
-      <div className="surface mb-5 p-3">
-        <div className="tabs-list inventory-tabs border-b-0">
-          <Link className="tab-button tab-button-active" to="/admin/parts">Products / Parts</Link>
-          {canViewStockMovements ? <Link className="tab-button" to="/admin/stock-movements">Stock Movements</Link> : null}
-        </div>
-      </div>
+      {!isTechnician ? <InventoryModuleTabs activeTab={activeTab} canViewStockMovements={canViewStockMovements} /> : null}
+      {activeTab === 'stock-movements' ? (
+        <StockMovementsPage embedded />
+      ) : activeTab === 'purchases' ? (
+        <PurchaseRegisterTab parts={parts} onPartsChanged={() => reload({ silent: true })} />
+      ) : activeTab === 'suppliers' ? (
+        <SuppliersTab />
+      ) : (
+      <>
       <div className="inventory-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         {inventoryKpis.map((item) => <InventoryMetricCard key={item.label} {...item} />)}
       </div>
@@ -369,13 +386,17 @@ export function InventoryPage() {
             <colgroup>
               <col className="inventory-col-part" />
               <col className="inventory-col-category" />
-              <col className="inventory-col-stock" />
-              <col className="inventory-col-pricing" />
+              <col className="inventory-col-number" />
+              <col className="inventory-col-number" />
+              <col className="inventory-col-number" />
+              <col className="inventory-col-money" />
+              <col className="inventory-col-money" />
+              <col className="inventory-col-money" />
               <col className="inventory-col-low" />
               <col className="inventory-col-status" />
               <col className="inventory-col-actions" />
             </colgroup>
-            <thead><tr><th>Part / Product</th><th>Category</th><th>Stock</th><th>Pricing</th><th>Low Stock Limit</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Part / Product</th><th>Category</th><th>On Hand</th><th>Reserved</th><th>Available</th><th>Selling Price</th><th>Cost Price</th><th>Stock Value</th><th>Low Stock Limit</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody className="divide-y divide-[var(--line)]">
               {filteredParts.map((part) => {
                 const stockValue = Number(part.onHand || 0) * Number(part.costPrice || 0);
@@ -387,20 +408,12 @@ export function InventoryPage() {
                       <span className="block text-xs font-normal muted">{part.brand || part.sku || 'Product / part'}</span>
                     </td>
                     <td><span className="inline-flex rounded-full border border-white/10 bg-white/[0.045] px-2.5 py-1 text-xs font-bold text-slate-200">{part.category || 'General'}</span></td>
-                    <td>
-                      <div className="inventory-cell-stack">
-                        <span>On hand: {part.onHand || 0}</span>
-                        <span>Reserved: {part.reserved || 0}</span>
-                        <span className="inventory-available-value">Available: {part.available || 0}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="inventory-cell-stack">
-                        <span>Selling: {currency(part.sellingPrice)}</span>
-                        <span>Cost: {currency(part.costPrice)}</span>
-                        <span className="inventory-value-line">Value: {currency(stockValue)}</span>
-                      </div>
-                    </td>
+                    <td className="text-center font-black">{part.onHand || 0}</td>
+                    <td className="text-center font-black">{part.reserved || 0}</td>
+                    <td className="text-center font-black text-sky-100">{part.available || 0}</td>
+                    <td className="font-bold">{currency(part.sellingPrice)}</td>
+                    <td className="font-bold">{currency(part.costPrice)}</td>
+                    <td className="font-black text-sky-100">{currency(stockValue)}</td>
                     <td className="text-center font-bold">{part.lowStockLimit}</td>
                     <td>
                       <div className="grid gap-1.5">
@@ -410,9 +423,9 @@ export function InventoryPage() {
                     </td>
                     <td className="text-right">
                       <div className="inventory-actions">
-                        {canEditStock ? <button type="button" className="btn btn-primary inventory-action-button" onClick={() => setQuickStockPart(part)}><PackagePlus className="h-4 w-4" />Add Stock</button> : null}
+                        {canEditStock ? <button type="button" className="btn btn-primary inventory-action-button" onClick={() => setStockChoicePart(part)}><PackagePlus className="h-4 w-4" />Add Stock</button> : null}
                         {canEditStock ? <button type="button" className="btn btn-secondary inventory-action-button" onClick={() => setEditor(part)}><Edit3 className="h-3.5 w-3.5" />Edit</button> : null}
-                        {canViewStockMovements ? <Link className="inventory-movement-link" to={`/admin/stock-movements?partId=${part.id}`}>View Movements</Link> : null}
+                        {canViewStockMovements ? <Link className="inventory-movement-link" to={`/admin/parts?tab=stock-movements&partId=${part.id}`}>View Movements</Link> : null}
                         {canDeletePart ? <button type="button" className="icon-button inventory-delete-button text-rose-100" onClick={() => setDeletePart(part)} aria-label={`Delete ${part.partName}`}><Trash2 className="h-4 w-4" /></button> : null}
                       </div>
                     </td>
@@ -425,8 +438,33 @@ export function InventoryPage() {
         <PaginationControls pagination={pagination} onPageChange={setPage} />
         </>
       )}
+      </>
+      )}
       {(canCreatePart || canEditStock) && editor ? <InventoryPartModal part={editor} onClose={() => setEditor(null)} onSave={savePart} /> : null}
       {canEditStock && quickStockPart ? <QuickStockModal part={quickStockPart} onClose={() => setQuickStockPart(null)} onSave={addQuickStock} /> : null}
+      {canEditStock && stockChoicePart ? (
+        <AddStockChoiceModal
+          part={stockChoicePart}
+          onClose={() => setStockChoicePart(null)}
+          onManual={() => {
+            setQuickStockPart(stockChoicePart);
+            setStockChoicePart(null);
+          }}
+          onPurchase={() => {
+            setPurchasePart(stockChoicePart);
+            setStockChoicePart(null);
+            if (!isTechnician) navigate('/admin/parts?tab=purchases');
+          }}
+        />
+      ) : null}
+      {canEditStock && purchasePart ? (
+        <PurchaseImportModal
+          initialPart={purchasePart}
+          parts={parts}
+          onClose={() => setPurchasePart(null)}
+          onSaved={() => reload({ silent: true })}
+        />
+      ) : null}
       {canDeletePart && deletePart ? (
         <ConfirmModal
           title="Delete Inventory Part"
@@ -504,7 +542,7 @@ function InventoryPartModal({ part, onClose, onSave }) {
 }
 
 function QuickStockModal({ part, onClose, onSave }) {
-  const [form, setForm] = useState({ partId: part.id, type: 'ADD', quantity: 1, source: 'Purchase', note: '' });
+  const [form, setForm] = useState({ partId: part.id, type: 'ADD', quantity: 1, source: 'Manual', note: '' });
   const quantity = Number(form.quantity || 0);
   const canSave = Boolean(form.partId && form.type && form.source && quantity && (form.type === 'ADJUST' || quantity > 0));
   const movementReasons = ['Damaged item', 'Physical count correction', 'Returned by customer', 'AMC replacement', 'Wrong previous entry'];
@@ -533,7 +571,7 @@ function QuickStockModal({ part, onClose, onSave }) {
           <label>
             <span className="label">Movement Type</span>
             <select className="input" value={form.type} onChange={(event) => update('type', event.target.value)}>
-              {['ADD', 'RETURN', 'ADJUST'].map((type) => <option key={type}>{type}</option>)}
+              {['ADD', 'RETURN', 'ADJUST'].map((type) => <option key={type} value={type}>{type === 'ADJUST' ? 'ADJUSTMENT' : type}</option>)}
             </select>
           </label>
           <label><span className="label">Quantity</span><input className="input" type="number" min={form.type === 'ADJUST' ? undefined : '1'} value={form.quantity} onChange={(event) => update('quantity', event.target.value)} /></label>

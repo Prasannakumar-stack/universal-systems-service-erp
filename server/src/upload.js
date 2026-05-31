@@ -7,6 +7,8 @@ const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const allowedExts = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const allowedLogoMimeTypes = new Set([...allowedMimeTypes, 'image/svg+xml']);
 const allowedLogoExts = new Set([...allowedExts, '.svg']);
+const allowedPurchaseBillMimeTypes = new Set([...allowedMimeTypes, 'application/pdf']);
+const allowedPurchaseBillExts = new Set([...allowedExts, '.pdf']);
 const allowedBackupMimeTypes = new Set(['application/zip', 'application/zip-compressed', 'application/x-zip-compressed', 'application/octet-stream']);
 
 function safeOriginalName(name = '') {
@@ -45,6 +47,17 @@ export const bookingUpload = multer({
 
 export const workOrderUpload = bookingUpload;
 export const websiteSettingsUpload = bookingUpload;
+export const purchaseBillUpload = multer({
+  storage,
+  limits: {
+    fileSize: 8 * 1024 * 1024
+  },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (allowedPurchaseBillMimeTypes.has(file.mimetype) && allowedPurchaseBillExts.has(ext)) return cb(null, true);
+    cb(new Error('Only PDF, JPG, JPEG, PNG, and WEBP bill files are allowed'));
+  }
+});
 export const companyLogoUpload = multer({
   storage,
   limits: {

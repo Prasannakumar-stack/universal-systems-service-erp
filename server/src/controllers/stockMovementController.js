@@ -25,6 +25,7 @@ export async function list(req, res) {
           { source: regex },
           { note: regex },
           { type: regex },
+          { sourceType: regex },
           { partId: { $in: parts.map((item) => item._id) } },
           { userId: { $in: users.map((item) => item._id) } }
         ]
@@ -78,6 +79,7 @@ export async function create(req, res) {
     quantity: req.body.quantity,
     source: req.body.source,
     sourceId: req.body.sourceId,
+    sourceType: req.body.sourceType,
     note: req.body.note,
     userId: req.user._id
   });

@@ -1,12 +1,12 @@
 import { useId } from 'react';
 
 export const SUPPORTED_BRANDS = [
-  { key: 'dell', name: 'Dell', logo: '/brands/dell.png' },
-  { key: 'hp', name: 'HP', logo: '/brands/hp.png' },
-  { key: 'lenovo', name: 'Lenovo', logo: '/brands/lenovo.png' },
-  { key: 'epson', name: 'Epson', logo: '/brands/epson.png' },
-  { key: 'canon', name: 'Canon', logo: '/brands/canon.png' },
-  { key: 'hikvision', name: 'Hikvision', logo: '/brands/hikvision.png' }
+  { key: 'dell', name: 'Dell', logo: '/brands/dell-transparent.png', width: 120, height: 40 },
+  { key: 'hp', name: 'HP', logo: '/brands/hp-transparent.png', width: 74, height: 40 },
+  { key: 'lenovo', name: 'Lenovo', logo: '/brands/lenovo-transparent.png', width: 128, height: 40 },
+  { key: 'epson', name: 'Epson', logo: '/brands/epson-transparent.png', width: 120, height: 40 },
+  { key: 'canon', name: 'Canon', logo: '/brands/canon-transparent.png', width: 128, height: 40 },
+  { key: 'hikvision', name: 'Hikvision', logo: '/brands/hikvision-transparent.png', width: 128, height: 40 }
 ];
 
 export const SUPPORTED_PUBLIC_BRANDS = SUPPORTED_BRANDS;
@@ -47,14 +47,17 @@ function resolveBrands(brands = SUPPORTED_BRANDS) {
     .filter(Boolean);
 }
 
-function BrandLogoImage({ brand }) {
+function BrandLogoImage({ brand, loading = 'lazy' }) {
   return (
     <img
       className={`brand-logo-img brand-logo-img-${brand.key}`}
       src={brand.logo}
-      alt={`${brand.name} logo`}
-      loading="lazy"
+      alt={brand.name}
+      width={brand.width}
+      height={brand.height}
+      loading={loading}
       decoding="async"
+      fetchPriority={loading === 'eager' ? 'high' : undefined}
     />
   );
 }
@@ -84,7 +87,8 @@ export function BrandLogoStrip({
   brands = SUPPORTED_BRANDS,
   size = 'medium',
   className = '',
-  as: Component = 'section'
+  as: Component = 'section',
+  logoLoading = size === 'small' ? 'lazy' : 'eager'
 }) {
   const headingId = useId();
   const resolvedBrands = resolveBrands(brands);
@@ -108,18 +112,13 @@ export function BrandLogoStrip({
               role="listitem"
               aria-label={brand.name}
             >
-              <BrandLogoImage brand={brand} />
+              <BrandLogoImage brand={brand} loading={logoLoading} />
             </span>
           ))}
         </div>
       </div>
     </Component>
   );
-}
-
-export function ServiceBrandChips({ serviceTitle }) {
-  const brands = brandNamesForService(serviceTitle);
-  return <BrandChips brands={brands} className="service-brand-chip-row" compact ariaLabel={`Supported brands for ${serviceTitle}`} />;
 }
 
 export function BookingBrandSupport({ serviceTitle }) {

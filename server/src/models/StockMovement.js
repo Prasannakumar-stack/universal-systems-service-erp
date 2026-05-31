@@ -8,6 +8,7 @@ const stockMovementSchema = new mongoose.Schema(
     balanceAfter: { type: Number, default: 0 },
     source: { type: String, trim: true, default: 'Manual' },
     sourceId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    sourceType: { type: String, enum: ['', 'Manual', 'WorkOrder', 'PurchaseImport'], default: '' },
     note: { type: String, trim: true, default: '' },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
   },
