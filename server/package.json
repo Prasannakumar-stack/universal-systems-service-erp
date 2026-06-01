@@ -7,6 +7,7 @@
     "dev": "nodemon src/index.js",
     "seed:phase2": "node src/seed/phase2Seed.js",
     "seed:phase4": "node src/seed/phase4Seed.js",
+    "seed:purchases": "node src/seed/purchaseImportSeed.js",
     "start": "node src/index.js"
   },
   "dependencies": {

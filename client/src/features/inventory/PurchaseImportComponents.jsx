@@ -6,10 +6,13 @@ import {
   Download,
   Edit3,
   Eye,
+  FileImage,
   FileSpreadsheet,
+  FileText,
   MapPin,
   PackageCheck,
   PackagePlus,
+  Phone,
   Plus,
   ReceiptText,
   Save,
@@ -76,6 +79,18 @@ function purchaseTotal(items = []) {
   return items.reduce((sum, item) => sum + Number(item.quantityReceived || 0) * Number(item.unitCost || 0), 0);
 }
 
+function fileNameFromBill(file = {}) {
+  return file.originalName || file.filename || 'Invoice bill';
+}
+
+function isImageBill(file = {}, url = '') {
+  return /^image\//i.test(file.mimetype || '') || /\.(jpe?g|png|webp|gif)$/i.test(file.originalName || file.filename || url);
+}
+
+function isPdfBill(file = {}, url = '') {
+  return /pdf/i.test(file.mimetype || '') || /\.pdf$/i.test(file.originalName || file.filename || url);
+}
+
 function localId() {
   return globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 }
@@ -122,7 +137,7 @@ function PurchaseMetricCard({ icon: Icon, label, value, helper, tone = 'blue' })
       <div className="inventory-kpi-icon"><Icon className="h-4 w-4" /></div>
       <div className="min-w-0">
         <p className="inventory-kpi-label">{label}</p>
-        <p className="inventory-kpi-value" title={String(value)}>{value}</p>
+        <p className="inventory-kpi-value purchase-metric-value" title={String(value)}>{value}</p>
         <p className="inventory-kpi-helper">{helper}</p>
       </div>
     </div>
@@ -481,7 +496,7 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
       <div className="inventory-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         {metrics.map((item) => <PurchaseMetricCard key={item.label} {...item} />)}
       </div>
-      <div className="surface inventory-filter-bar purchase-filter-bar mb-5 grid gap-3 p-4 xl:grid-cols-[minmax(280px,1fr)_180px_170px_160px_150px_150px_auto_auto]">
+      <div className="surface inventory-filter-bar purchase-filter-bar mb-5 p-4">
         <SearchBox value={search} onChange={setSearch} placeholder="Search part, supplier, invoice number, place" />
         <select className="input" value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
           <option value="">All suppliers</option>
@@ -497,7 +512,7 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
         </select>
         <input className="input" type="date" aria-label="Start date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         <input className="input" type="date" aria-label="End date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-        <button type="button" className="btn btn-secondary h-10 px-4" disabled={!hasFilters} onClick={resetFilters}>Reset</button>
+        <button type="button" className="btn btn-secondary h-10 px-4" disabled={!hasFilters} onClick={resetFilters}>Reset Filters</button>
         {canExport ? <button type="button" className="btn btn-secondary h-10 px-4" onClick={exportCsv}><Download className="h-4 w-4" />Export CSV</button> : null}
         <p className="inventory-count-pill xl:col-span-8">Showing <b>{purchases.length}</b> purchase/import record{purchases.length === 1 ? '' : 's'}</p>
       </div>
@@ -512,26 +527,38 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
         <>
           <div className="table-wrap purchase-table-wrap surface bg-[var(--surface)]">
             <table className="data-table purchase-register-table">
+              <colgroup>
+                <col className="purchase-col-index" />
+                <col className="purchase-col-invoice" />
+                <col className="purchase-col-supplier" />
+                <col className="purchase-col-place" />
+                <col className="purchase-col-date" />
+                <col className="purchase-col-status" />
+                <col className="purchase-col-payment" />
+                <col className="purchase-col-amount" />
+                <col className="purchase-col-count" />
+                <col className="purchase-col-actions" />
+              </colgroup>
               <thead>
                 <tr><th>#</th><th>Invoice / Ref No.</th><th>Supplier / Shop</th><th>Place / City</th><th>Purchase Date</th><th>Status</th><th>Payment Status</th><th>Total Amount</th><th>Items Count</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {purchases.map((purchase, index) => (
                   <tr key={rowId(purchase)} className={selectedId === rowId(purchase) ? 'purchase-row-selected' : ''}>
-                    <td>{(pagination.page - 1) * pagination.limit + index + 1}</td>
-                    <td className="font-black text-slate-50">{purchase.invoiceRef}</td>
-                    <td>
+                    <td className="purchase-cell-index">{(pagination.page - 1) * pagination.limit + index + 1}</td>
+                    <td className="purchase-cell-invoice font-black text-slate-50">{purchase.invoiceRef}</td>
+                    <td className="purchase-cell-supplier">
                       <span className="block font-bold text-slate-100">{purchase.supplierName}</span>
                       <span className="block text-xs muted">{purchase.purchaseSource || 'Supplier'}</span>
                     </td>
-                    <td>{purchase.placeCity || '-'}</td>
-                    <td>{formatDate(purchase.purchaseDate)}</td>
-                    <td><StatusBadge status={purchase.deliveryStatus} /></td>
-                    <td><StatusBadge status={purchase.paymentStatus} kind="payment" /></td>
-                    <td className="font-black">{currency(purchase.totalAmount)}</td>
-                    <td>{purchase.itemsCount || purchase.items?.length || 0}</td>
-                    <td>
-                      <div className="inventory-actions">
+                    <td className="purchase-cell-place">{purchase.placeCity || '-'}</td>
+                    <td className="purchase-cell-date">{formatDate(purchase.purchaseDate)}</td>
+                    <td className="purchase-cell-badge"><StatusBadge status={purchase.deliveryStatus} /></td>
+                    <td className="purchase-cell-badge"><StatusBadge status={purchase.paymentStatus} kind="payment" /></td>
+                    <td className="purchase-cell-money font-black">{currency(purchase.totalAmount)}</td>
+                    <td className="purchase-cell-count">{purchase.itemsCount || purchase.items?.length || 0}</td>
+                    <td className="purchase-cell-actions">
+                      <div className="inventory-actions purchase-row-actions">
                         <button type="button" className="icon-button h-8 w-8" title="View purchase" onClick={() => setSelectedId(rowId(purchase))}><Eye className="h-4 w-4" /></button>
                         {canEdit ? <button type="button" className="icon-button h-8 w-8" title="Edit purchase" onClick={() => setEditor(purchase)}><Edit3 className="h-4 w-4" /></button> : null}
                         {canDelete ? <button type="button" className="icon-button h-8 w-8 text-rose-100" title="Delete purchase" onClick={() => setDeletePurchase(purchase)}><Trash2 className="h-4 w-4" /></button> : null}
@@ -560,7 +587,7 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
       {deletePurchase ? (
         <ConfirmModal
           title="Delete Purchase / Import"
-          message={`Delete purchase ${deletePurchase.invoiceRef}? Stock will be reversed only if it has not already been used.`}
+          message="Are you sure you want to delete this purchase/import record? This may affect purchase history and stock records."
           confirmLabel="Delete"
           onCancel={() => setDeletePurchase(null)}
           onConfirm={confirmDelete}
@@ -576,10 +603,13 @@ function PurchaseDetailsPanel({ purchase, loading }) {
   }
   if (!purchase) return null;
   const usedByItem = purchase.usedByItem || {};
-  const billUrl = purchase.billFile?.url ? uploadedAssetUrl(purchase.billFile.url) : '';
+  const items = purchase.items || [];
+  const purchaseTotalAmount = Number.isFinite(Number(purchase.totalAmount))
+    ? Number(purchase.totalAmount)
+    : items.reduce((sum, item) => sum + Number(item.totalCost || 0), 0);
   return (
-    <section className="purchase-details-grid mt-5 grid gap-4 lg:grid-cols-3">
-      <article className="surface purchase-detail-card p-5">
+    <section className="purchase-details-grid mt-5">
+      <article className="surface purchase-detail-card purchase-info-card p-5">
         <div className="purchase-card-title"><ReceiptText className="h-4 w-4" />Purchase Details</div>
         <dl className="mt-4 grid gap-3 text-sm">
           <DetailRow label="Invoice / Ref No." value={purchase.invoiceRef} />
@@ -587,36 +617,34 @@ function PurchaseDetailsPanel({ purchase, loading }) {
           <DetailRow label="Contact number" value={purchase.contactNumber || '-'} />
           <DetailRow label="Place / City" value={purchase.placeCity || '-'} />
           <DetailRow label="Purchase date" value={formatDate(purchase.purchaseDate)} />
-          <div className="flex items-center justify-between gap-3"><dt className="muted">Delivery status</dt><dd><StatusBadge status={purchase.deliveryStatus} /></dd></div>
-          <div className="flex items-center justify-between gap-3"><dt className="muted">Payment status</dt><dd><StatusBadge status={purchase.paymentStatus} kind="payment" /></dd></div>
+          <DetailRow label="Delivery status" value={<StatusBadge status={purchase.deliveryStatus} />} />
+          <DetailRow label="Payment status" value={<StatusBadge status={purchase.paymentStatus} kind="payment" />} />
           <DetailRow label="Warranty" value={purchase.warrantyPeriod || '-'} />
           <DetailRow label="Notes" value={purchase.notes || '-'} />
-          <div className="flex items-center justify-between gap-3">
-            <dt className="muted">Invoice / Bill</dt>
-            <dd>{billUrl ? <a className="stock-source-link" href={billUrl} target="_blank" rel="noreferrer">Download</a> : '-'}</dd>
-          </div>
+          <DetailRow label="Invoice / Bill" value={<BillFileDisplay billFile={purchase.billFile} />} />
         </dl>
       </article>
-      <article className="surface purchase-detail-card p-5">
+      <article className="surface purchase-detail-card purchase-items-card p-5">
         <div className="purchase-card-title"><PackageCheck className="h-4 w-4" />Items in this Purchase</div>
-        <div className="purchase-mini-table mt-4">
-          <table className="data-table">
-            <thead><tr><th>Part / Product</th><th>Qty Ordered</th><th>Qty Received</th><th>Unit Cost</th><th>Total</th></tr></thead>
-            <tbody>
-              {(purchase.items || []).map((item) => (
-                <tr key={purchaseItemId(item)}>
-                  <td className="font-bold">{item.partName}</td>
-                  <td>{item.quantityOrdered}</td>
-                  <td>{item.quantityReceived}</td>
-                  <td>{currency(item.unitCost)}</td>
-                  <td className="font-black">{currency(item.totalCost)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="purchase-items-stack mt-4">
+          {items.map((item) => (
+            <div className="purchase-item-card" key={purchaseItemId(item)}>
+              <p className="purchase-item-name">{item.partName}</p>
+              <div className="purchase-item-meta">
+                <span>Ordered: <b>{item.quantityOrdered}</b></span>
+                <span>Received: <b>{item.quantityReceived}</b></span>
+                <span>Unit Cost: <b>{currency(item.unitCost)}</b></span>
+                <span>Total: <b>{currency(item.totalCost)}</b></span>
+              </div>
+            </div>
+          ))}
+          <div className="purchase-detail-total">
+            <span>Purchase Total</span>
+            <b>{currency(purchaseTotalAmount)}</b>
+          </div>
         </div>
       </article>
-      <article className="surface purchase-detail-card p-5">
+      <article className="surface purchase-detail-card purchase-usage-card p-5">
         <div className="purchase-card-title"><Truck className="h-4 w-4" />Used in Work Orders</div>
         {purchase.usage?.length ? (
           <div className="purchase-usage-list mt-4">
@@ -625,11 +653,12 @@ function PurchaseDetailsPanel({ purchase, loading }) {
               const workOrderId = rowId(workOrder);
               return (
                 <div key={rowId(usage)} className="purchase-usage-row">
-                  <div>
-                    <Link className="stock-source-link" to={`/admin/work-orders/${workOrderId}`}>{workOrderLabel(workOrderId)}</Link>
-                    <p className="mt-1 text-xs muted">{workOrder.customerId?.name || 'Customer'} • {formatDate(usage.createdAt)}</p>
+                  <div className="purchase-usage-main">
+                    <Link className="stock-source-link purchase-workorder-badge" to={`/admin/work-orders/${workOrderId}`}>{workOrderLabel(workOrderId)}</Link>
+                    <span className="purchase-usage-customer">{workOrder.customerId?.name || 'Customer'}</span>
+                    <span className="purchase-usage-date">{formatDate(usage.createdAt)}</span>
                   </div>
-                  <b>{usage.quantity}</b>
+                  <b className="purchase-usage-qty">{usage.quantity} used</b>
                 </div>
               );
             })}
@@ -641,11 +670,11 @@ function PurchaseDetailsPanel({ purchase, loading }) {
           <div className="purchase-summary-tile"><span>Total Used</span><b>{purchase.totalUsed || 0}</b></div>
           <div className="purchase-summary-tile"><span>Remaining Stock</span><b>{purchase.totalRemaining || 0}</b></div>
         </div>
-        {Object.keys(usedByItem).length ? (
-          <div className="mt-4 grid gap-2">
-            {(purchase.items || []).map((item) => (
-              <div key={purchaseItemId(item)} className="flex items-center justify-between gap-3 text-xs">
-                <span className="truncate muted">{item.partName}</span>
+        {items.length ? (
+          <div className="purchase-item-usage-list mt-4">
+            {items.map((item) => (
+              <div key={purchaseItemId(item)} className="purchase-item-usage-row">
+                <span>{item.partName}</span>
                 <b>{usedByItem[purchaseItemId(item)] || 0} used</b>
               </div>
             ))}
@@ -656,12 +685,61 @@ function PurchaseDetailsPanel({ purchase, loading }) {
   );
 }
 
+function BillFileDisplay({ billFile }) {
+  const billUrl = billFile?.url ? uploadedAssetUrl(billFile.url) : '';
+  if (!billUrl) return <span className="purchase-bill-empty">No bill uploaded</span>;
+
+  const name = fileNameFromBill(billFile);
+  const imageBill = isImageBill(billFile, billUrl);
+  const Icon = imageBill ? FileImage : isPdfBill(billFile, billUrl) ? FileText : ReceiptText;
+  return (
+    <div className="purchase-bill-file">
+      <div className="purchase-bill-preview" aria-hidden="true">
+        {imageBill ? <img src={billUrl} alt="" /> : <Icon className="h-5 w-5" />}
+      </div>
+      <div className="purchase-bill-main">
+        <span className="purchase-bill-name" title={name}>{name}</span>
+        <span className="purchase-bill-meta">{imageBill ? 'Image bill' : isPdfBill(billFile, billUrl) ? 'PDF bill' : 'Bill file'}</span>
+      </div>
+      <div className="purchase-bill-actions">
+        <a className="stock-source-link" href={billUrl} target="_blank" rel="noreferrer">View</a>
+        <a className="stock-source-link" href={billUrl} download={name}>Download</a>
+      </div>
+    </div>
+  );
+}
+
 function DetailRow({ label, value }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <dt className="muted">{label}</dt>
-      <dd className="max-w-[60%] text-right font-bold text-slate-100">{value}</dd>
+    <div className="purchase-detail-row">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
     </div>
+  );
+}
+
+function SupplierNameCell({ supplier }) {
+  return (
+    <div className="supplier-name-stack">
+      <span className="supplier-name-title">{supplier.name}</span>
+      <span className="supplier-phone-line">
+        <Phone className="h-3.5 w-3.5" />
+        {supplier.phone || 'Not provided'}
+      </span>
+    </div>
+  );
+}
+
+function SupplierPartsList({ parts = [] }) {
+  const safeParts = Array.isArray(parts) ? parts.filter(Boolean) : [];
+  if (!safeParts.length) return <span className="supplier-parts-empty">-</span>;
+  const visible = safeParts.slice(0, 2);
+  const remaining = safeParts.length - visible.length;
+  return (
+    <span className="supplier-parts-list" title={safeParts.join('\n')}>
+      {visible.map((part) => <span key={part} className="supplier-part-line">{part}</span>)}
+      {remaining > 0 ? <span className="supplier-parts-more">+{remaining} more</span> : null}
+    </span>
   );
 }
 
@@ -795,7 +873,7 @@ export function SuppliersTab() {
           {canEdit ? <button type="button" className="btn btn-primary h-10 px-4" onClick={() => setEditor({})}><Plus className="h-4 w-4" />Add Supplier</button> : null}
         </div>
       </section>
-      <div className="surface inventory-filter-bar mb-5 grid gap-3 p-4 lg:grid-cols-[minmax(280px,1fr)_180px_auto]">
+      <div className="surface inventory-filter-bar supplier-filter-bar mb-5 p-4">
         <SearchBox value={search} onChange={setSearch} placeholder="Search supplier, phone, city, GST" />
         <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">All statuses</option>
@@ -815,25 +893,33 @@ export function SuppliersTab() {
         <>
           <div className="table-wrap suppliers-table-wrap surface bg-[var(--surface)]">
             <table className="data-table suppliers-table">
-              <thead><tr><th>Supplier / Shop name</th><th>Phone</th><th>Place / City</th><th>Parts supplied</th><th>Total purchases</th><th>Pending payments</th><th>Last purchase date</th><th>Status</th><th>Actions</th></tr></thead>
+              <colgroup>
+                <col className="supplier-col-name" />
+                <col className="supplier-col-place" />
+                <col className="supplier-col-parts" />
+                <col className="supplier-col-total" />
+                <col className="supplier-col-pending" />
+                <col className="supplier-col-date" />
+                <col className="supplier-col-status" />
+                <col className="supplier-col-actions" />
+              </colgroup>
+              <thead><tr><th>Supplier / Shop</th><th>Place / City</th><th>Parts Supplied</th><th>Purchases</th><th>Pending Amount</th><th>Last Purchase</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
                 {suppliers.map((supplier) => (
                   <tr key={rowId(supplier)}>
-                    <td>
-                      <span className="block font-black text-slate-50">{supplier.name}</span>
-                      <span className="block text-xs muted">{supplier.email || supplier.gstNumber || 'Supplier / shop'}</span>
+                    <td className="supplier-cell-name" data-label="Supplier / Shop">
+                      <SupplierNameCell supplier={supplier} />
                     </td>
-                    <td>{supplier.phone || '-'}</td>
-                    <td>
+                    <td className="supplier-cell-place" data-label="Place / City">
                       <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{supplier.city || supplier.address || '-'}</span>
                     </td>
-                    <td><span className="stock-movement-note">{supplier.partsSupplied?.length ? supplier.partsSupplied.join(', ') : '-'}</span></td>
-                    <td className="font-bold">{supplier.totalPurchases || 0}</td>
-                    <td className="font-bold">{currency(supplier.pendingPaymentAmount || 0)}</td>
-                    <td>{supplier.lastPurchaseDate ? formatDate(supplier.lastPurchaseDate) : '-'}</td>
-                    <td><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${supplier.status === 'Active' ? 'border-emerald-300/25 bg-emerald-400/15 text-emerald-100' : 'border-slate-300/20 bg-slate-400/10 text-slate-200'}`}>{supplier.status}</span></td>
-                    <td>
-                      <div className="inventory-actions">
+                    <td className="supplier-cell-parts" data-label="Parts Supplied"><SupplierPartsList parts={supplier.partsSupplied} /></td>
+                    <td className="supplier-cell-total font-bold" data-label="Purchases">{supplier.totalPurchases || 0}</td>
+                    <td className="supplier-cell-pending font-bold" data-label="Pending Amount">{currency(supplier.pendingPaymentAmount || 0)}</td>
+                    <td className="supplier-cell-date" data-label="Last Purchase">{supplier.lastPurchaseDate ? formatDate(supplier.lastPurchaseDate) : '-'}</td>
+                    <td className="supplier-cell-status" data-label="Status"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${supplier.status === 'Active' ? 'border-emerald-300/25 bg-emerald-400/15 text-emerald-100' : 'border-slate-300/20 bg-slate-400/10 text-slate-200'}`}>{supplier.status}</span></td>
+                    <td className="supplier-cell-actions" data-label="Actions">
+                      <div className="inventory-actions supplier-row-actions">
                         {canEdit ? <button type="button" className="icon-button h-8 w-8" onClick={() => setEditor(supplier)} aria-label={`Edit ${supplier.name}`}><Edit3 className="h-4 w-4" /></button> : null}
                         {canDelete ? <button type="button" className="icon-button h-8 w-8 text-rose-100" onClick={() => setDeleteSupplier(supplier)} aria-label={`Delete ${supplier.name}`}><Trash2 className="h-4 w-4" /></button> : null}
                       </div>
@@ -850,7 +936,7 @@ export function SuppliersTab() {
       {deleteSupplier ? (
         <ConfirmModal
           title="Delete Supplier"
-          message={`Delete ${deleteSupplier.name}? Suppliers with purchase history cannot be deleted.`}
+          message="Are you sure you want to delete this supplier? Existing purchase history should remain safe."
           confirmLabel="Delete"
           onCancel={() => setDeleteSupplier(null)}
           onConfirm={confirmDelete}

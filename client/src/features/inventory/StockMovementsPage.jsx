@@ -286,7 +286,7 @@ export function StockMovementsPage({ embedded = false }) {
       <div className="inventory-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {ledgerKpis.map((item) => <LedgerMetricCard key={item.label} {...item} />)}
       </div>
-      <div className="surface inventory-filter-bar mb-5 grid items-center gap-3 p-4 xl:grid-cols-[minmax(280px,1fr)_150px_220px_155px_155px_auto]">
+      <div className="surface inventory-filter-bar stock-filter-bar mb-5 p-4">
         <div className="min-w-0">
           <SearchBox value={search} onChange={setSearch} placeholder="Search part, source, user, note" />
         </div>
