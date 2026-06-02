@@ -17,7 +17,6 @@ import {
   BookOpenCheck,
   Boxes,
   buildSevenDaySeries,
-  CalendarClock,
   callHref,
   CartesianGrid,
   CheckCircle2,
@@ -143,6 +142,7 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 import { can } from '../../utils/roles.js';
+import { AdminDateFilter } from './AdminDateFilter.jsx';
 
 export function StockMovementsPage({ embedded = false }) {
   const { request, user } = useAuth();
@@ -298,18 +298,8 @@ export function StockMovementsPage({ embedded = false }) {
           <option value="">All parts</option>
           {data.parts.map((part) => <option key={part.id} value={part.id}>{part.partName}</option>)}
         </select>
-        <label className="stock-date-filter date-input-shell relative block">
-          <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
-            <CalendarClock className="h-4 w-4" />
-          </span>
-          <input className="input pl-10" type="date" aria-label="Start date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        </label>
-        <label className="stock-date-filter date-input-shell relative block">
-          <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
-            <CalendarClock className="h-4 w-4" />
-          </span>
-          <input className="input pl-10" type="date" aria-label="End date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-        </label>
+        <AdminDateFilter className="stock-date-filter" value={dateFrom} onChange={setDateFrom} placeholder="From date" ariaLabel="Stock movement from date" />
+        <AdminDateFilter className="stock-date-filter" value={dateTo} onChange={setDateTo} placeholder="To date" ariaLabel="Stock movement to date" />
         <button
           type="button"
           className="btn btn-secondary stock-reset-filters-button h-10 whitespace-nowrap px-4"

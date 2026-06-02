@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { LOGO_FULL_PATH, LOGO_ICON_PATH } from '../config.js';
+import { drawAdvancedPdfSections } from './pdfTemplateAdvanced.js';
 
 const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
 const boldFontPath = 'C:\\Windows\\Fonts\\arialbd.ttf';
@@ -77,9 +78,10 @@ function cleanText(value, fallback = '-') {
 }
 
 function renderText(value = '', context = {}) {
-  return String(value || '').replace(/\{\{([a-z0-9_]+)\}\}/gi, (match, key) => {
-    if (Object.prototype.hasOwnProperty.call(context, key)) return context[key];
-    return match;
+  return String(value || '').replace(/\{\{([a-z0-9_]+)\}\}/gi, (_match, key) => {
+    if (!Object.prototype.hasOwnProperty.call(context, key)) return '-';
+    const next = context[key];
+    return next === undefined || next === null || next === '' ? '-' : next;
   });
 }
 
@@ -815,6 +817,7 @@ export function renderInvoicePdf(doc, options = {}) {
   const preferredFinalY = table.pageBreaks > 0 ? table.y + 6 : Math.max(ONE_PAGE_AMOUNT_Y, table.y + 6);
   const finalY = ensureFinalSectionStart(doc, preferredFinalY, title, company, config);
   drawFinalSections(doc, finalY, totals, config, context, company);
+  drawAdvancedPdfSections(doc, { config, context, title, company });
   drawPageNumbers(doc, config);
   return { subtotal, finalTotal, amountPaid, balance };
 }

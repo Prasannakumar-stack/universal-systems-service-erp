@@ -21,18 +21,37 @@ import { renderQuotationPdf, sampleQuotationData } from './quotationPdfTemplate.
 import { renderServiceCompletedPdf, sampleServiceCompletedData } from './serviceCompletedPdfTemplate.js';
 
 export const PDF_TEMPLATE_PLACEHOLDERS = [
+  '{{company_name}}',
+  '{{company_phone}}',
+  '{{company_email}}',
+  '{{company_address}}',
   '{{customer_name}}',
   '{{customer_phone}}',
   '{{customer_address}}',
+  '{{invoice_no}}',
   '{{invoice_number}}',
   '{{invoice_date}}',
+  '{{quotation_no}}',
+  '{{quotation_number}}',
+  '{{quotation_date}}',
+  '{{work_order_no}}',
   '{{work_order_id}}',
+  '{{amc_contract_no}}',
+  '{{amc_reference}}',
   '{{service_name}}',
+  '{{service_type}}',
+  '{{device}}',
+  '{{brand_model}}',
+  '{{problem_complaint}}',
   '{{technician_name}}',
   '{{total_amount}}',
+  '{{final_total}}',
+  '{{amount_paid}}',
+  '{{balance_due}}',
   '{{amc_start_date}}',
   '{{amc_end_date}}',
-  '{{next_service_date}}'
+  '{{next_service_date}}',
+  '{{current_date}}'
 ];
 
 const textFields = [
@@ -44,6 +63,22 @@ const textFields = [
   'notesWarrantyText',
   'amcTerms'
 ];
+
+const advancedSectionTypes = new Set([
+  'text',
+  'notice',
+  'warranty',
+  'terms',
+  'payment',
+  'bank',
+  'signature',
+  'qr',
+  'customer-message',
+  'custom-field',
+  'spacer'
+]);
+
+const cardWidths = new Set(['full', 'half', 'third', 'two-thirds']);
 
 export const PDF_TEMPLATE_DEFINITIONS = [
   {
@@ -201,13 +236,16 @@ function termsList(value = '', fallback = []) {
 }
 
 function commonStructuredConfig(key, flat = {}) {
+  const accentColor = flat.colorAccent || defaultConfigFor(key).colorAccent || '#0f2a52';
   return {
-    layoutVersion: 2,
+    layoutVersion: 5,
+    editMode: 'structured',
+    advancedEnabled: false,
     header: {
       showLogo: flat.showCompanyLogo !== false,
       showCompanyDetails: flat.showCompanyDetails !== false,
       title: flat.headerTitle || defaultConfigFor(key).headerTitle || '',
-      accentColor: flat.colorAccent || defaultConfigFor(key).colorAccent || '#0f2a52'
+      accentColor
     },
     footer: {
       showCallWhatsapp: true,
@@ -223,6 +261,48 @@ function commonStructuredConfig(key, flat = {}) {
       keepTermsTogether: true,
       keepFooterAtBottom: true,
       showPageNumbers: true
+    },
+    pageSettings: {
+      preferOnePage: true,
+      safePagination: true,
+      avoidFooterOverlap: true,
+      repeatTableHeader: true
+    },
+    structured: {
+      mode: 'structured',
+      useCurrentDefaultLayout: true,
+      advancedPanelOpen: false,
+      customSectionsEnabled: false,
+      allowDragDrop: false,
+      twoColumnCards: false,
+      customCardWidthEnabled: false,
+      customColorsEnabled: false,
+      qrPaymentCardEnabled: false,
+      signatureCardEnabled: false,
+      designModeEnabled: false,
+      defaultCardWidth: 'full',
+      customSections: []
+    },
+    design: {
+      enabled: false,
+      confirmed: false,
+      lockedDefaultSections: true,
+      gridEnabled: true,
+      snapToGrid: true,
+      page: {
+        size: 'A4',
+        orientation: 'portrait',
+        margin: 28,
+        backgroundColor: '#ffffff'
+      },
+      colors: {
+        accentColor,
+        cardBackground: '#ffffff',
+        textColor: '#0f172a',
+        borderColor: '#d8e5f7',
+        noticeBackground: '#f1f7ff'
+      },
+      elements: []
     },
     sections: {}
   };
@@ -494,6 +574,51 @@ function sanitizeStrings(value) {
   return value;
 }
 
+function clampNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+function sanitizeAdvancedSection(section = {}, index = 0) {
+  const type = advancedSectionTypes.has(section.type) ? section.type : 'text';
+  const fallbackTitle = type === 'qr' ? 'QR Code' : type.split('-').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+  const width = cardWidths.has(section.width) ? section.width : 'full';
+  return {
+    id: clean(section.id || `custom-section-${index + 1}`).replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || `custom-section-${index + 1}`,
+    type,
+    enabled: boolValue(section.enabled, true),
+    title: cleanText(section.title, fallbackTitle, 120),
+    content: cleanText(section.content, '', 5000),
+    variable: cleanText(section.variable, '', 120),
+    width,
+    minHeight: clampNumber(section.minHeight, type === 'spacer' ? 24 : 74, 8, 260),
+    backgroundColor: sanitizeColor(section.backgroundColor, type === 'notice' ? '#f1f7ff' : '#ffffff'),
+    textColor: sanitizeColor(section.textColor, '#0f172a'),
+    borderColor: sanitizeColor(section.borderColor, '#d8e5f7'),
+    accentColor: sanitizeColor(section.accentColor, '#0f2a52'),
+    locked: false
+  };
+}
+
+function sanitizeDesignElement(element = {}, index = 0) {
+  const type = advancedSectionTypes.has(element.type) ? element.type : 'text';
+  return {
+    id: clean(element.id || `design-element-${index + 1}`).replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || `design-element-${index + 1}`,
+    type,
+    enabled: boolValue(element.enabled, true),
+    title: cleanText(element.title, '', 120),
+    content: cleanText(element.content, '', 5000),
+    x: clampNumber(element.x, 40, 0, 595),
+    y: clampNumber(element.y, 120, 0, 842),
+    width: clampNumber(element.width, 240, 24, 540),
+    height: clampNumber(element.height, 90, 8, 780),
+    backgroundColor: sanitizeColor(element.backgroundColor, '#ffffff'),
+    textColor: sanitizeColor(element.textColor, '#0f172a'),
+    borderColor: sanitizeColor(element.borderColor, '#d8e5f7')
+  };
+}
+
 export function templateKeyForPdfType(type = '') {
   if (type === 'work' || type === 'amc-invoice') return 'invoice';
   if (type === 'quotation') return 'quotation';
@@ -541,10 +666,15 @@ function sanitizeConfig(payload = {}, key = '') {
   let sanitized = deepMerge(defaults, legacyStructuredOverrides(payload, key));
   sanitized = deepMerge(sanitized, payload || {});
   sanitized = sanitizeStrings(sanitized);
-  sanitized.layoutVersion = 2;
+  sanitized.layoutVersion = 5;
+  sanitized.editMode = sanitized.editMode === 'design' ? 'design' : 'structured';
+  sanitized.advancedEnabled = boolValue(sanitized.advancedEnabled, defaults.advancedEnabled);
   sanitized.header = sanitized.header || defaults.header;
   sanitized.footer = sanitized.footer || defaults.footer;
   sanitized.pageBreaks = sanitized.pageBreaks || defaults.pageBreaks;
+  sanitized.pageSettings = deepMerge(defaults.pageSettings, sanitized.pageSettings || {});
+  sanitized.structured = deepMerge(defaults.structured, sanitized.structured || {});
+  sanitized.design = deepMerge(defaults.design, sanitized.design || {});
   sanitized.sections = sanitized.sections || defaults.sections;
   sanitized.header.showLogo = boolValue(sanitized.header.showLogo, defaults.header.showLogo);
   sanitized.header.showCompanyDetails = boolValue(sanitized.header.showCompanyDetails, defaults.header.showCompanyDetails);
@@ -558,6 +688,44 @@ function sanitizeConfig(payload = {}, key = '') {
   Object.keys(defaults.pageBreaks).forEach((field) => {
     sanitized.pageBreaks[field] = boolValue(sanitized.pageBreaks[field], defaults.pageBreaks[field]);
   });
+  Object.keys(defaults.pageSettings).forEach((field) => {
+    sanitized.pageSettings[field] = boolValue(sanitized.pageSettings[field], defaults.pageSettings[field]);
+  });
+  sanitized.structured.mode = 'structured';
+  sanitized.structured.useCurrentDefaultLayout = boolValue(sanitized.structured.useCurrentDefaultLayout, true);
+  sanitized.structured.advancedPanelOpen = boolValue(sanitized.structured.advancedPanelOpen, false);
+  sanitized.structured.customSectionsEnabled = boolValue(sanitized.structured.customSectionsEnabled, false);
+  sanitized.structured.allowDragDrop = boolValue(sanitized.structured.allowDragDrop, false);
+  sanitized.structured.twoColumnCards = boolValue(sanitized.structured.twoColumnCards, false);
+  sanitized.structured.customCardWidthEnabled = boolValue(sanitized.structured.customCardWidthEnabled, false);
+  sanitized.structured.customColorsEnabled = boolValue(sanitized.structured.customColorsEnabled, false);
+  sanitized.structured.qrPaymentCardEnabled = boolValue(sanitized.structured.qrPaymentCardEnabled, false);
+  sanitized.structured.signatureCardEnabled = boolValue(sanitized.structured.signatureCardEnabled, false);
+  sanitized.structured.designModeEnabled = boolValue(sanitized.structured.designModeEnabled, false);
+  sanitized.structured.defaultCardWidth = cardWidths.has(sanitized.structured.defaultCardWidth) ? sanitized.structured.defaultCardWidth : 'full';
+  sanitized.structured.customSections = Array.isArray(sanitized.structured.customSections)
+    ? sanitized.structured.customSections.slice(0, 24).map((section, index) => sanitizeAdvancedSection(section, index))
+    : [];
+  sanitized.design.enabled = boolValue(sanitized.design.enabled, false);
+  sanitized.design.confirmed = boolValue(sanitized.design.confirmed, false);
+  sanitized.design.lockedDefaultSections = true;
+  sanitized.design.gridEnabled = boolValue(sanitized.design.gridEnabled, true);
+  sanitized.design.snapToGrid = boolValue(sanitized.design.snapToGrid, true);
+  sanitized.design.page = deepMerge(defaults.design.page, sanitized.design.page || {});
+  sanitized.design.page.size = sanitized.design.page.size === 'A4' ? 'A4' : 'A4';
+  sanitized.design.page.orientation = sanitized.design.page.orientation === 'landscape' ? 'landscape' : 'portrait';
+  sanitized.design.page.margin = clampNumber(sanitized.design.page.margin, defaults.design.page.margin, 0, 80);
+  sanitized.design.page.backgroundColor = sanitizeColor(sanitized.design.page.backgroundColor, '#ffffff');
+  sanitized.design.colors = deepMerge(defaults.design.colors, sanitized.design.colors || {});
+  sanitized.design.colors.accentColor = sanitizeColor(sanitized.design.colors.accentColor, sanitized.header.accentColor);
+  sanitized.design.colors.cardBackground = sanitizeColor(sanitized.design.colors.cardBackground, '#ffffff');
+  sanitized.design.colors.textColor = sanitizeColor(sanitized.design.colors.textColor, '#0f172a');
+  sanitized.design.colors.borderColor = sanitizeColor(sanitized.design.colors.borderColor, '#d8e5f7');
+  sanitized.design.colors.noticeBackground = sanitizeColor(sanitized.design.colors.noticeBackground, '#f1f7ff');
+  sanitized.design.elements = Array.isArray(sanitized.design.elements)
+    ? sanitized.design.elements.slice(0, 80).map((element, index) => sanitizeDesignElement(element, index))
+    : [];
+  if (!sanitized.design.enabled) sanitized.editMode = 'structured';
 
   if (key === 'invoice') {
     sanitized.sections.workCompletionNotice.messageLines = stringList(sanitized.sections.workCompletionNotice.messageLines, defaults.sections.workCompletionNotice.messageLines);
@@ -811,30 +979,56 @@ function fallbackCompany(company = COMPANY) {
 
 export function buildTemplateContext(source = {}, company = COMPANY) {
   const currentCompany = fallbackCompany(company);
+  const invoiceNumber = source.invoiceNo || source.invoiceNumber || '-';
+  const quotationNumber = source.quotationNo || source.quotationNumber || source.quotationNumberDisplay || invoiceNumber;
+  const workOrderId = source.workOrderNo || source.workOrderId || '-';
+  const amcReference = source.amcContractNo || source.amcReference || source.contractNumber || '-';
+  const totalAmount = source.totalAmount ?? source.finalTotal ?? 0;
+  const finalTotal = source.finalTotal ?? source.totalAmount ?? 0;
+  const amountPaid = source.amountPaid ?? source.paidAmount ?? 0;
+  const balanceDue = source.balanceDue ?? source.balance ?? Math.max(0, Number(finalTotal || 0) - Number(amountPaid || 0));
+  const serviceName = source.serviceName || source.serviceType || '-';
   return {
     company_name: currentCompany.name,
     company_phone: currentCompany.phones.join(' / '),
     company_email: currentCompany.email,
+    company_address: currentCompany.address || '-',
     customer_name: source.customerName || '-',
     customer_phone: source.customerPhone || '-',
     customer_address: source.customerAddress || '-',
-    invoice_number: source.invoiceNumber || '-',
+    invoice_no: invoiceNumber,
+    invoice_number: invoiceNumber,
     invoice_date: formatDate(source.invoiceDate || new Date()),
-    work_order_id: source.workOrderId || '-',
-    service_name: source.serviceName || '-',
+    quotation_no: quotationNumber,
+    quotation_number: quotationNumber,
+    quotation_date: formatDate(source.quotationDate || source.invoiceDate || new Date()),
+    work_order_no: workOrderId,
+    work_order_id: workOrderId,
+    amc_contract_no: amcReference,
+    amc_reference: amcReference,
+    service_name: serviceName,
+    service_type: source.serviceType || serviceName,
+    device: source.device || '-',
+    brand_model: source.brandModel || '-',
+    problem_complaint: source.problemComplaint || '-',
     technician_name: source.technicianName || '-',
-    total_amount: formatAmount(source.totalAmount || 0),
+    total_amount: formatAmount(totalAmount),
+    final_total: formatAmount(finalTotal),
+    amount_paid: formatAmount(amountPaid),
+    balance_due: formatAmount(balanceDue),
     amc_start_date: formatDate(source.amcStartDate),
     amc_end_date: formatDate(source.amcEndDate),
-    next_service_date: formatDate(source.nextServiceDate)
+    next_service_date: formatDate(source.nextServiceDate),
+    current_date: formatDate(source.currentDate || new Date())
   };
 }
 
 export function renderTemplateText(value = '', context = {}) {
   const text = String(value || '');
-  return text.replace(/\{\{([a-z0-9_]+)\}\}/gi, (match, key) => {
-    if (Object.prototype.hasOwnProperty.call(context, key)) return context[key];
-    return match;
+  return text.replace(/\{\{([a-z0-9_]+)\}\}/gi, (_match, key) => {
+    if (!Object.prototype.hasOwnProperty.call(context, key)) return '-';
+    const next = context[key];
+    return next === undefined || next === null || next === '' ? '-' : next;
   });
 }
 
@@ -864,9 +1058,17 @@ export function workOrderTemplateContext(workOrder = {}, company = COMPANY) {
     invoiceNumber: invoice.invoiceNumber,
     invoiceDate: invoice.createdAt || new Date(),
     workOrderId: workOrder.bookingId?.bookingCode || `WO-${String(workOrder._id || '').slice(-6).toUpperCase()}`,
+    amcReference: contract.contractNumber || contract.amcReference || contract.referenceNo,
     serviceName: workOrder.serviceType || workOrder.device || contract.contractType,
+    serviceType: workOrder.serviceType || contract.contractType,
+    device: workOrder.device,
+    brandModel: workOrder.brandModel || workOrder.model,
+    problemComplaint: workOrder.problemDescription || workOrder.problemComplaint || workOrder.customerComplaint,
     technicianName: workOrder.technicianId?.name || workOrder.technicianId?.username || 'Admin',
     totalAmount: total,
+    finalTotal: invoice.total ?? contract.contractValue ?? total,
+    amountPaid: invoice.amountPaid ?? invoice.paidAmount ?? contract.amountPaid,
+    balanceDue: invoice.balance ?? contract.balance,
     amcStartDate: contract.startDate,
     amcEndDate: contract.endDate,
     nextServiceDate: nextVisit?.scheduledDate
@@ -884,9 +1086,17 @@ export function documentTemplateContext(document = {}, company = COMPANY) {
     invoiceNumber: invoice.invoiceNumber,
     invoiceDate: invoice.createdAt || document.createdAt,
     workOrderId: workOrder.bookingId?.bookingCode || `WO-${String(workOrder._id || workOrder.id || '').slice(-6).toUpperCase()}`,
+    quotationNumber: document.quotationNumber || document.documentNumber,
     serviceName: workOrder.serviceType || workOrder.device,
+    serviceType: workOrder.serviceType,
+    device: workOrder.device,
+    brandModel: workOrder.brandModel || workOrder.model,
+    problemComplaint: workOrder.problemDescription || workOrder.problemComplaint || workOrder.customerComplaint,
     technicianName: workOrder.technicianId?.name || workOrder.technicianId?.username || 'Admin',
-    totalAmount: document.totalAmount || invoice.total || 0
+    totalAmount: document.totalAmount || invoice.total || 0,
+    finalTotal: document.finalTotal || invoice.total || document.totalAmount || 0,
+    amountPaid: document.amountPaid || invoice.amountPaid || invoice.paidAmount || 0,
+    balanceDue: document.balanceDue || invoice.balance || 0
   }, company);
 }
 
@@ -899,11 +1109,20 @@ function sampleContextFor(key, company = COMPANY) {
     customerPhone: '98427 81971',
     customerAddress: 'Mettur Dam, Salem',
     invoiceNumber: key === 'quotation' ? 'QUO-2026-0066' : 'INV-2026-0089',
+    quotationNumber: 'QUO-2026-0066',
     invoiceDate: now,
     workOrderId: 'WO-2026-0123',
+    amcReference: 'AMC-2026-0012',
     serviceName: key.startsWith('amc') ? 'Computer AMC Support' : 'Laptop Service',
+    serviceType: key.startsWith('amc') ? 'AMC Support' : 'Laptop Service',
+    device: 'Laptop',
+    brandModel: 'Dell Inspiron 15',
+    problemComplaint: 'System running slow and needs RAM upgrade.',
     technicianName: 'Arjun',
     totalAmount: key.startsWith('amc') ? 12500 : 2850,
+    finalTotal: key.startsWith('amc') ? 12500 : 2850,
+    amountPaid: key.startsWith('amc') ? 12500 : 0,
+    balanceDue: key.startsWith('amc') ? 0 : 2850,
     amcStartDate: now,
     amcEndDate: new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()),
     nextServiceDate: next

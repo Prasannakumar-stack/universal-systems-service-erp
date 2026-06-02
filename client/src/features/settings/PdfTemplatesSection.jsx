@@ -1,4 +1,4 @@
-import { Download, Edit3, Eye, FileText, History, Loader2, Palette, RotateCcw, Save, ShieldCheck, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, Edit3, Eye, FileText, History, Layers, LayoutGrid, Loader2, Palette, Plus, RotateCcw, Save, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
 import {
   apiBase,
   ConfirmModal,
@@ -16,18 +16,37 @@ import {
 import { can, hasRole } from '../../utils/roles.js';
 
 const placeholders = [
+  '{{company_name}}',
+  '{{company_phone}}',
+  '{{company_email}}',
+  '{{company_address}}',
   '{{customer_name}}',
   '{{customer_phone}}',
   '{{customer_address}}',
+  '{{invoice_no}}',
   '{{invoice_number}}',
   '{{invoice_date}}',
+  '{{quotation_no}}',
+  '{{quotation_number}}',
+  '{{quotation_date}}',
+  '{{work_order_no}}',
   '{{work_order_id}}',
+  '{{amc_contract_no}}',
+  '{{amc_reference}}',
   '{{service_name}}',
+  '{{service_type}}',
+  '{{device}}',
+  '{{brand_model}}',
+  '{{problem_complaint}}',
   '{{technician_name}}',
   '{{total_amount}}',
+  '{{final_total}}',
+  '{{amount_paid}}',
+  '{{balance_due}}',
   '{{amc_start_date}}',
   '{{amc_end_date}}',
-  '{{next_service_date}}'
+  '{{next_service_date}}',
+  '{{current_date}}'
 ];
 
 const sectionLabels = {
@@ -49,6 +68,25 @@ const footerFields = [
   ['footer.showEmail', 'Show email'],
   ['footer.showWebsite', 'Show website'],
   ['footer.showAddress', 'Show address']
+];
+
+const customCardTypes = [
+  ['text', 'Text Card'],
+  ['notice', 'Notice Card'],
+  ['warranty', 'Warranty Card'],
+  ['terms', 'Terms Card'],
+  ['payment', 'Payment / UPI Card'],
+  ['bank', 'Bank Details Card'],
+  ['signature', 'Signature Card - Coming later'],
+  ['qr', 'QR Code Card - Coming later'],
+  ['spacer', 'Spacer / Divider']
+];
+
+const cardWidthOptions = [
+  ['full', 'Full width'],
+  ['half', 'Half width'],
+  ['third', 'One third'],
+  ['two-thirds', 'Two thirds']
 ];
 
 function editedBy(template) {
@@ -73,6 +111,116 @@ function setPath(source, path, value) {
 
 function stableJson(value) {
   return JSON.stringify(value || {});
+}
+
+function cloneValue(value) {
+  return JSON.parse(JSON.stringify(value || {}));
+}
+
+function designStateFromConfig(config = {}) {
+  return cloneValue(config.design || {});
+}
+
+function mergeDesignStateForSave(config = {}, designState = {}) {
+  const currentDesign = config.design || {};
+  return {
+    ...config,
+    editMode: 'design',
+    design: {
+      ...currentDesign,
+      ...designState,
+      page: {
+        ...(currentDesign.page || {}),
+        ...(designState.page || {})
+      },
+      colors: {
+        ...(currentDesign.colors || {}),
+        ...(designState.colors || {})
+      },
+      elements: Array.isArray(designState.elements) ? designState.elements : (currentDesign.elements || []),
+      enabled: true,
+      confirmed: true,
+      lockedDefaultSections: true
+    }
+  };
+}
+
+function makeCustomCard(type = 'text') {
+  const label = customCardTypes.find(([value]) => value === type)?.[1] || 'Custom Section';
+  return {
+    id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    type,
+    enabled: true,
+    title: label,
+    content: '',
+    variable: '',
+    width: 'full',
+    minHeight: type === 'spacer' ? 24 : 74,
+    backgroundColor: type === 'notice' ? '#f1f7ff' : '#ffffff',
+    textColor: '#0f172a',
+    borderColor: '#d8e5f7',
+    accentColor: '#0f2a52'
+  };
+}
+
+function sectionKey(section, index = 0) {
+  return section.key || `${String(section.title || 'section').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${index}`;
+}
+
+function visibilityField(section) {
+  return section.fields.find((field) => String(field.path || '').endsWith('.show'))
+    || section.fields.find((field) => /show\/hide (section|message|table|terms|notice|summary|footer|customer greeting|plan details|payment details|renewal amount)/i.test(field.label || ''));
+}
+
+function sectionVisible(section, draft) {
+  const field = visibilityField(section);
+  if (!field) return true;
+  return getPath(draft, field.path, field.fallback ?? true) !== false;
+}
+
+function sectionOptionPath(section, index, option) {
+  return `structured.sectionOptions.${sectionKey(section, index)}.${option}`;
+}
+
+function designLayerOptionPath(layerId, option) {
+  return `sectionOptions.${layerId}.${option}`;
+}
+
+function cleanLayerTitle(title = 'Section') {
+  return String(title)
+    .replace(/\s+Section$/i, '')
+    .replace(/^Total Summary$/i, 'Amount Summary')
+    .replace(/^Work Completion Notice$/i, 'Notice / Terms')
+    .trim() || 'Section';
+}
+
+function designLayerRole(title = '') {
+  const value = String(title).toLowerCase();
+  if (value.includes('header')) return 'header';
+  if (value.includes('footer') || value.includes('thank you')) return 'footer';
+  if (value.includes('table') || value.includes('covered') || value.includes('work completed') || value.includes('parts used')) return 'table';
+  if (value.includes('amount') || value.includes('summary') || value.includes('total')) return 'amount';
+  if (value.includes('notice') || value.includes('terms') || value.includes('message') || value.includes('validity') || value.includes('acknowledgement') || value.includes('signature')) return 'notice';
+  if (value.includes('customer')) return 'customer';
+  if (value.includes('service') || value.includes('device') || value.includes('visit') || value.includes('amc') || value.includes('payment') || value.includes('plan') || value.includes('problem')) return 'details';
+  return 'details';
+}
+
+function overlayStyleForLayer(layer, index) {
+  const role = layer.role || 'details';
+  const detailLane = index % 2;
+  const detailRow = Math.floor(index / 2) % 2;
+  const base = {
+    header: { top: '3%', left: '6%', width: '88%', height: '10%' },
+    customer: { top: '15%', left: '52%', width: '42%', height: '12%' },
+    details: { top: `${15 + detailRow * 13}%`, left: detailLane === 0 ? '6%' : '52%', width: '42%', height: '12%' },
+    table: { top: '34%', left: '6%', width: '88%', height: '25%' },
+    amount: { top: '62%', left: '54%', width: '40%', height: '10%' },
+    notice: { top: '74%', left: '6%', width: '88%', height: '11%' },
+    footer: { top: '89%', left: '6%', width: '88%', height: '7%' },
+    custom: { top: '72%', left: '10%', width: '80%', height: '9%' }
+  };
+  return base[role] || base.details;
 }
 
 function TemplateStatusPill({ status = 'Active' }) {
@@ -136,7 +284,7 @@ function TemplateCard({ template, canEdit, busyKey, onEdit, onPreview, onDownloa
 function TemplateVariablesModal({ onClose }) {
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4">
-      <div className="surface admin-modal w-full max-w-2xl p-5">
+      <div className="surface admin-modal max-h-[85vh] w-full max-w-2xl overflow-y-auto p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Template Variables</p>
@@ -186,7 +334,7 @@ function VersionHistoryPanel({ versions, restoring, onRestore }) {
 }
 
 function FieldRow({ field, draft, setDraft, canEdit, saving }) {
-  const value = getPath(draft, field.path, field.type === 'toggle' ? true : '');
+  const value = getPath(draft, field.path, field.fallback ?? (field.type === 'toggle' ? true : ''));
   const disabled = !canEdit || saving;
   function update(nextValue) {
     setDraft((current) => setPath(current, field.path, nextValue));
@@ -195,10 +343,10 @@ function FieldRow({ field, draft, setDraft, canEdit, saving }) {
   if (field.type === 'toggle') {
     const checked = value !== false;
     return (
-      <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
-        <span className="min-w-0 text-sm font-bold text-slate-100">{field.label}</span>
-        <span className="flex items-center gap-2">
-          <span className={`text-xs font-black ${checked ? 'text-sky-100' : 'text-slate-400'}`}>{checked ? 'ON' : 'OFF'}</span>
+      <label className={`grid min-h-12 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-2.5 ${disabled ? 'opacity-70' : ''}`}>
+        <span className="min-w-0 text-sm font-bold leading-snug text-[var(--app-text)]">{field.label}</span>
+        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${checked ? 'border-sky-300/30 bg-sky-500/15 text-[var(--brand)]' : 'border-white/10 bg-white/[0.04] text-[var(--app-text-muted)]'}`}>{checked ? 'ON' : 'OFF'}</span>
+        <span className="flex items-center justify-end">
           <input className="sr-only" type="checkbox" checked={checked} disabled={disabled} onChange={(event) => update(event.target.checked)} />
           <span className={`relative h-7 w-14 rounded-full border transition ${checked ? 'border-sky-300/40 bg-sky-500/25' : 'border-white/10 bg-slate-950/50'}`}>
             <span className={`absolute top-1 h-5 w-5 rounded-full transition ${checked ? 'left-7 bg-sky-100' : 'left-1 bg-slate-500'}`} />
@@ -255,6 +403,742 @@ function SectionCard({ section, draft, setDraft, canEdit, saving }) {
         ))}
       </div>
     </section>
+  );
+}
+
+function SelectControl({ label, value, options, disabled, onChange }) {
+  return (
+    <label>
+      <span className="label">{label}</span>
+      <select className="input" value={value || ''} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+        {options.map(([optionValue, optionLabel, optionDisabled]) => (
+          <option key={optionValue} value={optionValue} disabled={Boolean(optionDisabled)}>{optionLabel}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function ColorControl({ label, value, disabled, onChange }) {
+  return (
+    <label>
+      <span className="label">{label}</span>
+      <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-2">
+        <input className="h-12 w-full rounded-card border border-white/10 bg-transparent p-1" type="color" value={value || '#0f2a52'} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+        <input className="input" value={value || ''} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+      </div>
+    </label>
+  );
+}
+
+function CustomSectionsEditor({ draft, setDraft, canEdit, saving, advancedEnabled, customSectionsEnabled }) {
+  const [newType, setNewType] = useState('text');
+  const [removeCandidate, setRemoveCandidate] = useState(null);
+  const enabled = advancedEnabled && customSectionsEnabled;
+  const disabled = !canEdit || saving || !enabled;
+  const cards = Array.isArray(getPath(draft, 'structured.customSections', [])) ? getPath(draft, 'structured.customSections', []) : [];
+
+  if (!advancedEnabled) return null;
+
+  function setCards(updater) {
+    setDraft((current) => {
+      const currentCards = Array.isArray(getPath(current, 'structured.customSections', [])) ? getPath(current, 'structured.customSections', []) : [];
+      const nextCards = typeof updater === 'function' ? updater(currentCards) : updater;
+      return setPath(current, 'structured.customSections', nextCards);
+    });
+  }
+
+  function updateCard(id, patch) {
+    setCards((currentCards) => currentCards.map((card) => (card.id === id ? { ...card, ...patch } : card)));
+  }
+
+  function addCard() {
+    if (disabled) return;
+    setCards((currentCards) => [...currentCards, makeCustomCard(newType)]);
+  }
+
+  return (
+    <section className={`surface admin-control-card p-4 ${enabled ? '' : 'opacity-90'}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Add Custom Card</p>
+          <h3 className="mt-1 text-lg font-black text-[var(--app-text)]">Custom Sections / Cards</h3>
+          <p className="mt-1 text-xs muted">
+            {enabled ? 'Add optional custom cards without changing fixed default sections.' : 'Enable custom sections/cards to add custom cards.'}
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,14rem)_auto]">
+          <SelectControl label="Card type" value={newType} options={customCardTypes} disabled={disabled} onChange={setNewType} />
+          <button type="button" className="btn btn-primary self-end" disabled={disabled} onClick={addCard}>
+            <Plus className="h-4 w-4" />
+            Add Custom Card
+          </button>
+        </div>
+      </div>
+
+      {!enabled ? (
+        <p className="mt-4 rounded-card border border-dashed border-white/15 bg-white/[0.025] p-3 text-sm font-semibold text-[var(--app-text-muted)]">Enable custom sections/cards to add custom cards.</p>
+      ) : (
+        <div className="mt-4 grid gap-3">
+          {cards.length ? cards.map((card, index) => (
+            <article key={card.id || index} className="rounded-card border border-white/10 bg-slate-950/30 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="admin-control-icon h-9 w-9"><Layers className="h-4 w-4" /></div>
+                  <div className="min-w-0">
+                    <p className="font-black text-[var(--app-text)]">{card.title || 'Custom Section'}</p>
+                    <p className="mt-1 text-xs uppercase tracking-wide text-[var(--app-text-muted)]">{customCardTypes.find(([type]) => type === card.type)?.[1] || 'Text Card'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-xs font-black text-[var(--app-text)]">
+                    <input type="checkbox" checked={card.enabled !== false} disabled={disabled} onChange={(event) => updateCard(card.id, { enabled: event.target.checked })} />
+                    Active
+                  </label>
+                  <button type="button" className="icon-button h-9 w-9" disabled={disabled} onClick={() => setRemoveCandidate(card)} aria-label="Remove custom section">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <SelectControl label="Type" value={card.type || 'text'} options={customCardTypes} disabled={disabled} onChange={(value) => updateCard(card.id, { type: value })} />
+                <SelectControl label="Width" value={card.width || 'full'} options={cardWidthOptions} disabled={disabled} onChange={(value) => updateCard(card.id, { width: value })} />
+                <label>
+                  <span className="label">Title</span>
+                  <input className="input" value={card.title || ''} disabled={disabled} onChange={(event) => updateCard(card.id, { title: event.target.value })} />
+                </label>
+                <label>
+                  <span className="label">Minimum height</span>
+                  <input className="input" type="number" min="8" max="260" value={card.minHeight || 74} disabled={disabled} onChange={(event) => updateCard(card.id, { minHeight: Number(event.target.value) })} />
+                </label>
+                {card.type !== 'spacer' ? (
+                  <>
+                    <label className="md:col-span-2">
+                      <span className="label">Content</span>
+                      <textarea className="input min-h-24" rows={4} value={card.content || ''} disabled={disabled} onChange={(event) => updateCard(card.id, { content: event.target.value })} />
+                    </label>
+                    <label className="md:col-span-2">
+                      <span className="label">Variable / QR value</span>
+                      <input className="input" value={card.variable || ''} disabled={disabled} onChange={(event) => updateCard(card.id, { variable: event.target.value })} />
+                    </label>
+                    {card.type === 'qr' ? (
+                      <button type="button" className="btn btn-secondary justify-between md:col-span-2" disabled>
+                        <span>Real QR generation</span>
+                        <span className="text-[10px] font-black uppercase text-slate-400">Coming later</span>
+                      </button>
+                    ) : null}
+                    {card.type === 'signature' ? (
+                      <button type="button" className="btn btn-secondary justify-between md:col-span-2" disabled>
+                        <span>Signature upload</span>
+                        <span className="text-[10px] font-black uppercase text-slate-400">Coming later</span>
+                      </button>
+                    ) : null}
+                    <ColorControl label="Accent" value={card.accentColor} disabled={disabled} onChange={(value) => updateCard(card.id, { accentColor: value })} />
+                    <ColorControl label="Background" value={card.backgroundColor} disabled={disabled} onChange={(value) => updateCard(card.id, { backgroundColor: value })} />
+                    <ColorControl label="Text color" value={card.textColor} disabled={disabled} onChange={(value) => updateCard(card.id, { textColor: value })} />
+                    <ColorControl label="Border" value={card.borderColor} disabled={disabled} onChange={(value) => updateCard(card.id, { borderColor: value })} />
+                  </>
+                ) : null}
+              </div>
+            </article>
+          )) : (
+            <p className="rounded-card border border-dashed border-white/15 bg-white/[0.025] p-4 text-sm muted">No custom cards added.</p>
+          )}
+        </div>
+      )}
+      {removeCandidate ? (
+        <ConfirmModal
+          title="Remove custom card?"
+          message={`Remove ${removeCandidate.title || 'this custom card'} from this template draft?`}
+          confirmLabel="Remove"
+          onCancel={() => setRemoveCandidate(null)}
+          onConfirm={() => {
+            const targetId = removeCandidate.id;
+            setRemoveCandidate(null);
+            setCards((currentCards) => currentCards.filter((card) => card.id !== targetId));
+          }}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function DesignModeWorkspace({
+  template,
+  sections,
+  draft,
+  designDraft,
+  setDesignDraft,
+  previewUrl,
+  previewLoading,
+  previewError,
+  canEdit,
+  saving,
+  busyKey,
+  onBack,
+  onPreview,
+  onDownload,
+  onShowVariables
+}) {
+  const disabled = !canEdit || saving;
+  const elements = Array.isArray(getPath(designDraft, 'elements', [])) ? getPath(designDraft, 'elements', []) : [];
+  const cards = Array.isArray(getPath(draft, 'structured.customSections', [])) ? getPath(draft, 'structured.customSections', []) : [];
+  const advancedEnabled = getPath(draft, 'advancedEnabled', false) === true;
+  const customSectionsEnabled = getPath(draft, 'structured.customSectionsEnabled', false) === true;
+  const customColorsEnabled = advancedEnabled && getPath(draft, 'structured.customColorsEnabled', false) === true;
+  const customWidthEnabled = advancedEnabled && getPath(draft, 'structured.customCardWidthEnabled', false) === true;
+  const twoColumnEnabled = advancedEnabled && getPath(draft, 'structured.twoColumnCards', false) === true;
+  const [selectedLayerId, setSelectedLayerId] = useState('');
+  const [zoom, setZoom] = useState('fit');
+
+  function setElements(updater) {
+    setDesignDraft((current) => {
+      const currentElements = Array.isArray(getPath(current, 'elements', [])) ? getPath(current, 'elements', []) : [];
+      const nextElements = typeof updater === 'function' ? updater(currentElements) : updater;
+      return setPath(current, 'elements', nextElements);
+    });
+  }
+
+  const sectionLayers = sections.map((section, index) => {
+    const key = sectionKey(section, index);
+    const title = cleanLayerTitle(getPath(draft, sectionOptionPath(section, index, 'title'), section.title));
+    return {
+      id: key,
+      title,
+      kind: 'Section',
+      locked: true,
+      editable: Boolean(visibilityField(section)),
+      supportsVisibility: Boolean(visibilityField(section)),
+      supportsTitle: true,
+      supportsIcon: true,
+      visible: sectionVisible(section, draft),
+      role: designLayerRole(section.title),
+      section,
+      sectionIndex: index
+    };
+  });
+  const customLayers = advancedEnabled && customSectionsEnabled
+    ? cards.map((card, index) => ({
+        id: card.id || `custom-card-${index}`,
+        title: card.title || 'Custom Card',
+        kind: 'Custom Card',
+        locked: false,
+        editable: true,
+        supportsVisibility: true,
+        supportsTitle: true,
+        supportsIcon: false,
+        visible: card.enabled !== false,
+        role: 'custom'
+      }))
+    : [];
+  const elementLayers = elements.map((element, index) => ({
+    id: element.id || `element-${index}`,
+    title: element.title || 'Text Layer',
+    kind: 'Free Element',
+    locked: false,
+    editable: true,
+    supportsVisibility: true,
+    supportsTitle: true,
+    supportsIcon: false,
+    visible: element.enabled !== false,
+    role: 'custom'
+  }));
+  const layers = [...sectionLayers, ...customLayers, ...elementLayers];
+  const layerSignature = layers.map((layer) => layer.id).join('|');
+  const selectedLayer = layers.find((layer) => layer.id === selectedLayerId) || null;
+  const previewFrameUrl = previewUrl ? `${previewUrl}#toolbar=0&navpanes=0&scrollbar=0` : '';
+  const zoomWidths = {
+    fit: 'min(100%, 540px)',
+    '75': '390px',
+    '100': '520px'
+  };
+
+  useEffect(() => {
+    if (selectedLayerId && !layers.some((layer) => layer.id === selectedLayerId)) setSelectedLayerId('');
+  }, [selectedLayerId, layerSignature]);
+
+  function addElement(type, title) {
+    const id = `element-${Date.now()}`;
+    setElements((current) => [...current, { id, type, title, content: '', x: 40, y: 120, width: 240, height: 90, enabled: true }]);
+    setSelectedLayerId(id);
+  }
+
+  const tools = [
+    { label: 'Add Text', type: 'text', enabled: true },
+    { label: 'Add Card', type: 'card', enabled: false },
+    { label: 'Add QR', type: 'qr', enabled: false },
+    { label: 'Add Signature', type: 'signature', enabled: false },
+    { label: 'Add Divider', type: 'spacer', enabled: false }
+  ];
+
+  return (
+    <div className="grid gap-4">
+      <section className="surface admin-control-card p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-amber-300/30 bg-amber-500/15 px-3 py-1 text-xs font-black uppercase tracking-wide text-[var(--warning)]">ADVANCED MODE - CHANGES APPLY ONLY AFTER SAVE</span>
+              <span className="rounded-full border border-sky-300/30 bg-sky-500/15 px-3 py-1 text-xs font-black uppercase tracking-wide text-[var(--brand)]">VISUAL EDITOR</span>
+            </div>
+            <h3 className="text-lg font-black text-[var(--app-text)]">Design Mode</h3>
+            <p className="mt-1 text-sm leading-6 muted">Design Mode is optional. Existing PDF design will not change until you save.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={onBack}>
+              <LayoutGrid className="h-4 w-4" />
+              Back to Structured Mode
+            </button>
+            <button type="button" className="btn btn-secondary admin-compact-button" onClick={onShowVariables}>
+              <ShieldCheck className="h-4 w-4" />
+              Variables
+            </button>
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onPreview(template, draft)}>
+              {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+              Preview PDF
+            </button>
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onDownload(template, draft)}>
+              {busyKey === `download-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Download Sample PDF
+            </button>
+            <button type="submit" className="btn btn-primary admin-compact-button" disabled={!canEdit || saving || Boolean(busyKey)}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save Template
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)_300px]">
+        <aside className="surface admin-control-card p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="admin-control-icon"><Layers className="h-5 w-5" /></div>
+            <div>
+              <h3 className="font-black text-[var(--app-text)]">Elements / Layers</h3>
+              <p className="mt-1 text-xs muted">Fixed template sections stay locked from destructive editing.</p>
+            </div>
+          </div>
+          <div className="grid gap-2">
+            {tools.map((tool) => (
+              <button
+                key={tool.type}
+                type="button"
+                className="btn btn-secondary justify-between"
+                disabled={disabled || !tool.enabled}
+                onClick={() => addElement(tool.type, tool.label)}
+              >
+                <span>{tool.label}</span>
+                {tool.enabled ? <Plus className="h-4 w-4" /> : <span className="text-[10px] font-black uppercase text-slate-400">Coming later</span>}
+              </button>
+            ))}
+          </div>
+          <div className="mt-5">
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--app-text-muted)]">Section Layers</p>
+            <div className="grid gap-2">
+              {layers.map((layer) => (
+              <button
+                key={layer.id}
+                type="button"
+                className={`rounded-card border px-3 py-2 text-left text-sm transition ${selectedLayerId === layer.id ? 'border-sky-300/50 bg-sky-500/15 shadow-[0_0_0_1px_rgba(125,211,252,0.18)]' : 'border-white/10 bg-white/[0.035] hover:border-sky-300/25 hover:bg-white/[0.055]'}`}
+                onClick={() => setSelectedLayerId(layer.id)}
+              >
+                <span className="flex min-w-0 items-start justify-between gap-2">
+                  <span className="min-w-0 font-bold text-[var(--app-text)]">{layer.title}</span>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${layer.locked ? 'border-amber-300/25 bg-amber-500/10 text-amber-100' : 'border-emerald-300/25 bg-emerald-500/10 text-emerald-100'}`}>{layer.locked ? 'Locked' : 'Editable'}</span>
+                </span>
+                <span className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-wide text-[var(--app-text-muted)]">
+                  <span>{layer.kind}</span>
+                  <span className={`rounded-full border px-2 py-0.5 ${layer.visible ? 'border-emerald-300/20 text-emerald-100' : 'border-slate-500/25 text-slate-300'}`}>{layer.visible ? 'Visible' : 'Hidden'}</span>
+                </span>
+              </button>
+            ))}
+            </div>
+          </div>
+        </aside>
+
+        <main className="surface admin-control-card p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-black text-[var(--app-text)]">A4 Canvas</h3>
+              <p className="mt-1 text-xs muted">Visual preview only. Existing PDF output changes only after Save Template.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {['fit', '75', '100'].map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${zoom === option ? 'border-sky-300/35 bg-sky-500/15 text-[var(--brand)]' : 'border-white/10 bg-white/[0.04] text-[var(--app-text-muted)]'}`}
+                  onClick={() => setZoom(option)}
+                >
+                  {option === 'fit' ? 'Fit' : `${option}%`}
+                </button>
+              ))}
+              <span className="rounded-full border border-sky-300/25 bg-sky-500/10 px-3 py-1 text-xs font-black text-[var(--brand)]">A4 Portrait</span>
+            </div>
+          </div>
+          <div className="overflow-x-auto rounded-card border border-white/10 bg-slate-950/35 p-4">
+            <div className="mx-auto transition-all" style={{ width: zoomWidths[zoom], maxWidth: '100%' }}>
+              <div className="relative aspect-[210/297] overflow-hidden rounded-card border border-white/20 bg-white shadow-2xl">
+                {previewFrameUrl ? (
+                  <iframe title={`${template.name} visual design preview`} src={previewFrameUrl} className="absolute inset-0 h-full w-full bg-white" />
+                ) : (
+                  <div className="absolute inset-0 grid place-items-center bg-white p-6 text-center text-sm font-semibold text-slate-600">
+                    {previewError || 'Preparing real PDF preview...'}
+                  </div>
+                )}
+                {previewLoading ? (
+                  <div className="absolute inset-0 z-20 grid place-items-center bg-slate-950/20">
+                    <Loader2 className="h-6 w-6 animate-spin text-sky-100" />
+                  </div>
+                ) : null}
+                <div className="absolute inset-0 z-10">
+                  {layers.filter((layer) => layer.kind !== 'Free Element').map((layer, index) => {
+                    const active = selectedLayerId === layer.id;
+                    return (
+                      <button
+                        key={layer.id}
+                        type="button"
+                        className={`absolute rounded-md border px-2 py-1 text-left text-[10px] font-black uppercase tracking-wide transition ${active ? 'border-cyan-300 bg-cyan-300/20 text-cyan-950 shadow-[0_0_0_2px_rgba(14,165,233,0.28)]' : 'border-cyan-400/35 bg-cyan-300/10 text-cyan-950/70 hover:bg-cyan-300/20'}`}
+                        style={overlayStyleForLayer(layer, index)}
+                        onClick={() => setSelectedLayerId(layer.id)}
+                      >
+                        {layer.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+          {previewError ? <p className="mt-3 rounded-card border border-rose-400/25 bg-rose-500/10 p-3 text-sm font-semibold text-rose-100">{previewError}</p> : null}
+        </main>
+
+        <aside className="surface admin-control-card p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="admin-control-icon"><Settings2 className="h-5 w-5" /></div>
+            <div>
+              <h3 className="font-black text-[var(--app-text)]">Properties</h3>
+              <p className="mt-1 text-xs muted">Layer properties are preview-only until saved.</p>
+            </div>
+          </div>
+          {selectedLayer ? (
+            <div className="grid gap-3">
+              <label>
+                <span className="label">Section name</span>
+                <input className="input" value={selectedLayer.title} disabled readOnly />
+              </label>
+              <FieldRow field={{ type: 'toggle', path: designLayerOptionPath(selectedLayer.id, 'visible'), label: 'Visible', fallback: selectedLayer.visible }} draft={designDraft} setDraft={setDesignDraft} canEdit={canEdit && selectedLayer.supportsVisibility} saving={saving} />
+              <FieldRow field={{ type: 'toggle', path: designLayerOptionPath(selectedLayer.id, 'showTitle'), label: 'Show title', fallback: true }} draft={designDraft} setDraft={setDesignDraft} canEdit={canEdit && selectedLayer.supportsTitle} saving={saving} />
+              <FieldRow field={{ type: 'toggle', path: designLayerOptionPath(selectedLayer.id, 'showIcon'), label: 'Show icon', fallback: true }} draft={designDraft} setDraft={setDesignDraft} canEdit={canEdit && selectedLayer.supportsIcon} saving={saving} />
+              <ColorControl label="Accent color" value={getPath(designDraft, designLayerOptionPath(selectedLayer.id, 'accentColor'), getPath(designDraft, 'colors.accentColor', getPath(draft, 'header.accentColor', '#0f2a52')))} disabled={disabled || !customColorsEnabled} onChange={(value) => setDesignDraft((current) => setPath(current, designLayerOptionPath(selectedLayer.id, 'accentColor'), value))} />
+              {!customColorsEnabled ? <p className="rounded-card border border-white/10 bg-white/[0.035] p-3 text-xs font-semibold muted">Enable custom colors in Advanced Layout to edit accent color.</p> : null}
+              <SelectControl label="Alignment" value={getPath(designDraft, designLayerOptionPath(selectedLayer.id, 'alignment'), 'left')} options={[['left', 'Left'], ['center', 'Center'], ['right', 'Right']]} disabled={disabled} onChange={(value) => setDesignDraft((current) => setPath(current, designLayerOptionPath(selectedLayer.id, 'alignment'), value))} />
+              <SelectControl label="Width option" value={getPath(designDraft, designLayerOptionPath(selectedLayer.id, 'width'), 'full')} options={cardWidthOptions} disabled={disabled || !customWidthEnabled} onChange={(value) => setDesignDraft((current) => setPath(current, designLayerOptionPath(selectedLayer.id, 'width'), value))} />
+              {!customWidthEnabled ? <p className="rounded-card border border-white/10 bg-white/[0.035] p-3 text-xs font-semibold muted">Enable custom card width in Advanced Layout to edit width.</p> : null}
+              <FieldRow field={{ type: 'toggle', path: designLayerOptionPath(selectedLayer.id, 'twoColumn'), label: 'Two-column card', fallback: false }} draft={designDraft} setDraft={setDesignDraft} canEdit={canEdit && twoColumnEnabled} saving={saving} />
+              {!twoColumnEnabled ? <p className="rounded-card border border-white/10 bg-white/[0.035] p-3 text-xs font-semibold muted">Enable two-column cards in Advanced Layout to use this option.</p> : null}
+              <button type="button" className="btn btn-secondary justify-between" disabled>
+                <span>Precise drag / snap</span>
+                <span className="text-[10px] font-black uppercase text-slate-400">Coming later</span>
+              </button>
+              {selectedLayer.locked ? (
+                <p className="rounded-card border border-amber-300/20 bg-amber-500/10 p-3 text-xs font-semibold text-amber-100">Locked section. You can adjust safe visual flags, but fixed template sections cannot be deleted or free-positioned here.</p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="rounded-card border border-dashed border-white/15 bg-white/[0.025] p-4 text-sm muted">Select a section from the canvas or layers list to edit its visual settings.</p>
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function AdvancedLayoutGroup({ title, children }) {
+  return (
+    <details open className="rounded-card border border-white/10 bg-white/[0.03] p-3">
+      <summary className="cursor-pointer text-sm font-black text-[var(--app-text)]">{title}</summary>
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        {children}
+      </div>
+    </details>
+  );
+}
+
+function AdvancedLayoutPanel({ draft, setDraft, canEdit, saving }) {
+  const disabled = !canEdit || saving;
+  const advancedEnabled = getPath(draft, 'advancedEnabled', false) === true;
+  const customWidthEnabled = getPath(draft, 'structured.customCardWidthEnabled', false) === true;
+  const customColorsEnabled = getPath(draft, 'structured.customColorsEnabled', false) === true;
+
+  function update(path, value) {
+    setDraft((current) => setPath(current, path, value));
+  }
+
+  return (
+    <section className="surface admin-control-card p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="admin-control-icon"><Settings2 className="h-5 w-5" /></div>
+          <div className="min-w-0">
+            <h3 className="text-lg font-black text-[var(--app-text)]">Advanced Layout</h3>
+            <p className="mt-1 max-w-3xl text-sm leading-6 muted">Optional tools for custom cards, colors, QR/payment, signature, and layout control. Existing PDF design stays unchanged until saved.</p>
+          </div>
+        </div>
+        <span className={`rounded-full border px-3 py-1 text-xs font-black ${advancedEnabled ? 'border-sky-300/30 bg-sky-500/15 text-[var(--brand)]' : 'border-white/10 bg-white/[0.04] text-[var(--app-text-muted)]'}`}>
+          {advancedEnabled ? 'ADVANCED ON' : 'ADVANCED OFF'}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        <FieldRow field={{ type: 'toggle', path: 'advancedEnabled', label: 'Enable Advanced Layout', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+        {!advancedEnabled ? (
+          <p className="rounded-card border border-sky-300/15 bg-sky-500/10 p-3 text-sm font-semibold text-[var(--brand)]">Advanced Layout is optional. Default templates remain unchanged unless you enable options and save the template.</p>
+        ) : (
+          <div className="grid gap-3">
+            <AdvancedLayoutGroup title="Layout Controls">
+            <FieldRow field={{ type: 'toggle', path: 'structured.allowDragDrop', label: 'Enable drag/drop ordering', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+            <FieldRow field={{ type: 'toggle', path: 'structured.twoColumnCards', label: 'Allow two-column cards', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+            <FieldRow field={{ type: 'toggle', path: 'structured.customCardWidthEnabled', label: 'Enable custom card width', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+              <SelectControl label="Default custom card width" value={getPath(draft, 'structured.defaultCardWidth', 'full')} options={cardWidthOptions} disabled={disabled || !customWidthEnabled} onChange={(value) => update('structured.defaultCardWidth', value)} />
+            </AdvancedLayoutGroup>
+
+            <AdvancedLayoutGroup title="Visual Controls">
+            <FieldRow field={{ type: 'toggle', path: 'structured.customColorsEnabled', label: 'Enable custom colors', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+              <ColorControl label="Accent color" value={getPath(draft, 'design.colors.accentColor', getPath(draft, 'header.accentColor', '#0f2a52'))} disabled={disabled || !customColorsEnabled} onChange={(value) => update('design.colors.accentColor', value)} />
+              <ColorControl label="Card background color" value={getPath(draft, 'design.colors.cardBackground', '#ffffff')} disabled={disabled || !customColorsEnabled} onChange={(value) => update('design.colors.cardBackground', value)} />
+              <label>
+                <span className="label">Border style</span>
+                <button type="button" className="btn btn-secondary w-full justify-between" disabled>
+                  <span>Default soft border</span>
+                  <span className="text-[10px] font-black uppercase text-slate-400">Coming later</span>
+                </button>
+              </label>
+            </AdvancedLayoutGroup>
+
+            <AdvancedLayoutGroup title="Extra Cards">
+              <FieldRow field={{ type: 'toggle', path: 'structured.customSectionsEnabled', label: 'Enable custom sections/cards', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+            <FieldRow field={{ type: 'toggle', path: 'structured.qrPaymentCardEnabled', label: 'Enable QR/payment card', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+            <FieldRow field={{ type: 'toggle', path: 'structured.signatureCardEnabled', label: 'Enable signature card', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+              <button type="button" className="btn btn-secondary justify-between lg:col-span-2" disabled>
+                <span>QR/payment rendering and signature upload</span>
+                <span className="text-[10px] font-black uppercase text-slate-400">Coming later</span>
+              </button>
+            </AdvancedLayoutGroup>
+
+            <AdvancedLayoutGroup title="Safety">
+            <FieldRow field={{ type: 'toggle', path: 'pageSettings.preferOnePage', label: 'Prefer one-page PDFs' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+            <FieldRow field={{ type: 'toggle', path: 'pageSettings.safePagination', label: 'Safe pagination' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+            </AdvancedLayoutGroup>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function LivePreviewPanel({ template, previewUrl, previewLoading, previewError }) {
+  return (
+    <section className="surface admin-control-card p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="font-black">Live PDF Preview</h3>
+          <p className="mt-1 text-xs muted">Server-rendered draft preview.</p>
+        </div>
+        {previewLoading ? <Loader2 className="h-4 w-4 animate-spin text-sky-100" /> : null}
+      </div>
+      <div className="overflow-hidden rounded-card border border-white/10 bg-slate-950/45">
+        {previewUrl ? (
+          <iframe title={`${template.name} preview`} src={previewUrl} className="h-[680px] w-full bg-white" />
+        ) : (
+          <div className="grid h-[680px] place-items-center p-6 text-center text-sm muted">
+            {previewError || 'Preparing PDF preview...'}
+          </div>
+        )}
+      </div>
+      {previewError ? <p className="mt-3 rounded-card border border-rose-400/25 bg-rose-500/10 p-3 text-sm font-semibold text-rose-100">{previewError}</p> : null}
+      <p className="mt-3 text-xs muted">Unsaved edits are used only for preview until you save the template.</p>
+    </section>
+  );
+}
+
+function SelectedSectionEditor({ section, sectionIndex, draft, setDraft, canEdit, saving }) {
+  if (!section) return null;
+  const Icon = section.icon || FileText;
+  const visibility = visibilityField(section);
+  const advancedEnabled = getPath(draft, 'advancedEnabled', false) === true;
+  const customColorsEnabled = getPath(draft, 'structured.customColorsEnabled', false) === true;
+  const customWidthEnabled = getPath(draft, 'structured.customCardWidthEnabled', false) === true;
+  const fields = section.fields.filter((field) => {
+    if (field.path === visibility?.path) return false;
+    if (field.type === 'color') return advancedEnabled && customColorsEnabled;
+    if (field.type === 'width' || field.type === 'layout') return advancedEnabled;
+    return true;
+  });
+
+  return (
+    <section className="surface admin-control-card p-5">
+      <div className="mb-4 flex items-start gap-3">
+        <div className="admin-control-icon"><Icon className="h-5 w-5" /></div>
+        <div>
+          <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Selected Section</p>
+          <h3 className="mt-1 text-xl font-black">{section.title}</h3>
+          <p className="mt-1 text-sm muted">Fixed sections can be hidden where supported, but cannot be deleted.</p>
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 md:grid-cols-2">
+        <label>
+          <span className="label">Section title</span>
+          <input
+            className="input"
+            value={getPath(draft, sectionOptionPath(section, sectionIndex, 'title'), section.title)}
+            disabled={!canEdit || saving}
+            onChange={(event) => setDraft((current) => setPath(current, sectionOptionPath(section, sectionIndex, 'title'), event.target.value))}
+          />
+        </label>
+        {visibility ? (
+          <FieldRow field={{ ...visibility, label: 'Show/hide section' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+        ) : (
+          <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
+            <span className="min-w-0 text-sm font-bold text-slate-100">Show/hide section</span>
+            <span className="rounded-full border border-sky-300/20 bg-sky-500/10 px-2 py-1 text-xs font-black text-sky-100">Fixed</span>
+          </label>
+        )}
+        <FieldRow field={{ type: 'toggle', path: sectionOptionPath(section, sectionIndex, 'showTitle'), label: 'Show/hide title' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+        <FieldRow field={{ type: 'toggle', path: sectionOptionPath(section, sectionIndex, 'showIcon'), label: 'Show/hide icon' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+        {advancedEnabled && customWidthEnabled ? (
+          <SelectControl
+            label="Width / layout"
+            value={getPath(draft, sectionOptionPath(section, sectionIndex, 'width'), 'full')}
+            options={cardWidthOptions}
+            disabled={!canEdit || saving}
+            onChange={(value) => setDraft((current) => setPath(current, sectionOptionPath(section, sectionIndex, 'width'), value))}
+          />
+        ) : null}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {fields.map((field) => (
+          <FieldRow key={field.path} field={field} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SectionsList({ items, draft, selectedKey, onSelect, canReorder, onMove }) {
+  return (
+    <section className="surface admin-control-card p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="admin-control-icon"><LayoutGrid className="h-5 w-5" /></div>
+        <div>
+          <h3 className="font-black">Template Sections</h3>
+          <p className="mt-1 text-xs muted">Fixed PDF sections in order.</p>
+        </div>
+      </div>
+      <div className="grid gap-2">
+        {items.map(({ section, index }, orderIndex) => {
+          const Icon = section.icon || FileText;
+          const key = sectionKey(section, index);
+          const active = selectedKey === key;
+          const visible = sectionVisible(section, draft);
+          return (
+            <article key={key} className={`rounded-card border p-3 transition ${active ? 'border-sky-300/55 bg-sky-500/15 shadow-[0_0_0_1px_rgba(125,211,252,0.2),0_18px_42px_rgba(14,165,233,0.12)]' : 'border-white/10 bg-white/[0.035]'}`}>
+              <div className="flex items-start gap-3">
+                <div className="admin-control-icon h-9 w-9"><Icon className="h-4 w-4" /></div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-black leading-snug text-[var(--app-text)]">{section.title}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase ${visible ? 'border-emerald-300/25 bg-emerald-500/15 text-emerald-100' : 'border-slate-500/25 bg-slate-500/10 text-slate-300'}`}>{visible ? 'VISIBLE' : 'HIDDEN'}</span>
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-black uppercase text-slate-300">FIXED</span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-[auto_auto_minmax(5rem,1fr)] gap-2">
+                <button type="button" className="icon-button h-9 w-9" disabled={!canReorder || orderIndex === 0} onClick={() => onMove(orderIndex, -1)} aria-label="Move section up"><ArrowUp className="h-3.5 w-3.5" /></button>
+                <button type="button" className="icon-button h-9 w-9" disabled={!canReorder || orderIndex === items.length - 1} onClick={() => onMove(orderIndex, 1)} aria-label="Move section down"><ArrowDown className="h-3.5 w-3.5" /></button>
+                <button type="button" className="btn btn-secondary h-9 justify-center px-3 py-1.5 text-xs" onClick={() => onSelect(key)}>
+                  <Eye className="h-3.5 w-3.5" />
+                  Select
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function StructuredBuilderWorkspace({
+  sections,
+  draft,
+  setDraft,
+  canEdit,
+  saving,
+  previewUrl,
+  previewLoading,
+  previewError,
+  template,
+  versions,
+  restoring,
+  onRestore
+}) {
+  const [sectionOrder, setSectionOrder] = useState(() => sections.map((section, index) => sectionKey(section, index)));
+  const [selectedKey, setSelectedKey] = useState(sectionOrder[0] || '');
+  const advancedEnabled = getPath(draft, 'advancedEnabled', false) === true;
+  const customSectionsEnabled = getPath(draft, 'structured.customSectionsEnabled', false) === true;
+  const canReorder = getPath(draft, 'advancedEnabled', false) === true && getPath(draft, 'structured.allowDragDrop', false) === true;
+
+  useEffect(() => {
+    const keys = sections.map((section, index) => sectionKey(section, index));
+    setSectionOrder(keys);
+    setSelectedKey((current) => (keys.includes(current) ? current : keys[0] || ''));
+  }, [sections, template.key]);
+
+  const orderedItems = sectionOrder
+    .map((key) => {
+      const index = sections.findIndex((section, itemIndex) => sectionKey(section, itemIndex) === key);
+      return index >= 0 ? { section: sections[index], index } : null;
+    })
+    .filter(Boolean);
+  const selectedItem = orderedItems.find((item) => sectionKey(item.section, item.index) === selectedKey) || orderedItems[0];
+
+  function moveSection(orderIndex, direction) {
+    setSectionOrder((current) => {
+      const next = current.slice();
+      const target = orderIndex + direction;
+      if (target < 0 || target >= next.length) return current;
+      [next[orderIndex], next[target]] = [next[target], next[orderIndex]];
+      return next;
+    });
+  }
+
+  return (
+    <>
+      <div className="hidden gap-5 xl:grid xl:grid-cols-[285px_minmax(0,1fr)_440px]">
+        <SectionsList items={orderedItems} draft={draft} selectedKey={selectedKey} onSelect={setSelectedKey} canReorder={canReorder} onMove={moveSection} />
+        <main className="grid content-start gap-4">
+          <AdvancedLayoutPanel draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+          <SelectedSectionEditor section={selectedItem?.section} sectionIndex={selectedItem?.index || 0} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+          <CustomSectionsEditor draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} advancedEnabled={advancedEnabled} customSectionsEnabled={customSectionsEnabled} />
+        </main>
+        <aside className="grid content-start gap-4 xl:sticky xl:top-4">
+          <LivePreviewPanel template={template} previewUrl={previewUrl} previewLoading={previewLoading} previewError={previewError} />
+          <VersionHistoryPanel versions={versions} restoring={restoring} onRestore={onRestore} />
+        </aside>
+      </div>
+
+      <div className="grid gap-4 xl:hidden">
+        <AdvancedLayoutPanel draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+        {sections.map((section) => (
+          <SectionCard key={section.title} section={section} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+        ))}
+        <CustomSectionsEditor draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} advancedEnabled={advancedEnabled} customSectionsEnabled={customSectionsEnabled} />
+        <LivePreviewPanel template={template} previewUrl={previewUrl} previewLoading={previewLoading} previewError={previewError} />
+        <VersionHistoryPanel versions={versions} restoring={restoring} onRestore={onRestore} />
+      </div>
+    </>
   );
 }
 
@@ -561,14 +1445,30 @@ function StructuredTemplateEditor({
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const [designConfirmOpen, setDesignConfirmOpen] = useState(false);
+  const [uiMode, setUiMode] = useState('structured');
+  const [designDraft, setDesignDraft] = useState(() => designStateFromConfig(draft));
   const previewUrlRef = useRef('');
   const requestIdRef = useRef(0);
   const sections = templateSectionDefinitions[template.key] || [];
   const busy = Boolean(busyKey) || saving;
+  const designMode = uiMode === 'design';
+  const draftDesignSignature = stableJson(draft.design || {});
+  const designDraftDirty = stableJson(designDraft) !== draftDesignSignature;
 
   useEffect(() => () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
   }, []);
+
+  useEffect(() => {
+    setUiMode('structured');
+    setDesignConfirmOpen(false);
+    setDesignDraft(designStateFromConfig(draft));
+  }, [template.key]);
+
+  useEffect(() => {
+    if (!designMode && !designDraftDirty) setDesignDraft(designStateFromConfig(draft));
+  }, [draftDesignSignature, designMode, designDraftDirty, draft]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -603,78 +1503,126 @@ function StructuredTemplateEditor({
 
   function submit(event) {
     event.preventDefault();
-    onSave(event);
+    onSave(event, designDraftDirty ? mergeDesignStateForSave(draft, designDraft) : draft);
+  }
+
+  function switchToStructuredMode() {
+    setUiMode('structured');
+  }
+
+  function activateDesignMode() {
+    setUiMode('design');
+  }
+
+  function switchToDesignMode() {
+    if (designMode) return;
+    setDesignConfirmOpen(true);
   }
 
   return (
-    <form className="grid gap-5" onSubmit={submit}>
-      <section className="surface admin-control-card p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0">
-            <button type="button" className="btn btn-secondary admin-compact-button mb-4" onClick={onCancel}>
-              <X className="h-4 w-4" />
-              Back to Templates
-            </button>
-            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Structured PDF Editor</p>
-            <h2 className="mt-1 text-2xl font-black">{template.name}</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Edit this fixed PDF from top to bottom using cards that follow the real PDF layout. Preview refreshes automatically after edits.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-secondary admin-compact-button" onClick={onShowVariables}>
-              <ShieldCheck className="h-4 w-4" />
-              Template Variables
-            </button>
-            <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onPreview(template, draft)}>
-              {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-              Preview PDF
-            </button>
-            <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onDownload(template, draft)}>
-              {busyKey === `download-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              Download Sample PDF
-            </button>
-            <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || busy} onClick={() => onReset(template)}>
-              <RotateCcw className="h-4 w-4" />
-              Reset to Default
-            </button>
-            <button type="submit" className="btn btn-primary admin-compact-button" disabled={!canEdit || busy}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saving ? 'Saving...' : 'Save Template'}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_440px]">
-        <div className="grid gap-4">
-          {sections.map((section) => (
-            <SectionCard key={section.title} section={section} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-          ))}
-        </div>
-        <aside className="grid content-start gap-4 2xl:sticky 2xl:top-4">
-          <section className="surface admin-control-card p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h3 className="font-black">Live PDF Preview</h3>
-                <p className="mt-1 text-xs muted">Server-rendered draft preview.</p>
+    <>
+      <form className="grid gap-5" onSubmit={submit}>
+        <section className="surface admin-control-card p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0">
+              <button
+                type="button"
+                className="btn btn-secondary admin-compact-button mb-4"
+                onClick={() => {
+                  if (designDraftDirty && !window.confirm('Discard unsaved design mode changes?')) return;
+                  onCancel();
+                }}
+              >
+                <X className="h-4 w-4" />
+                Back to Templates
+              </button>
+              <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Structured PDF Editor</p>
+              <h2 className="mt-1 text-2xl font-black">{template.name}</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 muted">Edit this fixed PDF from top to bottom using cards that follow the real PDF layout. Preview refreshes automatically after edits.</p>
+              <div className="mt-4 inline-flex flex-wrap rounded-card border border-white/10 bg-slate-950/35 p-1">
+                <button type="button" className={`btn admin-compact-button border-0 ${!designMode ? 'btn-primary' : 'btn-secondary'}`} disabled={busy} onClick={switchToStructuredMode}>
+                  <LayoutGrid className="h-4 w-4" />
+                  Structured Mode
+                </button>
+                <button type="button" className={`btn admin-compact-button border-0 ${designMode ? 'btn-primary' : 'btn-secondary'}`} disabled={!canEdit || busy} onClick={switchToDesignMode}>
+                  <Edit3 className="h-4 w-4" />
+                  Design Mode
+                </button>
               </div>
-              {previewLoading ? <Loader2 className="h-4 w-4 animate-spin text-sky-100" /> : null}
             </div>
-            <div className="overflow-hidden rounded-card border border-white/10 bg-slate-950/45">
-              {previewUrl ? (
-                <iframe title={`${template.name} preview`} src={previewUrl} className="h-[680px] w-full bg-white" />
-              ) : (
-                <div className="grid h-[680px] place-items-center p-6 text-center text-sm muted">
-                  {previewError || 'Preparing PDF preview...'}
-                </div>
-              )}
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn btn-secondary admin-compact-button" onClick={onShowVariables}>
+                <ShieldCheck className="h-4 w-4" />
+                Template Variables
+              </button>
+              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onPreview(template, draft)}>
+                {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+                Preview PDF
+              </button>
+              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onDownload(template, draft)}>
+                {busyKey === `download-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Download Sample PDF
+              </button>
+              <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || busy} onClick={() => onReset(template)}>
+                <RotateCcw className="h-4 w-4" />
+                Reset to Default
+              </button>
+              <button type="submit" className="btn btn-primary admin-compact-button" disabled={!canEdit || busy}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {saving ? 'Saving...' : 'Save Template'}
+              </button>
             </div>
-            {previewError ? <p className="mt-3 rounded-card border border-rose-400/25 bg-rose-500/10 p-3 text-sm font-semibold text-rose-100">{previewError}</p> : null}
-            <p className="mt-3 text-xs muted">Unsaved edits are used only for this preview until you save the template.</p>
-          </section>
-          <VersionHistoryPanel versions={versions} restoring={restoring} onRestore={onRestore} />
-        </aside>
-      </div>
-    </form>
+          </div>
+        </section>
+
+      {designMode ? (
+        <DesignModeWorkspace
+          template={template}
+          sections={sections}
+          draft={draft}
+          designDraft={designDraft}
+          setDesignDraft={setDesignDraft}
+          previewUrl={previewUrl}
+          previewLoading={previewLoading}
+          previewError={previewError}
+          canEdit={canEdit}
+          saving={saving}
+          busyKey={busyKey}
+          onBack={switchToStructuredMode}
+          onPreview={onPreview}
+          onDownload={onDownload}
+          onShowVariables={onShowVariables}
+        />
+      ) : (
+        <StructuredBuilderWorkspace
+          sections={sections}
+          draft={draft}
+          setDraft={setDraft}
+          canEdit={canEdit}
+          saving={saving}
+          previewUrl={previewUrl}
+          previewLoading={previewLoading}
+          previewError={previewError}
+          template={template}
+          versions={versions}
+          restoring={restoring}
+          onRestore={onRestore}
+        />
+      )}
+      </form>
+      {designConfirmOpen ? (
+        <ConfirmModal
+          title="Switch to Design Mode?"
+          message="Design Mode gives visual layout control. Existing PDF design will not change until you save. Continue?"
+          confirmLabel="Continue"
+          onCancel={() => setDesignConfirmOpen(false)}
+          onConfirm={() => {
+            setDesignConfirmOpen(false);
+            activateDesignMode();
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -759,23 +1707,24 @@ export function PdfTemplatesSection({ onDirtyChange = null }) {
     }
   }
 
-  async function saveTemplate(event) {
-    event.preventDefault();
+  async function saveTemplate(event, configOverride = null) {
+    event?.preventDefault?.();
     if (!activeTemplate) return;
     if (!canEdit) {
       push('Only admin users can save PDF templates', 'error');
       return;
     }
+    const configToSave = configOverride || draft;
     setSaving(true);
     try {
       const result = await request(`/pdf-templates/${activeTemplate.key}`, {
         method: 'PATCH',
-        body: JSON.stringify({ config: draft })
+        body: JSON.stringify({ config: configToSave })
       });
       push(result.message || 'PDF template saved');
       await reload({ silent: true });
       setEditingKey(result.template?.key || activeTemplate.key);
-      setDraft(JSON.parse(JSON.stringify(result.template?.config || draft)));
+      setDraft(JSON.parse(JSON.stringify(result.template?.config || configToSave)));
     } catch (err) {
       push(err.message, 'error');
     } finally {

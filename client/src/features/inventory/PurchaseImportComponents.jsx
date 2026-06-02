@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Building2,
-  CalendarClock,
   CircleDollarSign,
   Download,
   Edit3,
@@ -31,8 +30,6 @@ import {
   Link,
   LoadingBlock,
   SearchBox,
-  currency,
-  csvCell,
   dateInputValue,
   downloadCsv,
   formatDate,
@@ -44,9 +41,11 @@ import {
   useAuth,
   useDebouncedValue,
   useResource,
-  useToast
+  useToast,
+  wholeCurrency
 } from '../../shared/phase1Shared.jsx';
 import { can } from '../../utils/roles.js';
+import { AdminDateFilter } from './AdminDateFilter.jsx';
 
 const purchaseTabs = [
   { id: 'parts', label: 'Products / Parts' },
@@ -77,6 +76,10 @@ function purchaseItemId(item) {
 
 function purchaseTotal(items = []) {
   return items.reduce((sum, item) => sum + Number(item.quantityReceived || 0) * Number(item.unitCost || 0), 0);
+}
+
+function formatCurrencyNoDecimal(amount) {
+  return wholeCurrency(amount);
 }
 
 function fileNameFromBill(file = {}) {
@@ -349,7 +352,7 @@ export function PurchaseImportModal({ purchase = null, initialPart = null, parts
                       <td><input className="input" type="number" min="0" value={item.quantityOrdered} onChange={(event) => updateItem(item.localId, 'quantityOrdered', event.target.value)} /></td>
                       <td><input className="input" type="number" min="0" value={item.quantityReceived} onChange={(event) => updateItem(item.localId, 'quantityReceived', event.target.value)} /></td>
                       <td><input className="input" type="number" min="0" step="0.01" value={item.unitCost} onChange={(event) => updateItem(item.localId, 'unitCost', event.target.value)} /></td>
-                      <td className="font-black text-sky-100">{currency(Number(item.quantityReceived || 0) * Number(item.unitCost || 0))}</td>
+                      <td className="font-black text-sky-100">{formatCurrencyNoDecimal(Number(item.quantityReceived || 0) * Number(item.unitCost || 0))}</td>
                       <td className="text-right">
                         <button type="button" className="icon-button h-8 w-8 text-rose-100" aria-label="Remove item" disabled={form.items.length === 1} onClick={() => setForm((current) => ({ ...current, items: current.items.filter((row) => row.localId !== item.localId) }))}>
                           <Trash2 className="h-4 w-4" />
@@ -361,7 +364,7 @@ export function PurchaseImportModal({ purchase = null, initialPart = null, parts
               </table>
             </div>
             <div className="mt-4 flex justify-end">
-              <div className="purchase-total-pill"><span>Total</span><b>{currency(totalAmount)}</b></div>
+              <div className="purchase-total-pill"><span>Total</span><b>{formatCurrencyNoDecimal(totalAmount)}</b></div>
             </div>
           </section>
         </div>
@@ -429,7 +432,7 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
   const pagination = paginationFrom(data, purchases.length, limit);
   const metrics = [
     { label: 'Total Purchases', value: summary.totalPurchases || 0, helper: 'Purchase/import records', icon: ShoppingCart, tone: 'blue' },
-    { label: 'Total Spent', value: currency(summary.totalSpent || 0), helper: 'Received purchase value', icon: CircleDollarSign, tone: 'cyan' },
+    { label: 'Total Spent', value: formatCurrencyNoDecimal(summary.totalSpent || 0), helper: 'Received purchase value', icon: CircleDollarSign, tone: 'cyan' },
     { label: 'Pending Deliveries', value: summary.pendingDeliveries || 0, helper: 'Ordered or partially received', icon: Truck, tone: summary.pendingDeliveries ? 'amber' : 'green' },
     { label: 'Pending Payments', value: summary.pendingPayments || 0, helper: 'Pending or partial payments', icon: ReceiptText, tone: summary.pendingPayments ? 'red' : 'green' },
     { label: 'Low Stock Parts', value: summary.lowStockParts || 0, helper: 'Parts needing attention', icon: PackageCheck, tone: summary.lowStockParts ? 'amber' : 'green' },
@@ -448,7 +451,7 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
   function exportCsv() {
     downloadCsv(
       'purchase-import-register.csv',
-      ['Invoice / Ref No.', 'Supplier / Shop', 'Place / City', 'Purchase Date', 'Status', 'Payment Status', 'Total Amount', 'Items Count'],
+      ['Invoice / Ref No.', 'Supplier / Shop', 'Place / City', 'Date', 'Status', 'Payment', 'Amount', 'Items'],
       purchases.map((purchase) => [
         purchase.invoiceRef,
         purchase.supplierName,
@@ -510,10 +513,10 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
           <option value="">All payments</option>
           {paymentStatuses.map((status) => <option key={status}>{status}</option>)}
         </select>
-        <input className="input" type="date" aria-label="Start date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        <input className="input" type="date" aria-label="End date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        <AdminDateFilter value={dateFrom} onChange={setDateFrom} placeholder="From date" ariaLabel="Purchase from date" />
+        <AdminDateFilter value={dateTo} onChange={setDateTo} placeholder="To date" ariaLabel="Purchase to date" />
         <button type="button" className="btn btn-secondary h-10 px-4" disabled={!hasFilters} onClick={resetFilters}>Reset Filters</button>
-        {canExport ? <button type="button" className="btn btn-secondary h-10 px-4" onClick={exportCsv}><Download className="h-4 w-4" />Export CSV</button> : null}
+        {canExport ? <button type="button" className="btn btn-secondary purchase-export-button" onClick={exportCsv}><Download className="h-4 w-4" />Export CSV</button> : null}
         <p className="inventory-count-pill xl:col-span-8">Showing <b>{purchases.length}</b> purchase/import record{purchases.length === 1 ? '' : 's'}</p>
       </div>
       {!purchases.length ? (
@@ -528,7 +531,6 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
           <div className="table-wrap purchase-table-wrap surface bg-[var(--surface)]">
             <table className="data-table purchase-register-table">
               <colgroup>
-                <col className="purchase-col-index" />
                 <col className="purchase-col-invoice" />
                 <col className="purchase-col-supplier" />
                 <col className="purchase-col-place" />
@@ -540,12 +542,11 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
                 <col className="purchase-col-actions" />
               </colgroup>
               <thead>
-                <tr><th>#</th><th>Invoice / Ref No.</th><th>Supplier / Shop</th><th>Place / City</th><th>Purchase Date</th><th>Status</th><th>Payment Status</th><th>Total Amount</th><th>Items Count</th><th>Actions</th></tr>
+                <tr><th>Invoice / Ref No.</th><th>Supplier / Shop</th><th>Place / City</th><th>Date</th><th>Status</th><th>Payment</th><th>Amount</th><th>Items</th><th>Actions</th></tr>
               </thead>
               <tbody>
-                {purchases.map((purchase, index) => (
+                {purchases.map((purchase) => (
                   <tr key={rowId(purchase)} className={selectedId === rowId(purchase) ? 'purchase-row-selected' : ''}>
-                    <td className="purchase-cell-index">{(pagination.page - 1) * pagination.limit + index + 1}</td>
                     <td className="purchase-cell-invoice font-black text-slate-50">{purchase.invoiceRef}</td>
                     <td className="purchase-cell-supplier">
                       <span className="block font-bold text-slate-100">{purchase.supplierName}</span>
@@ -555,13 +556,13 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
                     <td className="purchase-cell-date">{formatDate(purchase.purchaseDate)}</td>
                     <td className="purchase-cell-badge"><StatusBadge status={purchase.deliveryStatus} /></td>
                     <td className="purchase-cell-badge"><StatusBadge status={purchase.paymentStatus} kind="payment" /></td>
-                    <td className="purchase-cell-money font-black">{currency(purchase.totalAmount)}</td>
+                    <td className="purchase-cell-money font-black">{formatCurrencyNoDecimal(purchase.totalAmount)}</td>
                     <td className="purchase-cell-count">{purchase.itemsCount || purchase.items?.length || 0}</td>
                     <td className="purchase-cell-actions">
                       <div className="inventory-actions purchase-row-actions">
-                        <button type="button" className="icon-button h-8 w-8" title="View purchase" onClick={() => setSelectedId(rowId(purchase))}><Eye className="h-4 w-4" /></button>
-                        {canEdit ? <button type="button" className="icon-button h-8 w-8" title="Edit purchase" onClick={() => setEditor(purchase)}><Edit3 className="h-4 w-4" /></button> : null}
-                        {canDelete ? <button type="button" className="icon-button h-8 w-8 text-rose-100" title="Delete purchase" onClick={() => setDeletePurchase(purchase)}><Trash2 className="h-4 w-4" /></button> : null}
+                        <button type="button" className="icon-button purchase-action-button purchase-action-view" title="View purchase" aria-label={`View ${purchase.invoiceRef}`} onClick={() => setSelectedId(rowId(purchase))}><Eye className="h-4 w-4" /></button>
+                        {canEdit ? <button type="button" className="icon-button purchase-action-button purchase-action-edit" title="Edit purchase" aria-label={`Edit ${purchase.invoiceRef}`} onClick={() => setEditor(purchase)}><Edit3 className="h-4 w-4" /></button> : null}
+                        {canDelete ? <button type="button" className="icon-button purchase-action-button purchase-action-delete" title="Delete purchase" aria-label={`Delete ${purchase.invoiceRef}`} onClick={() => setDeletePurchase(purchase)}><Trash2 className="h-4 w-4" /></button> : null}
                       </div>
                     </td>
                   </tr>
@@ -633,14 +634,14 @@ function PurchaseDetailsPanel({ purchase, loading }) {
               <div className="purchase-item-meta">
                 <span>Ordered: <b>{item.quantityOrdered}</b></span>
                 <span>Received: <b>{item.quantityReceived}</b></span>
-                <span>Unit Cost: <b>{currency(item.unitCost)}</b></span>
-                <span>Total: <b>{currency(item.totalCost)}</b></span>
+                <span>Unit Cost: <b>{formatCurrencyNoDecimal(item.unitCost)}</b></span>
+                <span>Total: <b>{formatCurrencyNoDecimal(item.totalCost)}</b></span>
               </div>
             </div>
           ))}
           <div className="purchase-detail-total">
             <span>Purchase Total</span>
-            <b>{currency(purchaseTotalAmount)}</b>
+            <b>{formatCurrencyNoDecimal(purchaseTotalAmount)}</b>
           </div>
         </div>
       </article>
@@ -702,8 +703,8 @@ function BillFileDisplay({ billFile }) {
         <span className="purchase-bill-meta">{imageBill ? 'Image bill' : isPdfBill(billFile, billUrl) ? 'PDF bill' : 'Bill file'}</span>
       </div>
       <div className="purchase-bill-actions">
-        <a className="stock-source-link" href={billUrl} target="_blank" rel="noreferrer">View</a>
-        <a className="stock-source-link" href={billUrl} download={name}>Download</a>
+        <a className="stock-source-link purchase-bill-button" href={billUrl} target="_blank" rel="noreferrer"><Eye className="h-3.5 w-3.5" />View</a>
+        <a className="stock-source-link purchase-bill-button" href={billUrl} download={name}><Download className="h-3.5 w-3.5" />Download</a>
       </div>
     </div>
   );
@@ -915,13 +916,13 @@ export function SuppliersTab() {
                     </td>
                     <td className="supplier-cell-parts" data-label="Parts Supplied"><SupplierPartsList parts={supplier.partsSupplied} /></td>
                     <td className="supplier-cell-total font-bold" data-label="Purchases">{supplier.totalPurchases || 0}</td>
-                    <td className="supplier-cell-pending font-bold" data-label="Pending Amount">{currency(supplier.pendingPaymentAmount || 0)}</td>
+                    <td className="supplier-cell-pending font-bold" data-label="Pending Amount">{formatCurrencyNoDecimal(supplier.pendingPaymentAmount || 0)}</td>
                     <td className="supplier-cell-date" data-label="Last Purchase">{supplier.lastPurchaseDate ? formatDate(supplier.lastPurchaseDate) : '-'}</td>
                     <td className="supplier-cell-status" data-label="Status"><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${supplier.status === 'Active' ? 'border-emerald-300/25 bg-emerald-400/15 text-emerald-100' : 'border-slate-300/20 bg-slate-400/10 text-slate-200'}`}>{supplier.status}</span></td>
                     <td className="supplier-cell-actions" data-label="Actions">
                       <div className="inventory-actions supplier-row-actions">
-                        {canEdit ? <button type="button" className="icon-button h-8 w-8" onClick={() => setEditor(supplier)} aria-label={`Edit ${supplier.name}`}><Edit3 className="h-4 w-4" /></button> : null}
-                        {canDelete ? <button type="button" className="icon-button h-8 w-8 text-rose-100" onClick={() => setDeleteSupplier(supplier)} aria-label={`Delete ${supplier.name}`}><Trash2 className="h-4 w-4" /></button> : null}
+                        {canEdit ? <button type="button" className="icon-button purchase-action-button purchase-action-edit" onClick={() => setEditor(supplier)} aria-label={`Edit ${supplier.name}`} title="Edit supplier"><Edit3 className="h-4 w-4" /></button> : null}
+                        {canDelete ? <button type="button" className="icon-button purchase-action-button purchase-action-delete" onClick={() => setDeleteSupplier(supplier)} aria-label={`Delete ${supplier.name}`} title="Delete supplier"><Trash2 className="h-4 w-4" /></button> : null}
                       </div>
                     </td>
                   </tr>

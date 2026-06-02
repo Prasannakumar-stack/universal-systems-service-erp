@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { LOGO_FULL_PATH, LOGO_ICON_PATH } from '../config.js';
+import { drawAdvancedPdfSections } from './pdfTemplateAdvanced.js';
 
 const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
 const boldFontPath = 'C:\\Windows\\Fonts\\arialbd.ttf';
@@ -79,9 +80,10 @@ function cleanText(value, fallback = '-') {
 }
 
 function renderText(value = '', context = {}) {
-  return String(value || '').replace(/\{\{([a-z0-9_]+)\}\}/gi, (match, key) => {
-    if (Object.prototype.hasOwnProperty.call(context, key)) return context[key];
-    return match;
+  return String(value || '').replace(/\{\{([a-z0-9_]+)\}\}/gi, (_match, key) => {
+    if (!Object.prototype.hasOwnProperty.call(context, key)) return '-';
+    const next = context[key];
+    return next === undefined || next === null || next === '' ? '-' : next;
   });
 }
 
@@ -428,7 +430,7 @@ function drawAmountSummary(doc, y, subtotal, taxSettings = {}, config = {}) {
   const percentage = Number(taxSettings.defaultPercentage ?? 18);
   const gstAmount = hasGst ? subtotal * (percentage / 100) : 0;
   const finalTotal = subtotal + gstAmount;
-  const height = hasGst ? 76 : 58;
+  const height = hasGst ? 68 : 50;
   const x = 366;
   const width = 195;
   drawCard(doc, x, y, width, height, { fill: '#ffffff' });
@@ -443,11 +445,11 @@ function drawAmountSummary(doc, y, subtotal, taxSettings = {}, config = {}) {
   let rowY = y + 14;
   if (visibleFlag(totalSummary, 'showSubtotal')) {
     row('Sub Total:', money(subtotal), rowY);
-    rowY += 20;
+    rowY += 17;
   }
   if (hasGst && visibleFlag(totalSummary, 'showTax')) {
     row(`${taxSettings.taxLabel || 'GST'} (${percentage}%):`, money(gstAmount), rowY);
-    rowY += 20;
+    rowY += 17;
   }
   if (visibleFlag(totalSummary, 'showFinalTotal')) row('Final Total:', money(finalTotal), rowY, true);
   return { y: y + height + 4, finalTotal };
@@ -457,11 +459,11 @@ function drawValidityNote(doc, y, config = {}) {
   const validity = cfgSection(config, 'validityNote');
   const text = cleanText(validity.text, 'This quotation is valid for 7 days from the quotation date.');
   if (validity.show === false || !text) return 0;
-  drawCard(doc, 34, y, 318, 38, { fill: LIGHT_BLUE, stroke: '#b8daf7' });
-  drawHeaderIcon(doc, 'calendar', 51, y + 10, NAVY);
+  drawCard(doc, 34, y, 318, 32, { fill: LIGHT_BLUE, stroke: '#b8daf7' });
+  drawHeaderIcon(doc, 'calendar', 51, y + 7, NAVY);
   doc.font(boldFont()).fontSize(8.5).fillColor(NAVY).text('VALIDITY NOTE', 78, y + 8, { width: 120 });
-  doc.font(bodyFont()).fontSize(7.8).fillColor(TEXT).text(text, 78, y + 21, { width: 245, lineGap: 1 });
-  return 42;
+  doc.font(bodyFont()).fontSize(7.5).fillColor(TEXT).text(text, 78, y + 20, { width: 245, lineGap: 0.5 });
+  return 36;
 }
 
 function quotationTerms(config = {}, context = {}) {
@@ -474,16 +476,17 @@ function quotationTerms(config = {}, context = {}) {
 function drawTerms(doc, y, config = {}, context = {}) {
   const terms = cfgSection(config, 'terms');
   if (terms.show === false) return 0;
-  drawCard(doc, 34, y, 527, 112);
-  doc.font(boldFont()).fontSize(10).fillColor(NAVY).text(cleanText(terms.title, 'TERMS & CONDITIONS'), 50, y + 13);
-  let lineY = y + 32;
+  const height = 96;
+  drawCard(doc, 34, y, 527, height);
+  doc.font(boldFont()).fontSize(9.5).fillColor(NAVY).text(cleanText(terms.title, 'TERMS & CONDITIONS'), 50, y + 11);
+  let lineY = y + 28;
   quotationTerms(config, context).slice(0, 6).forEach((term, index) => {
-    doc.font(boldFont()).fontSize(7.5).fillColor(NAVY_DARK).text(`${index + 1}.`, 50, lineY, { width: 16 });
-    doc.font(bodyFont()).fontSize(7.5).fillColor(TEXT).text(term, 68, lineY, { width: 470, lineGap: 1 });
-    const height = Math.max(11, doc.heightOfString(term, { width: 470, lineGap: 1 }));
-    lineY += height + 2;
+    doc.font(boldFont()).fontSize(7.1).fillColor(NAVY_DARK).text(`${index + 1}.`, 50, lineY, { width: 16 });
+    doc.font(bodyFont()).fontSize(7.1).fillColor(TEXT).text(term, 68, lineY, { width: 470, lineGap: 0.4 });
+    const rowHeight = Math.max(9.4, doc.heightOfString(term, { width: 470, lineGap: 0.4 }));
+    lineY += rowHeight + 1.2;
   });
-  return 112;
+  return height;
 }
 
 function drawHandshakeIcon(doc, x, y) {
@@ -508,19 +511,20 @@ function drawReadyCard(doc, y, config = {}) {
     'To continue with the service, tap "Approve Quotation" in WhatsApp.',
     'For any questions or changes, contact us before approval.'
   ]);
-  drawCard(doc, 34, y, 527, 88, { fill: LIGHT_BLUE, stroke: '#b8daf7' });
-  drawHandshakeIcon(doc, 52, y + 20);
-  drawLine(doc, 124, y + 15, 124, y + 73, '#b8daf7', 0.85);
-  doc.font(boldFont()).fontSize(11.5).fillColor(NAVY).text(cleanText(approval.title, 'READY TO PROCEED?'), 144, y + 16, { width: 385 });
-  let lineY = y + 36;
-  doc.font(bodyFont()).fontSize(8.7).fillColor(TEXT);
+  const height = 68;
+  drawCard(doc, 34, y, 527, height, { fill: LIGHT_BLUE, stroke: '#b8daf7' });
+  drawHandshakeIcon(doc, 52, y + 10);
+  drawLine(doc, 124, y + 10, 124, y + 58, '#b8daf7', 0.85);
+  doc.font(boldFont()).fontSize(10.7).fillColor(NAVY).text(cleanText(approval.title, 'READY TO PROCEED?'), 144, y + 12, { width: 385 });
+  let lineY = y + 30;
+  doc.font(bodyFont()).fontSize(8.1).fillColor(TEXT);
   lines.slice(0, 3).forEach((line) => {
     doc.text(line, 144, lineY, { width: 385 });
-    lineY += 14;
+    lineY += 11.5;
   });
-  doc.font(boldFont()).fontSize(8.7).fillColor(NAVY_DARK)
-    .text('Thank you for choosing Universal Systems.', 144, y + 77, { width: 385 });
-  return 88;
+  doc.font(boldFont()).fontSize(8.1).fillColor(NAVY_DARK)
+    .text('Thank you for choosing Universal Systems.', 144, y + 56, { width: 385 });
+  return height;
 }
 
 function drawFooter(doc, company, config = {}) {
@@ -552,10 +556,10 @@ function drawFooter(doc, company, config = {}) {
 
 function quotationFinalSectionsHeight(taxSettings = {}, config = {}) {
   let height = 4;
-  if (cfgSection(config, 'totalSummary').show !== false) height += (taxEnabled(taxSettings, config) ? 80 : 62);
-  if (cfgSection(config, 'validityNote').show !== false) height += 46;
-  if (cfgSection(config, 'terms').show !== false) height += 120;
-  if (cfgSection(config, 'whatsappApprovalMessage').show !== false) height += 88;
+  if (cfgSection(config, 'totalSummary').show !== false) height += (taxEnabled(taxSettings, config) ? 72 : 54);
+  if (cfgSection(config, 'validityNote').show !== false) height += 40;
+  if (cfgSection(config, 'terms').show !== false) height += 104;
+  if (cfgSection(config, 'whatsappApprovalMessage').show !== false) height += 68;
   return height;
 }
 
@@ -666,6 +670,7 @@ export function renderQuotationPdf(doc, options = {}) {
   const nextY = ensureQuotationFinalStart(doc, table.y, title, company, config, taxSettings);
   const summary = drawQuotationFinalSections(doc, nextY, subtotal, taxSettings, config, context);
   drawFooter(doc, company, config);
+  drawAdvancedPdfSections(doc, { config, context, title, company });
   drawPageNumbers(doc, config);
   return { subtotal, finalTotal: summary.finalTotal };
 }

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { LOGO_FULL_PATH, LOGO_ICON_PATH } from '../config.js';
+import { drawAdvancedPdfSections } from './pdfTemplateAdvanced.js';
 
 const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
 const boldFontPath = 'C:\\Windows\\Fonts\\arialbd.ttf';
@@ -62,9 +63,10 @@ function cleanText(value, fallback = '-') {
 }
 
 function renderText(value = '', context = {}) {
-  return String(value || '').replace(/\{\{([a-z0-9_]+)\}\}/gi, (match, key) => {
-    if (Object.prototype.hasOwnProperty.call(context, key)) return context[key];
-    return match;
+  return String(value || '').replace(/\{\{([a-z0-9_]+)\}\}/gi, (_match, key) => {
+    if (!Object.prototype.hasOwnProperty.call(context, key)) return '-';
+    const next = context[key];
+    return next === undefined || next === null || next === '' ? '-' : next;
   });
 }
 
@@ -488,6 +490,21 @@ function drawFooter(doc, company, stripText, config = {}) {
   drawBottomStrip(doc, cleanText(config.footer?.thankYouMessage || stripText, stripText));
 }
 
+function drawPageNumbers(doc, config = {}) {
+  if (config.pageBreaks?.showPageNumbers === false) return;
+  try {
+    const range = doc.bufferedPageRange();
+    if (range.count <= 1) return;
+    for (let pageIndex = range.start; pageIndex < range.start + range.count; pageIndex += 1) {
+      doc.switchToPage(pageIndex);
+      doc.font(bodyFont()).fontSize(7.5).fillColor(MUTED)
+        .text(`Page ${pageIndex - range.start + 1} of ${range.count}`, PAGE_RIGHT - 75, 57, { width: 70, align: 'right' });
+    }
+  } catch {
+    // Page numbers require buffered pages.
+  }
+}
+
 function drawSignatureLine(doc, y, config = {}) {
   const signature = cfgSection(config, 'signature');
   if (signature.show === false) return;
@@ -632,15 +649,22 @@ export function renderAmcContractPdf(doc, options = {}) {
       { key: 'quantity', label: 'Qty', width: 48, align: 'center' },
       { key: 'coverageNotes', label: 'Coverage Notes', width: CONTENT_WIDTH - 347 }
     ];
+  const coveredRows = (data.coveredItems || []).map((item, index) => ({
+    sno: index + 1,
+    device: item.device,
+    brandModel: item.brandModel,
+    serialNumber: item.serialNumber,
+    quantity: item.quantity || 1,
+    coverageNotes: item.coverageNotes
+  }));
   if (coveredDevices.show !== false) {
-    drawTable(doc, PAGE_X, 344, CONTENT_WIDTH, columns, (data.coveredItems || []).map((item, index) => ({
-      sno: index + 1,
-      device: item.device,
-      brandModel: item.brandModel,
-      serialNumber: item.serialNumber,
-      quantity: item.quantity || 1,
-      coverageNotes: item.coverageNotes
-    })), { title: 'COVERED ITEMS', rowHeight: 23, fontSize: 7.5 });
+    const firstPageRows = coveredRows.length > 2 ? coveredRows.slice(0, 2) : coveredRows;
+    drawTable(doc, PAGE_X, 344, CONTENT_WIDTH, columns, firstPageRows, { title: 'COVERED ITEMS', rowHeight: 23, fontSize: 7.5 });
+    if (coveredRows.length > 2) {
+      doc.addPage({ size: 'A4', margin: 0 });
+      drawPageBase(doc, `${title} CONTINUED`, company, config);
+      drawTable(doc, PAGE_X, 170, CONTENT_WIDTH, columns, coveredRows.slice(2), { title: 'COVERED ITEMS CONTINUED', rowHeight: 23, fontSize: 7.5 });
+    }
   }
 
   if (paymentDetails.show !== false) {
@@ -680,6 +704,8 @@ export function renderAmcContractPdf(doc, options = {}) {
     .text('Renew on time to continue uninterrupted service support.', 96, 736, { width: 360 });
   drawSignatureLine(doc, 754, config);
   drawFooter(doc, company, 'Thank you for choosing Universal Systems AMC support.', config);
+  drawAdvancedPdfSections(doc, { config, context, title, company });
+  drawPageNumbers(doc, config);
 }
 
 export function renderAmcServiceVisitPdf(doc, options = {}) {
@@ -764,6 +790,8 @@ export function renderAmcServiceVisitPdf(doc, options = {}) {
   }
 
   drawFooter(doc, company, 'Thank you for choosing Universal Systems AMC support.', config);
+  drawAdvancedPdfSections(doc, { config, context, title, company });
+  drawPageNumbers(doc, config);
 }
 
 export function renderAmcRenewalPdf(doc, options = {}) {
@@ -850,4 +878,6 @@ export function renderAmcRenewalPdf(doc, options = {}) {
   }
 
   drawFooter(doc, company, 'We value your trust. Stay connected for the best service!', config);
+  drawAdvancedPdfSections(doc, { config, context, title, company });
+  drawPageNumbers(doc, config);
 }
