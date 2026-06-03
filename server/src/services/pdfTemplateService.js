@@ -66,6 +66,7 @@ const textFields = [
 
 const advancedSectionTypes = new Set([
   'text',
+  'card',
   'info',
   'notice',
   'warranty',
@@ -76,7 +77,9 @@ const advancedSectionTypes = new Set([
   'qr',
   'customer-message',
   'custom-field',
-  'spacer'
+  'spacer',
+  'divider',
+  'image'
 ]);
 
 const cardWidths = new Set(['full', 'half', 'third', 'two-thirds', 'auto']);
@@ -298,15 +301,22 @@ function commonStructuredConfig(key, flat = {}) {
       },
       customSections: []
     },
-    design: {
-      enabled: false,
-      confirmed: false,
-      lockedDefaultSections: true,
-      gridEnabled: true,
-      snapToGrid: true,
-      page: {
-        size: 'A4',
-        orientation: 'portrait',
+      design: {
+        enabled: false,
+        confirmed: false,
+        lockedDefaultSections: true,
+        canvas: {
+          size: 'A4',
+          orientation: 'portrait',
+          zoom: 'fit',
+          gridSize: 8,
+          snap: true
+        },
+        gridEnabled: true,
+        snapToGrid: true,
+        page: {
+          size: 'A4',
+          orientation: 'portrait',
         margin: 28,
         backgroundColor: '#ffffff'
       },
@@ -314,11 +324,14 @@ function commonStructuredConfig(key, flat = {}) {
         accentColor,
         cardBackground: '#ffffff',
         textColor: '#0f172a',
-        borderColor: '#d8e5f7',
-        noticeBackground: '#f1f7ff'
+          borderColor: '#d8e5f7',
+          noticeBackground: '#f1f7ff'
+        },
+        pages: [{ id: 'page-1', name: 'Page 1', elements: [] }],
+        sections: [],
+        elements: [],
+        customElements: []
       },
-      elements: []
-    },
     sections: {}
   };
 }
@@ -620,21 +633,151 @@ function sanitizeAdvancedSection(section = {}, index = 0) {
   };
 }
 
+function normalizeDesignElementType(type = 'text') {
+  const normalized = clean(type || 'text');
+  if (normalized === 'info' || normalized === 'notice' || normalized === 'custom-field') return 'card';
+  if (normalized === 'bank' || normalized === 'payment' || normalized === 'customer-message') return 'card';
+  if (normalized === 'warranty' || normalized === 'terms') return 'card';
+  if (normalized === 'line') return 'divider';
+  return advancedSectionTypes.has(normalized) ? normalized : 'text';
+}
+
+function sanitizeDesignContent(type = 'text', content = {}, element = {}) {
+  const source = isPlainObject(content) ? content : { text: cleanText(content, '', 5000) };
+  const common = {
+    kind: cleanText(source.kind, type === 'section' ? 'details' : type, 80),
+    label: cleanText(source.label ?? element.label, '', 160),
+    title: cleanText(source.title ?? element.title, '', 160),
+    body: cleanText(source.body ?? element.body, '', 5000),
+    text: cleanText(source.text ?? (typeof element.content === 'string' ? element.content : ''), '', 5000),
+    helperText: cleanText(source.helperText ?? element.helperText, '', 1000),
+    name: cleanText(source.name ?? element.personName, '', 160),
+    designation: cleanText(source.designation, '', 160),
+    qrType: ['payment', 'contact', 'company', 'custom'].includes(source.qrType || element.qrType) ? (source.qrType || element.qrType) : 'payment',
+    imageMode: ['logo', 'placeholder', 'custom'].includes(source.imageMode || element.imageMode) ? (source.imageMode || element.imageMode) : 'logo',
+    twoColumn: boolValue(source.twoColumn ?? element.twoColumn, false),
+    columns: Array.isArray(source.columns) ? source.columns.map((item) => cleanText(item, '', 80)).slice(0, 8) : [],
+    rows: Array.isArray(source.rows)
+      ? source.rows.map((row) => (Array.isArray(row) ? row.map((item) => cleanText(item, '', 160)).slice(0, 8) : [cleanText(row, '', 160)])).slice(0, 12)
+      : []
+  };
+  if (type === 'card' && !common.title) common.title = cleanText(element.name, 'Card title', 160);
+  if (type === 'qr' && !common.label) common.label = 'QR CODE';
+  if (type === 'signature' && !common.label) common.label = 'Authorized Signature';
+  if ((type === 'divider' || type === 'spacer' || type === 'image') && !common.label) common.label = type === 'image' ? 'Image / Logo' : type === 'spacer' ? 'Spacer' : 'Divider';
+  if (type === 'text' && !common.text) common.text = cleanText(element.title, 'Text block', 160);
+  return common;
+}
+
+function sanitizeDesignStyle(style = {}, element = {}) {
+  const source = isPlainObject(style) ? style : {};
+  return {
+    accentColor: sanitizeColor(source.accentColor || element.accentColor, '#0284c7'),
+    backgroundColor: sanitizeColor(source.backgroundColor || element.backgroundColor, '#ffffff'),
+    textColor: sanitizeColor(source.textColor || element.textColor, '#0f172a'),
+    borderColor: sanitizeColor(source.borderColor || element.borderColor, '#cbd5e1'),
+    borderRadius: clampNumber(source.borderRadius, 10, 0, 32),
+    borderWidth: clampNumber(source.borderWidth, 1, 0, 8),
+    shadow: boolValue(source.shadow, false),
+    fontSize: clampNumber(source.fontSize, 13, 8, 32),
+    fontWeight: clampNumber(source.fontWeight, 700, 300, 950),
+    alignment: ['left', 'center', 'right'].includes(source.alignment || element.alignment) ? (source.alignment || element.alignment) : 'left',
+    dividerThickness: clampNumber(source.dividerThickness, 2, 1, 8),
+    dividerStyle: ['solid', 'dashed', 'dotted'].includes(source.dividerStyle) ? source.dividerStyle : 'solid'
+  };
+}
+
+function sanitizeDesignPage(page = {}, index = 0) {
+  const id = clean(page.id || `page-${index + 1}`).replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || `page-${index + 1}`;
+  return {
+    id,
+    name: cleanText(page.name, `Page ${index + 1}`, 120),
+    elements: Array.isArray(page.elements) ? page.elements.map((item) => cleanText(item, '', 80)).filter(Boolean).slice(0, 120) : []
+  };
+}
+
+function sanitizeDesignSection(section = {}, index = 0) {
+  const id = clean(section.id || `section-${index + 1}`).replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || `section-${index + 1}`;
+  const pageId = clean(section.pageId || 'page-1').replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || 'page-1';
+  const content = sanitizeDesignContent('section', section.content, section);
+  return {
+    id,
+    type: 'section',
+    kind: 'section',
+    name: cleanText(section.name || section.title, `Section ${index + 1}`, 160),
+    title: cleanText(section.title || section.name, `Section ${index + 1}`, 160),
+    pageId,
+    sourceKey: cleanText(section.sourceKey, '', 120),
+    sourceIndex: clampNumber(section.sourceIndex, index, 0, 999),
+    role: cleanText(section.role, 'details', 80),
+    visible: boolValue(section.visible, true),
+    enabled: boolValue(section.enabled ?? section.visible, true),
+    locked: section.locked !== false,
+    system: boolValue(section.system, true),
+    showTitle: boolValue(section.showTitle, true),
+    showIcon: boolValue(section.showIcon, true),
+    x: clampNumber(section.x, 0, 0, 595),
+    y: clampNumber(section.y, 0, 0, 842),
+    width: clampNumber(section.width, 520, 24, 595),
+    height: clampNumber(section.height, 80, 8, 842),
+    alignment: ['left', 'center', 'right'].includes(section.alignment) ? section.alignment : 'left',
+    content,
+    style: sanitizeDesignStyle(section.style || {}, section),
+    fullWidth: boolValue(section.fullWidth, false),
+    twoColumn: boolValue(section.twoColumn ?? content.twoColumn, false),
+    pageBreakBefore: boolValue(section.pageBreakBefore, false),
+    avoidSplit: boolValue(section.avoidSplit, true),
+    printSafe: boolValue(section.printSafe, true),
+    zIndex: clampNumber(section.zIndex, index + 1, 1, 999)
+  };
+}
+
 function sanitizeDesignElement(element = {}, index = 0) {
-  const type = advancedSectionTypes.has(element.type) ? element.type : 'text';
+  const type = normalizeDesignElementType(element.type);
+  const fallbackName = type === 'qr'
+    ? 'QR Code'
+    : type === 'signature'
+      ? 'Signature'
+      : type === 'divider'
+        ? 'Divider'
+        : type === 'spacer'
+          ? 'Spacer'
+          : type === 'image'
+            ? 'Image / Logo'
+            : type === 'card'
+              ? 'Card'
+              : 'Text';
+  const pageId = clean(element.pageId || 'page-1').replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || 'page-1';
+  const content = sanitizeDesignContent(type, element.content, element);
   return {
     id: clean(element.id || `design-element-${index + 1}`).replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || `design-element-${index + 1}`,
     type,
-    enabled: boolValue(element.enabled, true),
-    title: cleanText(element.title, '', 120),
-    content: cleanText(element.content, '', 5000),
-    x: clampNumber(element.x, 40, 0, 595),
-    y: clampNumber(element.y, 120, 0, 842),
-    width: clampNumber(element.width, 240, 24, 540),
-    height: clampNumber(element.height, 90, 8, 780),
-    backgroundColor: sanitizeColor(element.backgroundColor, '#ffffff'),
-    textColor: sanitizeColor(element.textColor, '#0f172a'),
-    borderColor: sanitizeColor(element.borderColor, '#d8e5f7')
+    name: cleanText(element.name || element.title, fallbackName, 160),
+    title: cleanText(element.title || element.name, fallbackName, 160),
+    pageId,
+    x: clampNumber(element.x, 48, 0, 595),
+    y: clampNumber(element.y, 118, 0, 842),
+    width: clampNumber(element.width, type === 'divider' ? 260 : 220, 24, 595),
+    height: clampNumber(element.height, type === 'divider' ? 22 : 76, 8, 842),
+    widthMode: ['full', 'half', 'custom'].includes(element.widthMode) ? element.widthMode : 'custom',
+    visible: boolValue(element.visible ?? element.enabled, true),
+    enabled: boolValue(element.enabled ?? element.visible, true),
+    locked: boolValue(element.locked, false),
+    showTitle: boolValue(element.showTitle, true),
+    showIcon: boolValue(element.showIcon, true),
+    fullWidth: boolValue(element.fullWidth, false),
+    twoColumn: boolValue(element.twoColumn ?? content.twoColumn, false),
+    pageBreakBefore: boolValue(element.pageBreakBefore, false),
+    avoidSplit: boolValue(element.avoidSplit, true),
+    printSafe: boolValue(element.printSafe, true),
+    zIndex: clampNumber(element.zIndex, index + 20, 1, 999),
+    qrType: content.qrType,
+    alignment: ['left', 'center', 'right'].includes(element.alignment) ? element.alignment : content.alignment || 'left',
+    content,
+    style: sanitizeDesignStyle(element.style || {}, element),
+    backgroundColor: sanitizeColor(element.backgroundColor || element.style?.backgroundColor, '#ffffff'),
+    textColor: sanitizeColor(element.textColor || element.style?.textColor, '#0f172a'),
+    borderColor: sanitizeColor(element.borderColor || element.style?.borderColor, '#d8e5f7')
   };
 }
 
@@ -729,8 +872,16 @@ function sanitizeConfig(payload = {}, key = '') {
   sanitized.design.enabled = boolValue(sanitized.design.enabled, false);
   sanitized.design.confirmed = boolValue(sanitized.design.confirmed, false);
   sanitized.design.lockedDefaultSections = true;
+  sanitized.design.blank = boolValue(sanitized.design.blank, false);
+  sanitized.design.freeLayoutMode = boolValue(sanitized.design.freeLayoutMode, false);
+  sanitized.design.canvas = deepMerge(defaults.design.canvas, sanitized.design.canvas || {});
+  sanitized.design.canvas.size = 'A4';
+  sanitized.design.canvas.orientation = sanitized.design.canvas.orientation === 'landscape' ? 'landscape' : 'portrait';
+  sanitized.design.canvas.zoom = ['fit', 'fit-width', '75', '100', '125'].includes(String(sanitized.design.canvas.zoom)) ? String(sanitized.design.canvas.zoom) : 'fit-width';
+  sanitized.design.canvas.gridSize = clampNumber(sanitized.design.canvas.gridSize, 8, 4, 24);
+  sanitized.design.canvas.snap = boolValue(sanitized.design.canvas.snap, true);
   sanitized.design.gridEnabled = boolValue(sanitized.design.gridEnabled, true);
-  sanitized.design.snapToGrid = boolValue(sanitized.design.snapToGrid, true);
+  sanitized.design.snapToGrid = boolValue(sanitized.design.snapToGrid, sanitized.design.canvas.snap);
   sanitized.design.page = deepMerge(defaults.design.page, sanitized.design.page || {});
   sanitized.design.page.size = sanitized.design.page.size === 'A4' ? 'A4' : 'A4';
   sanitized.design.page.orientation = sanitized.design.page.orientation === 'landscape' ? 'landscape' : 'portrait';
@@ -742,9 +893,35 @@ function sanitizeConfig(payload = {}, key = '') {
   sanitized.design.colors.textColor = sanitizeColor(sanitized.design.colors.textColor, '#0f172a');
   sanitized.design.colors.borderColor = sanitizeColor(sanitized.design.colors.borderColor, '#d8e5f7');
   sanitized.design.colors.noticeBackground = sanitizeColor(sanitized.design.colors.noticeBackground, '#f1f7ff');
-  sanitized.design.elements = Array.isArray(sanitized.design.elements)
-    ? sanitized.design.elements.slice(0, 80).map((element, index) => sanitizeDesignElement(element, index))
+  const designElementSource = Array.isArray(sanitized.design.customElements) && sanitized.design.customElements.length
+    ? sanitized.design.customElements
+    : sanitized.design.elements;
+  sanitized.design.elements = Array.isArray(designElementSource)
+    ? designElementSource.slice(0, 80).map((element, index) => sanitizeDesignElement(element, index))
     : [];
+  sanitized.design.customElements = sanitized.design.elements;
+  sanitized.design.sections = Array.isArray(sanitized.design.sections)
+    ? sanitized.design.sections.slice(0, 40).map((section, index) => sanitizeDesignSection(section, index))
+    : [];
+  const savedPages = Array.isArray(sanitized.design.pages) ? sanitized.design.pages : [];
+  const pageIds = new Set([
+    'page-1',
+    ...savedPages.map((page) => page?.id).filter(Boolean),
+    ...sanitized.design.elements.map((element) => element.pageId).filter(Boolean),
+    ...sanitized.design.sections.map((section) => section.pageId).filter(Boolean)
+  ]);
+  sanitized.design.pages = [...pageIds].map((pageId, index) => {
+    const savedPage = savedPages.find((page) => page?.id === pageId) || {};
+    return sanitizeDesignPage({
+      ...savedPage,
+      id: pageId,
+      elements: [
+        ...sanitized.design.sections.filter((section) => section.pageId === pageId).map((section) => section.id),
+        ...sanitized.design.elements.filter((element) => element.pageId === pageId).map((element) => element.id)
+      ]
+    }, index);
+  });
+  sanitized.design.sectionOptions = isPlainObject(sanitized.design.sectionOptions) ? sanitized.design.sectionOptions : {};
   if (!sanitized.design.enabled) sanitized.editMode = 'structured';
 
   if (key === 'invoice') {

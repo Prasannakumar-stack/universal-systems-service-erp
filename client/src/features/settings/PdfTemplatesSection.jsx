@@ -1,4 +1,47 @@
-import { ArrowDown, ArrowUp, Download, Edit3, Eye, FileText, History, Layers, LayoutGrid, Loader2, Palette, Plus, RotateCcw, Save, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  ArrowDown,
+  ArrowUp,
+  Box,
+  Columns2,
+  Copy,
+  Download,
+  Edit3,
+  Eye,
+  EyeOff,
+  FilePlus2,
+  FileText,
+  GripVertical,
+  Grid2X2,
+  History,
+  Image as ImageIcon,
+  Layers,
+  LayoutGrid,
+  Loader2,
+  Lock,
+  Maximize2,
+  Minus,
+  Move,
+  Palette,
+  Plus,
+  QrCode,
+  Redo2,
+  RotateCcw,
+  Save,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Signature,
+  SlidersHorizontal,
+  Square,
+  Trash2,
+  Type,
+  Undo2,
+  Unlock,
+  X
+} from 'lucide-react';
 import {
   apiBase,
   ConfirmModal,
@@ -93,6 +136,105 @@ const borderStyleOptions = [
   ['highlight', 'Highlight border']
 ];
 
+const builderCanvas = {
+  width: 595,
+  height: 842,
+  gridSize: 8
+};
+
+const builderElementTypes = [
+  { type: 'text', label: 'Add Text', icon: Type },
+  { type: 'card', label: 'Add Card', icon: Square },
+  { type: 'qr', label: 'Add QR', icon: QrCode },
+  { type: 'signature', label: 'Add Signature', icon: Signature },
+  { type: 'divider', label: 'Add Divider', icon: Minus },
+  { type: 'spacer', label: 'Add Spacer', icon: Maximize2 },
+  { type: 'image', label: 'Add Image / Logo', icon: ImageIcon }
+];
+
+const builderRailItems = [
+  { id: 'templates', label: 'Templates', icon: LayoutGrid },
+  { id: 'elements', label: 'Elements', icon: Plus },
+  { id: 'text', label: 'Text', icon: Type },
+  { id: 'uploads', label: 'Uploads / Logo', icon: ImageIcon },
+  { id: 'variables', label: 'Variables', icon: ShieldCheck },
+  { id: 'pages', label: 'Pages', icon: FilePlus2 },
+  { id: 'layers', label: 'Layers', icon: Layers },
+  { id: 'history', label: 'History', icon: History }
+];
+
+const builderInspectorTabs = [
+  ['content', 'Content'],
+  ['layout', 'Layout'],
+  ['style', 'Style'],
+  ['visibility', 'Visibility'],
+  ['advanced', 'Advanced']
+];
+
+const builderTextPresets = [
+  {
+    id: 'heading',
+    label: 'Heading',
+    name: 'Heading',
+    content: { text: 'Document heading' },
+    width: 300,
+    height: 54,
+    style: { fontSize: 22, fontWeight: 800, alignment: 'left', backgroundColor: '#ffffff', borderWidth: 0 }
+  },
+  {
+    id: 'subheading',
+    label: 'Subheading',
+    name: 'Subheading',
+    content: { text: 'Short supporting line' },
+    width: 280,
+    height: 44,
+    style: { fontSize: 15, fontWeight: 700, alignment: 'left', backgroundColor: '#ffffff', borderWidth: 0 }
+  },
+  {
+    id: 'body',
+    label: 'Body Copy',
+    name: 'Body Copy',
+    content: { text: 'Add paragraph text or variables here.' },
+    width: 300,
+    height: 86,
+    style: { fontSize: 12, fontWeight: 600, alignment: 'left', backgroundColor: '#ffffff', borderWidth: 1 }
+  },
+  {
+    id: 'label',
+    label: 'Small Label',
+    name: 'Small Label',
+    content: { text: 'LABEL' },
+    width: 130,
+    height: 34,
+    style: { fontSize: 10, fontWeight: 800, alignment: 'center', backgroundColor: '#eef8ff', borderWidth: 1 }
+  }
+];
+
+const builderVariableGroups = [
+  ['Company variables', ['{{company.name}}', '{{company.phone}}', '{{company.email}}', '{{company.address}}']],
+  ['Customer variables', ['{{customer.name}}', '{{customer.phone}}', '{{customer.address}}']],
+  ['Booking variables', ['{{booking.id}}', '{{booking.serviceType}}', '{{booking.device}}']],
+  ['Work Order variables', ['{{workOrder.id}}', '{{technician.name}}', '{{workOrder.problemComplaint}}']],
+  ['Invoice variables', ['{{invoice.number}}', '{{invoice.date}}', '{{invoice.total}}']],
+  ['Quotation variables', ['{{quotation.number}}', '{{quotation.date}}', '{{quotation.validityDays}}']],
+  ['AMC variables', ['{{amc.contractNo}}', '{{amc.startDate}}', '{{amc.endDate}}']]
+];
+
+const defaultElementStyles = {
+  accentColor: '#0284c7',
+  backgroundColor: '#ffffff',
+  textColor: '#0f172a',
+  borderColor: '#cbd5e1',
+  borderRadius: 10,
+  borderWidth: 1,
+  shadow: false,
+  fontSize: 13,
+  fontWeight: 700,
+  alignment: 'left',
+  dividerThickness: 2,
+  dividerStyle: 'solid'
+};
+
 function editedBy(template) {
   return template?.lastEditedBy?.name || template?.lastEditedBy?.username || 'System default';
 }
@@ -122,26 +264,39 @@ function cloneValue(value) {
 }
 
 function designStateFromConfig(config = {}) {
-  return cloneValue(config.design || {});
+  return normalizeDesignState(cloneValue(config.design || {}));
 }
 
 function mergeDesignStateForSave(config = {}, designState = {}) {
   const currentDesign = config.design || {};
+  const normalizedDesign = normalizeDesignState(designState);
   return {
     ...config,
     editMode: 'design',
+    advancedEnabled: true,
+    structured: {
+      ...(config.structured || {}),
+      designModeEnabled: true
+    },
     design: {
       ...currentDesign,
-      ...designState,
+      ...normalizedDesign,
+      canvas: {
+        ...(currentDesign.canvas || {}),
+        ...(normalizedDesign.canvas || {})
+      },
       page: {
         ...(currentDesign.page || {}),
-        ...(designState.page || {})
+        ...(normalizedDesign.page || {})
       },
       colors: {
         ...(currentDesign.colors || {}),
-        ...(designState.colors || {})
+        ...(normalizedDesign.colors || {})
       },
-      elements: Array.isArray(designState.elements) ? designState.elements : (currentDesign.elements || []),
+      pages: normalizedDesign.pages,
+      sections: normalizedDesign.sections,
+      elements: normalizedDesign.elements,
+      customElements: normalizedDesign.customElements,
       enabled: true,
       confirmed: true,
       lockedDefaultSections: true
@@ -243,6 +398,555 @@ function overlayStyleForLayer(layer, index) {
     custom: { top: '72%', left: '10%', width: '80%', height: '9%' }
   };
   return base[role] || base.details;
+}
+
+function templateDisplayTitle(template = {}, draft = {}) {
+  return getPath(draft, 'header.title', template?.name || 'PDF Document');
+}
+
+function previewBodyFromDraft(draft = {}, paths = [], fallback = '') {
+  for (const path of paths) {
+    const value = getPath(draft, path, '');
+    if (Array.isArray(value) && value.length) return value.join('\n');
+    if (value) return String(value);
+  }
+  return fallback;
+}
+
+function sectionPreviewContent(templateKey = '', section = {}, draft = {}, template = {}, index = 0) {
+  const title = cleanLayerTitle(getPath(draft, sectionOptionPath(section, index, 'title'), section.title));
+  const role = designLayerRole(section.title);
+  const lower = String(section.title || '').toLowerCase();
+  if (role === 'header') {
+    return {
+      kind: 'header',
+      title: templateDisplayTitle(template, draft),
+      body: 'Universal Systems\nPhone: 98765 43210\nsupport@universalsystems.example'
+    };
+  }
+  if (role === 'customer') {
+    return {
+      kind: 'details',
+      title,
+      rows: [
+        ['Customer', '{{customer_name}}'],
+        ['Phone', '{{customer_phone}}'],
+        ['Address', '{{customer_address}}']
+      ]
+    };
+  }
+  if (role === 'table') {
+    const covered = lower.includes('covered');
+    const work = lower.includes('work completed');
+    return {
+      kind: 'table',
+      title,
+      columns: covered ? ['Device', 'Serial No', 'Covered For'] : work ? ['Work', 'Status', 'Remarks'] : ['Description', 'Qty', 'Rate', 'Total'],
+      rows: covered
+        ? [['AC Unit', 'SN-2048', 'AMC'], ['Water Purifier', 'SN-9032', 'Service']]
+        : work
+          ? [['Diagnosis', 'Done', 'Issue fixed'], ['Testing', 'Done', 'Passed']]
+          : [['Service labour', '1', 'Rs. 1,500', 'Rs. 1,500'], ['Replacement part', '1', 'Rs. 3,000', 'Rs. 3,000']]
+    };
+  }
+  if (role === 'amount') {
+    return {
+      kind: 'amount',
+      title,
+      rows: [
+        ['Subtotal', 'Rs. 4,500'],
+        ['Tax', 'Rs. 810'],
+        ['Final Total', 'Rs. 5,310']
+      ]
+    };
+  }
+  if (role === 'footer') {
+    return {
+      kind: 'footer',
+      title,
+      body: previewBodyFromDraft(draft, ['footer.thankYouMessage'], 'Thank you for choosing Universal Systems.')
+    };
+  }
+  if (lower.includes('terms')) {
+    return {
+      kind: 'notice',
+      title,
+      body: previewBodyFromDraft(draft, ['sections.terms.text', 'sections.amcTerms.text'], 'Payment, warranty, and service terms appear here.')
+    };
+  }
+  if (lower.includes('notice') || lower.includes('message') || lower.includes('validity') || lower.includes('acknowledgement') || lower.includes('renewal')) {
+    return {
+      kind: 'notice',
+      title,
+      body: previewBodyFromDraft(draft, [
+        'sections.workCompletionNotice.messageLines',
+        'sections.whatsappApprovalMessage.messageLines',
+        'sections.validityNote.text',
+        'sections.customerAcknowledgement.text',
+        'sections.contactWhatsappMessage.text'
+      ], 'Customer-facing note and message text will render here.')
+    };
+  }
+  if (lower.includes('page break')) {
+    return {
+      kind: 'notice',
+      title,
+      body: 'Pagination controls: repeat headers, keep totals together, and show page numbers.'
+    };
+  }
+  return {
+    kind: 'details',
+    title,
+    rows: [
+      ['Reference', templateKey === 'quotation' ? '{{quotation_number}}' : templateKey.includes('amc') ? '{{amc_contract_no}}' : '{{invoice_number}}'],
+      ['Date', '{{current_date}}'],
+      ['Status', 'Active'],
+      ['Technician', '{{technician_name}}']
+    ]
+  };
+}
+
+function sectionHeightForRole(role = 'details', title = '') {
+  const lower = String(title || '').toLowerCase();
+  if (role === 'header') return 82;
+  if (role === 'table') return 166;
+  if (role === 'amount') return 96;
+  if (role === 'notice') return lower.includes('terms') ? 126 : 104;
+  if (role === 'footer') return 62;
+  if (lower.includes('page break')) return 56;
+  return 88;
+}
+
+function sectionDefaultStyle(role = 'details', draft = {}) {
+  const accentColor = getPath(draft, 'design.colors.accentColor', getPath(draft, 'header.accentColor', '#0f2a52'));
+  const noticeBackground = getPath(draft, 'design.colors.noticeBackground', '#f1f7ff');
+  const base = {
+    ...defaultElementStyles,
+    accentColor,
+    backgroundColor: '#ffffff',
+    textColor: '#0f172a',
+    borderColor: getPath(draft, 'design.colors.borderColor', '#d8e5f7'),
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: 700,
+    shadow: false
+  };
+  if (role === 'header') return { ...base, backgroundColor: '#eef8ff', borderColor: accentColor, fontSize: 13, fontWeight: 800 };
+  if (role === 'notice') return { ...base, backgroundColor: noticeBackground, accentColor: '#2563eb' };
+  if (role === 'amount') return { ...base, backgroundColor: '#f8fafc', accentColor: '#047857' };
+  if (role === 'footer') return { ...base, backgroundColor: '#f8fafc', fontSize: 10 };
+  return base;
+}
+
+function buildDefaultTemplateSections(template = {}, sections = [], draft = {}) {
+  const orderedKeys = Array.isArray(getPath(draft, 'structured.sectionOrder', [])) ? getPath(draft, 'structured.sectionOrder', []) : [];
+  const orderedSections = [
+    ...orderedKeys
+      .map((key) => {
+        const index = sections.findIndex((section, itemIndex) => sectionKey(section, itemIndex) === key);
+        return index >= 0 ? { section: sections[index], index } : null;
+      })
+      .filter(Boolean),
+    ...sections
+      .map((section, index) => ({ section, index, key: sectionKey(section, index) }))
+      .filter((item) => !orderedKeys.includes(item.key))
+  ];
+  const output = [];
+  let y = 30;
+  let pageNumber = 1;
+  let halfRow = null;
+
+  function flushHalfRow() {
+    if (!halfRow) return;
+    y = halfRow.y + halfRow.height + 12;
+    halfRow = null;
+  }
+
+  function ensurePage(height) {
+    if (y + height <= builderCanvas.height - 32) return;
+    pageNumber += 1;
+    y = 30;
+    halfRow = null;
+  }
+
+  orderedSections.forEach(({ section, index }) => {
+    const id = sectionKey(section, index);
+    const role = designLayerRole(section.title);
+    const title = cleanLayerTitle(getPath(draft, sectionOptionPath(section, index, 'title'), section.title));
+    const height = sectionHeightForRole(role, section.title);
+    const isHalf = role === 'customer' || role === 'details';
+    if (!sectionVisible(section, draft)) {
+      return;
+    }
+    if (!isHalf) flushHalfRow();
+    ensurePage(height);
+    let x = 32;
+    let sectionY = y;
+    let width = builderCanvas.width - 64;
+    if (isHalf) {
+      if (!halfRow) {
+        halfRow = { y, height };
+        x = 32;
+      } else {
+        x = 304;
+        sectionY = halfRow.y;
+        halfRow.height = Math.max(halfRow.height, height);
+      }
+      width = 259;
+    } else if (role === 'amount') {
+      x = 304;
+      width = 259;
+    }
+    output.push(normalizeBuilderSection({
+      id,
+      sourceKey: id,
+      sourceIndex: index,
+      type: 'section',
+      name: title,
+      title,
+      role,
+      pageId: `page-${pageNumber}`,
+      x,
+      y: sectionY,
+      width,
+      height,
+      visible: true,
+      enabled: true,
+      locked: true,
+      system: true,
+      showTitle: getPath(draft, sectionOptionPath(section, index, 'showTitle'), true) !== false,
+      showIcon: getPath(draft, sectionOptionPath(section, index, 'showIcon'), true) !== false,
+      zIndex: index + 1,
+      content: sectionPreviewContent(template.key, section, draft, template, index),
+      style: sectionDefaultStyle(role, draft)
+    }, output.length));
+    if (isHalf && x > 32) flushHalfRow();
+    if (!isHalf) y += height + 12;
+  });
+  flushHalfRow();
+  return output;
+}
+
+function normalizeBuilderSection(section = {}, index = 0) {
+  const role = section.role || designLayerRole(section.title || section.name);
+  const style = {
+    ...sectionDefaultStyle(role),
+    ...(section.style || {}),
+    accentColor: section.style?.accentColor || section.accentColor || sectionDefaultStyle(role).accentColor,
+    backgroundColor: section.style?.backgroundColor || section.backgroundColor || sectionDefaultStyle(role).backgroundColor,
+    textColor: section.style?.textColor || section.textColor || sectionDefaultStyle(role).textColor,
+    borderColor: section.style?.borderColor || section.borderColor || sectionDefaultStyle(role).borderColor
+  };
+  const content = typeof section.content === 'object' && section.content !== null
+    ? cloneValue(section.content)
+    : { kind: role === 'table' ? 'table' : 'details', title: section.title || section.name || 'Section', body: String(section.content || '') };
+  const name = cleanLayerTitle(section.name || section.title || `Section ${index + 1}`);
+  return {
+    ...section,
+    id: section.id || `section-${index + 1}`,
+    type: 'section',
+    kind: 'section',
+    name,
+    title: section.title || name,
+    role,
+    pageId: section.pageId || 'page-1',
+    x: clampBuilderNumber(section.x, 32, 0, builderCanvas.width - 24),
+    y: clampBuilderNumber(section.y, 30, 0, builderCanvas.height - 12),
+    width: clampBuilderNumber(section.width, builderCanvas.width - 64, 24, builderCanvas.width),
+    height: clampBuilderNumber(section.height, sectionHeightForRole(role, section.title), 24, builderCanvas.height),
+    visible: section.visible ?? section.enabled ?? true,
+    enabled: section.enabled ?? section.visible ?? true,
+    locked: section.locked !== false,
+    system: section.system !== false,
+    showTitle: section.showTitle !== false,
+    showIcon: section.showIcon !== false,
+    fullWidth: Boolean(section.fullWidth),
+    twoColumn: Boolean(section.twoColumn),
+    pageBreakBefore: Boolean(section.pageBreakBefore),
+    avoidSplit: section.avoidSplit !== false,
+    printSafe: section.printSafe !== false,
+    zIndex: clampBuilderNumber(section.zIndex, index + 1, 1, 999),
+    alignment: section.alignment || style.alignment || 'left',
+    content,
+    style
+  };
+}
+
+function mergeTemplateSections(defaultSections = [], savedSections = []) {
+  const savedById = new Map(savedSections.map((section) => [section.id || section.sourceKey, section]));
+  const mergedIds = new Set();
+  const merged = defaultSections.map((defaultSection, index) => {
+    const saved = savedById.get(defaultSection.id) || savedById.get(defaultSection.sourceKey) || {};
+    mergedIds.add(saved.id || defaultSection.id);
+    return normalizeBuilderSection({
+      ...defaultSection,
+      ...saved,
+      id: defaultSection.id,
+      sourceKey: defaultSection.sourceKey,
+      sourceIndex: defaultSection.sourceIndex,
+      role: defaultSection.role,
+      system: true,
+      locked: saved.locked ?? defaultSection.locked,
+      content: { ...(defaultSection.content || {}), ...(saved.content || {}) },
+      style: { ...(defaultSection.style || {}), ...(saved.style || {}) }
+    }, index);
+  });
+  savedSections.forEach((section) => {
+    if (!mergedIds.has(section.id || section.sourceKey)) merged.push(normalizeBuilderSection(section, merged.length));
+  });
+  return merged;
+}
+
+function designStateWithTemplateSections(designState = {}, sections = [], draft = {}, template = {}) {
+  const normalized = normalizeDesignState(designState);
+  const savedSections = Array.isArray(normalized.sections) ? normalized.sections.map((section, index) => normalizeBuilderSection(section, index)) : [];
+  const defaultSections = normalized.blank === true ? [] : buildDefaultTemplateSections(template, sections, draft);
+  const mergedSections = defaultSections.length ? mergeTemplateSections(defaultSections, savedSections) : savedSections;
+  const next = {
+    ...normalized,
+    sections: mergedSections,
+    pages: normalizeDesignPages(normalized, normalized.elements, mergedSections)
+  };
+  return next;
+}
+
+function clampBuilderNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+function snapBuilderValue(value, gridSize = builderCanvas.gridSize) {
+  const grid = Math.max(1, Number(gridSize) || builderCanvas.gridSize);
+  return Math.round(Number(value || 0) / grid) * grid;
+}
+
+function normalizeElementType(type = 'text') {
+  const normalized = String(type || 'text').toLowerCase();
+  if (normalized === 'info' || normalized === 'notice' || normalized === 'custom-field') return 'card';
+  if (normalized === 'bank' || normalized === 'payment' || normalized === 'customer-message') return 'card';
+  if (normalized === 'warranty' || normalized === 'terms') return 'card';
+  if (normalized === 'line') return 'divider';
+  if (builderElementTypes.some((item) => item.type === normalized)) return normalized;
+  return 'text';
+}
+
+function contentDefaultsForElement(type = 'text') {
+  if (type === 'card') return { title: 'Card title', body: 'Add details here', twoColumn: false };
+  if (type === 'qr') return { label: 'QR CODE', qrType: 'payment', helperText: 'Payment / contact QR placeholder' };
+  if (type === 'signature') return { label: 'Authorized Signature', name: '', designation: '' };
+  if (type === 'divider') return { label: 'Divider' };
+  if (type === 'spacer') return { label: 'Spacer' };
+  if (type === 'image') return { label: 'Company Logo', imageMode: 'logo' };
+  return { text: 'New text block' };
+}
+
+function defaultSizeForElement(type = 'text') {
+  if (type === 'card') return { width: 260, height: 118 };
+  if (type === 'qr') return { width: 190, height: 132 };
+  if (type === 'signature') return { width: 230, height: 96 };
+  if (type === 'divider') return { width: 260, height: 22 };
+  if (type === 'spacer') return { width: 220, height: 44 };
+  if (type === 'image') return { width: 180, height: 96 };
+  return { width: 220, height: 76 };
+}
+
+function elementNameForType(type = 'text') {
+  return builderElementTypes.find((item) => item.type === type)?.label.replace(/^Add\s+/i, '') || 'Element';
+}
+
+function makeBuilderElement(type = 'text', pageId = 'page-1', index = 0) {
+  const normalizedType = normalizeElementType(type);
+  const size = defaultSizeForElement(normalizedType);
+  const id = `element-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const name = elementNameForType(normalizedType);
+  return {
+    id,
+    type: normalizedType,
+    name,
+    title: name,
+    pageId,
+    x: 48 + (index % 5) * 18,
+    y: 118 + (index % 7) * 26,
+    width: size.width,
+    height: size.height,
+    widthMode: 'custom',
+    visible: true,
+    enabled: true,
+    locked: false,
+    showTitle: true,
+    showIcon: true,
+    fullWidth: false,
+    twoColumn: false,
+    pageBreakBefore: false,
+    avoidSplit: true,
+    printSafe: true,
+    zIndex: index + 20,
+    content: contentDefaultsForElement(normalizedType),
+    style: { ...defaultElementStyles }
+  };
+}
+
+function normalizeBuilderElement(element = {}, index = 0) {
+  const type = normalizeElementType(element.type);
+  const size = defaultSizeForElement(type);
+  const rawContent = typeof element.content === 'object' && element.content !== null
+    ? element.content
+    : { ...contentDefaultsForElement(type), text: String(element.content || '') };
+  const content = { ...contentDefaultsForElement(type), ...rawContent };
+  const style = {
+    ...defaultElementStyles,
+    ...(element.style || {}),
+    accentColor: element.style?.accentColor || element.accentColor || defaultElementStyles.accentColor,
+    backgroundColor: element.style?.backgroundColor || element.backgroundColor || defaultElementStyles.backgroundColor,
+    textColor: element.style?.textColor || element.textColor || defaultElementStyles.textColor,
+    borderColor: element.style?.borderColor || element.borderColor || defaultElementStyles.borderColor
+  };
+  const name = cleanLayerTitle(element.name || element.title || elementNameForType(type));
+  return {
+    ...element,
+    id: element.id || `element-${index + 1}`,
+    type,
+    name,
+    title: element.title || name,
+    pageId: element.pageId || 'page-1',
+    x: clampBuilderNumber(element.x, 48, 0, builderCanvas.width - 24),
+    y: clampBuilderNumber(element.y, 118, 0, builderCanvas.height - 12),
+    width: clampBuilderNumber(element.width, size.width, 24, builderCanvas.width),
+    height: clampBuilderNumber(element.height, size.height, 8, builderCanvas.height),
+    widthMode: ['full', 'half', 'custom'].includes(element.widthMode) ? element.widthMode : 'custom',
+    visible: element.visible ?? element.enabled ?? true,
+    enabled: element.enabled ?? element.visible ?? true,
+    locked: Boolean(element.locked),
+    showTitle: element.showTitle !== false,
+    showIcon: element.showIcon !== false,
+    fullWidth: Boolean(element.fullWidth),
+    twoColumn: Boolean(element.twoColumn || content.twoColumn),
+    pageBreakBefore: Boolean(element.pageBreakBefore),
+    avoidSplit: element.avoidSplit !== false,
+    printSafe: element.printSafe !== false,
+    zIndex: clampBuilderNumber(element.zIndex, index + 20, 1, 999),
+    qrType: element.qrType || content.qrType || 'payment',
+    alignment: element.alignment || style.alignment || 'left',
+    content,
+    style
+  };
+}
+
+function normalizeDesignPages(source = {}, elements = [], sections = []) {
+  const savedPages = Array.isArray(source.pages) ? source.pages : [];
+  const pageIds = new Set(['page-1']);
+  elements.forEach((element) => {
+    if (element.pageId) pageIds.add(element.pageId);
+  });
+  sections.forEach((section) => {
+    if (section.pageId) pageIds.add(section.pageId);
+  });
+  savedPages.forEach((page) => {
+    if (page?.id) pageIds.add(page.id);
+  });
+  return [...pageIds].map((id, index) => {
+    const saved = savedPages.find((page) => page?.id === id) || {};
+    return {
+      id,
+      name: saved.name || `Page ${index + 1}`,
+      elements: Array.isArray(saved.elements) ? saved.elements : []
+    };
+  });
+}
+
+function normalizeDesignState(source = {}) {
+  const rawElements = Array.isArray(source.customElements) && source.customElements.length
+    ? source.customElements
+    : Array.isArray(source.elements)
+      ? source.elements
+      : [];
+  const elements = rawElements.map((element, index) => normalizeBuilderElement(element, index));
+  const sections = Array.isArray(source.sections) ? source.sections.map((section, index) => normalizeBuilderSection(section, index)) : [];
+  const pages = normalizeDesignPages(source, elements, sections);
+  return {
+    ...source,
+    enabled: source.enabled === true,
+    confirmed: source.confirmed === true,
+    lockedDefaultSections: true,
+    blank: source.blank === true,
+    freeLayoutMode: source.freeLayoutMode === true,
+    canvas: {
+      size: 'A4',
+      orientation: 'portrait',
+      zoom: source.canvas?.zoom || 'fit-width',
+      gridSize: clampBuilderNumber(source.canvas?.gridSize ?? source.gridSize, builderCanvas.gridSize, 4, 24),
+      snap: source.canvas?.snap ?? source.snapToGrid ?? true
+    },
+    gridEnabled: source.gridEnabled !== false,
+    snapToGrid: source.snapToGrid ?? source.canvas?.snap ?? true,
+    page: {
+      size: 'A4',
+      orientation: 'portrait',
+      margin: clampBuilderNumber(source.page?.margin, 28, 0, 80),
+      backgroundColor: source.page?.backgroundColor || '#ffffff'
+    },
+    colors: {
+      accentColor: source.colors?.accentColor || '#0f2a52',
+      cardBackground: source.colors?.cardBackground || '#ffffff',
+      textColor: source.colors?.textColor || '#0f172a',
+      borderColor: source.colors?.borderColor || '#d8e5f7',
+      noticeBackground: source.colors?.noticeBackground || '#f1f7ff'
+    },
+    pages,
+    sections,
+    elements,
+    customElements: elements,
+    savedTemplates: Array.isArray(source.savedTemplates) ? source.savedTemplates : [],
+    sectionOptions: source.sectionOptions || {}
+  };
+}
+
+function elementIconForType(type = 'text') {
+  return builderElementTypes.find((item) => item.type === normalizeElementType(type))?.icon || Type;
+}
+
+function elementPrimaryText(element = {}) {
+  const content = element.content || {};
+  if (element.type === 'card') return content.body || content.title || element.name || '';
+  if (element.type === 'qr') return content.label || 'QR CODE';
+  if (element.type === 'signature') return [content.label, content.name, content.designation].filter(Boolean).join('\n');
+  if (element.type === 'divider' || element.type === 'spacer' || element.type === 'image') return content.label || element.name || '';
+  return content.text || element.content || '';
+}
+
+function frameFromPercent(style = {}) {
+  return {
+    x: Math.round((parseFloat(style.left) / 100) * builderCanvas.width),
+    y: Math.round((parseFloat(style.top) / 100) * builderCanvas.height),
+    width: Math.round((parseFloat(style.width) / 100) * builderCanvas.width),
+    height: Math.round((parseFloat(style.height) / 100) * builderCanvas.height)
+  };
+}
+
+function frameForSectionLayer(layer, index) {
+  return frameFromPercent(overlayStyleForLayer(layer, index));
+}
+
+function styleForBuilderElement(element = {}, selected = false) {
+  const style = element.style || defaultElementStyles;
+  const borderWidth = clampBuilderNumber(style.borderWidth, 1, 0, 8);
+  return {
+    left: element.x,
+    top: element.y,
+    width: element.width,
+    height: element.height,
+    zIndex: element.zIndex || 20,
+    color: style.textColor || '#0f172a',
+    background: element.type === 'divider' ? 'transparent' : style.backgroundColor || '#ffffff',
+    borderColor: selected ? '#0284c7' : style.borderColor || '#cbd5e1',
+    borderRadius: element.type === 'divider' ? 0 : clampBuilderNumber(style.borderRadius, 10, 0, 32),
+    borderWidth: element.type === 'divider' ? 0 : borderWidth,
+    boxShadow: style.shadow ? '0 14px 28px rgba(15, 23, 42, 0.16)' : 'none',
+    textAlign: style.alignment || element.alignment || 'left',
+    fontSize: clampBuilderNumber(style.fontSize, 13, 8, 32),
+    fontWeight: style.fontWeight || 700
+  };
 }
 
 function TemplateStatusPill({ status = 'Active' }) {
@@ -662,288 +1366,1618 @@ function DesignModeWorkspace({
   template,
   sections,
   draft,
+  setDraft,
   designDraft,
   setDesignDraft,
-  previewUrl,
-  previewLoading,
-  previewError,
   canEdit,
   saving,
   busyKey,
+  versions,
+  restoring,
+  onRestore,
+  hasUnsavedDesignChanges,
   onBack,
   onPreview,
   onDownload,
   onShowVariables
 }) {
   const disabled = !canEdit || saving;
-  const elements = Array.isArray(getPath(designDraft, 'elements', [])) ? getPath(designDraft, 'elements', []) : [];
-  const cards = Array.isArray(getPath(draft, 'structured.customSections', [])) ? getPath(draft, 'structured.customSections', []) : [];
-  const advancedEnabled = getPath(draft, 'advancedEnabled', false) === true;
-  const customSectionsEnabled = getPath(draft, 'structured.customSectionsEnabled', false) === true;
-  const customColorsEnabled = advancedEnabled && getPath(draft, 'structured.customColorsEnabled', false) === true;
-  const customWidthEnabled = advancedEnabled && getPath(draft, 'structured.customCardWidthEnabled', false) === true;
-  const twoColumnEnabled = advancedEnabled && getPath(draft, 'structured.twoColumnCards', false) === true;
+  const normalizedDesign = useMemo(() => normalizeDesignState(designDraft), [designDraft]);
+  const canvasDesign = useMemo(
+    () => designStateWithTemplateSections(normalizedDesign, sections, draft, template),
+    [normalizedDesign, sections, draft, template]
+  );
+  const elements = canvasDesign.elements;
+  const canvasSections = canvasDesign.sections;
+  const pages = canvasDesign.pages;
+  const gridSize = canvasDesign.canvas.gridSize || builderCanvas.gridSize;
+  const snapEnabled = canvasDesign.canvas.snap !== false && canvasDesign.snapToGrid !== false;
+  const gridEnabled = canvasDesign.gridEnabled !== false;
+  const freeLayoutMode = canvasDesign.freeLayoutMode === true;
+  const [activeRail, setActiveRail] = useState('templates');
   const [selectedLayerId, setSelectedLayerId] = useState('');
-  const [zoom, setZoom] = useState('fit');
+  const [currentPageId, setCurrentPageId] = useState(pages[0]?.id || 'page-1');
+  const [zoom, setZoom] = useState(canvasDesign.canvas.zoom === 'fit' ? 'fit-width' : canvasDesign.canvas.zoom || 'fit-width');
+  const [variableQuery, setVariableQuery] = useState('');
+  const [activeInspectorTab, setActiveInspectorTab] = useState('content');
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [rightInspectorOpen, setRightInspectorOpen] = useState(false);
+  const [fullScreenEditor, setFullScreenEditor] = useState(false);
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  const [interaction, setInteraction] = useState(null);
+  const paperRef = useRef(null);
+  const freeLayoutWarningShownRef = useRef(false);
+  const normalizedSignature = stableJson(normalizedDesign);
+  const rawDesignSignature = stableJson(designDraft);
 
-  function setElements(updater) {
-    setDesignDraft((current) => {
-      const currentElements = Array.isArray(getPath(current, 'elements', [])) ? getPath(current, 'elements', []) : [];
-      const nextElements = typeof updater === 'function' ? updater(currentElements) : updater;
-      return setPath(current, 'elements', nextElements);
-    });
-  }
+  useEffect(() => {
+    if (rawDesignSignature !== normalizedSignature) setDesignDraft(normalizedDesign);
+  }, [rawDesignSignature, normalizedSignature, normalizedDesign, setDesignDraft]);
 
-  const sectionLayers = sections.map((section, index) => {
-    const key = sectionKey(section, index);
-    const title = cleanLayerTitle(getPath(draft, sectionOptionPath(section, index, 'title'), section.title));
+  useEffect(() => {
+    setUndoStack([]);
+    setRedoStack([]);
+    setSelectedLayerId('');
+    setCurrentPageId('page-1');
+  }, [template.key]);
+
+  useEffect(() => {
+    if (!pages.some((page) => page.id === currentPageId)) setCurrentPageId(pages[0]?.id || 'page-1');
+  }, [currentPageId, pages]);
+
+  const sectionLayers = canvasSections.map((sectionDesign, index) => {
+    const key = sectionDesign.id || `section-${index + 1}`;
+    const originalSection = sections[sectionDesign.sourceIndex] || sections.find((section, itemIndex) => sectionKey(section, itemIndex) === (sectionDesign.sourceKey || key));
+    const title = cleanLayerTitle(sectionDesign.name || sectionDesign.title || originalSection?.title || 'Section');
     return {
       id: key,
+      name: title,
       title,
-      kind: 'Section',
-      locked: true,
-      editable: Boolean(visibilityField(section)),
-      supportsVisibility: Boolean(visibilityField(section)),
+      kind: 'section',
+      type: 'section',
+      badge: 'Section',
+      pageId: sectionDesign.pageId || 'page-1',
+      locked: sectionDesign.locked !== false || !freeLayoutMode,
+      editable: true,
+      supportsVisibility: true,
       supportsTitle: true,
       supportsIcon: true,
-      visible: sectionVisible(section, draft),
-      role: designLayerRole(section.title),
-      section,
-      sectionIndex: index
+      visible: sectionDesign.visible !== false && sectionDesign.enabled !== false,
+      role: sectionDesign.role || designLayerRole(title),
+      section: originalSection,
+      sectionDesign,
+      sectionIndex: sectionDesign.sourceIndex ?? index
     };
   });
-  const customLayers = advancedEnabled && customSectionsEnabled
-    ? cards.map((card, index) => ({
-        id: card.id || `custom-card-${index}`,
-        title: card.title || 'Custom Card',
-        kind: 'Custom Card',
-        locked: false,
-        editable: true,
-        supportsVisibility: true,
-        supportsTitle: true,
-        supportsIcon: false,
-        visible: card.enabled !== false,
-        role: 'custom'
-      }))
-    : [];
   const elementLayers = elements.map((element, index) => ({
     id: element.id || `element-${index}`,
-    title: element.title || 'Text Layer',
-    kind: 'Free Element',
+    name: element.name || element.title || 'Free Element',
+    title: element.name || element.title || 'Free Element',
+    kind: 'element',
+    type: element.type,
+    badge: elementNameForType(element.type),
+    pageId: element.pageId || 'page-1',
     locked: false,
     editable: true,
     supportsVisibility: true,
     supportsTitle: true,
     supportsIcon: false,
-    visible: element.enabled !== false,
-    role: 'custom'
+    visible: element.visible !== false && element.enabled !== false,
+    role: 'custom',
+    element,
+    elementIndex: index
   }));
-  const layers = [...sectionLayers, ...customLayers, ...elementLayers];
+  const layers = [...sectionLayers, ...elementLayers];
   const layerSignature = layers.map((layer) => layer.id).join('|');
   const selectedLayer = layers.find((layer) => layer.id === selectedLayerId) || null;
-  const previewFrameUrl = previewUrl ? `${previewUrl}#toolbar=0&navpanes=0&scrollbar=0` : '';
-  const zoomWidths = {
-    fit: 'min(100%, 540px)',
-    '75': '390px',
-    '100': '520px'
-  };
+  const selectedElement = selectedLayer?.kind === 'element' ? selectedLayer.element : null;
+  const selectedSectionLayer = selectedLayer?.kind === 'section' ? selectedLayer : null;
+  const selectedSection = selectedSectionLayer?.sectionDesign || null;
+  const currentPage = pages.find((page) => page.id === currentPageId) || pages[0] || { id: 'page-1', name: 'Page 1' };
+  const zoomScale = zoom === '125' ? 1.25 : zoom === '100' ? 1 : zoom === '75' ? 0.75 : zoom === 'fit-width' ? 1.1 : 0.88;
+  const previewConfig = useMemo(() => mergeDesignStateForSave(draft, canvasDesign), [draft, canvasDesign]);
+  const visiblePageSections = canvasSections
+    .filter((section) => (section.pageId || 'page-1') === currentPage.id && section.visible !== false && section.enabled !== false)
+    .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  const visiblePageElements = elements
+    .filter((element) => (element.pageId || 'page-1') === currentPage.id && element.visible !== false && element.enabled !== false)
+    .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
   useEffect(() => {
     if (selectedLayerId && !layers.some((layer) => layer.id === selectedLayerId)) setSelectedLayerId('');
   }, [selectedLayerId, layerSignature]);
 
-  function addElement(type, title) {
-    const id = `element-${Date.now()}`;
-    setElements((current) => [...current, { id, type, title, content: '', x: 40, y: 120, width: 240, height: 90, enabled: true }]);
-    setSelectedLayerId(id);
+  useEffect(() => {
+    if (selectedLayerId) setInspectorCollapsed(false);
+  }, [selectedLayerId]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0 });
+    document.body.classList.add('pdf-design-active');
+    return () => document.body.classList.remove('pdf-design-active');
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle('pdf-design-fullscreen', fullScreenEditor);
+    return () => document.body.classList.remove('pdf-design-fullscreen');
+  }, [fullScreenEditor]);
+
+  function currentCanvasDesign(source = designDraft) {
+    return designStateWithTemplateSections(source, sections, draft, template);
   }
 
-  const tools = [
-    { label: 'Add Text', type: 'text', enabled: true },
-    { label: 'Add Card', type: 'card', enabled: false },
-    { label: 'Add QR', type: 'qr', enabled: false },
-    { label: 'Add Signature', type: 'signature', enabled: false },
-    { label: 'Add Divider', type: 'spacer', enabled: false }
-  ];
+  function commitDesign(updater) {
+    if (disabled) return;
+    setUndoStack((history) => [...history.slice(-24), currentCanvasDesign(designDraft)]);
+    setRedoStack([]);
+    setDesignDraft((current) => {
+      const currentDesign = currentCanvasDesign(current);
+      const next = typeof updater === 'function' ? updater(currentDesign) : updater;
+      return normalizeDesignState(next);
+    });
+  }
+
+  function updateDesignDirect(updater) {
+    setDesignDraft((current) => normalizeDesignState(typeof updater === 'function' ? updater(currentCanvasDesign(current)) : updater));
+  }
+
+  function patchElement(elementId, patch) {
+    commitDesign((current) => {
+      const nextElements = current.elements.map((element, index) => {
+        if (element.id !== elementId) return element;
+        const patchValue = typeof patch === 'function' ? patch(element) : patch;
+        const merged = {
+          ...element,
+          ...patchValue,
+          content: patchValue.content ? { ...(element.content || {}), ...patchValue.content } : element.content,
+          style: patchValue.style ? { ...(element.style || {}), ...patchValue.style } : element.style
+        };
+        return normalizeBuilderElement(merged, index);
+      });
+      return { ...current, elements: nextElements, customElements: nextElements };
+    });
+  }
+
+  function patchElementDirect(elementId, patch) {
+    updateDesignDirect((current) => {
+      const nextElements = current.elements.map((element, index) => {
+        if (element.id !== elementId) return element;
+        const patchValue = typeof patch === 'function' ? patch(element) : patch;
+        return normalizeBuilderElement({ ...element, ...patchValue }, index);
+      });
+      return { ...current, elements: nextElements, customElements: nextElements };
+    });
+  }
+
+  function patchSection(sectionId, patch) {
+    commitDesign((current) => {
+      const nextSections = current.sections.map((section, index) => {
+        if (section.id !== sectionId) return section;
+        const patchValue = typeof patch === 'function' ? patch(section) : patch;
+        const merged = {
+          ...section,
+          ...patchValue,
+          content: patchValue.content ? { ...(section.content || {}), ...patchValue.content } : section.content,
+          style: patchValue.style ? { ...(section.style || {}), ...patchValue.style } : section.style
+        };
+        return normalizeBuilderSection(merged, index);
+      });
+      return {
+        ...current,
+        sections: nextSections,
+        pages: normalizeDesignPages(current, current.elements, nextSections)
+      };
+    });
+  }
+
+  function patchSectionDirect(sectionId, patch) {
+    updateDesignDirect((current) => {
+      const nextSections = current.sections.map((section, index) => {
+        if (section.id !== sectionId) return section;
+        const patchValue = typeof patch === 'function' ? patch(section) : patch;
+        return normalizeBuilderSection({ ...section, ...patchValue }, index);
+      });
+      return {
+        ...current,
+        sections: nextSections,
+        pages: normalizeDesignPages(current, current.elements, nextSections)
+      };
+    });
+  }
+
+  function updateSectionOption(layerId, option, value) {
+    commitDesign((current) => setPath(current, designLayerOptionPath(layerId, option), value));
+  }
+
+  function updateLayerOption(layer, option, value) {
+    if (!layer) return;
+    if (layer.kind === 'element') {
+      patchElement(layer.id, { [option]: value });
+      return;
+    }
+    patchSection(layer.id, { [option]: value });
+    updateSectionOption(layer.id, option, value);
+  }
+
+  function toggleLayerVisibility(layer) {
+    if (!layer) return;
+    if (layer.kind === 'section' && layer.supportsVisibility) {
+      const nextVisible = !layer.visible;
+      const field = layer.section ? visibilityField(layer.section) : null;
+      if (field) setDraft((current) => setPath(current, field.path, nextVisible));
+      patchSection(layer.id, { visible: nextVisible, enabled: nextVisible });
+      updateSectionOption(layer.id, 'visible', nextVisible);
+      return;
+    }
+    if (layer.kind === 'element') patchElement(layer.id, { visible: !layer.visible, enabled: !layer.visible });
+  }
+
+  function addElement(type) {
+    if (disabled) return;
+    const nextElement = makeBuilderElement(type, currentPage.id, elements.length);
+    commitDesign((current) => {
+      const nextElements = [...current.elements, nextElement];
+      return { ...current, elements: nextElements, customElements: nextElements };
+    });
+    setSelectedLayerId(nextElement.id);
+    setActiveRail('layers');
+  }
+
+  function addTextPreset(preset) {
+    if (disabled) return;
+    const nextElement = normalizeBuilderElement({
+      ...makeBuilderElement('text', currentPage.id, elements.length),
+      name: preset.name,
+      title: preset.name,
+      width: preset.width,
+      height: preset.height,
+      content: preset.content,
+      style: { ...defaultElementStyles, ...(preset.style || {}) }
+    }, elements.length);
+    commitDesign((current) => {
+      const nextElements = [...current.elements, nextElement];
+      return { ...current, elements: nextElements, customElements: nextElements };
+    });
+    setSelectedLayerId(nextElement.id);
+    setActiveRail('layers');
+  }
+
+  function applyDefaultTemplateLayout() {
+    if (disabled) return;
+    commitDesign((current) => ({
+      ...current,
+      blank: false,
+      freeLayoutMode: false,
+      sections: buildDefaultTemplateSections(template, sections, draft),
+      pages: normalizeDesignPages(current, current.elements, buildDefaultTemplateSections(template, sections, draft))
+    }));
+    setSelectedLayerId('');
+    setCurrentPageId('page-1');
+    setActiveRail('layers');
+  }
+
+  function startBlankDesign() {
+    if (disabled) return;
+    if (!window.confirm('Start from a blank A4 design? Existing canvas sections and elements in this unsaved draft will be cleared.')) return;
+    commitDesign((current) => ({
+      ...current,
+      blank: true,
+      freeLayoutMode: true,
+      sections: [],
+      elements: [],
+      customElements: [],
+      pages: [{ id: 'page-1', name: 'Blank A4', elements: [] }]
+    }));
+    setSelectedLayerId('');
+    setCurrentPageId('page-1');
+    setActiveRail('elements');
+  }
+
+  function duplicateCurrentTemplate() {
+    if (disabled) return;
+    const snapshot = {
+      id: `saved-template-${Date.now()}`,
+      name: `${template.name} Copy`,
+      createdAt: new Date().toISOString(),
+      design: {
+        ...canvasDesign,
+        sections: canvasSections,
+        elements,
+        customElements: elements,
+        pages
+      }
+    };
+    commitDesign((current) => ({
+      ...current,
+      savedTemplates: [snapshot, ...(current.savedTemplates || [])].slice(0, 12)
+    }));
+    setActiveRail('templates');
+  }
+
+  function applySavedTemplate(savedTemplate) {
+    if (disabled || !savedTemplate?.design) return;
+    commitDesign((current) => ({
+      ...current,
+      ...cloneValue(savedTemplate.design),
+      savedTemplates: current.savedTemplates || []
+    }));
+    setSelectedLayerId('');
+    setCurrentPageId(savedTemplate.design.pages?.[0]?.id || 'page-1');
+  }
+
+  function deleteSavedTemplate(templateId) {
+    if (disabled) return;
+    commitDesign((current) => ({
+      ...current,
+      savedTemplates: (current.savedTemplates || []).filter((item) => item.id !== templateId)
+    }));
+  }
+
+  function duplicateElement(element) {
+    if (!element || disabled) return;
+    const copy = normalizeBuilderElement({
+      ...cloneValue(element),
+      id: `element-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: `${element.name || 'Element'} Copy`,
+      x: Math.min(builderCanvas.width - 24, element.x + 18),
+      y: Math.min(builderCanvas.height - 12, element.y + 18),
+      zIndex: (Math.max(...elements.map((item) => item.zIndex || 1), 1) + 1)
+    }, elements.length);
+    commitDesign((current) => {
+      const nextElements = [...current.elements, copy];
+      return { ...current, elements: nextElements, customElements: nextElements };
+    });
+    setSelectedLayerId(copy.id);
+  }
+
+  function deleteElement(elementId) {
+    if (disabled) return;
+    commitDesign((current) => {
+      const nextElements = current.elements.filter((element) => element.id !== elementId);
+      return { ...current, elements: nextElements, customElements: nextElements };
+    });
+    setSelectedLayerId('');
+  }
+
+  function moveElementLayer(elementId, direction) {
+    if (disabled) return;
+    commitDesign((current) => {
+      const nextElements = current.elements.slice();
+      const index = nextElements.findIndex((element) => element.id === elementId);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= nextElements.length) return current;
+      [nextElements[index], nextElements[target]] = [nextElements[target], nextElements[index]];
+      return {
+        ...current,
+        elements: nextElements.map((element, itemIndex) => ({ ...element, zIndex: itemIndex + 20 })),
+        customElements: nextElements.map((element, itemIndex) => ({ ...element, zIndex: itemIndex + 20 }))
+      };
+    });
+  }
+
+  function addPage() {
+    if (disabled) return;
+    const id = `page-${pages.length + 1}`;
+    commitDesign((current) => ({
+      ...current,
+      pages: [...current.pages, { id, name: `Page ${current.pages.length + 1}`, elements: [] }]
+    }));
+    setCurrentPageId(id);
+    setActiveRail('pages');
+  }
+
+  function duplicatePage(page) {
+    if (disabled || !page) return;
+    const id = `page-${pages.length + 1}`;
+    commitDesign((current) => {
+      const copiedElements = current.elements
+        .filter((element) => (element.pageId || 'page-1') === page.id)
+        .map((element, index) => normalizeBuilderElement({
+          ...cloneValue(element),
+          id: `element-${Date.now()}-${index}`,
+          name: `${element.name || 'Element'} Copy`,
+          pageId: id,
+          x: Math.min(builderCanvas.width - 24, element.x + 12),
+          y: Math.min(builderCanvas.height - 12, element.y + 12),
+          zIndex: (current.elements.length + index + 20)
+        }, current.elements.length + index));
+      const copiedSections = current.sections
+        .filter((section) => (section.pageId || 'page-1') === page.id)
+        .map((section, index) => normalizeBuilderSection({
+          ...cloneValue(section),
+          id: `section-${Date.now()}-${index}`,
+          sourceKey: '',
+          system: false,
+          locked: false,
+          name: `${section.name || 'Section'} Copy`,
+          title: `${section.title || 'Section'} Copy`,
+          pageId: id,
+          zIndex: (current.sections.length + index + 1)
+        }, current.sections.length + index));
+      const nextElements = [...current.elements, ...copiedElements];
+      const nextSections = [...current.sections, ...copiedSections];
+      return {
+        ...current,
+        pages: [...current.pages, { id, name: `${page.name || 'Page'} Copy`, elements: copiedElements.map((element) => element.id) }],
+        elements: nextElements,
+        customElements: nextElements,
+        sections: nextSections
+      };
+    });
+    setCurrentPageId(id);
+  }
+
+  function deletePage(pageId) {
+    if (disabled || pageId === 'page-1' || pages.length <= 1) return;
+    commitDesign((current) => {
+      const nextElements = current.elements.filter((element) => (element.pageId || 'page-1') !== pageId);
+      const nextSections = current.sections.filter((section) => (section.pageId || 'page-1') !== pageId);
+      return {
+        ...current,
+        pages: current.pages.filter((page) => page.id !== pageId),
+        elements: nextElements,
+        customElements: nextElements,
+        sections: nextSections
+      };
+    });
+    setCurrentPageId('page-1');
+    setSelectedLayerId('');
+  }
+
+  function movePage(pageId, direction) {
+    if (disabled) return;
+    commitDesign((current) => {
+      const nextPages = current.pages.slice();
+      const index = nextPages.findIndex((page) => page.id === pageId);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= nextPages.length) return current;
+      [nextPages[index], nextPages[target]] = [nextPages[target], nextPages[index]];
+      return { ...current, pages: nextPages };
+    });
+  }
+
+  function updateCanvasOption(path, value) {
+    commitDesign((current) => setPath(current, path, value));
+  }
+
+  function toggleFreeLayoutMode() {
+    const nextValue = !freeLayoutMode;
+    if (nextValue && !freeLayoutWarningShownRef.current) {
+      if (!window.confirm('Free Layout Mode gives full control but can break PDF alignment. Use carefully.')) return;
+      freeLayoutWarningShownRef.current = true;
+    }
+    commitDesign((current) => ({
+      ...current,
+      freeLayoutMode: nextValue,
+      sections: current.sections.map((section, index) => normalizeBuilderSection({
+        ...section,
+        locked: nextValue ? false : section.system !== false
+      }, index))
+    }));
+  }
+
+  function undoDesign() {
+    if (!undoStack.length) return;
+    const previous = undoStack[undoStack.length - 1];
+    setUndoStack((history) => history.slice(0, -1));
+    setRedoStack((history) => [currentCanvasDesign(designDraft), ...history.slice(0, 24)]);
+    setDesignDraft(previous);
+  }
+
+  function redoDesign() {
+    if (!redoStack.length) return;
+    const next = redoStack[0];
+    setRedoStack((history) => history.slice(1));
+    setUndoStack((history) => [...history.slice(-24), currentCanvasDesign(designDraft)]);
+    setDesignDraft(next);
+  }
+
+  function beginElementInteraction(event, element, mode = 'move', handle = '') {
+    if (disabled || element.locked) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = paperRef.current?.getBoundingClientRect();
+    const scale = rect ? rect.width / builderCanvas.width : zoomScale;
+    setUndoStack((history) => [...history.slice(-24), currentCanvasDesign(designDraft)]);
+    setRedoStack([]);
+    setSelectedLayerId(element.id);
+    setInteraction({
+      kind: 'element',
+      id: element.id,
+      type: element.type,
+      mode,
+      handle,
+      scale,
+      startX: event.clientX,
+      startY: event.clientY,
+      startFrame: {
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height
+      }
+    });
+  }
+
+  function beginSectionInteraction(event, section, mode = 'move', handle = '') {
+    if (disabled || !freeLayoutMode || section.locked) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = paperRef.current?.getBoundingClientRect();
+    const scale = rect ? rect.width / builderCanvas.width : zoomScale;
+    setUndoStack((history) => [...history.slice(-24), currentCanvasDesign(designDraft)]);
+    setRedoStack([]);
+    setSelectedLayerId(section.id);
+    setInteraction({
+      kind: 'section',
+      id: section.id,
+      type: 'section',
+      mode,
+      handle,
+      scale,
+      startX: event.clientX,
+      startY: event.clientY,
+      startFrame: {
+        x: section.x,
+        y: section.y,
+        width: section.width,
+        height: section.height
+      }
+    });
+  }
+
+  useEffect(() => {
+    if (!interaction) return undefined;
+    function onMove(event) {
+      const dx = (event.clientX - interaction.startX) / interaction.scale;
+      const dy = (event.clientY - interaction.startY) / interaction.scale;
+      const start = interaction.startFrame;
+      let next = { ...start };
+      if (interaction.mode === 'resize') {
+        if (interaction.handle.includes('e')) next.width = start.width + dx;
+        if (interaction.handle.includes('s')) next.height = start.height + dy;
+        if (interaction.handle.includes('w')) {
+          next.x = start.x + dx;
+          next.width = start.width - dx;
+        }
+        if (interaction.handle.includes('n')) {
+          next.y = start.y + dy;
+          next.height = start.height - dy;
+        }
+      } else {
+        next.x = start.x + dx;
+        next.y = start.y + dy;
+      }
+      if (snapEnabled) {
+        next.x = snapBuilderValue(next.x, gridSize);
+        next.y = snapBuilderValue(next.y, gridSize);
+        next.width = snapBuilderValue(next.width, gridSize);
+        next.height = snapBuilderValue(next.height, gridSize);
+      }
+      const minSize = interaction.kind === 'section'
+        ? { width: 80, height: 32 }
+        : defaultSizeForElement(interaction.type || selectedElement?.type || 'text');
+      next.width = clampBuilderNumber(next.width, minSize.width, 24, builderCanvas.width);
+      next.height = clampBuilderNumber(next.height, minSize.height, 8, builderCanvas.height);
+      next.x = clampBuilderNumber(next.x, 0, 0, builderCanvas.width - 12);
+      next.y = clampBuilderNumber(next.y, 0, 0, builderCanvas.height - 8);
+      if (interaction.kind === 'section') patchSectionDirect(interaction.id, next);
+      else patchElementDirect(interaction.id, next);
+    }
+    function onUp() {
+      setInteraction(null);
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [interaction, gridSize, snapEnabled, selectedElement?.type]);
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      if ((!selectedElement && !selectedSection) || disabled) return;
+      const deltas = {
+        ArrowLeft: [-1, 0],
+        ArrowRight: [1, 0],
+        ArrowUp: [0, -1],
+        ArrowDown: [0, 1]
+      };
+      if (!deltas[event.key]) return;
+      if (selectedElement?.locked) return;
+      if (selectedSection && (!freeLayoutMode || selectedSection.locked)) return;
+      event.preventDefault();
+      const amount = event.shiftKey ? 10 : 1;
+      const [xDelta, yDelta] = deltas[event.key];
+      if (selectedElement) {
+        patchElement(selectedElement.id, {
+          x: clampBuilderNumber(selectedElement.x + xDelta * amount, selectedElement.x, 0, builderCanvas.width - 12),
+          y: clampBuilderNumber(selectedElement.y + yDelta * amount, selectedElement.y, 0, builderCanvas.height - 8)
+        });
+        return;
+      }
+      patchSection(selectedSection.id, {
+        x: clampBuilderNumber(selectedSection.x + xDelta * amount, selectedSection.x, 0, builderCanvas.width - 12),
+        y: clampBuilderNumber(selectedSection.y + yDelta * amount, selectedSection.y, 0, builderCanvas.height - 8)
+      });
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedElement, selectedSection, freeLayoutMode, disabled]);
+
+  function insertVariable(variable) {
+    if (!selectedElement && !selectedSection) {
+      onShowVariables?.();
+      return;
+    }
+    if (selectedSection) {
+      const content = selectedSection.content || {};
+      patchSection(selectedSection.id, {
+        content: {
+          body: `${content.body || ''}${content.body ? ' ' : ''}${variable}`
+        }
+      });
+      return;
+    }
+    const content = selectedElement.content || {};
+    const target = selectedElement.type === 'card'
+      ? 'body'
+      : selectedElement.type === 'qr'
+        ? 'helperText'
+        : selectedElement.type === 'signature'
+          ? 'name'
+          : 'text';
+    patchElement(selectedElement.id, {
+      content: {
+        [target]: `${content[target] || ''}${content[target] ? ' ' : ''}${variable}`
+      }
+    });
+  }
+
+  const filteredVariableGroups = builderVariableGroups
+    .map(([group, variables]) => [
+      group,
+      variables.filter((variable) => `${group} ${variable}`.toLowerCase().includes(variableQuery.toLowerCase()))
+    ])
+    .filter(([, variables]) => variables.length);
+
+  function renderRailPanel() {
+    if (activeRail === 'templates') {
+      const savedTemplates = Array.isArray(canvasDesign.savedTemplates) ? canvasDesign.savedTemplates : [];
+      return (
+        <div className="pdf-builder-panel-body">
+          <div className="pdf-template-gallery">
+            <article className="pdf-template-gallery-card is-active">
+              <div className="pdf-template-gallery-preview">
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className="min-w-0">
+                <p>{template.name}</p>
+                <small>Current template layout</small>
+              </div>
+              <button type="button" className="btn btn-secondary justify-center" disabled={disabled} onClick={duplicateCurrentTemplate}>
+                <Copy className="h-4 w-4" />
+                Duplicate
+              </button>
+              <button type="button" className="btn btn-primary justify-center" disabled={disabled} onClick={applyDefaultTemplateLayout}>
+                <LayoutGrid className="h-4 w-4" />
+                Start from Current Template
+              </button>
+            </article>
+            <article className="pdf-template-gallery-card">
+              <div className="pdf-template-gallery-preview is-system">
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className="min-w-0">
+                <p>Default {template.name}</p>
+                <small>Restore fixed document sections</small>
+              </div>
+              <button type="button" className="btn btn-secondary justify-center" disabled={disabled} onClick={applyDefaultTemplateLayout}>
+                <RotateCcw className="h-4 w-4" />
+                Restore Default Layout
+              </button>
+            </article>
+            <article className="pdf-template-gallery-card">
+              <div className="pdf-template-gallery-preview is-blank" />
+              <div className="min-w-0">
+                <p>Blank A4 Template</p>
+                <small>Start with a white PDF page</small>
+              </div>
+              <button type="button" className="btn btn-primary justify-center" disabled={disabled} onClick={startBlankDesign}>
+                <FilePlus2 className="h-4 w-4" />
+                Start from Blank Template
+              </button>
+            </article>
+            {savedTemplates.map((savedTemplate) => (
+              <article key={savedTemplate.id} className="pdf-template-gallery-card">
+                <div className="pdf-template-gallery-preview">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <div className="min-w-0">
+                  <p>{savedTemplate.name || 'Saved Template'}</p>
+                  <small>{savedTemplate.createdAt ? formatDate(savedTemplate.createdAt) : 'Local saved design'}</small>
+                </div>
+                <div className="pdf-template-card-actions">
+                  <button type="button" className="icon-button" disabled={disabled} onClick={() => applySavedTemplate(savedTemplate)} title="Apply saved template">
+                    <Eye className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" className="icon-button pdf-danger-icon" disabled={disabled} onClick={() => deleteSavedTemplate(savedTemplate.id)} title="Delete saved template">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (activeRail === 'layers') {
+      return (
+        <div className="pdf-builder-panel-body">
+          <div className="pdf-layer-list">
+            {layers.map((layer) => (
+              <BuilderLayerRow
+                key={layer.id}
+                layer={layer}
+                selected={selectedLayerId === layer.id}
+                disabled={disabled}
+                onSelect={() => {
+                  setSelectedLayerId(layer.id);
+                  if (layer.pageId) setCurrentPageId(layer.pageId);
+                }}
+                onToggleVisibility={() => toggleLayerVisibility(layer)}
+                onMoveUp={() => moveElementLayer(layer.id, -1)}
+                onMoveDown={() => moveElementLayer(layer.id, 1)}
+                onDuplicate={() => layer.kind === 'element' && duplicateElement(layer.element)}
+                onDelete={() => layer.kind === 'element' && deleteElement(layer.id)}
+              />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (activeRail === 'pages') {
+      return (
+        <div className="pdf-builder-panel-body">
+          <div className="pdf-page-list">
+            {pages.map((page, index) => {
+              const pageElements = elements.filter((element) => (element.pageId || 'page-1') === page.id);
+              const pageSections = canvasSections.filter((section) => (section.pageId || 'page-1') === page.id);
+              return (
+                <div key={page.id} className={`pdf-page-row ${currentPageId === page.id ? 'is-active' : ''}`}>
+                  <button type="button" className="pdf-page-main" onClick={() => setCurrentPageId(page.id)}>
+                  <span className="pdf-page-thumb">{index + 1}</span>
+                  <span className="min-w-0">
+                    <span className="pdf-page-name">{page.name || `Page ${index + 1}`}</span>
+                    <span className="pdf-page-meta">{pageSections.length} sections / {pageElements.length} elements - A4 Portrait</span>
+                  </span>
+                  </button>
+                  <div className="pdf-page-actions">
+                    <button type="button" className="icon-button" disabled={disabled || index === 0} onClick={() => movePage(page.id, -1)} title="Move page up"><ArrowUp className="h-3.5 w-3.5" /></button>
+                    <button type="button" className="icon-button" disabled={disabled || index === pages.length - 1} onClick={() => movePage(page.id, 1)} title="Move page down"><ArrowDown className="h-3.5 w-3.5" /></button>
+                    <button type="button" className="icon-button" disabled={disabled} onClick={() => duplicatePage(page)} title="Duplicate page"><Copy className="h-3.5 w-3.5" /></button>
+                    <button type="button" className="icon-button pdf-danger-icon" disabled={disabled || page.id === 'page-1' || pages.length <= 1} onClick={() => deletePage(page.id)} title="Delete page"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <button type="button" className="btn btn-secondary w-full justify-center" disabled={disabled} onClick={addPage}>
+            <Plus className="h-4 w-4" />
+            Add Page
+          </button>
+          <div className="pdf-builder-note">
+            <p className="font-black text-slate-100">Page Break Settings</p>
+            <p className="mt-1 text-xs muted">Use the locked Page Break Settings layer to keep final sections away from the footer. Page 2 appears when you add one or place elements there.</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeRail === 'variables') {
+      return (
+        <div className="pdf-builder-panel-body">
+          <label className="pdf-builder-search">
+            <Search className="h-4 w-4" />
+            <input value={variableQuery} placeholder="Search variables" onChange={(event) => setVariableQuery(event.target.value)} />
+          </label>
+          <div className="pdf-variable-groups">
+            {filteredVariableGroups.map(([group, variables]) => (
+              <section key={group} className="pdf-variable-group">
+                <h4>{group}</h4>
+                <div className="grid gap-2">
+                  {variables.map((variable) => (
+                    <button key={variable} type="button" className="pdf-variable-row" onClick={() => insertVariable(variable)}>
+                      <code>{variable}</code>
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (activeRail === 'history') {
+      return (
+        <div className="pdf-builder-panel-body">
+          <div className="grid gap-2">
+            {versions.length ? versions.slice(0, 8).map((version) => (
+              <div key={version.id || version.version} className="pdf-builder-history-row">
+                <div className="min-w-0">
+                  <p>v{version.version}</p>
+                  <span>{version.editedAt ? formatDate(version.editedAt) : 'No date'} - {version.editedBy?.name || version.editedBy?.username || 'System'}</span>
+                </div>
+                <button type="button" className="btn btn-secondary py-1.5 text-xs" disabled={restoring} onClick={() => onRestore(version)}>
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Restore
+                </button>
+              </div>
+            )) : <p className="pdf-builder-empty">Saved versions will appear after the first edit.</p>}
+          </div>
+        </div>
+      );
+    }
+
+    if (activeRail === 'text') {
+      return (
+        <div className="pdf-builder-panel-body">
+          <div className="pdf-elements-grid">
+            {builderTextPresets.map((preset) => (
+              <button key={preset.id} type="button" className="pdf-element-button" disabled={disabled} onClick={() => addTextPreset(preset)}>
+                <Type className="h-4 w-4" />
+                <span>{preset.label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="pdf-builder-note">
+            <p className="font-black text-slate-100">Text presets</p>
+            <p className="mt-1 text-xs muted">Add headings, labels, and body text, then insert variables from the Variables tab.</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeRail === 'uploads') {
+      return (
+        <div className="pdf-builder-panel-body">
+          <div className="pdf-elements-grid">
+            <button type="button" className="pdf-element-button" disabled={disabled} onClick={() => addElement('image')}>
+              <ImageIcon className="h-4 w-4" />
+              <span>Logo</span>
+            </button>
+            <button type="button" className="pdf-element-button" disabled={disabled} onClick={() => addElement('image')}>
+              <FilePlus2 className="h-4 w-4" />
+              <span>Image Placeholder</span>
+            </button>
+          </div>
+          <div className="pdf-builder-note">
+            <p className="font-black text-slate-100">Uploads / Logo</p>
+            <p className="mt-1 text-xs muted">Logo elements render the company logo in saved PDFs when one is configured; otherwise they stay as placeholders.</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="pdf-builder-panel-body">
+        <div className="pdf-elements-grid">
+          {builderElementTypes.map((tool) => {
+            const Icon = tool.icon;
+            return (
+              <button key={tool.type} type="button" className="pdf-element-button" disabled={disabled} onClick={() => addElement(tool.type)}>
+                <Icon className="h-4 w-4" />
+                <span>{tool.label.replace(/^Add\s+/i, '')}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="pdf-builder-note">
+          <p className="font-black text-slate-100">Current page</p>
+          <p className="mt-1 text-xs muted">New elements are added to {currentPage.name || 'Page 1'} and saved in the design JSON.</p>
+        </div>
+      </div>
+    );
+  }
+
+  function renderInspectorTabContent(tabId = activeInspectorTab) {
+    if (!selectedLayer) {
+      return (
+        <div className="pdf-builder-helper pdf-builder-helper-compact">
+          <MousePointerFallback />
+          <p>Select a section or element to edit.</p>
+        </div>
+      );
+    }
+
+    if (tabId === 'content') {
+      if (selectedElement) {
+        return <ElementContentControls element={selectedElement} disabled={disabled || selectedElement.locked} onPatch={(patch) => patchElement(selectedElement.id, patch)} onOpenVariables={() => setActiveRail('variables')} />;
+      }
+      return (
+        <div className="pdf-inspector-grid">
+          <BuilderTextInput label="Section name" value={selectedSection.name || selectedSection.title} disabled={disabled} onChange={(value) => patchSection(selectedSection.id, { name: value, title: value, content: { title: value } })} />
+          <BuilderTextInput label="Preview title" value={selectedSection.content?.title || selectedSection.title} disabled={disabled} onChange={(value) => patchSection(selectedSection.id, { content: { title: value } })} />
+          <BuilderTextarea label="Preview body" value={selectedSection.content?.body || ''} disabled={disabled} rows={3} onChange={(value) => patchSection(selectedSection.id, { content: { body: value } })} />
+          <button type="button" className="btn btn-secondary justify-center pdf-field-full" onClick={() => setActiveRail('variables')}>
+            <ShieldCheck className="h-4 w-4" />
+            Variable insert helper
+          </button>
+        </div>
+      );
+    }
+
+    if (tabId === 'layout') {
+      if (selectedElement) {
+        return (
+          <ElementLayoutControls
+            element={selectedElement}
+            pages={pages}
+            disabled={disabled || selectedElement.locked}
+            onPatch={(patch) => patchElement(selectedElement.id, patch)}
+          />
+        );
+      }
+      return freeLayoutMode ? (
+        <ElementLayoutControls
+          element={selectedSection}
+          pages={pages}
+          disabled={disabled || selectedSection.locked}
+          onPatch={(patch) => patchSection(selectedSection.id, patch)}
+        />
+      ) : (
+        <LockedLayoutSummary frame={{ x: Math.round(selectedSection.x), y: Math.round(selectedSection.y), width: Math.round(selectedSection.width), height: Math.round(selectedSection.height) }} />
+      );
+    }
+
+    if (tabId === 'style') {
+      return selectedElement
+        ? <ElementStyleControls element={selectedElement} disabled={disabled || selectedElement.locked} onPatch={(patch) => patchElement(selectedElement.id, patch)} />
+        : <ElementStyleControls element={selectedSection} disabled={disabled} onPatch={(patch) => patchSection(selectedSection.id, patch)} />;
+    }
+
+    if (tabId === 'visibility') {
+      return (
+        <div className="pdf-inspector-grid">
+          <BuilderToggle label="Visible" checked={selectedLayer.visible !== false} disabled={disabled || (!selectedLayer.supportsVisibility && selectedLayer.kind === 'section')} onChange={() => toggleLayerVisibility(selectedLayer)} />
+          <BuilderToggle label="Show title" checked={selectedLayer.kind === 'section' ? selectedSection?.showTitle !== false : selectedElement?.showTitle !== false} disabled={disabled} onChange={(checked) => updateLayerOption(selectedLayer, 'showTitle', checked)} />
+          <BuilderToggle label="Show icon" checked={selectedLayer.kind === 'section' ? selectedSection?.showIcon !== false : selectedElement?.showIcon !== false} disabled={disabled || selectedLayer.kind === 'element'} onChange={(checked) => updateLayerOption(selectedLayer, 'showIcon', checked)} />
+        </div>
+      );
+    }
+
+    return (
+      <div className="pdf-inspector-grid">
+        {selectedElement ? (
+          <>
+            <BuilderNumberInput label="Layer z-index" value={selectedElement.zIndex} min={1} max={999} disabled={disabled} onChange={(value) => patchElement(selectedElement.id, { zIndex: value })} />
+            <BuilderToggle label="Lock element" checked={selectedElement.locked === true} disabled={disabled} onChange={(checked) => patchElement(selectedElement.id, { locked: checked })} />
+            <BuilderToggle label="Print safe" checked={selectedElement.printSafe !== false} disabled={disabled || selectedElement.locked} onChange={(checked) => patchElement(selectedElement.id, { printSafe: checked })} />
+            <BuilderToggle label="Page break before" checked={selectedElement.pageBreakBefore === true} disabled={disabled || selectedElement.locked} onChange={(checked) => patchElement(selectedElement.id, { pageBreakBefore: checked })} />
+            <BuilderToggle label="Avoid split across pages" checked={selectedElement.avoidSplit !== false} disabled={disabled || selectedElement.locked} onChange={(checked) => patchElement(selectedElement.id, { avoidSplit: checked })} />
+          </>
+        ) : (
+          <>
+            <BuilderNumberInput label="Layer z-index" value={selectedSection.zIndex} min={1} max={999} disabled={disabled || !freeLayoutMode} onChange={(value) => patchSection(selectedSection.id, { zIndex: value })} />
+            <BuilderToggle label="Lock section" checked={selectedSection.locked === true} disabled={disabled || !freeLayoutMode} onChange={(checked) => patchSection(selectedSection.id, { locked: checked })} />
+            <BuilderToggle label="Print safe" checked={selectedSection.printSafe !== false} disabled={disabled} onChange={(checked) => patchSection(selectedSection.id, { printSafe: checked })} />
+            <BuilderToggle label="Page break before" checked={selectedSection.pageBreakBefore === true} disabled={disabled} onChange={(checked) => patchSection(selectedSection.id, { pageBreakBefore: checked })} />
+            <BuilderToggle label="Avoid split across pages" checked={selectedSection.avoidSplit !== false} disabled={disabled} onChange={(checked) => patchSection(selectedSection.id, { avoidSplit: checked })} />
+          </>
+        )}
+      </div>
+    );
+  }
+
+  function renderInspectorPanel({ placement = 'bottom' } = {}) {
+    const compact = placement === 'bottom';
+    return (
+      <div className={`pdf-inspector-panel ${compact ? 'is-bottom' : 'is-right'} ${inspectorCollapsed && compact ? 'is-collapsed' : ''} ${!selectedLayer ? 'is-empty' : ''}`}>
+        <div className="pdf-inspector-drawer-bar">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Properties</p>
+            <h3>{selectedLayer ? selectedLayer.title : 'Select a section or element to edit.'}</h3>
+          </div>
+          <div className="pdf-inspector-drawer-actions">
+            {selectedLayer ? (
+              <>
+                <span className="pdf-state-badge is-fixed">{selectedLayer.badge}</span>
+                <span className={`pdf-state-badge ${selectedLayer.locked ? 'is-off' : 'is-on'}`}>{selectedLayer.locked ? 'Locked' : 'Editable'}</span>
+              </>
+            ) : null}
+            {selectedElement ? (
+              <>
+                <button type="button" className="icon-button" disabled={disabled} onClick={() => duplicateElement(selectedElement)} title="Duplicate">
+                  <Copy className="h-4 w-4" />
+                </button>
+                <button type="button" className="icon-button pdf-danger-icon" disabled={disabled} onClick={() => deleteElement(selectedElement.id)} title="Delete">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </>
+            ) : null}
+            {compact ? (
+              <button type="button" className="icon-button" onClick={() => setInspectorCollapsed((value) => !value)} title={inspectorCollapsed ? 'Open properties' : 'Collapse properties'}>
+                {inspectorCollapsed ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+              </button>
+            ) : (
+              <button type="button" className="icon-button" onClick={() => setRightInspectorOpen(false)} title="Close right inspector">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+        {!inspectorCollapsed || !compact ? (
+          selectedLayer ? (
+            <>
+            {selectedSection ? (
+              <p className="pdf-locked-message pdf-inspector-inline-message">{freeLayoutMode ? 'Free Layout Mode is on. Drag and resize this section on the canvas.' : 'Safe Mode is on. Default sections stay locked; turn on Free Layout Mode to move or resize them.'}</p>
+            ) : null}
+            <div className="pdf-inspector-tabs" role="tablist" aria-label="PDF design properties">
+              {builderInspectorTabs.map(([tabId, label]) => (
+                <button
+                  key={tabId}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeInspectorTab === tabId}
+                  className={`pdf-inspector-tab ${activeInspectorTab === tabId ? 'is-active' : ''}`}
+                  onClick={() => setActiveInspectorTab(tabId)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="pdf-inspector-tab-body">
+              {renderInspectorTabContent()}
+            </div>
+            </>
+          ) : (
+            <div className="pdf-inspector-tab-body">
+              {renderInspectorTabContent('content')}
+            </div>
+          )
+        ) : null}
+      </div>
+    );
+  }
 
   return (
-    <div className="grid gap-4">
-      <section className="surface admin-control-card p-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-amber-300/30 bg-amber-500/15 px-3 py-1 text-xs font-black uppercase tracking-wide text-[var(--warning)]">ADVANCED MODE - CHANGES APPLY ONLY AFTER SAVE</span>
-              <span className="rounded-full border border-sky-300/30 bg-sky-500/15 px-3 py-1 text-xs font-black uppercase tracking-wide text-[var(--brand)]">VISUAL EDITOR</span>
-            </div>
-            <h3 className="text-lg font-black text-[var(--app-text)]">Design Mode</h3>
-            <p className="mt-1 text-sm leading-6 muted">Design Mode is optional. Existing PDF design will not change until you save.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={onBack}>
-              <LayoutGrid className="h-4 w-4" />
-              Back to Structured Mode
-            </button>
-            <button type="button" className="btn btn-secondary admin-compact-button" onClick={onShowVariables}>
-              <ShieldCheck className="h-4 w-4" />
-              Variables
-            </button>
-            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onPreview(template, draft)}>
-              {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-              Preview PDF
-            </button>
-            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onDownload(template, draft)}>
-              {busyKey === `download-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              Download Sample PDF
-            </button>
-            <button type="submit" className="btn btn-primary admin-compact-button" disabled={!canEdit || saving || Boolean(busyKey)}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save Template
-            </button>
-          </div>
+    <div className={`pdf-builder-workspace ${fullScreenEditor ? 'is-fullscreen' : ''} ${rightInspectorOpen ? 'has-right-inspector' : ''} ${inspectorCollapsed ? 'is-inspector-collapsed' : ''}`}>
+      <section className="pdf-builder-toolbar">
+        <div className="pdf-builder-toolbar-title">
+          <span className="pdf-builder-warning">ADVANCED MODE - CHANGES APPLY ONLY AFTER SAVE</span>
+          <span className="pdf-builder-mode">VISUAL PDF BUILDER</span>
+          {hasUnsavedDesignChanges ? <span className="pdf-builder-unsaved">Unsaved changes</span> : <span className="pdf-builder-saved">Saved template view</span>}
+        </div>
+        <div className="pdf-builder-toolbar-actions">
+          <button type="button" className={`btn admin-compact-button ${fullScreenEditor ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setFullScreenEditor((value) => !value)}>
+            <Maximize2 className="h-4 w-4" />
+            {fullScreenEditor ? 'Exit Full Screen' : 'Full Screen Editor'}
+          </button>
+          <button type="button" className={`btn admin-compact-button ${rightInspectorOpen ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setRightInspectorOpen((value) => !value)}>
+            <Settings2 className="h-4 w-4" />
+            Inspector Right Panel
+          </button>
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={onBack}>
+            <LayoutGrid className="h-4 w-4" />
+            Back to Structured Mode
+          </button>
+          <button type="button" className="icon-button" disabled={!undoStack.length || disabled} onClick={undoDesign} title="Undo">
+            <Undo2 className="h-4 w-4" />
+          </button>
+          <button type="button" className="icon-button" disabled={!redoStack.length || disabled} onClick={redoDesign} title="Redo">
+            <Redo2 className="h-4 w-4" />
+          </button>
+          <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => setActiveRail('variables')}>
+            <ShieldCheck className="h-4 w-4" />
+            Variables
+          </button>
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onPreview(template, previewConfig)}>
+            {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+            Preview PDF
+          </button>
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onDownload(template, previewConfig)}>
+            {busyKey === `download-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Download Sample PDF
+          </button>
+          <button type="submit" className="btn btn-primary admin-compact-button pdf-builder-save-button" disabled={!canEdit || saving || Boolean(busyKey)}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? 'Saving...' : 'Save Template'}
+          </button>
         </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)_300px]">
-        <aside className="surface admin-control-card p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="admin-control-icon"><Layers className="h-5 w-5" /></div>
-            <div>
-              <h3 className="font-black text-[var(--app-text)]">Elements / Layers</h3>
-              <p className="mt-1 text-xs muted">Fixed template sections stay locked from destructive editing.</p>
-            </div>
-          </div>
-          <div className="grid gap-2">
-            {tools.map((tool) => (
+      <div className="pdf-builder-shell">
+        <aside className="pdf-builder-rail" aria-label="Design builder tools">
+          {builderRailItems.map((item) => {
+            const Icon = item.icon;
+            return (
               <button
-                key={tool.type}
+                key={item.id}
                 type="button"
-                className="btn btn-secondary justify-between"
-                disabled={disabled || !tool.enabled}
-                onClick={() => addElement(tool.type, tool.label)}
+                className={`pdf-rail-button ${activeRail === item.id ? 'is-active' : ''}`}
+                onClick={() => setActiveRail(item.id)}
+                title={item.label}
               >
-                <span>{tool.label}</span>
-                {tool.enabled ? <Plus className="h-4 w-4" /> : <span className="text-[10px] font-black uppercase text-slate-400">Coming later</span>}
+                <Icon className="h-5 w-5" />
+                <span>{item.label}</span>
               </button>
-            ))}
-          </div>
-          <div className="mt-5">
-            <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--app-text-muted)]">Section Layers</p>
-            <div className="grid gap-2">
-              {layers.map((layer) => (
-              <button
-                key={layer.id}
-                type="button"
-                className={`rounded-card border px-3 py-2 text-left text-sm transition ${selectedLayerId === layer.id ? 'border-sky-300/50 bg-sky-500/15 shadow-[0_0_0_1px_rgba(125,211,252,0.18)]' : 'border-white/10 bg-white/[0.035] hover:border-sky-300/25 hover:bg-white/[0.055]'}`}
-                onClick={() => setSelectedLayerId(layer.id)}
-              >
-                <span className="flex min-w-0 items-start justify-between gap-2">
-                  <span className="min-w-0 font-bold text-[var(--app-text)]">{layer.title}</span>
-                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${layer.locked ? 'border-amber-300/25 bg-amber-500/10 text-amber-100' : 'border-emerald-300/25 bg-emerald-500/10 text-emerald-100'}`}>{layer.locked ? 'Locked' : 'Editable'}</span>
-                </span>
-                <span className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-wide text-[var(--app-text-muted)]">
-                  <span>{layer.kind}</span>
-                  <span className={`rounded-full border px-2 py-0.5 ${layer.visible ? 'border-emerald-300/20 text-emerald-100' : 'border-slate-500/25 text-slate-300'}`}>{layer.visible ? 'Visible' : 'Hidden'}</span>
-                </span>
-              </button>
-            ))}
-            </div>
-          </div>
+            );
+          })}
         </aside>
 
-        <main className="surface admin-control-card p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <aside className="pdf-builder-panel">
+          <div className="pdf-builder-panel-header">
             <div>
-              <h3 className="font-black text-[var(--app-text)]">A4 Canvas</h3>
-              <p className="mt-1 text-xs muted">Visual preview only. Existing PDF output changes only after Save Template.</p>
+              <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">{builderRailItems.find((item) => item.id === activeRail)?.label}</p>
+              <h3>{activeRail === 'templates' ? 'Template Gallery' : activeRail === 'elements' ? 'Elements' : activeRail === 'text' ? 'Text' : activeRail === 'uploads' ? 'Uploads / Logo' : activeRail === 'layers' ? 'Layers' : activeRail === 'pages' ? 'Pages' : activeRail === 'variables' ? 'Variables' : 'Saved Versions'}</h3>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {['fit', '75', '100'].map((option) => (
+            <SlidersHorizontal className="h-4 w-4 text-sky-100/70" />
+          </div>
+          {renderRailPanel()}
+        </aside>
+
+        <div className="pdf-builder-stage">
+          <main className="pdf-builder-canvas">
+          <div className="pdf-builder-canvas-header">
+            <div>
+              <h3>A4 Canvas</h3>
+              <p>{currentPage.name || 'Page 1'} - White PDF page - sections and elements snap to {gridSize}px grid</p>
+            </div>
+            <div className="pdf-canvas-controls">
+              <span className={`pdf-canvas-mode-pill ${freeLayoutMode ? 'is-free' : 'is-safe'}`}>
+                {freeLayoutMode ? 'Free Layout Mode' : 'Safe Mode'}
+              </span>
+              {['fit', 'fit-width', '75', '100', '125'].map((option) => (
                 <button
                   key={option}
                   type="button"
-                  className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${zoom === option ? 'border-sky-300/35 bg-sky-500/15 text-[var(--brand)]' : 'border-white/10 bg-white/[0.04] text-[var(--app-text-muted)]'}`}
-                  onClick={() => setZoom(option)}
+                  className={`pdf-canvas-pill ${zoom === option ? 'is-active' : ''}`}
+                  onClick={() => {
+                    setZoom(option);
+                    updateCanvasOption('canvas.zoom', option);
+                  }}
                 >
-                  {option === 'fit' ? 'Fit' : `${option}%`}
+                  {option === 'fit' ? 'Fit' : option === 'fit-width' ? 'Fit Width' : `${option}%`}
                 </button>
               ))}
-              <span className="rounded-full border border-sky-300/25 bg-sky-500/10 px-3 py-1 text-xs font-black text-[var(--brand)]">A4 Portrait</span>
+              <button type="button" className={`pdf-canvas-pill ${gridEnabled ? 'is-active' : ''}`} onClick={() => updateCanvasOption('gridEnabled', !gridEnabled)}>
+                <Grid2X2 className="h-3.5 w-3.5" />
+                Grid
+              </button>
+              <button type="button" className={`pdf-canvas-pill ${snapEnabled ? 'is-active' : ''}`} onClick={() => updateCanvasOption('canvas.snap', !snapEnabled)}>
+                <Move className="h-3.5 w-3.5" />
+                Snap
+              </button>
+              <button type="button" className={`pdf-canvas-pill ${freeLayoutMode ? 'is-active' : ''}`} disabled={disabled} onClick={toggleFreeLayoutMode}>
+                {freeLayoutMode ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                Free Layout Mode
+              </button>
             </div>
           </div>
-          <div className="overflow-x-auto rounded-card border border-white/10 bg-slate-950/35 p-4">
-            <div className="mx-auto transition-all" style={{ width: zoomWidths[zoom], maxWidth: '100%' }}>
-              <div className="relative aspect-[210/297] overflow-hidden rounded-card border border-white/20 bg-white shadow-2xl">
-                {previewFrameUrl ? (
-                  <iframe title={`${template.name} visual design preview`} src={previewFrameUrl} className="absolute inset-0 h-full w-full bg-white" />
-                ) : (
-                  <div className="absolute inset-0 grid place-items-center bg-white p-6 text-center text-sm font-semibold text-slate-600">
-                    {previewError || 'Preparing real PDF preview...'}
-                  </div>
-                )}
-                {previewLoading ? (
-                  <div className="absolute inset-0 z-20 grid place-items-center bg-slate-950/20">
-                    <Loader2 className="h-6 w-6 animate-spin text-sky-100" />
+          <div className="pdf-canvas-scroll">
+            <div className="pdf-paper-stage" style={{ width: builderCanvas.width * zoomScale, height: builderCanvas.height * zoomScale }}>
+              <div
+                ref={paperRef}
+                className={`pdf-a4-page ${gridEnabled ? 'has-grid' : ''}`}
+                style={{
+                  width: builderCanvas.width,
+                  height: builderCanvas.height,
+                  transform: `scale(${zoomScale})`
+                }}
+                onPointerDown={() => setSelectedLayerId('')}
+              >
+                {visiblePageSections.map((section) => {
+                  const layer = sectionLayers.find((item) => item.id === section.id);
+                  return (
+                    <BuilderCanvasSection
+                      key={section.id}
+                      section={section}
+                      layer={layer}
+                      selected={selectedLayerId === section.id}
+                      disabled={disabled}
+                      freeLayoutMode={freeLayoutMode}
+                      onSelect={() => setSelectedLayerId(section.id)}
+                      onDragStart={(event) => beginSectionInteraction(event, section, 'move')}
+                      onResizeStart={(event, handle) => beginSectionInteraction(event, section, 'resize', handle)}
+                    />
+                  );
+                })}
+                {visiblePageElements.map((element) => (
+                  <BuilderCanvasElement
+                    key={element.id}
+                    element={element}
+                    selected={selectedLayerId === element.id}
+                    disabled={disabled}
+                    onSelect={() => setSelectedLayerId(element.id)}
+                    onDragStart={(event) => beginElementInteraction(event, element, 'move')}
+                    onResizeStart={(event, handle) => beginElementInteraction(event, element, 'resize', handle)}
+                  />
+                ))}
+                <div className="pdf-page-break-guide">Page break safe zone</div>
+                {visiblePageSections.length === 0 && visiblePageElements.length === 0 ? (
+                  <div className="pdf-canvas-empty">
+                    <p>Choose a template or add an element from the left panel.</p>
                   </div>
                 ) : null}
-                <div className="absolute inset-0 z-10">
-                  {layers.filter((layer) => layer.kind !== 'Free Element').map((layer, index) => {
-                    const active = selectedLayerId === layer.id;
-                    return (
-                      <button
-                        key={layer.id}
-                        type="button"
-                        className={`absolute rounded-md border px-2 py-1 text-left text-[10px] font-black uppercase tracking-wide transition ${active ? 'border-cyan-300 bg-cyan-300/20 text-cyan-950 shadow-[0_0_0_2px_rgba(14,165,233,0.28)]' : 'border-cyan-400/35 bg-cyan-300/10 text-cyan-950/70 hover:bg-cyan-300/20'}`}
-                        style={overlayStyleForLayer(layer, index)}
-                        onClick={() => setSelectedLayerId(layer.id)}
-                      >
-                        {layer.title}
-                      </button>
-                    );
-                  })}
-                </div>
               </div>
             </div>
           </div>
-          {previewError ? <p className="mt-3 rounded-card border border-rose-400/25 bg-rose-500/10 p-3 text-sm font-semibold text-rose-100">{previewError}</p> : null}
-        </main>
+          </main>
 
-        <aside className="surface admin-control-card p-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-auto">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="admin-control-icon"><Settings2 className="h-5 w-5" /></div>
-            <div>
-              <h3 className="font-black text-[var(--app-text)]">Properties</h3>
-              <p className="mt-1 text-xs muted">Layer properties are preview-only until saved.</p>
-            </div>
-          </div>
-          {selectedLayer ? (
-            <div className="grid gap-3">
-              <label>
-                <span className="label">Section name</span>
-                <input className="input" value={selectedLayer.title} disabled readOnly />
-              </label>
-              <FieldRow field={{ type: 'toggle', path: designLayerOptionPath(selectedLayer.id, 'visible'), label: 'Visible', fallback: selectedLayer.visible }} draft={designDraft} setDraft={setDesignDraft} canEdit={canEdit && selectedLayer.supportsVisibility} saving={saving} />
-              <FieldRow field={{ type: 'toggle', path: designLayerOptionPath(selectedLayer.id, 'showTitle'), label: 'Show title', fallback: true }} draft={designDraft} setDraft={setDesignDraft} canEdit={canEdit && selectedLayer.supportsTitle} saving={saving} />
-              <FieldRow field={{ type: 'toggle', path: designLayerOptionPath(selectedLayer.id, 'showIcon'), label: 'Show icon', fallback: true }} draft={designDraft} setDraft={setDesignDraft} canEdit={canEdit && selectedLayer.supportsIcon} saving={saving} />
-              <ColorControl label="Accent color" value={getPath(designDraft, designLayerOptionPath(selectedLayer.id, 'accentColor'), getPath(designDraft, 'colors.accentColor', getPath(draft, 'header.accentColor', '#0f2a52')))} disabled={disabled || !customColorsEnabled} onChange={(value) => setDesignDraft((current) => setPath(current, designLayerOptionPath(selectedLayer.id, 'accentColor'), value))} />
-              {!customColorsEnabled ? <p className="rounded-card border border-white/10 bg-white/[0.035] p-3 text-xs font-semibold muted">Enable custom colors in Advanced Layout to edit accent color.</p> : null}
-              <SelectControl label="Alignment" value={getPath(designDraft, designLayerOptionPath(selectedLayer.id, 'alignment'), 'left')} options={[['left', 'Left'], ['center', 'Center'], ['right', 'Right']]} disabled={disabled} onChange={(value) => setDesignDraft((current) => setPath(current, designLayerOptionPath(selectedLayer.id, 'alignment'), value))} />
-              <SelectControl label="Width option" value={getPath(designDraft, designLayerOptionPath(selectedLayer.id, 'width'), 'full')} options={cardWidthOptions} disabled={disabled || !customWidthEnabled} onChange={(value) => setDesignDraft((current) => setPath(current, designLayerOptionPath(selectedLayer.id, 'width'), value))} />
-              {!customWidthEnabled ? <p className="rounded-card border border-white/10 bg-white/[0.035] p-3 text-xs font-semibold muted">Enable custom card width in Advanced Layout to edit width.</p> : null}
-              <FieldRow field={{ type: 'toggle', path: designLayerOptionPath(selectedLayer.id, 'twoColumn'), label: 'Two-column card', fallback: false }} draft={designDraft} setDraft={setDesignDraft} canEdit={canEdit && twoColumnEnabled} saving={saving} />
-              {!twoColumnEnabled ? <p className="rounded-card border border-white/10 bg-white/[0.035] p-3 text-xs font-semibold muted">Enable two-column cards in Advanced Layout to use this option.</p> : null}
-              <button type="button" className="btn btn-secondary justify-between" disabled>
-                <span>Precise drag / snap</span>
-                <span className="text-[10px] font-black uppercase text-slate-400">Coming later</span>
-              </button>
-              {selectedLayer.locked ? (
-                <p className="rounded-card border border-amber-300/20 bg-amber-500/10 p-3 text-xs font-semibold text-amber-100">Locked section. You can adjust safe visual flags, but fixed template sections cannot be deleted or free-positioned here.</p>
-              ) : null}
-            </div>
-          ) : (
-            <p className="rounded-card border border-dashed border-white/15 bg-white/[0.025] p-4 text-sm muted">Select a section from the canvas or layers list to edit its visual settings.</p>
-          )}
-        </aside>
+          <section className="pdf-builder-bottom-inspector">
+            {renderInspectorPanel({ placement: 'bottom' })}
+          </section>
+        </div>
+
+        {rightInspectorOpen ? (
+          <aside className="pdf-builder-inspector pdf-builder-inspector-optional">
+            {renderInspectorPanel({ placement: 'right' })}
+          </aside>
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function MousePointerFallback() {
+  return <Move className="h-5 w-5" />;
+}
+
+function styleForBuilderSection(section = {}, selected = false) {
+  const style = section.style || defaultElementStyles;
+  const borderWidth = clampBuilderNumber(style.borderWidth, 1, 0, 8);
+  return {
+    left: section.x,
+    top: section.y,
+    width: section.width,
+    height: section.height,
+    zIndex: section.zIndex || 1,
+    color: style.textColor || '#0f172a',
+    background: style.backgroundColor || '#ffffff',
+    borderColor: selected ? '#0284c7' : style.borderColor || '#d8e5f7',
+    borderRadius: clampBuilderNumber(style.borderRadius, 8, 0, 32),
+    borderWidth,
+    boxShadow: style.shadow ? '0 14px 28px rgba(15, 23, 42, 0.14)' : 'none',
+    textAlign: style.alignment || section.alignment || 'left',
+    fontSize: clampBuilderNumber(style.fontSize, 12, 8, 26),
+    fontWeight: style.fontWeight || 700
+  };
+}
+
+function BuilderCanvasSection({ section, layer, selected, disabled, freeLayoutMode, onSelect, onDragStart, onResizeStart }) {
+  const Icon = layer?.section?.icon || FileText;
+  const style = styleForBuilderSection(section, selected);
+  const locked = disabled || section.locked || !freeLayoutMode;
+  const content = section.content || {};
+  const rows = Array.isArray(content.rows) ? content.rows : [];
+  const columns = Array.isArray(content.columns) ? content.columns : [];
+  return (
+    <div
+      className={`pdf-builder-section is-${content.kind || section.role || 'details'} ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}`}
+      style={style}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        onSelect();
+        if (!locked) onDragStart(event);
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      <div className="pdf-section-topline">
+        {section.showTitle !== false ? (
+          <span className="pdf-section-title"><Icon className="h-3.5 w-3.5" />{content.title || section.title || section.name}</span>
+        ) : <span />}
+        <span className="pdf-section-lock">{locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}{locked ? 'Locked' : 'Free'}</span>
+      </div>
+      {content.kind === 'header' ? (
+        <div className="pdf-section-header-preview">
+          <div className="pdf-section-logo-mark">US</div>
+          <div>
+            <strong>{content.title || section.title}</strong>
+            <span>{content.body || 'Company details'}</span>
+          </div>
+        </div>
+      ) : content.kind === 'table' ? (
+        <div className="pdf-section-table-preview">
+          <div className="pdf-section-table-head">
+            {columns.slice(0, 4).map((column) => <span key={column}>{column}</span>)}
+          </div>
+          {rows.slice(0, 3).map((row, rowIndex) => (
+            <div key={`row-${rowIndex}`} className="pdf-section-table-row">
+              {row.slice(0, 4).map((cell, cellIndex) => <span key={`${cell}-${cellIndex}`}>{cell}</span>)}
+            </div>
+          ))}
+        </div>
+      ) : content.kind === 'amount' ? (
+        <div className="pdf-section-amount-preview">
+          {rows.map(([label, value]) => (
+            <span key={label}><em>{label}</em><strong>{value}</strong></span>
+          ))}
+        </div>
+      ) : rows.length ? (
+        <div className="pdf-section-details-preview">
+          {rows.slice(0, 5).map(([label, value]) => (
+            <span key={label}><em>{label}</em><strong>{value}</strong></span>
+          ))}
+        </div>
+      ) : (
+        <div className="pdf-section-body-preview">{content.body || 'Section content preview'}</div>
+      )}
+      {selected && !locked ? ['nw', 'ne', 'sw', 'se'].map((handle) => (
+        <button
+          key={handle}
+          type="button"
+          className={`pdf-resize-handle is-${handle}`}
+          onPointerDown={(event) => onResizeStart(event, handle)}
+          aria-label={`Resize ${handle}`}
+        />
+      )) : null}
+    </div>
+  );
+}
+
+function BuilderCanvasElement({ element, selected, disabled, onSelect, onDragStart, onResizeStart }) {
+  const Icon = elementIconForType(element.type);
+  const style = styleForBuilderElement(element, selected);
+  const content = element.content || {};
+  const locked = element.locked || disabled;
+  return (
+    <div
+      className={`pdf-builder-element is-${element.type} ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}`}
+      style={style}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        onSelect();
+        if (!locked) onDragStart(event);
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      <div className="pdf-element-grip"><GripVertical className="h-3.5 w-3.5" /></div>
+      {element.type === 'qr' ? (
+        <div className="pdf-canvas-qr">
+          <div className="pdf-qr-placeholder">QR</div>
+          <span>{content.label || 'QR CODE'}</span>
+          <small>{content.qrType || element.qrType || 'payment'}</small>
+        </div>
+      ) : element.type === 'signature' ? (
+        <div className="pdf-canvas-signature">
+          <p>{content.label || 'Authorized Signature'}</p>
+          <span />
+          <small>{[content.name, content.designation].filter(Boolean).join(' · ') || 'Name / designation'}</small>
+        </div>
+      ) : element.type === 'divider' ? (
+        <div className="pdf-canvas-divider" style={{ borderTopWidth: element.style?.dividerThickness || 2, borderTopStyle: element.style?.dividerStyle || 'solid', borderColor: element.style?.accentColor || '#0284c7' }}>
+          {content.label ? <span>{content.label}</span> : null}
+        </div>
+      ) : element.type === 'spacer' ? (
+        <div className="pdf-canvas-spacer">{content.label || 'Spacer'}</div>
+      ) : element.type === 'image' ? (
+        <div className="pdf-canvas-image"><ImageIcon className="h-5 w-5" /><span>{content.label || 'Image / Logo'}</span></div>
+      ) : element.type === 'card' ? (
+        <div className={`pdf-canvas-card ${element.twoColumn ? 'is-two-column' : ''}`}>
+          <p><Icon className="h-3.5 w-3.5" />{content.title || element.name}</p>
+          <span>{content.body || 'Add details here'}</span>
+        </div>
+      ) : (
+        <div className="pdf-canvas-text">{elementPrimaryText(element) || 'New text block'}</div>
+      )}
+      {element.locked ? <span className="pdf-element-lock"><Lock className="h-3 w-3" /></span> : null}
+      {selected && !locked ? ['nw', 'ne', 'sw', 'se'].map((handle) => (
+        <button
+          key={handle}
+          type="button"
+          className={`pdf-resize-handle is-${handle}`}
+          onPointerDown={(event) => onResizeStart(event, handle)}
+          aria-label={`Resize ${handle}`}
+        />
+      )) : null}
+    </div>
+  );
+}
+
+function BuilderLayerRow({ layer, selected, disabled, onSelect, onToggleVisibility, onMoveUp, onMoveDown, onDuplicate, onDelete }) {
+  const Icon = layer.kind === 'section' ? (layer.section?.icon || FileText) : elementIconForType(layer.type);
+  const elementLayer = layer.kind === 'element';
+  return (
+    <div className={`pdf-layer-row ${selected ? 'is-active' : ''}`}>
+      <button type="button" className="pdf-layer-main" onClick={onSelect}>
+        <GripVertical className="h-3.5 w-3.5 text-slate-400" />
+        <Icon className="h-4 w-4 text-sky-100" />
+        <span className="pdf-layer-text">
+          <span className="pdf-layer-name">{layer.title}</span>
+          <span className="pdf-layer-badges">
+            <span className={`pdf-layer-badge ${layer.locked ? 'is-locked' : 'is-free'}`}>{layer.locked ? 'Locked' : 'Free'}</span>
+            <span className="pdf-layer-badge">{layer.kind === 'section' ? 'Section' : layer.badge}</span>
+          </span>
+        </span>
+      </button>
+      <div className="pdf-layer-actions">
+        <button type="button" className="icon-button" disabled={disabled || !layer.supportsVisibility} onClick={onToggleVisibility} title={layer.visible ? 'Hide' : 'Show'}>
+          {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+        </button>
+        <button type="button" className="icon-button" disabled title={layer.locked ? 'Locked' : 'Unlocked'}>
+          {layer.locked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+        </button>
+        {elementLayer ? (
+          <>
+            <button type="button" className="icon-button" disabled={disabled} onClick={onMoveUp} title="Move up">
+              <ArrowUp className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" className="icon-button" disabled={disabled} onClick={onMoveDown} title="Move down">
+              <ArrowDown className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" className="icon-button" disabled={disabled} onClick={onDuplicate} title="Duplicate">
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" className="icon-button pdf-danger-icon" disabled={disabled} onClick={onDelete} title="Delete">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function InspectorAccordion({ title, children, open = false }) {
+  return (
+    <details className="pdf-inspector-accordion" open={open}>
+      <summary>{title}</summary>
+      <div className="pdf-inspector-accordion-body">{children}</div>
+    </details>
+  );
+}
+
+function BuilderToggle({ label, checked, disabled, onChange }) {
+  return (
+    <label className={`pdf-toggle-row ${disabled ? 'is-disabled' : ''}`}>
+      <span className="pdf-toggle-label">{label}</span>
+      <span className={`pdf-state-badge ${checked ? 'is-on' : 'is-off'}`}>{checked ? 'ON' : 'OFF'}</span>
+      <span className="pdf-toggle-switch-wrap">
+        <input className="sr-only" type="checkbox" checked={Boolean(checked)} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+        <span className={`pdf-toggle-switch ${checked ? 'is-on' : ''}`}><span /></span>
+      </span>
+    </label>
+  );
+}
+
+function BuilderTextInput({ label, value, disabled, onChange }) {
+  return (
+    <label className="pdf-control-field pdf-field-full">
+      <span className="label">{label}</span>
+      <input className="input" value={value || ''} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function BuilderTextarea({ label, value, disabled, rows = 4, onChange }) {
+  return (
+    <label className="pdf-control-field pdf-field-full">
+      <span className="label">{label}</span>
+      <textarea className="input min-h-24" rows={rows} value={value || ''} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function BuilderNumberInput({ label, value, min = 0, max = 999, disabled, onChange }) {
+  return (
+    <label className="pdf-control-field">
+      <span className="label">{label}</span>
+      <input className="input" type="number" min={min} max={max} value={value ?? ''} disabled={disabled} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
+  );
+}
+
+function BuilderSelect({ label, value, options, disabled, onChange }) {
+  return (
+    <label className="pdf-control-field">
+      <span className="label">{label}</span>
+      <select className="input" value={value || ''} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+        {options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function ElementContentControls({ element, disabled, onPatch, onOpenVariables }) {
+  const content = element.content || {};
+  return (
+    <div className="pdf-inspector-grid">
+      <BuilderTextInput label="Element name" value={element.name} disabled={disabled} onChange={(value) => onPatch({ name: value, title: value })} />
+      {element.type === 'card' ? (
+        <>
+          <BuilderTextInput label="Title" value={content.title} disabled={disabled} onChange={(value) => onPatch({ content: { title: value } })} />
+          <BuilderTextarea label="Body/content text" value={content.body} disabled={disabled} onChange={(value) => onPatch({ content: { body: value } })} />
+        </>
+      ) : element.type === 'qr' ? (
+        <>
+          <BuilderTextInput label="QR label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} />
+          <BuilderSelect label="QR type" value={content.qrType || element.qrType || 'payment'} options={[['payment', 'Payment'], ['contact', 'Contact'], ['company', 'Company'], ['custom', 'Custom']]} disabled={disabled} onChange={(value) => onPatch({ qrType: value, content: { qrType: value } })} />
+          <BuilderTextarea label="Helper text" value={content.helperText} disabled={disabled} rows={3} onChange={(value) => onPatch({ content: { helperText: value } })} />
+        </>
+      ) : element.type === 'signature' ? (
+        <>
+          <BuilderTextInput label="Label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} />
+          <BuilderTextInput label="Name" value={content.name} disabled={disabled} onChange={(value) => onPatch({ content: { name: value } })} />
+          <BuilderTextInput label="Designation" value={content.designation} disabled={disabled} onChange={(value) => onPatch({ content: { designation: value } })} />
+        </>
+      ) : element.type === 'divider' || element.type === 'spacer' || element.type === 'image' ? (
+        <BuilderTextInput label="Label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} />
+      ) : (
+        <BuilderTextarea label="Body/content text" value={content.text || elementPrimaryText(element)} disabled={disabled} onChange={(value) => onPatch({ content: { text: value } })} />
+      )}
+      <button type="button" className="btn btn-secondary justify-center pdf-field-full" onClick={onOpenVariables}>
+        <ShieldCheck className="h-4 w-4" />
+        Variable insert helper
+      </button>
+    </div>
+  );
+}
+
+function ElementLayoutControls({ element, pages, disabled, onPatch }) {
+  const pageOptions = pages.map((page, index) => [page.id, page.name || `Page ${index + 1}`]);
+  return (
+    <div className="pdf-inspector-grid">
+      <BuilderNumberInput label="X position" value={Math.round(element.x)} max={builderCanvas.width} disabled={disabled} onChange={(value) => onPatch({ x: value })} />
+      <BuilderNumberInput label="Y position" value={Math.round(element.y)} max={builderCanvas.height} disabled={disabled} onChange={(value) => onPatch({ y: value })} />
+      <BuilderSelect label="Width" value={element.widthMode || 'custom'} options={[['full', 'Full width'], ['half', 'Half width'], ['custom', 'Custom']]} disabled={disabled} onChange={(value) => {
+        if (value === 'full') onPatch({ widthMode: value, fullWidth: true, x: 32, width: builderCanvas.width - 64 });
+        else if (value === 'half') onPatch({ widthMode: value, fullWidth: false, width: Math.round((builderCanvas.width - 80) / 2) });
+        else onPatch({ widthMode: value, fullWidth: false });
+      }} />
+      {element.widthMode === 'custom' || !element.widthMode ? <BuilderNumberInput label="Custom width" value={Math.round(element.width)} min={24} max={builderCanvas.width} disabled={disabled} onChange={(value) => onPatch({ width: value, widthMode: 'custom' })} /> : null}
+      <BuilderNumberInput label="Height" value={Math.round(element.height)} min={8} max={builderCanvas.height} disabled={disabled} onChange={(value) => onPatch({ height: value })} />
+      <BuilderSelect label="Alignment" value={element.style?.alignment || element.alignment || 'left'} options={[['left', 'Left'], ['center', 'Center'], ['right', 'Right']]} disabled={disabled} onChange={(value) => onPatch({ alignment: value, style: { alignment: value } })} />
+      <BuilderToggle label="Full width" checked={element.fullWidth === true} disabled={disabled} onChange={(checked) => onPatch(checked ? { fullWidth: true, widthMode: 'full', x: 32, width: builderCanvas.width - 64 } : { fullWidth: false, widthMode: 'custom' })} />
+      <BuilderToggle label="Two-column card" checked={element.twoColumn === true} disabled={disabled || element.type !== 'card'} onChange={(checked) => onPatch({ twoColumn: checked, content: { twoColumn: checked } })} />
+      <BuilderSelect label="Page number" value={element.pageId || 'page-1'} options={pageOptions} disabled={disabled} onChange={(value) => onPatch({ pageId: value })} />
+    </div>
+  );
+}
+
+function LockedLayoutSummary({ frame }) {
+  return (
+    <div className="pdf-inspector-grid">
+      <BuilderNumberInput label="X position" value={frame.x} disabled onChange={() => {}} />
+      <BuilderNumberInput label="Y position" value={frame.y} disabled onChange={() => {}} />
+      <BuilderNumberInput label="Width" value={frame.width} disabled onChange={() => {}} />
+      <BuilderNumberInput label="Height" value={frame.height} disabled onChange={() => {}} />
+    </div>
+  );
+}
+
+function ElementStyleControls({ element, disabled, onPatch }) {
+  const style = element.style || defaultElementStyles;
+  return (
+    <div className="pdf-inspector-grid">
+      <ColorControl label="Accent color" value={style.accentColor} disabled={disabled} onChange={(value) => onPatch({ style: { accentColor: value } })} />
+      <ColorControl label="Background color" value={style.backgroundColor} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { backgroundColor: value } })} />
+      <ColorControl label="Text color" value={style.textColor} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { textColor: value } })} />
+      <ColorControl label="Border color" value={style.borderColor} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { borderColor: value } })} />
+      <BuilderNumberInput label="Border radius" value={style.borderRadius ?? 10} max={32} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { borderRadius: value } })} />
+      <BuilderNumberInput label="Border" value={style.borderWidth ?? 1} max={8} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { borderWidth: value } })} />
+      <BuilderToggle label="Shadow" checked={style.shadow === true} disabled={disabled || element.type === 'divider'} onChange={(checked) => onPatch({ style: { shadow: checked } })} />
+      <BuilderNumberInput label="Font size" value={style.fontSize ?? 13} min={8} max={32} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontSize: value } })} />
+      <BuilderSelect label="Font weight" value={String(style.fontWeight || 700)} options={[['400', 'Regular'], ['600', 'Semi bold'], ['700', 'Bold'], ['800', 'Extra bold']]} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontWeight: Number(value) } })} />
+      {element.type === 'divider' ? (
+        <>
+          <BuilderNumberInput label="Thickness" value={style.dividerThickness ?? 2} min={1} max={8} disabled={disabled} onChange={(value) => onPatch({ style: { dividerThickness: value } })} />
+          <BuilderSelect label="Divider style" value={style.dividerStyle || 'solid'} options={[['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]} disabled={disabled} onChange={(value) => onPatch({ style: { dividerStyle: value } })} />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -1611,7 +3645,9 @@ function StructuredTemplateEditor({
   versions,
   restoring,
   onRestore,
-  onShowVariables
+  onShowVariables,
+  onDesignDirtyChange,
+  onDesignModeChange
 }) {
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -1640,6 +3676,16 @@ function StructuredTemplateEditor({
   useEffect(() => {
     if (!designMode && !designDraftDirty) setDesignDraft(designStateFromConfig(draft));
   }, [draftDesignSignature, designMode, designDraftDirty, draft]);
+
+  useEffect(() => {
+    onDesignDirtyChange?.(designDraftDirty);
+    return () => onDesignDirtyChange?.(false);
+  }, [designDraftDirty, onDesignDirtyChange]);
+
+  useEffect(() => {
+    onDesignModeChange?.(designMode);
+    return () => onDesignModeChange?.(false);
+  }, [designMode, onDesignModeChange]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -1674,7 +3720,8 @@ function StructuredTemplateEditor({
 
   function submit(event) {
     event.preventDefault();
-    onSave(event, designDraftDirty ? mergeDesignStateForSave(draft, designDraft) : draft);
+    const designForSave = designStateWithTemplateSections(designDraft, sections, draft, template);
+    onSave(event, designMode || designDraftDirty ? mergeDesignStateForSave(draft, designForSave) : draft);
   }
 
   function switchToStructuredMode() {
@@ -1692,8 +3739,8 @@ function StructuredTemplateEditor({
 
   return (
     <>
-      <form className="grid gap-5" onSubmit={submit}>
-        <section className="surface admin-control-card pdf-editor-hero p-5">
+      <form className={`grid gap-5 ${designMode ? 'pdf-design-editor-form' : ''}`} onSubmit={submit}>
+        {!designMode ? <section className="surface admin-control-card pdf-editor-hero p-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0">
               <button
@@ -1726,11 +3773,11 @@ function StructuredTemplateEditor({
                 <ShieldCheck className="h-4 w-4" />
                 Template Variables
               </button>
-              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onPreview(template, draft)}>
+              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onPreview(template, designMode ? null : draft)}>
                 {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
                 Preview PDF
               </button>
-              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onDownload(template, draft)}>
+              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onDownload(template, designMode ? null : draft)}>
                 {busyKey === `download-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 Download Sample PDF
               </button>
@@ -1744,21 +3791,23 @@ function StructuredTemplateEditor({
               </button>
             </div>
           </div>
-        </section>
+        </section> : null}
 
       {designMode ? (
         <DesignModeWorkspace
           template={template}
           sections={sections}
           draft={draft}
+          setDraft={setDraft}
           designDraft={designDraft}
           setDesignDraft={setDesignDraft}
-          previewUrl={previewUrl}
-          previewLoading={previewLoading}
-          previewError={previewError}
           canEdit={canEdit}
           saving={saving}
           busyKey={busyKey}
+          versions={versions}
+          restoring={restoring}
+          onRestore={onRestore}
+          hasUnsavedDesignChanges={designDraftDirty}
           onBack={switchToStructuredMode}
           onPreview={onPreview}
           onDownload={onDownload}
@@ -1797,7 +3846,7 @@ function StructuredTemplateEditor({
   );
 }
 
-export function PdfTemplatesSection({ onDirtyChange = null }) {
+export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange = null }) {
   const { request, token, user } = useAuth();
   const { push } = useToast();
   const [editingKey, setEditingKey] = useState('');
@@ -1808,11 +3857,12 @@ export function PdfTemplatesSection({ onDirtyChange = null }) {
   const [variablesOpen, setVariablesOpen] = useState(false);
   const [resetCandidate, setResetCandidate] = useState(null);
   const [restoreCandidate, setRestoreCandidate] = useState(null);
+  const [designEditorDirty, setDesignEditorDirty] = useState(false);
   const canEdit = hasRole(user, 'admin') && can(user, 'manage_pdf_templates');
   const { data, loading, error, reload } = useResource(() => request('/pdf-templates'), [request]);
   const templates = data?.templates || [];
   const activeTemplate = templates.find((template) => template.key === editingKey) || null;
-  const editorDirty = Boolean(activeTemplate && stableJson(draft) !== stableJson(activeTemplate.config || {}));
+  const editorDirty = Boolean(activeTemplate && stableJson(draft) !== stableJson(activeTemplate.config || {})) || designEditorDirty;
   const grouped = useMemo(() => ({
     service: templates.filter((template) => template.category === 'service'),
     amc: templates.filter((template) => template.category === 'amc')
@@ -1822,12 +3872,17 @@ export function PdfTemplatesSection({ onDirtyChange = null }) {
     onDirtyChange?.(editorDirty);
   }, [editorDirty, onDirtyChange]);
 
+  useEffect(() => {
+    if (!activeTemplate) onDesignModeChange?.(false);
+  }, [activeTemplate, onDesignModeChange]);
+
   function startEdit(template) {
     if (!canEdit) {
       push('Only admin users can edit PDF templates', 'error');
       return;
     }
     setEditingKey(template.key);
+    setDesignEditorDirty(false);
     setDraft(JSON.parse(JSON.stringify(template.config || {})));
   }
 
@@ -1896,6 +3951,7 @@ export function PdfTemplatesSection({ onDirtyChange = null }) {
       await reload({ silent: true });
       setEditingKey(result.template?.key || activeTemplate.key);
       setDraft(JSON.parse(JSON.stringify(result.template?.config || configToSave)));
+      setDesignEditorDirty(false);
     } catch (err) {
       push(err.message, 'error');
     } finally {
@@ -1914,6 +3970,7 @@ export function PdfTemplatesSection({ onDirtyChange = null }) {
       push(result.message || 'PDF template reset');
       await reload({ silent: true });
       if (editingKey === template.key) setDraft(JSON.parse(JSON.stringify(result.template?.config || {})));
+      if (editingKey === template.key) setDesignEditorDirty(false);
     } catch (err) {
       push(err.message, 'error');
     } finally {
@@ -1930,6 +3987,7 @@ export function PdfTemplatesSection({ onDirtyChange = null }) {
       push(result.message || 'PDF template version restored');
       await reload({ silent: true });
       setDraft(JSON.parse(JSON.stringify(result.template?.config || {})));
+      setDesignEditorDirty(false);
     } catch (err) {
       push(err.message, 'error');
     } finally {
@@ -1954,6 +4012,7 @@ export function PdfTemplatesSection({ onDirtyChange = null }) {
           onSave={saveTemplate}
           onCancel={() => {
             if (editorDirty && !window.confirm('Discard unsaved template changes?')) return;
+            setDesignEditorDirty(false);
             setEditingKey('');
           }}
           onPreview={previewTemplate}
@@ -1963,6 +4022,8 @@ export function PdfTemplatesSection({ onDirtyChange = null }) {
           restoring={restoring}
           onRestore={(version) => setRestoreCandidate(version)}
           onShowVariables={() => setVariablesOpen(true)}
+          onDesignDirtyChange={setDesignEditorDirty}
+          onDesignModeChange={onDesignModeChange}
         />
         {variablesOpen ? <TemplateVariablesModal onClose={() => setVariablesOpen(false)} /> : null}
         {resetCandidate ? (

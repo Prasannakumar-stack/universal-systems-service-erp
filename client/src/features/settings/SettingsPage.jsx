@@ -4221,6 +4221,7 @@ const documentsPdfTabs = [
 function DocumentsPdfsSection({ onDirtyChange = null }) {
   const [activeDocumentTab, setActiveDocumentTab] = useState('templates');
   const [dirtyMap, setDirtyMap] = useState({});
+  const [designModeActive, setDesignModeActive] = useState(false);
 
   const setChildDirty = useCallback((key, dirty) => {
     setDirtyMap((current) => {
@@ -4233,9 +4234,13 @@ function DocumentsPdfsSection({ onDirtyChange = null }) {
     onDirtyChange?.(Object.values(dirtyMap).some(Boolean));
   }, [dirtyMap, onDirtyChange]);
 
+  useEffect(() => {
+    if (activeDocumentTab !== 'templates') setDesignModeActive(false);
+  }, [activeDocumentTab]);
+
   return (
-    <div className="grid gap-5 pb-32" data-documents-pdfs-root>
-      <section className="surface admin-control-card p-5">
+    <div className={`grid gap-5 pb-32 ${designModeActive ? 'documents-pdfs-design-active' : ''}`} data-documents-pdfs-root>
+      {!designModeActive ? <section className="surface admin-control-card p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -4253,9 +4258,9 @@ function DocumentsPdfsSection({ onDirtyChange = null }) {
             <p className="mt-1 text-xs text-sky-100/80">Existing generated PDFs and document records are not changed automatically.</p>
           </div>
         </div>
-      </section>
+      </section> : null}
 
-      <div className="surface settings-tabs-card p-2">
+      {!designModeActive ? <div className="surface settings-tabs-card p-2">
         <div className="tabs-list amc-tabs settings-tabs border-b-0">
           {documentsPdfTabs.map((tab) => {
             const Icon = tab.icon;
@@ -4272,10 +4277,10 @@ function DocumentsPdfsSection({ onDirtyChange = null }) {
             );
           })}
         </div>
-      </div>
+      </div> : null}
 
       {activeDocumentTab === 'templates' ? (
-        <PdfTemplatesSection onDirtyChange={(dirty) => setChildDirty('templates', dirty)} />
+        <PdfTemplatesSection onDirtyChange={(dirty) => setChildDirty('templates', dirty)} onDesignModeChange={setDesignModeActive} />
       ) : null}
 
       {activeDocumentTab === 'terms' ? (

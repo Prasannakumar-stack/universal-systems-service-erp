@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
 const PAGE_X = 34;
@@ -17,7 +19,10 @@ const CARD_LABELS = {
   qr: 'QR Code',
   'customer-message': 'Customer Message',
   'custom-field': 'Custom Field',
-  spacer: 'Divider'
+  spacer: 'Spacer',
+  divider: 'Divider',
+  card: 'Card',
+  image: 'Image / Logo'
 };
 
 const CARD_GAP = 12;
@@ -28,9 +33,10 @@ function cleanText(value, fallback = '') {
 }
 
 function renderText(value = '', context = {}) {
-  return String(value || '').replace(/\{\{([a-z0-9_]+)\}\}/gi, (_match, key) => {
-    if (!Object.prototype.hasOwnProperty.call(context, key)) return '-';
-    const next = context[key];
+  return String(value || '').replace(/\{\{([a-z0-9_.]+)\}\}/gi, (_match, key) => {
+    const normalizedKey = String(key || '').replace(/\./g, '_');
+    if (!Object.prototype.hasOwnProperty.call(context, normalizedKey)) return '-';
+    const next = context[normalizedKey];
     return next === undefined || next === null || next === '' ? '-' : next;
   });
 }
@@ -219,10 +225,335 @@ function drawCard(doc, card, x, y, width, height, context, options = {}) {
   doc.restore();
 }
 
+function clampNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+function designElements(config = {}) {
+  if (config.design?.enabled !== true) return [];
+  const sectionSource = Array.isArray(config.design?.sections) ? config.design.sections : [];
+  const sections = sectionSource
+    .filter((section) => section && section.enabled !== false && section.visible !== false)
+    .map((section, index) => ({
+      ...section,
+      type: 'section',
+      pageId: section.pageId || 'page-1',
+      zIndex: Number(section.zIndex || index + 1)
+    }));
+  const source = Array.isArray(config.design?.customElements) && config.design.customElements.length
+    ? config.design.customElements
+    : Array.isArray(config.design?.elements)
+      ? config.design.elements
+      : [];
+  const elements = source
+    .filter((element) => element && element.enabled !== false && element.visible !== false)
+    .map((element, index) => ({
+      ...element,
+      pageId: element.pageId || 'page-1',
+      zIndex: Number(element.zIndex || index + 20)
+    }));
+  return [...sections, ...elements]
+    .sort((a, b) => (a.pageId || '').localeCompare(b.pageId || '') || a.zIndex - b.zIndex);
+}
+
+function designPagesForElements(config = {}, elements = []) {
+  const savedPages = Array.isArray(config.design?.pages) ? config.design.pages : [];
+  const pageIds = new Set(elements.map((element) => element.pageId || 'page-1'));
+  return [...pageIds].map((pageId, index) => {
+    const saved = savedPages.find((page) => page?.id === pageId) || {};
+    return {
+      id: pageId,
+      name: saved.name || `Page ${index + 1}`,
+      elements: elements.filter((element) => (element.pageId || 'page-1') === pageId)
+    };
+  });
+}
+
+function designElementFrame(element = {}) {
+  const margin = element.printSafe === false ? 0 : 24;
+  const fallbackWidth = element.type === 'section' ? CONTENT_WIDTH : element.type === 'divider' ? 260 : 220;
+  const fallbackHeight = element.type === 'section' ? 80 : element.type === 'divider' ? 22 : 76;
+  let x = clampNumber(element.x, margin, margin, PAGE_WIDTH - margin - 24);
+  let y = clampNumber(element.y, 118, margin, PAGE_HEIGHT - margin - 8);
+  let width = clampNumber(element.width, fallbackWidth, 24, PAGE_WIDTH - margin * 2);
+  let height = clampNumber(element.height, fallbackHeight, 8, PAGE_HEIGHT - margin * 2);
+  if (element.fullWidth || element.widthMode === 'full') {
+    x = PAGE_X;
+    width = CONTENT_WIDTH;
+  }
+  if (x + width > PAGE_WIDTH - margin) width = Math.max(24, PAGE_WIDTH - margin - x);
+  if (y + height > PAGE_HEIGHT - margin) height = Math.max(8, PAGE_HEIGHT - margin - y);
+  return { x, y, width, height };
+}
+
+function contentForElement(element = {}) {
+  return element.content && typeof element.content === 'object' ? element.content : { text: String(element.content || '') };
+}
+
+function drawElementShell(doc, element, frame) {
+  if (element.type === 'divider' || element.type === 'spacer') return;
+  const style = element.style || {};
+  const radius = clampNumber(style.borderRadius, 8, 0, 32);
+  const borderWidth = clampNumber(style.borderWidth, 1, 0, 8);
+  const background = style.backgroundColor || element.backgroundColor || '#ffffff';
+  const borderColor = style.borderColor || element.borderColor || '#cbd5e1';
+  if (style.shadow) {
+    doc.save();
+    doc.opacity(0.08).roundedRect(frame.x + 4, frame.y + 5, frame.width, frame.height, radius).fill('#0f172a');
+    doc.restore();
+  }
+  doc.roundedRect(frame.x, frame.y, frame.width, frame.height, radius).fill(background);
+  if (borderWidth > 0) {
+    doc.roundedRect(frame.x, frame.y, frame.width, frame.height, radius)
+      .strokeColor(borderColor)
+      .lineWidth(borderWidth)
+      .stroke();
+  }
+}
+
+function drawDividerElement(doc, element, frame, context = {}) {
+  const style = element.style || {};
+  const color = style.accentColor || '#0284c7';
+  const y = frame.y + Math.max(4, frame.height / 2);
+  doc.save();
+  doc.strokeColor(color).lineWidth(clampNumber(style.dividerThickness, 2, 1, 8));
+  if (style.dividerStyle === 'dashed') doc.dash(6, { space: 4 });
+  if (style.dividerStyle === 'dotted') doc.dash(1, { space: 3 });
+  doc.moveTo(frame.x, y).lineTo(frame.x + frame.width, y).stroke();
+  if (doc.undash) doc.undash();
+  const label = cleanText(contentForElement(element).label, '');
+  if (label) {
+    useFont(doc, 'BodyBold', 'Helvetica-Bold');
+    doc.roundedRect(frame.x + 12, y - 8, Math.min(170, frame.width - 24), 16, 8).fill('#ffffff');
+    doc.fontSize(7.6).fillColor(color).text(renderText(label, context), frame.x + 18, y - 5, { width: Math.min(158, frame.width - 36) });
+  }
+  doc.restore();
+}
+
+function drawTextElement(doc, element, frame, context) {
+  const style = element.style || {};
+  const content = contentForElement(element);
+  const text = renderText(content.text || element.title || element.name || 'Text block', context);
+  drawElementShell(doc, element, frame);
+  useFont(doc, Number(style.fontWeight || 700) >= 700 ? 'BodyBold' : 'Body', Number(style.fontWeight || 700) >= 700 ? 'Helvetica-Bold' : 'Helvetica');
+  doc.fontSize(clampNumber(style.fontSize, 13, 8, 32)).fillColor(style.textColor || element.textColor || '#0f172a')
+    .text(text, frame.x + 12, frame.y + 12, {
+      width: Math.max(12, frame.width - 24),
+      height: Math.max(8, frame.height - 18),
+      align: style.alignment || element.alignment || 'left',
+      lineGap: 2
+    });
+}
+
+function drawCardElement(doc, element, frame, context) {
+  const style = element.style || {};
+  const content = contentForElement(element);
+  const accent = style.accentColor || '#0284c7';
+  drawElementShell(doc, element, frame);
+  doc.rect(frame.x, frame.y, 5, frame.height).fill(accent);
+  useFont(doc, 'BodyBold', 'Helvetica-Bold');
+  doc.fontSize(Math.max(8, clampNumber(style.fontSize, 13, 8, 32) * 0.78)).fillColor(accent)
+    .text(renderText(content.title || element.name || 'Card', context), frame.x + 16, frame.y + 12, { width: Math.max(12, frame.width - 32) });
+  useFont(doc, Number(style.fontWeight || 700) >= 700 ? 'BodyBold' : 'Body', Number(style.fontWeight || 700) >= 700 ? 'Helvetica-Bold' : 'Helvetica');
+  doc.fontSize(clampNumber(style.fontSize, 13, 8, 32) * 0.72).fillColor(style.textColor || '#0f172a')
+    .text(renderText(content.body || '-', context), frame.x + 16, frame.y + 34, {
+      width: Math.max(12, frame.width - 32),
+      height: Math.max(8, frame.height - 42),
+      columns: element.twoColumn ? 2 : 1,
+      columnGap: 10,
+      lineGap: 2,
+      align: style.alignment || element.alignment || 'left'
+    });
+}
+
+function drawSectionElement(doc, element, frame, context) {
+  const style = element.style || {};
+  const content = contentForElement(element);
+  const accent = style.accentColor || '#0f2a52';
+  const kind = content.kind || element.role || 'details';
+  drawElementShell(doc, { ...element, type: 'card' }, frame);
+  doc.rect(frame.x, frame.y, 5, frame.height).fill(accent);
+  if (element.showTitle !== false) {
+    useFont(doc, 'BodyBold', 'Helvetica-Bold');
+    doc.fontSize(8.8).fillColor(accent)
+      .text(renderText(content.title || element.title || element.name || 'Section', context), frame.x + 14, frame.y + 10, { width: Math.max(12, frame.width - 28) });
+  }
+  const bodyX = frame.x + 14;
+  const bodyY = frame.y + (element.showTitle === false ? 12 : 30);
+  const bodyWidth = Math.max(12, frame.width - 28);
+  const bodyHeight = Math.max(8, frame.height - (bodyY - frame.y) - 10);
+  if (kind === 'header') {
+    doc.roundedRect(bodyX, bodyY, 34, 34, 7).fill(accent);
+    useFont(doc, 'BodyBold', 'Helvetica-Bold');
+    doc.fontSize(9).fillColor('#ffffff').text('US', bodyX, bodyY + 11, { width: 34, align: 'center' });
+    useFont(doc, 'BodyBold', 'Helvetica-Bold');
+    doc.fontSize(11).fillColor(style.textColor || '#0f172a')
+      .text(renderText(content.title || element.title || 'PDF Document', context), bodyX + 44, bodyY + 2, { width: bodyWidth - 44 });
+    useFont(doc, 'Body', 'Helvetica');
+    doc.fontSize(7.4).fillColor('#475569')
+      .text(renderText(content.body || 'Company details', context), bodyX + 44, bodyY + 17, { width: bodyWidth - 44, height: bodyHeight - 14, lineGap: 1 });
+    return;
+  }
+  if (kind === 'table') {
+    const columns = Array.isArray(content.columns) && content.columns.length ? content.columns.slice(0, 4) : ['Description', 'Qty', 'Rate', 'Total'];
+    const rows = Array.isArray(content.rows) && content.rows.length ? content.rows.slice(0, 4) : [];
+    const columnWidth = bodyWidth / columns.length;
+    doc.roundedRect(bodyX, bodyY, bodyWidth, 18, 5).fill(accent);
+    useFont(doc, 'BodyBold', 'Helvetica-Bold');
+    doc.fontSize(6.8).fillColor('#ffffff');
+    columns.forEach((column, index) => {
+      doc.text(renderText(column, context), bodyX + index * columnWidth + 4, bodyY + 5, { width: columnWidth - 8 });
+    });
+    useFont(doc, 'Body', 'Helvetica');
+    doc.fontSize(6.7).fillColor(style.textColor || '#0f172a');
+    rows.forEach((row, rowIndex) => {
+      const rowY = bodyY + 18 + rowIndex * 18;
+      doc.rect(bodyX, rowY, bodyWidth, 18).fill(rowIndex % 2 ? '#ffffff' : '#f8fafc');
+      row.slice(0, columns.length).forEach((cell, cellIndex) => {
+        doc.fillColor(style.textColor || '#0f172a').text(renderText(cell, context), bodyX + cellIndex * columnWidth + 4, rowY + 5, { width: columnWidth - 8 });
+      });
+    });
+    doc.rect(bodyX, bodyY, bodyWidth, Math.min(bodyHeight, 18 + rows.length * 18)).strokeColor(style.borderColor || '#d8e5f7').lineWidth(0.4).stroke();
+    return;
+  }
+  if (kind === 'amount') {
+    const rows = Array.isArray(content.rows) && content.rows.length ? content.rows.slice(0, 5) : [['Total', 'Rs. 0']];
+    useFont(doc, 'Body', 'Helvetica');
+    rows.forEach(([label, value], index) => {
+      const rowY = bodyY + index * 17;
+      doc.fontSize(7.4).fillColor('#64748b').text(renderText(label, context), bodyX, rowY, { width: bodyWidth * 0.55 });
+      useFont(doc, index === rows.length - 1 ? 'BodyBold' : 'Body', index === rows.length - 1 ? 'Helvetica-Bold' : 'Helvetica');
+      doc.fontSize(index === rows.length - 1 ? 8.6 : 7.6).fillColor(index === rows.length - 1 ? accent : (style.textColor || '#0f172a'))
+        .text(renderText(value, context), bodyX + bodyWidth * 0.55, rowY, { width: bodyWidth * 0.45, align: 'right' });
+      useFont(doc, 'Body', 'Helvetica');
+    });
+    return;
+  }
+  const rows = Array.isArray(content.rows) ? content.rows.slice(0, 6) : [];
+  if (rows.length) {
+    rows.forEach(([label, value], index) => {
+      const rowY = bodyY + index * 14;
+      useFont(doc, 'Body', 'Helvetica');
+      doc.fontSize(6.9).fillColor('#64748b').text(renderText(label, context), bodyX, rowY, { width: bodyWidth * 0.42 });
+      useFont(doc, 'BodyBold', 'Helvetica-Bold');
+      doc.fontSize(7.1).fillColor(style.textColor || '#0f172a').text(renderText(value, context), bodyX + bodyWidth * 0.42, rowY, { width: bodyWidth * 0.58 });
+    });
+    return;
+  }
+  useFont(doc, 'Body', 'Helvetica');
+  doc.fontSize(7.6).fillColor(style.textColor || '#0f172a')
+    .text(renderText(content.body || content.text || '-', context), bodyX, bodyY, {
+      width: bodyWidth,
+      height: bodyHeight,
+      lineGap: 2,
+      align: style.alignment || element.alignment || 'left'
+    });
+}
+
+function drawQrElement(doc, element, frame, context) {
+  const style = element.style || {};
+  const content = contentForElement(element);
+  const accent = style.accentColor || '#0284c7';
+  drawElementShell(doc, element, frame);
+  const size = Math.min(64, Math.max(42, frame.height - 30), Math.max(42, frame.width * 0.34));
+  drawQrPattern(doc, frame.x + 14, frame.y + 16, size, accent);
+  useFont(doc, 'BodyBold', 'Helvetica-Bold');
+  doc.fontSize(9).fillColor(accent).text(renderText(content.label || 'QR CODE', context), frame.x + size + 28, frame.y + 18, { width: Math.max(20, frame.width - size - 42) });
+  useFont(doc, 'Body', 'Helvetica');
+  doc.fontSize(7.8).fillColor(style.textColor || '#334155')
+    .text(renderText(content.helperText || `${content.qrType || element.qrType || 'payment'} QR placeholder`, context), frame.x + size + 28, frame.y + 36, {
+      width: Math.max(20, frame.width - size - 42),
+      height: Math.max(8, frame.height - 42),
+      lineGap: 2
+    });
+}
+
+function drawSignatureElement(doc, element, frame, context) {
+  const style = element.style || {};
+  const content = contentForElement(element);
+  drawElementShell(doc, element, frame);
+  useFont(doc, 'BodyBold', 'Helvetica-Bold');
+  doc.fontSize(8.6).fillColor(style.textColor || '#0f172a')
+    .text(renderText(content.label || 'Authorized Signature', context), frame.x + 12, frame.y + 12, { width: frame.width - 24, align: style.alignment || element.alignment || 'left' });
+  const lineY = frame.y + frame.height - 30;
+  doc.strokeColor(style.borderColor || '#94a3b8').lineWidth(0.8).moveTo(frame.x + 18, lineY).lineTo(frame.x + frame.width - 18, lineY).stroke();
+  useFont(doc, 'Body', 'Helvetica');
+  doc.fontSize(7.6).fillColor('#64748b').text(renderText([content.name, content.designation].filter(Boolean).join(' / ') || 'Name / designation', context), frame.x + 18, lineY + 8, {
+    width: frame.width - 36,
+    align: style.alignment || element.alignment || 'center'
+  });
+}
+
+function drawImageElement(doc, element, frame, company = {}) {
+  const style = element.style || {};
+  const content = contentForElement(element);
+  drawElementShell(doc, element, frame);
+  const logoPath = company.logoFilePath;
+  if ((content.imageMode || 'logo') === 'logo' && logoPath && fs.existsSync(logoPath)) {
+    doc.image(logoPath, frame.x + 12, frame.y + 12, {
+      fit: [Math.max(20, frame.width - 24), Math.max(20, frame.height - 24)],
+      align: 'center',
+      valign: 'center'
+    });
+    return;
+  }
+  useFont(doc, 'BodyBold', 'Helvetica-Bold');
+  doc.fontSize(9).fillColor(style.textColor || '#64748b')
+    .text(cleanText(content.label, 'Image / Logo'), frame.x + 12, frame.y + Math.max(12, frame.height / 2 - 5), { width: frame.width - 24, align: 'center' });
+}
+
+function drawSpacerElement(doc, element, frame) {
+  const style = element.style || {};
+  doc.save();
+  doc.roundedRect(frame.x, frame.y, frame.width, frame.height, 6)
+    .strokeColor(style.borderColor || '#cbd5e1')
+    .lineWidth(0.7)
+    .dash(3, { space: 3 })
+    .stroke();
+  if (doc.undash) doc.undash();
+  useFont(doc, 'BodyBold', 'Helvetica-Bold');
+  doc.fontSize(7.5).fillColor('#94a3b8').text(cleanText(contentForElement(element).label, 'Spacer'), frame.x, frame.y + Math.max(4, frame.height / 2 - 4), { width: frame.width, align: 'center' });
+  doc.restore();
+}
+
+function drawDesignElement(doc, element, context, company) {
+  const frame = designElementFrame(element);
+  if (element.type === 'section') return drawSectionElement(doc, element, frame, context);
+  if (element.type === 'divider') return drawDividerElement(doc, element, frame, context);
+  if (element.type === 'spacer') return drawSpacerElement(doc, element, frame);
+  if (element.type === 'card') return drawCardElement(doc, element, frame, context);
+  if (element.type === 'qr') return drawQrElement(doc, element, frame, context);
+  if (element.type === 'signature') return drawSignatureElement(doc, element, frame, context);
+  if (element.type === 'image') return drawImageElement(doc, element, frame, company);
+  return drawTextElement(doc, element, frame, context);
+}
+
+function drawDesignPdfPages(doc, options = {}) {
+  const { config = {}, context = {}, company = {} } = options;
+  const elements = options.elements || designElements(config);
+  if (!elements.length) return 0;
+  let pagesAdded = 0;
+  designPagesForElements(config, elements).forEach((page) => {
+    if (!page.elements.length) return;
+    doc.addPage({ size: 'A4', margin: 0 });
+    pagesAdded += 1;
+    doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT).fill(config.design?.page?.backgroundColor || '#ffffff');
+    doc.strokeColor('#e2e8f0').lineWidth(0.7).rect(18, 18, PAGE_WIDTH - 36, PAGE_HEIGHT - 36).stroke();
+    page.elements
+      .slice()
+      .sort((a, b) => Number(a.zIndex || 0) - Number(b.zIndex || 0))
+      .forEach((element) => drawDesignElement(doc, element, context, company));
+  });
+  return pagesAdded;
+}
+
 export function drawAdvancedPdfSections(doc, options = {}) {
   const { config = {}, context = {}, title = '', company = {} } = options;
   const cards = sectionCards(config);
-  if (!cards.length) return { pagesAdded: 0 };
+  const positionedElements = designElements(config);
+  if (!cards.length && !positionedElements.length) return { pagesAdded: 0 };
 
   const accentColor = config.design?.colors?.accentColor || config.colorAccent || '#0f2a52';
   const borderStyle = config.structured?.borderStyle || 'default';
@@ -241,37 +572,41 @@ export function drawAdvancedPdfSections(doc, options = {}) {
     rowHeight = 0;
   }
 
-  doc.addPage({ size: 'A4', margin: 0 });
-  pagesAdded += 1;
-  drawAdvancedHeader(doc, title, company, accentColor);
+  if (cards.length) {
+    doc.addPage({ size: 'A4', margin: 0 });
+    pagesAdded += 1;
+    drawAdvancedHeader(doc, title, company, accentColor);
 
-  cards.forEach((card) => {
-    const width = widthForCard(card, config);
-    const height = cardHeight(doc, card, width, context);
-    const needsRow = twoColumnCards && width < CONTENT_WIDTH;
-    if (!needsRow) flushRow();
-    if (needsRow && rowUsed > 0 && rowUsed + CARD_GAP + width > CONTENT_WIDTH) flushRow();
-    if (y + height > FOOTER_SAFE_Y) {
-      rowX = PAGE_X;
-      rowUsed = 0;
-      rowHeight = 0;
-      doc.addPage({ size: 'A4', margin: 0 });
-      pagesAdded += 1;
-      drawAdvancedHeader(doc, title, company, accentColor);
-      y = 96;
-    }
-    const x = needsRow ? rowX : PAGE_X;
-    drawCard(doc, card, x, y, width, height, context, { borderStyle });
-    if (needsRow) {
-      rowHeight = Math.max(rowHeight, height);
-      rowUsed += (rowUsed ? CARD_GAP : 0) + width;
-      rowX += width + CARD_GAP;
-      if (rowUsed >= CONTENT_WIDTH - 1) flushRow();
-      return;
-    }
-    y += height + CARD_GAP;
-  });
-  flushRow();
+    cards.forEach((card) => {
+      const width = widthForCard(card, config);
+      const height = cardHeight(doc, card, width, context);
+      const needsRow = twoColumnCards && width < CONTENT_WIDTH;
+      if (!needsRow) flushRow();
+      if (needsRow && rowUsed > 0 && rowUsed + CARD_GAP + width > CONTENT_WIDTH) flushRow();
+      if (y + height > FOOTER_SAFE_Y) {
+        rowX = PAGE_X;
+        rowUsed = 0;
+        rowHeight = 0;
+        doc.addPage({ size: 'A4', margin: 0 });
+        pagesAdded += 1;
+        drawAdvancedHeader(doc, title, company, accentColor);
+        y = 96;
+      }
+      const x = needsRow ? rowX : PAGE_X;
+      drawCard(doc, card, x, y, width, height, context, { borderStyle });
+      if (needsRow) {
+        rowHeight = Math.max(rowHeight, height);
+        rowUsed += (rowUsed ? CARD_GAP : 0) + width;
+        rowX += width + CARD_GAP;
+        if (rowUsed >= CONTENT_WIDTH - 1) flushRow();
+        return;
+      }
+      y += height + CARD_GAP;
+    });
+    flushRow();
+  }
+
+  pagesAdded += drawDesignPdfPages(doc, { config, context, title, company, elements: positionedElements });
 
   return { pagesAdded };
 }
