@@ -66,6 +66,7 @@ const textFields = [
 
 const advancedSectionTypes = new Set([
   'text',
+  'info',
   'notice',
   'warranty',
   'terms',
@@ -78,7 +79,8 @@ const advancedSectionTypes = new Set([
   'spacer'
 ]);
 
-const cardWidths = new Set(['full', 'half', 'third', 'two-thirds']);
+const cardWidths = new Set(['full', 'half', 'third', 'two-thirds', 'auto']);
+const borderStyles = new Set(['default', 'thin', 'none', 'highlight']);
 
 export const PDF_TEMPLATE_DEFINITIONS = [
   {
@@ -281,6 +283,19 @@ function commonStructuredConfig(key, flat = {}) {
       signatureCardEnabled: false,
       designModeEnabled: false,
       defaultCardWidth: 'full',
+      borderStyle: 'default',
+      qrPaymentCard: {
+        title: 'Payment Details',
+        note: '',
+        upiText: '',
+        qrValue: ''
+      },
+      signatureCard: {
+        title: 'Authorized Signature',
+        personName: '',
+        designation: '',
+        imageUrl: ''
+      },
       customSections: []
     },
     design: {
@@ -582,7 +597,11 @@ function clampNumber(value, fallback, min, max) {
 
 function sanitizeAdvancedSection(section = {}, index = 0) {
   const type = advancedSectionTypes.has(section.type) ? section.type : 'text';
-  const fallbackTitle = type === 'qr' ? 'QR Code' : type.split('-').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+  const fallbackTitle = type === 'qr'
+    ? 'QR / Payment Card'
+    : type === 'spacer'
+      ? 'Divider'
+      : type.split('-').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
   const width = cardWidths.has(section.width) ? section.width : 'full';
   return {
     id: clean(section.id || `custom-section-${index + 1}`).replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || `custom-section-${index + 1}`,
@@ -703,6 +722,7 @@ function sanitizeConfig(payload = {}, key = '') {
   sanitized.structured.signatureCardEnabled = boolValue(sanitized.structured.signatureCardEnabled, false);
   sanitized.structured.designModeEnabled = boolValue(sanitized.structured.designModeEnabled, false);
   sanitized.structured.defaultCardWidth = cardWidths.has(sanitized.structured.defaultCardWidth) ? sanitized.structured.defaultCardWidth : 'full';
+  sanitized.structured.borderStyle = borderStyles.has(sanitized.structured.borderStyle) ? sanitized.structured.borderStyle : 'default';
   sanitized.structured.customSections = Array.isArray(sanitized.structured.customSections)
     ? sanitized.structured.customSections.slice(0, 24).map((section, index) => sanitizeAdvancedSection(section, index))
     : [];
