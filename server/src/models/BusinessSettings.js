@@ -46,15 +46,7 @@ const businessSettingsSchema = new mongoose.Schema(
       defaultPaymentStatus: { type: String, enum: ['Pending', 'Partial', 'Paid'], default: 'Pending' },
       paymentTermsText: { type: String, trim: true, default: 'Payment due on receipt.' }
     },
-    notificationTemplates: {
-      bookingReceived: { type: String, trim: true, default: '' },
-      bookingConfirmed: { type: String, trim: true, default: '' },
-      technicianAssigned: { type: String, trim: true, default: '' },
-      workOrderCompleted: { type: String, trim: true, default: '' },
-      invoiceGenerated: { type: String, trim: true, default: '' },
-      amcReminder: { type: String, trim: true, default: '' },
-      paymentReceived: { type: String, trim: true, default: '' }
-    },
+    notificationTemplates: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     statusWorkflows: {
       booking: { type: [statusItemSchema], default: undefined },
       workOrder: { type: [statusItemSchema], default: undefined },
