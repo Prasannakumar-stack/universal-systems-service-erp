@@ -179,28 +179,28 @@ const defaultBusinessSettings = Object.freeze({
   notificationTemplates: buildNotificationTemplateDefaults(),
   statusWorkflows: {
     booking: [
-      { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, active: true, protected: true },
-      { key: 'Converted', label: 'Converted', color: '#22c55e', order: 1, active: true, protected: true }
+      { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, description: 'New booking created and waiting for admin action.', active: true, protected: true },
+      { key: 'Converted', label: 'Converted', color: '#22c55e', order: 1, description: 'Booking converted into a work order.', active: true, protected: true }
     ],
     workOrder: [
-      { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, active: true, protected: true },
-      { key: 'In Progress', label: 'In Progress', color: '#38bdf8', order: 1, active: true, protected: true },
-      { key: 'Awaiting Parts', label: 'Awaiting Parts', color: '#a78bfa', order: 2, active: true, protected: true },
-      { key: 'Completed', label: 'Completed', color: '#22c55e', order: 3, active: true, protected: true },
-      { key: 'Delivered', label: 'Delivered', color: '#14b8a6', order: 4, active: true, protected: true },
-      { key: 'Returned', label: 'Returned', color: '#64748b', order: 5, active: true, protected: true }
+      { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, description: 'Work order created and waiting for assignment.', active: true, protected: true },
+      { key: 'In Progress', label: 'In Progress', color: '#38bdf8', order: 1, description: 'Technician has started the work.', active: true, protected: true },
+      { key: 'Awaiting Parts', label: 'Awaiting Parts', color: '#a78bfa', order: 2, description: 'Repair is paused until spare parts arrive.', active: true, protected: true },
+      { key: 'Completed', label: 'Completed', color: '#22c55e', order: 3, description: 'Work is completed and ready for billing or delivery.', active: true, protected: true },
+      { key: 'Delivered', label: 'Delivered', color: '#14b8a6', order: 4, description: 'Device or product returned to customer.', active: true, protected: true },
+      { key: 'Returned', label: 'Returned', color: '#64748b', order: 5, description: 'Item returned after service workflow completion.', active: true, protected: true }
     ],
     invoice: [
-      { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, active: true, protected: true },
-      { key: 'Partial', label: 'Partial', color: '#38bdf8', order: 1, active: true, protected: true },
-      { key: 'Paid', label: 'Paid', color: '#22c55e', order: 2, active: true, protected: true },
-      { key: 'Void', label: 'Void', color: '#ef4444', order: 3, active: true, protected: true }
+      { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, description: 'Invoice is waiting for payment.', active: true, protected: true },
+      { key: 'Partial', label: 'Partial', color: '#38bdf8', order: 1, description: 'Partial payment has been received.', active: true, protected: true },
+      { key: 'Paid', label: 'Paid', color: '#22c55e', order: 2, description: 'Invoice is fully paid.', active: true, protected: true },
+      { key: 'Void', label: 'Void', color: '#ef4444', order: 3, description: 'Invoice is void and should not be collected.', active: true, protected: true }
     ],
     amc: [
-      { key: 'Active', label: 'Active', color: '#22c55e', order: 0, active: true, protected: true },
-      { key: 'Cancelled', label: 'Cancelled', color: '#ef4444', order: 1, active: true, protected: true },
-      { key: 'Upcoming', label: 'Upcoming', color: '#38bdf8', order: 2, active: true, protected: true },
-      { key: 'Completed', label: 'Completed', color: '#14b8a6', order: 3, active: true, protected: true }
+      { key: 'Active', label: 'Active', color: '#22c55e', order: 0, description: 'AMC contract is active.', active: true, protected: true },
+      { key: 'Cancelled', label: 'Cancelled', color: '#ef4444', order: 1, description: 'AMC contract has been cancelled.', active: true, protected: true },
+      { key: 'Upcoming', label: 'Upcoming', color: '#38bdf8', order: 2, description: 'AMC visit or renewal is upcoming.', active: true, protected: true },
+      { key: 'Completed', label: 'Completed', color: '#14b8a6', order: 3, description: 'AMC visit or work is completed.', active: true, protected: true }
     ]
   },
   pdfTerms: {
@@ -425,6 +425,7 @@ function sanitizeWorkflowItem(item = {}, fallback = {}, index = 0) {
     label,
     color: cleanText(item.color, fallback.color || '#75c4ff', 20),
     order: Math.max(0, Math.floor(numberValue(item.order, fallback.order ?? index))),
+    description: cleanText(item.description, fallback.description || '', 500),
     active: protectedStatus ? true : item.active !== false,
     protected: protectedStatus
   };

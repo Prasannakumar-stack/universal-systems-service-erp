@@ -14,6 +14,7 @@ const statusItemSchema = new mongoose.Schema(
     label: { type: String, trim: true, default: '' },
     color: { type: String, trim: true, default: '#75c4ff' },
     order: { type: Number, default: 0 },
+    description: { type: String, trim: true, default: '' },
     active: { type: Boolean, default: true },
     protected: { type: Boolean, default: false }
   },

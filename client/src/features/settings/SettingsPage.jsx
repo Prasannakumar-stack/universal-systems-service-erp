@@ -177,6 +177,7 @@ import { themePreferenceOptions, useThemePreference } from '../../utils/theme.js
 import { NotificationTemplatesSection } from './NotificationTemplatesSection.jsx';
 import { PdfTemplatesSection } from './PdfTemplatesSection.jsx';
 import { PublicWebsiteSettingsSection } from './PublicWebsiteSettingsSection.jsx';
+import StatusWorkflowSettingsSection from './StatusWorkflowSettingsSection.jsx';
 
 const emptyTechnicianForm = {
   name: '',
@@ -278,13 +279,6 @@ const businessPermissionByTab = {
   statusWorkflow: 'manage_status_workflows',
   pdfTerms: 'manage_pdf_terms',
   preferences: 'edit_settings'
-};
-
-const workflowLabels = {
-  booking: 'Booking status flow',
-  workOrder: 'Work order status flow',
-  invoice: 'Invoice status flow',
-  amc: 'AMC status flow'
 };
 
 const rolePresetButtons = [
@@ -4067,63 +4061,6 @@ function PaymentSettingsSection({ onDirtyChange = null }) {
   );
 }
 
-function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
-  return (
-    <BusinessSettingsFrame section="statusWorkflows" tabId="statusWorkflow" title="Status Workflow Settings" icon={Workflow} description="Preview and store status flows without changing the existing status buttons or backend enums." onDirtyChange={onDirtyChange}>
-      {({ form, setForm, canEdit, saving }) => {
-        function updateStatus(flow, index, field, value) {
-          setForm((current) => {
-            const next = clonePlain(current);
-            next[flow][index] = { ...next[flow][index], [field]: value };
-            return next;
-          });
-        }
-        function addStatus(flow) {
-          setForm((current) => {
-            const next = clonePlain(current);
-            next[flow] = [...(next[flow] || []), { key: `Custom ${next[flow]?.length || 0}`, label: 'Custom Status', color: '#75c4ff', order: next[flow]?.length || 0, active: true, protected: false }];
-            return next;
-          });
-        }
-        return (
-          <div className="grid gap-5">
-            {Object.entries(workflowLabels).map(([flow, label]) => (
-              <section key={flow} className="surface admin-control-card p-5">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-xl font-black">{label}</h3>
-                    <p className="mt-1 text-sm muted">Core statuses are protected because current business logic depends on them.</p>
-                  </div>
-                  <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || saving} onClick={() => addStatus(flow)}>
-                    <Plus className="h-4 w-4" />
-                    Add Status
-                  </button>
-                </div>
-                <div className="mb-4 flex flex-wrap gap-2">
-                  {(form[flow] || []).filter((item) => item.active !== false).map((item) => (
-                    <span key={`${flow}-${item.key}`} className="rounded-full border border-white/10 px-3 py-1 text-xs font-black text-slate-100" style={{ backgroundColor: `${item.color || '#75c4ff'}33` }}>{item.label}</span>
-                  ))}
-                </div>
-                <div className="grid gap-3">
-                  {(form[flow] || []).map((item, index) => (
-                    <div key={`${flow}-${item.key}-${index}`} className="grid gap-3 rounded-card border border-white/10 bg-white/[0.035] p-3 lg:grid-cols-[1fr_1fr_90px_120px_120px]">
-                      <label><span className="label">Label</span><input className="input" value={item.label || ''} disabled={!canEdit || saving || item.protected} onChange={(event) => updateStatus(flow, index, 'label', event.target.value)} /></label>
-                      <label><span className="label">Key</span><input className="input" value={item.key || ''} disabled={!canEdit || saving || item.protected} onChange={(event) => updateStatus(flow, index, 'key', event.target.value)} /></label>
-                      <label><span className="label">Color</span><input className="h-12 w-full rounded-card border border-white/10 bg-transparent p-1" type="color" value={item.color || '#75c4ff'} disabled={!canEdit || saving} onChange={(event) => updateStatus(flow, index, 'color', event.target.value)} /></label>
-                      <label><span className="label">Order</span><input className="input" type="number" min="0" value={item.order ?? index} disabled={!canEdit || saving} onChange={(event) => updateStatus(flow, index, 'order', event.target.value)} /></label>
-                      <label className="flex items-center justify-between gap-2 rounded-card border border-white/10 bg-slate-950/20 px-3 py-3"><span className="text-sm font-bold text-slate-100">{item.protected ? 'Protected' : 'Active'}</span><input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={item.active !== false} disabled={!canEdit || saving || item.protected} onChange={(event) => updateStatus(flow, index, 'active', event.target.checked)} /></label>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        );
-      }}
-    </BusinessSettingsFrame>
-  );
-}
-
 function PdfTermsSettingsSection({ onDirtyChange = null, embedded = false }) {
   const fields = [
     ['invoiceTerms', 'Invoice terms'],
@@ -4502,7 +4439,7 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
   }, [hasUnsavedChanges]);
 
   function canLeaveActiveTab() {
-    return !(dirtyTabs[activeTab] && !window.confirm('You have unsaved changes in this settings tab. Leave without saving?'));
+    return !(dirtyTabs[activeTab] && !window.confirm('You have unsaved changes. Continue without saving?'));
   }
 
   function clearActiveDirtyFlag() {
