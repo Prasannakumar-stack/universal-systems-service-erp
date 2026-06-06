@@ -174,10 +174,13 @@ import {
 } from 'lucide-react';
 import { ALL_PERMISSIONS, ROLE_PERMISSIONS, can, hasRole, permissionMatrixGroups, roleDisplayOrder, roleLabel, roleUiMetadata, supportedRoles } from '../../utils/roles.js';
 import { themePreferenceOptions, useThemePreference } from '../../utils/theme.js';
+import AdminPreferencesSection from './AdminPreferencesSection.jsx';
 import { NotificationTemplatesSection } from './NotificationTemplatesSection.jsx';
 import { PdfTemplatesSection } from './PdfTemplatesSection.jsx';
 import { PublicWebsiteSettingsSection } from './PublicWebsiteSettingsSection.jsx';
+import SecurityControlCenterSection from './SecuritySettingsSection.jsx';
 import StatusWorkflowSettingsSection from './StatusWorkflowSettingsSection.jsx';
+import SystemHealthBackupSection from './SystemHealthBackupSection.jsx';
 
 const emptyTechnicianForm = {
   name: '',
@@ -197,14 +200,22 @@ const settingsTabs = [
   { id: 'usersRoles', label: 'Users & Roles' },
   { id: 'documentsPdfs', label: 'Documents & PDFs' },
   { id: 'publicWebsite', label: 'Public Website Settings' },
-  { id: 'backupStorage', label: 'Backup & Storage' },
+  { id: 'systemHealthBackup', label: 'System Health & Backup' },
   { id: 'taxGst', label: 'Tax / GST' },
   { id: 'paymentSettings', label: 'Payment Settings' },
   { id: 'notificationTemplates', label: 'Notification Templates' },
   { id: 'statusWorkflow', label: 'Status Workflow' },
-  { id: 'systemInformation', label: 'System Information' },
   { id: 'preferences', label: 'Preferences' }
 ];
+
+function normalizeSettingsTabId(tabId = 'overview') {
+  const value = String(tabId || 'overview').trim();
+  const normalized = value.replace(/[\s_-]+/g, '').toLowerCase();
+  if (['backupstorage', 'backupandstorage', 'systeminformation', 'systeminfo', 'systemhealthbackup'].includes(normalized)) {
+    return 'systemHealthBackup';
+  }
+  return value || 'overview';
+}
 
 const roleIconMap = {
   admin: ShieldCheck,
@@ -468,13 +479,13 @@ const settingsOverviewGroups = [
     description: 'Manage backups, storage, restore tools, and data safety.',
     cards: [
       {
-        id: 'backupStorage',
-        tabId: 'backupStorage',
-        icon: DatabaseBackup,
-        title: 'Backup & Storage',
-        description: 'Manage storage usage, create backups, export data, and restore system data safely.',
+        id: 'systemHealthBackup',
+        tabId: 'systemHealthBackup',
+        icon: ShieldCheck,
+        title: 'System Health & Backup',
+        description: 'Monitor system status, storage usage, backups, and service readiness.',
         status: 'Needs Setup',
-        tags: ['backup', 'restore', 'storage', 'export']
+        tags: ['system health', 'backup', 'restore', 'storage', 'api', 'database']
       }
     ]
   }
@@ -1417,37 +1428,36 @@ function CompanyProfileSection({ onDirtyChange = null }) {
   const [uploading, setUploading] = useState(false);
   const [confirmRemoveLogo, setConfirmRemoveLogo] = useState(false);
   const saved = data?.company || null;
-  const dirty = Boolean(saved && form && stableJson(form) !== stableJson({
-    name: saved.name || '',
-    businessType: saved.businessType || '',
-    industry: saved.industry || '',
-    phone: saved.phone || '',
-    whatsapp: saved.whatsapp || '',
-    email: saved.email || '',
-    address: saved.address || '',
-    googleMapsLink: saved.googleMapsLink || '',
-    gstNumber: saved.gstNumber || '',
-    panNumber: saved.panNumber || '',
-    logoUrl: saved.logoUrl || '',
-    useCompanyLogoOnPublicWebsite: saved.useCompanyLogoOnPublicWebsite !== false
-  }));
+
+  function baselineFromCompany(companyProfile = {}) {
+    return {
+      name: companyProfile.name || '',
+      businessType: companyProfile.businessType || '',
+      industry: companyProfile.industry || '',
+      phone: companyProfile.phone || '',
+      whatsapp: companyProfile.whatsapp || '',
+      email: companyProfile.email || '',
+      address: companyProfile.address || '',
+      googleMapsLink: companyProfile.googleMapsLink || '',
+      gstNumber: companyProfile.gstNumber || '',
+      panNumber: companyProfile.panNumber || '',
+      logoUrl: companyProfile.logoUrl || '',
+      useCompanyLogoOnPublicWebsite: companyProfile.useCompanyLogoOnPublicWebsite !== false
+    };
+  }
+
+  const savedBaseline = useMemo(() => saved ? baselineFromCompany(saved) : null, [saved]);
+  const dirty = Boolean(savedBaseline && form && stableJson(form) !== stableJson(savedBaseline));
+  const logoSrc = settingsAssetUrl(form?.logoUrl || '');
+  const updatedBy = saved?.lastUpdatedBy?.name || saved?.lastUpdatedBy?.username || 'System';
+  const updatedDate = saved?.lastUpdatedDate ? formatDate(saved.lastUpdatedDate) : 'Not edited yet';
+  const companyNameReady = Boolean(form?.name?.trim());
+  const emailValid = !form?.email?.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  const canSave = canEdit && dirty && !saving && companyNameReady && emailValid;
 
   useEffect(() => {
     if (!saved) return;
-    setForm({
-      name: saved.name || '',
-      businessType: saved.businessType || '',
-      industry: saved.industry || '',
-      phone: saved.phone || '',
-      whatsapp: saved.whatsapp || '',
-      email: saved.email || '',
-      address: saved.address || '',
-      googleMapsLink: saved.googleMapsLink || '',
-      gstNumber: saved.gstNumber || '',
-      panNumber: saved.panNumber || '',
-      logoUrl: saved.logoUrl || '',
-      useCompanyLogoOnPublicWebsite: saved.useCompanyLogoOnPublicWebsite !== false
-    });
+    setForm(baselineFromCompany(saved));
   }, [saved?.updatedAt, saved?.id]);
 
   useEffect(() => {
@@ -1458,9 +1468,35 @@ function CompanyProfileSection({ onDirtyChange = null }) {
     setForm((current) => ({ ...(current || {}), [field]: value }));
   }
 
+  function updatePhoneField(field, value) {
+    update(field, String(value || '').replace(/[^0-9+\-()\s/,]/g, '').slice(0, 120));
+  }
+
+  function revertChanges() {
+    if (!savedBaseline || saving) return;
+    setForm(savedBaseline);
+  }
+
+  function usePhoneForWhatsapp() {
+    if (!canEdit || saving || !form?.phone) return;
+    updatePhoneField('whatsapp', form.phone);
+    push('Phone number copied to WhatsApp field', 'info');
+  }
+
+  function validateForm() {
+    if (!companyNameReady) return 'Company name is required.';
+    if (!emailValid) return 'Enter a valid email address.';
+    return '';
+  }
+
   async function save(event) {
     event.preventDefault();
     if (!canEdit || !form) return;
+    const validationMessage = validateForm();
+    if (validationMessage) {
+      push(validationMessage, 'error');
+      return;
+    }
     setSaving(true);
     try {
       const result = await request('/settings/company-profile', {
@@ -1476,8 +1512,24 @@ function CompanyProfileSection({ onDirtyChange = null }) {
     }
   }
 
+  function validateLogoFile(file) {
+    if (!file) return '';
+    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']);
+    const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.svg'];
+    const name = String(file.name || '').toLowerCase();
+    const extOk = allowedExts.some((ext) => name.endsWith(ext));
+    if (!allowedTypes.has(file.type) && !extOk) return 'Only JPG, PNG, WEBP, or SVG logo files are allowed.';
+    if (file.size > 5 * 1024 * 1024) return 'Logo must be 5 MB or less.';
+    return '';
+  }
+
   async function uploadLogo(file) {
     if (!file || !canEdit) return;
+    const validationMessage = validateLogoFile(file);
+    if (validationMessage) {
+      push(validationMessage, 'error');
+      return;
+    }
     const body = new FormData();
     body.append('logo', file);
     setUploading(true);
@@ -1510,107 +1562,185 @@ function CompanyProfileSection({ onDirtyChange = null }) {
   if (error) return <ErrorBlock message={error} />;
 
   return (
-    <form className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]" onSubmit={save}>
-      <section className="surface admin-control-card p-5">
-        <div className="flex items-start gap-3">
-          <div className="admin-control-icon"><Building2 className="h-5 w-5" /></div>
-          <div className="min-w-0">
-            <h2 className="text-2xl font-black">Company Profile</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 muted">This profile feeds PDF headers, public contact details, public logo display, and admin identity defaults.</p>
-          </div>
+    <form className="company-profile-settings" onSubmit={save} data-company-profile-root>
+      <section className="company-profile-summary">
+        <div className="company-profile-summary-item">
+          <CheckCircle2 className="h-4 w-4" />
+          <span>Company Profile</span>
+          <strong>Active</strong>
         </div>
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <label>
-            <span className="label">Company name <RequiredMark /></span>
-            <input className="input" value={form.name} disabled={!canEdit || saving} onChange={(event) => update('name', event.target.value)} required />
-          </label>
-          <label>
-            <span className="label">Business type</span>
-            <input className="input" value={form.businessType} disabled={!canEdit || saving} onChange={(event) => update('businessType', event.target.value)} />
-          </label>
-          <label>
-            <span className="label">Industry</span>
-            <input className="input" value={form.industry} disabled={!canEdit || saving} onChange={(event) => update('industry', event.target.value)} />
-          </label>
-          <label>
-            <span className="label">Phone</span>
-            <input className="input" value={form.phone} disabled={!canEdit || saving} onChange={(event) => update('phone', event.target.value)} />
-          </label>
-          <label>
-            <span className="label">WhatsApp</span>
-            <input className="input" value={form.whatsapp} disabled={!canEdit || saving} onChange={(event) => update('whatsapp', event.target.value)} />
-          </label>
-          <label>
-            <span className="label">Email</span>
-            <input className="input" type="email" value={form.email} disabled={!canEdit || saving} onChange={(event) => update('email', event.target.value)} />
-          </label>
-          <label>
-            <span className="label">GST number</span>
-            <input className="input" value={form.gstNumber} disabled={!canEdit || saving} onChange={(event) => update('gstNumber', event.target.value)} />
-          </label>
-          <label>
-            <span className="label">PAN number</span>
-            <input className="input" value={form.panNumber} disabled={!canEdit || saving} onChange={(event) => update('panNumber', event.target.value)} />
-          </label>
-          <label>
-            <span className="label">Google Maps link</span>
-            <input className="input" value={form.googleMapsLink} disabled={!canEdit || saving} onChange={(event) => update('googleMapsLink', event.target.value)} />
-          </label>
-          <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
-            <span>
-              <span className="block font-bold text-slate-100">Use company logo on public website</span>
-              <span className="mt-1 block text-xs muted">The public website still keeps its own accent color and theme settings.</span>
-            </span>
-            <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={form.useCompanyLogoOnPublicWebsite} disabled={!canEdit || saving} onChange={(event) => update('useCompanyLogoOnPublicWebsite', event.target.checked)} />
-          </label>
-          <label className="lg:col-span-2">
-            <span className="label">Address</span>
-            <textarea className="input min-h-28" value={form.address} disabled={!canEdit || saving} onChange={(event) => update('address', event.target.value)} />
-          </label>
+        <div className="company-profile-summary-item">
+          <Globe2 className="h-4 w-4" />
+          <span>Public Logo</span>
+          <strong>{form.useCompanyLogoOnPublicWebsite ? 'Enabled' : 'Disabled'}</strong>
         </div>
-        {!canEdit ? <p className="mt-4 rounded-card border border-amber-300/25 bg-amber-500/10 p-3 text-sm font-semibold text-amber-100">Only admin users with company profile access can save these settings.</p> : null}
-        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button type="button" className="btn btn-secondary" disabled={!dirty || saving} onClick={() => setForm({
-            name: saved.name || '',
-            businessType: saved.businessType || '',
-            industry: saved.industry || '',
-            phone: saved.phone || '',
-            whatsapp: saved.whatsapp || '',
-            email: saved.email || '',
-            address: saved.address || '',
-            googleMapsLink: saved.googleMapsLink || '',
-            gstNumber: saved.gstNumber || '',
-            panNumber: saved.panNumber || '',
-            logoUrl: saved.logoUrl || '',
-            useCompanyLogoOnPublicWebsite: saved.useCompanyLogoOnPublicWebsite !== false
-          })}>
-            Revert
-          </button>
-          <button className="btn btn-primary" disabled={!canEdit || !dirty || saving}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
+        <div className="company-profile-summary-item">
+          <CalendarClock className="h-4 w-4" />
+          <span>Last Updated</span>
+          <strong>{updatedDate}</strong>
+        </div>
+        <div className="company-profile-summary-item">
+          <UserRound className="h-4 w-4" />
+          <span>Updated By</span>
+          <strong>{updatedBy}</strong>
         </div>
       </section>
 
-      <aside className="surface admin-control-card p-5">
-        <div className="flex items-start gap-3">
-          <div className="admin-control-icon"><ImageUp className="h-5 w-5" /></div>
-          <div>
-            <h3 className="text-xl font-black">Company Logo</h3>
-            <p className="mt-1 text-sm muted">Used in PDF headers and public website branding when enabled.</p>
+      <section className="company-profile-main company-profile-card">
+        <div className="company-profile-section-head">
+          <div className="company-profile-title">
+            <div className="company-profile-icon"><Building2 className="h-5 w-5" /></div>
+            <div className="min-w-0">
+              <h2>Company Profile</h2>
+              <p>This identity feeds PDF headers, invoices, quotations, public contact details, and admin defaults.</p>
+            </div>
+          </div>
+          <span className="company-profile-status-pill">{dirty ? 'Unsaved changes' : 'Saved'}</span>
+        </div>
+
+        <div className="company-profile-form-stack">
+          <div className="company-profile-form-group">
+            <div className="company-profile-form-group-head">
+              <span>Business Identity</span>
+              <small>Primary business naming used across documents.</small>
+            </div>
+            <div className="company-profile-field-grid">
+              <label className="company-profile-field">
+                <span>Company name <RequiredMark /></span>
+                <input className="input" value={form.name} placeholder="Universal Systems" disabled={!canEdit || saving} onChange={(event) => update('name', event.target.value)} required />
+              </label>
+              <label className="company-profile-field">
+                <span>Business type</span>
+                <input className="input" value={form.businessType} placeholder="Repair & Service" disabled={!canEdit || saving} onChange={(event) => update('businessType', event.target.value)} />
+              </label>
+              <label className="company-profile-field">
+                <span>Industry</span>
+                <input className="input" value={form.industry} placeholder="Computer, Electronics & IT Services" disabled={!canEdit || saving} onChange={(event) => update('industry', event.target.value)} />
+              </label>
+            </div>
+          </div>
+
+          <div className="company-profile-form-group">
+            <div className="company-profile-form-group-head">
+              <span>Contact Details</span>
+              <small>Used on PDFs, public contact areas, and business communication defaults.</small>
+            </div>
+            <div className="company-profile-field-grid">
+              <label className="company-profile-field">
+                <span>Phone</span>
+                <input className="input" value={form.phone} placeholder="9842781971 / 9944269071" disabled={!canEdit || saving} onChange={(event) => updatePhoneField('phone', event.target.value)} />
+              </label>
+              <label className="company-profile-field">
+                <span className="company-profile-label-row">
+                  WhatsApp
+                  {!form.whatsapp && form.phone ? (
+                    <button type="button" className="company-profile-inline-link" disabled={!canEdit || saving} onClick={usePhoneForWhatsapp}>Use phone number</button>
+                  ) : null}
+                </span>
+                <input className="input" value={form.whatsapp} placeholder="Example: 9842781971" disabled={!canEdit || saving} onChange={(event) => updatePhoneField('whatsapp', event.target.value)} />
+                <small>Used for customer WhatsApp communication if enabled.</small>
+              </label>
+              <label className="company-profile-field">
+                <span>Email</span>
+                <input className={`input ${emailValid ? '' : 'company-profile-input-error'}`} type="email" value={form.email} placeholder="info@example.com" disabled={!canEdit || saving} onChange={(event) => update('email', event.target.value)} />
+                {!emailValid ? <small className="company-profile-error-text">Enter a valid email address.</small> : null}
+              </label>
+            </div>
+          </div>
+
+          <div className="company-profile-form-group">
+            <div className="company-profile-form-group-head">
+              <span>Tax Details</span>
+              <small>Shown only where tax or compliance settings use these details.</small>
+            </div>
+            <div className="company-profile-field-grid">
+              <label className="company-profile-field">
+                <span>GST number</span>
+                <input className="input" value={form.gstNumber} placeholder="Optional - shown only on tax invoices if enabled." disabled={!canEdit || saving} onChange={(event) => update('gstNumber', event.target.value.toUpperCase())} />
+                <small>Optional - shown only on tax invoices if enabled.</small>
+              </label>
+              <label className="company-profile-field">
+                <span>PAN number</span>
+                <input className="input" value={form.panNumber} placeholder="Optional - shown only where required." disabled={!canEdit || saving} onChange={(event) => update('panNumber', event.target.value.toUpperCase())} />
+                <small>Optional - shown only where required.</small>
+              </label>
+            </div>
+          </div>
+
+          <div className="company-profile-form-group">
+            <div className="company-profile-form-group-head">
+              <span>Public Details</span>
+              <small>Controls address, map link, and whether the company logo appears publicly.</small>
+            </div>
+            <div className="company-profile-field-grid">
+              <label className="company-profile-field">
+                <span>Google Maps link</span>
+                <input className="input" value={form.googleMapsLink} placeholder="Paste Google Maps share link." disabled={!canEdit || saving} onChange={(event) => update('googleMapsLink', event.target.value)} />
+              </label>
+              <label className="company-profile-toggle">
+                <span>
+                  <strong>Use company logo on public website</strong>
+                  <small>The public website keeps its own theme and accent colors.</small>
+                </span>
+                <input type="checkbox" checked={form.useCompanyLogoOnPublicWebsite} disabled={!canEdit || saving} onChange={(event) => update('useCompanyLogoOnPublicWebsite', event.target.checked)} />
+              </label>
+              <label className="company-profile-field company-profile-address-field">
+                <span>Address</span>
+                <textarea className="input" rows={3} value={form.address} placeholder="Full business address shown on PDFs and public contact areas." disabled={!canEdit || saving} onChange={(event) => update('address', event.target.value)} />
+              </label>
+            </div>
           </div>
         </div>
-        <div className="mt-5 grid place-items-center rounded-card border border-white/10 bg-white/[0.035] p-5">
-          {form.logoUrl ? (
-            <img src={settingsAssetUrl(form.logoUrl)} alt="Company logo" className="max-h-28 max-w-full object-contain" />
-          ) : (
-            <div className="grid h-28 w-full place-items-center rounded-card border border-dashed border-white/15">
-              <ImageUp className="h-8 w-8 text-slate-400" />
+
+        {!canEdit ? <p className="company-profile-warning">Only admin users with company profile access can save these settings.</p> : null}
+
+        {!dirty ? (
+          <div className="company-profile-clean-actions">
+            <button type="button" className="btn btn-secondary" disabled>Revert</button>
+            <button type="button" className="btn btn-primary company-profile-save-muted" disabled>
+              <Save className="h-4 w-4" />
+              Save Changes
+            </button>
+          </div>
+        ) : null}
+      </section>
+
+      <aside className="company-logo-panel company-profile-card">
+        <div className="company-profile-section-head">
+          <div className="company-profile-title">
+            <div className="company-profile-icon"><ImageUp className="h-5 w-5" /></div>
+            <div className="min-w-0">
+              <h3>Company Logo</h3>
+              <p>Used in PDF headers and public website branding when enabled.</p>
             </div>
-          )}
+          </div>
         </div>
-        <div className="mt-4 grid gap-2">
+
+        <div className="company-logo-preview-block">
+          <span>Logo visibility preview</span>
+          <div className="company-logo-main-preview">
+            {logoSrc ? (
+              <img src={logoSrc} alt="Company logo" />
+            ) : (
+              <div className="company-logo-empty">
+                <ImageUp className="h-8 w-8" />
+                <strong>No logo uploaded</strong>
+              </div>
+            )}
+          </div>
+          <div className="company-logo-contrast-grid">
+            <div className="company-logo-contrast-card company-logo-contrast-light">
+              <small>Light background</small>
+              {logoSrc ? <img src={logoSrc} alt="Company logo on light background" /> : <b>No logo</b>}
+            </div>
+            <div className="company-logo-contrast-card company-logo-contrast-dark">
+              <small>Dark background</small>
+              {logoSrc ? <img src={logoSrc} alt="Company logo on dark background" /> : <b>No logo</b>}
+            </div>
+          </div>
+        </div>
+
+        <div className="company-logo-actions">
           <label className={`btn btn-secondary justify-center ${!canEdit || uploading ? 'pointer-events-none opacity-60' : ''}`}>
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
             Change Logo
@@ -1625,19 +1755,37 @@ function CompanyProfileSection({ onDirtyChange = null }) {
             Remove Logo
           </button>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-card border border-white/10 bg-white p-3">
-            {form.logoUrl ? <img src={settingsAssetUrl(form.logoUrl)} alt="Company logo on light background" className="mx-auto h-14 max-w-full object-contain" /> : <p className="text-center text-xs font-bold text-slate-700">No logo</p>}
+        <p className="company-logo-recommendation">Recommended: PNG, SVG, or WEBP with transparent background, max 5 MB.</p>
+
+        <div className="company-profile-preview-section">
+          <div className="company-profile-form-group-head">
+            <span>Preview where this appears</span>
+            <small>Safe visual previews only. PDF generation logic is unchanged.</small>
           </div>
-          <div className="rounded-card border border-white/10 bg-slate-950 p-3">
-            {form.logoUrl ? <img src={settingsAssetUrl(form.logoUrl)} alt="Company logo on dark background" className="mx-auto h-14 max-w-full object-contain" /> : <p className="text-center text-xs font-bold text-slate-300">No logo</p>}
+          <div className="company-profile-preview-list">
+            {[
+              { title: 'PDF Header Preview', helper: 'Service reports and documents', icon: FileText },
+              { title: 'Public Website Header Preview', helper: form.useCompanyLogoOnPublicWebsite ? 'Company logo enabled' : 'Company logo disabled', icon: Globe2 },
+              { title: 'Invoice / Quotation Header Preview', helper: 'Billing document identity', icon: ReceiptText }
+            ].map((item) => (
+              <div key={item.title} className="company-profile-preview-card">
+                <div className="company-profile-preview-logo">
+                  <item.icon className="h-4 w-4" />
+                </div>
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{form.name || 'Company name'} - {item.helper}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-        <p className="mt-3 text-xs font-semibold muted">Recommended: PNG, SVG, or WEBP with transparent background, max 5 MB.</p>
-        <div className="mt-5 grid gap-3">
-          <SettingsInfoItem icon={CalendarClock} label="Last updated" value={saved?.lastUpdatedDate ? formatDate(saved.lastUpdatedDate) : 'Not edited yet'} />
-          <SettingsInfoItem icon={UserRound} label="Updated by" value={saved?.lastUpdatedBy?.name || saved?.lastUpdatedBy?.username || 'System default'} />
+
+        <div className="company-profile-meta-list">
+          <SettingsInfoItem icon={CalendarClock} label="Last updated" value={updatedDate} />
+          <SettingsInfoItem icon={UserRound} label="Updated by" value={updatedBy} />
         </div>
+
         {confirmRemoveLogo ? (
           <ConfirmModal
             title="Remove company logo?"
@@ -1648,6 +1796,25 @@ function CompanyProfileSection({ onDirtyChange = null }) {
           />
         ) : null}
       </aside>
+
+      {dirty ? (
+        <div className="company-profile-save-bar">
+          <div>
+            <strong>Unsaved company profile changes</strong>
+            <span>{validateForm() || 'Save to update business identity across PDFs, invoices, quotations, and public contact details.'}</span>
+          </div>
+          <div className="company-profile-save-actions">
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={revertChanges}>
+              <RotateCcw className="h-4 w-4" />
+              Revert
+            </button>
+            <button type="submit" className="btn btn-primary admin-compact-button" disabled={!canSave}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </form>
   );
 }
@@ -4405,8 +4572,13 @@ function AccountStatusPill({ active }) {
 export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = false } = {}) {
   const { push } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const { themePreference, resolvedTheme, setThemePreference } = useThemePreference();
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const requestedSettingsTab = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return normalizeSettingsTabId(params.get('tab') || params.get('section') || initialTab);
+  }, [initialTab, location.search]);
+  const [activeTab, setActiveTab] = useState(requestedSettingsTab);
   const [comingSoonModule, setComingSoonModule] = useState(null);
   const [dirtyTabs, setDirtyTabs] = useState({});
   const [preferences, setPreferences] = useState({
@@ -4450,7 +4622,7 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
   function scrollSettingsContentToTop() {
     requestAnimationFrame(() => {
       const main = document.querySelector('.enterprise-main');
-      const focusedRoot = document.querySelector('[data-documents-pdfs-root], [data-backup-storage-root], [data-tax-gst-root], [data-payment-settings-root]');
+      const focusedRoot = document.querySelector('[data-documents-pdfs-root], [data-system-health-root], [data-backup-storage-root], [data-tax-gst-root], [data-payment-settings-root], [data-admin-preferences-root]');
       if (focusedRoot && typeof focusedRoot.scrollIntoView === 'function') {
         focusedRoot.scrollIntoView({ block: 'start', behavior: 'auto' });
         return;
@@ -4461,16 +4633,17 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
   }
 
   function changeTab(tabId) {
-    if (tabId === activeTab && !comingSoonModule) return;
+    const nextTabId = normalizeSettingsTabId(tabId);
+    if (nextTabId === activeTab && !comingSoonModule) return;
     if (!canLeaveActiveTab()) return;
-    if ((tabId === 'documentsPdfs' || tabId === 'taxGst' || tabId === 'paymentSettings') && !standaloneTab) {
+    if ((nextTabId === 'documentsPdfs' || nextTabId === 'taxGst' || nextTabId === 'paymentSettings') && !standaloneTab) {
       clearActiveDirtyFlag();
-      navigate(tabId === 'documentsPdfs' ? '/admin/settings/documents-pdfs' : tabId === 'taxGst' ? '/admin/settings/tax-gst' : '/admin/settings/payment-settings');
+      navigate(nextTabId === 'documentsPdfs' ? '/admin/settings/documents-pdfs' : nextTabId === 'taxGst' ? '/admin/settings/tax-gst' : '/admin/settings/payment-settings');
       return;
     }
     clearActiveDirtyFlag();
     setComingSoonModule(null);
-    setActiveTab(tabId);
+    setActiveTab(nextTabId);
   }
 
   function openComingSoon(module) {
@@ -4516,12 +4689,12 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
   }, [preferences, savedPreferences, setTabDirty]);
 
   useEffect(() => {
-    setActiveTab(initialTab);
+    setActiveTab(requestedSettingsTab);
     setComingSoonModule(null);
-  }, [initialTab]);
+  }, [requestedSettingsTab]);
 
   useEffect(() => {
-    if (activeTab === 'documentsPdfs' || activeTab === 'backupStorage' || activeTab === 'taxGst' || activeTab === 'paymentSettings') scrollSettingsContentToTop();
+    if (activeTab === 'documentsPdfs' || activeTab === 'systemHealthBackup' || activeTab === 'taxGst' || activeTab === 'paymentSettings' || activeTab === 'preferences') scrollSettingsContentToTop();
   }, [activeTab]);
 
   function savePreferences() {
@@ -4621,7 +4794,7 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
         ) : null}
 
         {activeTab === 'security' ? (
-          <SecuritySettingsSection />
+          <SecurityControlCenterSection />
         ) : null}
 
         {activeTab === 'usersRoles' ? (
@@ -4629,7 +4802,7 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
         ) : null}
 
         {activeTab === 'preferences' ? (
-          <PreferencesSection themePreference={themePreference} resolvedTheme={resolvedTheme} onThemeChange={updateThemePreference} onDirtyChange={(dirty) => setTabDirty('preferences', dirty)} />
+          <AdminPreferencesSection themePreference={themePreference} resolvedTheme={resolvedTheme} onThemeChange={updateThemePreference} onDirtyChange={(dirty) => setTabDirty('preferences', dirty)} />
         ) : null}
 
         {activeTab === 'documentsPdfs' ? (
@@ -4640,8 +4813,8 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
           <PublicWebsiteSettingsSection onDirtyChange={(dirty) => setTabDirty('publicWebsite', dirty)} />
         ) : null}
 
-        {activeTab === 'backupStorage' ? (
-          <BackupStorageSection onDirtyChange={(dirty) => setTabDirty('backupStorage', dirty)} onOpenTab={changeTab} />
+        {activeTab === 'systemHealthBackup' ? (
+          <SystemHealthBackupSection onDirtyChange={(dirty) => setTabDirty('systemHealthBackup', dirty)} />
         ) : null}
 
         {activeTab === 'taxGst' ? (
@@ -4660,9 +4833,6 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
           <StatusWorkflowSettingsSection onDirtyChange={(dirty) => setTabDirty('statusWorkflow', dirty)} />
         ) : null}
 
-        {activeTab === 'systemInformation' ? (
-          <SystemInformationSection />
-        ) : null}
       </div>
     </div>
   );

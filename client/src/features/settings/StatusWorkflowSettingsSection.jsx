@@ -10,6 +10,7 @@ import {
   Loader2,
   LockKeyhole,
   MoreVertical,
+  PencilLine,
   Plus,
   RotateCcw,
   Save,
@@ -23,58 +24,78 @@ import { EmptyState, ErrorBlock, LoadingBlock, useAuth, useResource, useToast } 
 import { can, hasRole } from '../../utils/roles.js';
 
 const flowMeta = {
-  booking: { label: 'Booking', title: 'Booking workflow', helper: 'Service intake and conversion statuses.' },
-  workOrder: { label: 'Work Order', title: 'Work order workflow', helper: 'Job execution, repair, delivery, and return statuses.' },
-  invoice: { label: 'Invoice', title: 'Invoice workflow', helper: 'Billing and payment collection statuses.' },
-  amc: { label: 'AMC', title: 'AMC workflow', helper: 'AMC contract and visit lifecycle statuses.' }
+  booking: { label: 'Booking', title: 'Booking workflow', helper: 'Service intake, confirmation, cancellation, and conversion statuses.' },
+  workOrder: { label: 'Work Order', title: 'Work order workflow', helper: 'Technician assignment, repair progress, approval, delivery, and terminal statuses.' },
+  invoice: { label: 'Invoice', title: 'Invoice workflow', helper: 'Invoice preparation, sending, payment collection, and terminal billing states.' },
+  amc: { label: 'AMC', title: 'AMC workflow', helper: 'AMC contract, visit, renewal, expiry, and cancellation lifecycle statuses.' }
 };
 
 const workflowDefaults = {
   booking: [
-    { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, active: true, protected: true, description: 'New booking created and waiting for admin action.' },
+    { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, active: true, protected: true, description: 'New booking received and waiting for action.' },
     { key: 'Converted', label: 'Converted', color: '#22c55e', order: 1, active: true, protected: true, description: 'Booking converted into a work order.' }
   ],
   workOrder: [
-    { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, active: true, protected: true, description: 'Work order created and waiting for assignment.' },
+    { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, active: true, protected: true, description: 'Job created and waiting to be assigned.' },
     { key: 'In Progress', label: 'In Progress', color: '#38bdf8', order: 1, active: true, protected: true, description: 'Technician has started the work.' },
-    { key: 'Awaiting Parts', label: 'Awaiting Parts', color: '#a78bfa', order: 2, active: true, protected: true, description: 'Repair is paused until spare parts arrive.' },
-    { key: 'Completed', label: 'Completed', color: '#22c55e', order: 3, active: true, protected: true, description: 'Work is completed and ready for billing or delivery.' },
-    { key: 'Delivered', label: 'Delivered', color: '#14b8a6', order: 4, active: true, protected: true, description: 'Device or product returned to customer.' },
-    { key: 'Returned', label: 'Returned', color: '#64748b', order: 5, active: true, protected: true, description: 'Item returned after service workflow completion.' }
+    { key: 'Awaiting Parts', label: 'Awaiting Parts', color: '#a78bfa', order: 2, active: true, protected: true, description: 'Work is paused until required parts arrive.' },
+    { key: 'Completed', label: 'Completed', color: '#22c55e', order: 3, active: true, protected: true, description: 'Service work is completed.' },
+    { key: 'Delivered', label: 'Delivered', color: '#14b8a6', order: 4, active: true, protected: true, description: 'Device/product delivered to customer.' },
+    { key: 'Returned', label: 'Returned', color: '#64748b', order: 5, active: true, protected: true, description: 'Device/product returned without completion or after issue.' }
   ],
   invoice: [
-    { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, active: true, protected: true, description: 'Invoice is waiting for payment.' },
-    { key: 'Partial', label: 'Partial', color: '#38bdf8', order: 1, active: true, protected: true, description: 'Partial payment has been received.' },
-    { key: 'Paid', label: 'Paid', color: '#22c55e', order: 2, active: true, protected: true, description: 'Invoice is fully paid.' },
-    { key: 'Void', label: 'Void', color: '#ef4444', order: 3, active: true, protected: true, description: 'Invoice is void and should not be collected.' }
+    { key: 'Pending', label: 'Pending', color: '#f59e0b', order: 0, active: true, protected: true, description: 'Payment is pending.' },
+    { key: 'Partial', label: 'Partial', color: '#38bdf8', order: 1, active: true, protected: true, description: 'Partial payment received.' },
+    { key: 'Paid', label: 'Paid', color: '#22c55e', order: 2, active: true, protected: true, description: 'Full payment received.' },
+    { key: 'Void', label: 'Void', color: '#ef4444', order: 3, active: true, protected: true, description: 'Invoice cancelled and no longer valid.' }
   ],
   amc: [
-    { key: 'Active', label: 'Active', color: '#22c55e', order: 0, active: true, protected: true, description: 'AMC contract is active.' },
-    { key: 'Cancelled', label: 'Cancelled', color: '#ef4444', order: 1, active: true, protected: true, description: 'AMC contract has been cancelled.' },
-    { key: 'Upcoming', label: 'Upcoming', color: '#38bdf8', order: 2, active: true, protected: true, description: 'AMC visit or renewal is upcoming.' },
-    { key: 'Completed', label: 'Completed', color: '#14b8a6', order: 3, active: true, protected: true, description: 'AMC visit or work is completed.' }
+    { key: 'Active', label: 'Active', color: '#22c55e', order: 0, active: true, protected: true, description: 'AMC contract is currently active.' },
+    { key: 'Cancelled', label: 'Cancelled', color: '#ef4444', order: 1, active: true, protected: true, description: 'AMC contract cancelled.' },
+    { key: 'Upcoming', label: 'Upcoming', color: '#38bdf8', order: 2, active: true, protected: true, description: 'AMC renewal or visit is upcoming.' },
+    { key: 'Completed', label: 'Completed', color: '#14b8a6', order: 3, active: true, protected: true, description: 'AMC visit/service completed.' }
   ]
 };
 
 const suggestedStatuses = {
   booking: [
-    { key: 'Confirmed', label: 'Confirmed', color: '#38bdf8', description: 'Booking confirmed with the customer.' },
-    { key: 'Cancelled', label: 'Cancelled', color: '#ef4444', description: 'Booking cancelled before conversion.' }
+    { key: 'Confirmed', label: 'Confirmed', color: '#38bdf8', order: 1, description: 'Booking confirmed with the customer.' },
+    { key: 'Cancelled', label: 'Cancelled', color: '#ef4444', order: 99, terminal: true, description: 'Booking cancelled before conversion.' }
   ],
   workOrder: [
-    { key: 'Assigned', label: 'Assigned', color: '#60a5fa', description: 'Technician has been assigned.' },
-    { key: 'Customer Approval', label: 'Customer Approval', color: '#fbbf24', description: 'Waiting for customer approval before continuing.' },
-    { key: 'Ready for Delivery', label: 'Ready for Delivery', color: '#2dd4bf', description: 'Service is complete and ready to hand over.' },
-    { key: 'Cancelled', label: 'Cancelled', color: '#ef4444', description: 'Work order cancelled before completion.' }
+    { key: 'Assigned', label: 'Assigned', color: '#60a5fa', order: 1, description: 'Technician has been assigned.' },
+    { key: 'Customer Approval', label: 'Customer Approval', color: '#fbbf24', order: 4, description: 'Waiting for customer approval before continuing.' },
+    { key: 'Ready for Delivery', label: 'Ready for Delivery', color: '#2dd4bf', order: 6, description: 'Device is ready to hand over.' },
+    { key: 'Cancelled', label: 'Cancelled', color: '#ef4444', order: 99, terminal: true, description: 'Work order cancelled before completion.' }
   ],
   invoice: [
-    { key: 'Draft', label: 'Draft', color: '#94a3b8', description: 'Invoice is being prepared.' },
-    { key: 'Sent', label: 'Sent', color: '#60a5fa', description: 'Invoice sent to the customer.' },
-    { key: 'Overdue', label: 'Overdue', color: '#f97316', description: 'Invoice is past due date.' }
+    { key: 'Draft', label: 'Draft', color: '#94a3b8', order: 0, description: 'Invoice is being prepared.' },
+    { key: 'Sent', label: 'Sent', color: '#60a5fa', order: 1, description: 'Invoice sent to the customer.' },
+    { key: 'Overdue', label: 'Overdue', color: '#f97316', order: 98, terminal: true, description: 'Payment is past due date.' }
   ],
   amc: [
-    { key: 'Expired', label: 'Expired', color: '#f97316', description: 'AMC contract has passed expiry date.' }
+    { key: 'Renewed', label: 'Renewed', color: '#22c55e', order: 3, description: 'AMC contract renewed for a new term.' },
+    { key: 'Expired', label: 'Expired', color: '#f97316', order: 98, terminal: true, description: 'AMC contract has passed expiry date.' }
   ]
+};
+
+const visualFlowRules = {
+  booking: {
+    main: ['Pending', 'Confirmed', 'Converted'],
+    side: ['Cancelled']
+  },
+  workOrder: {
+    main: ['Pending', 'Assigned', 'In Progress', 'Awaiting Parts', 'Customer Approval', 'Completed', 'Ready for Delivery', 'Delivered'],
+    side: ['Returned', 'Cancelled']
+  },
+  invoice: {
+    main: ['Draft', 'Sent', 'Pending', 'Partial', 'Paid'],
+    side: ['Overdue', 'Void']
+  },
+  amc: {
+    main: ['Active', 'Upcoming', 'Renewed'],
+    side: ['Completed', 'Expired', 'Cancelled']
+  }
 };
 
 const automationRules = {
@@ -120,6 +141,11 @@ function statusIdentity(value = '') {
   return String(value || '').trim().toLowerCase();
 }
 
+function statusMatchesToken(status = {}, token = '') {
+  const target = statusIdentity(token);
+  return statusIdentity(status.key) === target || statusIdentity(status.label) === target;
+}
+
 function sortedStatuses(statuses = []) {
   return statuses
     .map((item, index) => ({ item, index }))
@@ -130,9 +156,9 @@ function defaultState() {
   return clonePlain(workflowDefaults);
 }
 
-function defaultDescription(flow, key) {
+function defaultDescription(flow, key, label = '') {
   const defaults = [...(workflowDefaults[flow] || []), ...(suggestedStatuses[flow] || [])];
-  return defaults.find((item) => item.key === key)?.description || '';
+  return defaults.find((item) => statusMatchesToken(item, key) || statusMatchesToken(item, label))?.description || '';
 }
 
 function normalizeStatusItem(flow, item = {}, index = 0) {
@@ -146,7 +172,7 @@ function normalizeStatusItem(flow, item = {}, index = 0) {
     order: Number.isFinite(Number(item.order)) ? Number(item.order) : index,
     active: protectedStatus ? true : item.active !== false,
     protected: protectedStatus,
-    description: String(item.description ?? defaultItem?.description ?? defaultDescription(flow, key) ?? '').trim()
+    description: String(item.description ?? defaultItem?.description ?? defaultDescription(flow, key, item.label) ?? '').trim()
   };
 }
 
@@ -168,6 +194,23 @@ function nextOrder(statuses = []) {
   return Math.max(...statuses.map((item, index) => Number(item.order ?? index))) + 1;
 }
 
+function buildVisualFlow(flow, statuses = []) {
+  const active = sortedStatuses(statuses)
+    .map(({ item, index }) => ({ ...item, originalIndex: index }))
+    .filter((item) => item.active !== false);
+  const used = new Set();
+  const rules = visualFlowRules[flow] || { main: [], side: [] };
+  const pick = (token) => {
+    const match = active.find((item) => !used.has(item.originalIndex) && statusMatchesToken(item, token));
+    if (match) used.add(match.originalIndex);
+    return match || null;
+  };
+  const main = rules.main.map(pick).filter(Boolean);
+  const side = rules.side.map(pick).filter(Boolean);
+  const additional = active.filter((item) => !used.has(item.originalIndex));
+  return { main, side, additional };
+}
+
 function validateFlow(statuses = []) {
   const errors = [];
   const keyCounts = {};
@@ -182,6 +225,7 @@ function validateFlow(statuses = []) {
     if (!key) errors.push(`Row ${row}: Key is required.`);
     if (!color || !colorPattern.test(color)) errors.push(`Row ${row}: Valid color is required.`);
     if (!order) errors.push(`Row ${row}: Order is required.`);
+    if (order && !Number.isFinite(Number(order))) errors.push(`Row ${row}: Order must be a valid number.`);
     keyCounts[key] = (keyCounts[key] || 0) + 1;
     orderCounts[order] = (orderCounts[order] || 0) + 1;
   });
@@ -244,12 +288,13 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [unsavedConfirm, setUnsavedConfirm] = useState(null);
   const [automationEnabled, setAutomationEnabled] = useState({});
+  const [descriptionEditKey, setDescriptionEditKey] = useState('');
   const dirty = stableJson(draft) !== savedJson;
   const validation = useMemo(() => validateAllFlows(draft), [draft]);
   const validationErrors = Object.values(validation).flat();
   const currentStatuses = draft[activeFlow] || [];
   const currentSorted = sortedStatuses(currentStatuses);
-  const activeStatuses = currentSorted.map(({ item }) => item).filter((item) => item.active !== false);
+  const visualFlow = useMemo(() => buildVisualFlow(activeFlow, currentStatuses), [activeFlow, currentStatuses]);
   const currentMissingSuggestions = missingSuggestions(activeFlow, currentStatuses);
 
   useEffect(() => {
@@ -283,6 +328,7 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
     if (!requestDirtyAction({ type: 'switch', flow })) return;
     setActiveFlow(flow);
     setMenuKey('');
+    setDescriptionEditKey('');
   }
 
   function continueUnsavedAction() {
@@ -293,6 +339,7 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
       setDraft(clonePlain(saved));
       setActiveFlow(action.flow);
       setMenuKey('');
+      setDescriptionEditKey('');
       return;
     }
     if (action.type === 'reset') {
@@ -322,12 +369,19 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
       return next;
     });
     setMenuKey('');
+    setDescriptionEditKey('');
   }
 
   function toggleActive(originalIndex) {
     const status = draft[activeFlow]?.[originalIndex];
     if (!status || status.protected) return;
     updateStatus(originalIndex, 'active', status.active === false);
+    setMenuKey('');
+  }
+
+  function editDescription(menuId) {
+    if (!canEdit || saving) return;
+    setDescriptionEditKey(menuId);
     setMenuKey('');
   }
 
@@ -353,10 +407,12 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
     if (!key) errors.push('Key is required.');
     if (key && !safeKeyPattern.test(key)) errors.push('Key must use lowercase letters, numbers, hyphen, or underscore.');
     if (!addDraft.color || !colorPattern.test(addDraft.color)) errors.push('Valid color is required.');
+    if (String(addDraft.order ?? '').trim() === '') errors.push('Order is required.');
+    if (String(addDraft.order ?? '').trim() !== '' && !Number.isFinite(Number(addDraft.order))) errors.push('Order must be a valid number.');
     const statuses = draft[activeFlow] || [];
     if (statuses.some((item) => statusIdentity(item.key) === statusIdentity(key))) errors.push('Key must be unique inside this workflow.');
     if (statuses.some((item) => statusIdentity(item.label) === statusIdentity(label))) errors.push('Label already exists inside this workflow.');
-    if (statuses.some((item) => Number(item.order) === Number(addDraft.order))) errors.push('Order number is already used in this workflow.');
+    if (String(addDraft.order ?? '').trim() !== '' && statuses.some((item) => Number(item.order) === Number(addDraft.order))) errors.push('Order number is already used in this workflow.');
     return errors;
   }
 
@@ -414,6 +470,7 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
   function cancelChanges() {
     setDraft(clonePlain(saved));
     setMenuKey('');
+    setDescriptionEditKey('');
   }
 
   async function saveWorkflow(event = null) {
@@ -484,21 +541,56 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
             <h3>{flowMeta[activeFlow].title}</h3>
             <p>{flowMeta[activeFlow].helper}</p>
           </div>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || saving} onClick={() => openAddModal()}>
-            <Plus className="h-4 w-4" />
-            Add Status
-          </button>
+          <div className="status-workflow-section-actions">
+            {!dirty ? (
+              <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || saving} onClick={requestResetFlow}><RotateCcw className="h-4 w-4" /> Reset Flow</button>
+            ) : null}
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || saving} onClick={() => openAddModal()}>
+              <Plus className="h-4 w-4" />
+              Add Status
+            </button>
+          </div>
         </div>
-        <div className="status-workflow-preview-strip" aria-label={`${flowMeta[activeFlow].label} workflow preview`}>
-          {activeStatuses.length ? activeStatuses.map((status, index) => (
-            <div key={`${status.key}-${index}`} className="status-workflow-preview-step">
-              <span style={{ backgroundColor: status.color || '#75c4ff' }} />
-              <strong>{status.label}</strong>
-              {index < activeStatuses.length - 1 ? <ArrowRight className="h-4 w-4" /> : null}
+        <div className="status-workflow-preview-shell">
+          <div className="status-workflow-scroll-shell">
+            <div className="status-workflow-preview-strip" aria-label={`${flowMeta[activeFlow].label} workflow preview`}>
+              {visualFlow.main.length ? visualFlow.main.map((status, index) => (
+                <div key={`${status.key}-${index}`} className="status-workflow-preview-step">
+                  <span style={{ backgroundColor: status.color || '#75c4ff' }} />
+                  <strong>{status.label}</strong>
+                  {index < visualFlow.main.length - 1 ? <ArrowRight className="h-4 w-4" /> : null}
+                </div>
+              )) : (
+                <span className="status-workflow-empty-inline">No active statuses configured.</span>
+              )}
             </div>
-          )) : (
-            <span className="status-workflow-empty-inline">No active statuses configured.</span>
-          )}
+          </div>
+          {visualFlow.side.length || visualFlow.additional.length ? (
+            <div className="status-workflow-side-strip">
+              {visualFlow.side.length ? (
+                <>
+                  <span className="status-workflow-side-label">Side / terminal</span>
+                  {visualFlow.side.map((status, index) => (
+                    <span key={`side-${status.key}-${index}`} className="status-workflow-side-pill">
+                      <i style={{ backgroundColor: status.color || '#75c4ff' }} />
+                      {status.label}
+                    </span>
+                  ))}
+                </>
+              ) : null}
+              {visualFlow.additional.length ? (
+                <>
+                  <span className="status-workflow-side-label">Additional</span>
+                  {visualFlow.additional.map((status, index) => (
+                    <span key={`additional-${status.key}-${index}`} className="status-workflow-side-pill">
+                      <i style={{ backgroundColor: status.color || '#75c4ff' }} />
+                      {status.label}
+                    </span>
+                  ))}
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -524,18 +616,26 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
         <div className="status-workflow-list">
           {currentSorted.map(({ item, index }, sortedIndex) => {
             const menuId = `${activeFlow}:${index}`;
+            const isDescriptionEditing = descriptionEditKey === menuId;
+            const descriptionText = String(item.description || '').trim() || defaultDescription(activeFlow, item.key, item.label);
             return (
               <article key={`${item.key}-${index}`} className="status-workflow-row">
                 <div className="status-workflow-drag" title="Visual drag handle. Use Move Up / Move Down to reorder."><GripVertical className="h-4 w-4" /></div>
                 <div className="status-workflow-status-cell">
-                  <label>
+                  <label className="status-workflow-label-field">
                     <span className="label">Label</span>
-                    <input className="input" value={item.label || ''} disabled={!canEdit || saving} onChange={(event) => updateStatus(index, 'label', event.target.value)} />
+                    <input className="input" value={item.label || ''} disabled={!canEdit || saving} onFocus={() => editDescription(menuId)} onChange={(event) => updateStatus(index, 'label', event.target.value)} />
                   </label>
-                  <label>
-                    <span className="label sr-only">Description</span>
-                    <input className="input status-workflow-description-input" value={item.description || ''} disabled={!canEdit || saving} placeholder="No description added" onChange={(event) => updateStatus(index, 'description', event.target.value)} />
-                  </label>
+                  {isDescriptionEditing ? (
+                    <label className="status-workflow-description-editor">
+                      <span className="label sr-only">Description</span>
+                      <input className="input status-workflow-description-input" value={item.description || ''} disabled={!canEdit || saving} placeholder={descriptionText || 'No description'} onChange={(event) => updateStatus(index, 'description', event.target.value)} />
+                    </label>
+                  ) : (
+                    <button type="button" className={`status-workflow-description-text ${descriptionText ? '' : 'is-empty'}`} disabled={!canEdit || saving} title={descriptionText || 'No description'} onClick={() => editDescription(menuId)}>
+                      {descriptionText || 'No description'}
+                    </button>
+                  )}
                 </div>
                 <label className="status-workflow-key-cell">
                   <span className="label">Key</span>
@@ -567,8 +667,18 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
                     <div className="status-workflow-menu">
                       <button type="button" disabled={sortedIndex === 0} onClick={() => moveStatus(sortedIndex, -1)}><ArrowUp className="h-4 w-4" /> Move Up</button>
                       <button type="button" disabled={sortedIndex === currentSorted.length - 1} onClick={() => moveStatus(sortedIndex, 1)}><ArrowDown className="h-4 w-4" /> Move Down</button>
-                      <button type="button" disabled={item.protected} onClick={() => toggleActive(index)}><CheckCircle2 className="h-4 w-4" /> {item.active === false ? 'Enable' : 'Disable'}</button>
-                      <button type="button" className="is-danger" disabled={item.protected} title={item.protected ? 'Core statuses cannot be deleted.' : ''} onClick={() => confirmDelete(index)}><Trash2 className="h-4 w-4" /> Delete</button>
+                      <button type="button" onClick={() => editDescription(menuId)}><PencilLine className="h-4 w-4" /> Edit Description</button>
+                      {item.protected ? (
+                        <>
+                          <span className="status-workflow-menu-note" title="Core status key is protected"><LockKeyhole className="h-4 w-4" /> Core status key is protected</span>
+                          <span className="status-workflow-menu-note" title="Core status cannot be deleted"><Trash2 className="h-4 w-4" /> Core status cannot be deleted</span>
+                        </>
+                      ) : (
+                        <>
+                          <button type="button" onClick={() => toggleActive(index)}><CheckCircle2 className="h-4 w-4" /> {item.active === false ? 'Enable' : 'Disable'}</button>
+                          <button type="button" className="is-danger" onClick={() => confirmDelete(index)}><Trash2 className="h-4 w-4" /> Delete</button>
+                        </>
+                      )}
                     </div>
                   ) : null}
                 </div>
@@ -614,14 +724,28 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
             </div>
             <Info className="h-5 w-5" />
           </div>
-          <div className="status-workflow-transition-map">
-            {activeStatuses.map((status, index) => (
-              <div key={`${status.key}-${index}`} className="status-workflow-transition-step">
-                <span style={{ backgroundColor: status.color || '#75c4ff' }} />
-                <strong>{status.label}</strong>
-                {index < activeStatuses.length - 1 ? <ArrowRight className="h-4 w-4" /> : null}
+          <div className="status-workflow-transition-shell">
+            <div className="status-workflow-scroll-shell">
+              <div className="status-workflow-transition-map">
+                {visualFlow.main.length ? visualFlow.main.map((status, index) => (
+                  <div key={`${status.key}-${index}`} className="status-workflow-transition-step">
+                    <span style={{ backgroundColor: status.color || '#75c4ff' }} />
+                    <strong>{status.label}</strong>
+                    {index < visualFlow.main.length - 1 ? <ArrowRight className="h-4 w-4" /> : null}
+                  </div>
+                )) : <span className="status-workflow-empty-inline">No main movement path configured.</span>}
               </div>
-            ))}
+            </div>
+            {visualFlow.side.length || visualFlow.additional.length ? (
+              <div className="status-workflow-side-strip status-workflow-side-strip-compact">
+                {[...visualFlow.side, ...visualFlow.additional].map((status, index) => (
+                  <span key={`movement-side-${status.key}-${index}`} className="status-workflow-side-pill">
+                    <i style={{ backgroundColor: status.color || '#75c4ff' }} />
+                    {status.label}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -660,24 +784,18 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
             <AlertTriangle className="h-5 w-5" />
             <div>
               <strong>You have unsaved changes</strong>
-              <span>Save or cancel before switching workflows.</span>
             </div>
           </div>
           <div className="status-workflow-save-actions">
-            <button type="button" className="btn btn-secondary" disabled={saving} onClick={cancelChanges}>Cancel Changes</button>
             <button type="button" className="btn btn-secondary" disabled={saving || !canEdit} onClick={requestResetFlow}><RotateCcw className="h-4 w-4" /> Reset Flow</button>
+            <button type="button" className="btn btn-secondary" disabled={saving} onClick={cancelChanges}>Cancel Changes</button>
             <button type="button" className="btn btn-primary" disabled={!canEdit || saving || validationErrors.length > 0} title={validationErrors.length ? 'Please fix validation errors before saving' : ''} onClick={saveWorkflow}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {saving ? 'Saving...' : 'Save Workflow'}
             </button>
           </div>
         </div>
-      ) : (
-        <div className="status-workflow-clean-actions">
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || saving} onClick={requestResetFlow}><RotateCcw className="h-4 w-4" /> Reset Flow</button>
-          <button type="button" className="btn btn-primary admin-compact-button" disabled>Save Workflow</button>
-        </div>
-      )}
+      ) : null}
 
       {addModalOpen ? (
         <WorkflowModal title="Add Status" description={`Add a custom status to ${flowMeta[activeFlow].label}.`} onClose={() => setAddModalOpen(false)}>
