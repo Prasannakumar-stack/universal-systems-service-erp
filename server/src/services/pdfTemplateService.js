@@ -692,7 +692,8 @@ function sanitizeDesignPage(page = {}, index = 0) {
   return {
     id,
     name: cleanText(page.name, `Page ${index + 1}`, 120),
-    elements: Array.isArray(page.elements) ? page.elements.map((item) => cleanText(item, '', 80)).filter(Boolean).slice(0, 120) : []
+    elements: Array.isArray(page.elements) ? page.elements.map((item) => cleanText(item, '', 80)).filter(Boolean).slice(0, 120) : [],
+    manual: boolValue(page.manual ?? page.userAdded, false)
   };
 }
 
@@ -728,6 +729,8 @@ function sanitizeDesignSection(section = {}, index = 0) {
     pageBreakBefore: boolValue(section.pageBreakBefore, false),
     avoidSplit: boolValue(section.avoidSplit, true),
     printSafe: boolValue(section.printSafe, true),
+    rendererFrame: boolValue(section.rendererFrame, false),
+    layoutSource: ['renderer', 'custom', 'default'].includes(section.layoutSource) ? section.layoutSource : (section.rendererFrame ? 'renderer' : 'default'),
     zIndex: clampNumber(section.zIndex, index + 1, 1, 999)
   };
 }

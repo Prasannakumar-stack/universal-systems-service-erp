@@ -407,10 +407,10 @@ const settingsOverviewGroups = [
         route: '/admin/settings/documents-pdfs',
         icon: FileText,
         title: 'Documents & PDFs',
-        description: 'Manage PDF templates, terms, footer notes, and document numbering.',
+        description: 'Manage PDF templates, document previews, and numbering.',
         status: 'Active',
         actionLabel: 'Manage',
-        tags: ['pdf', 'templates', 'terms', 'numbering']
+        tags: ['pdf', 'templates', 'numbering']
       },
       {
         id: 'notificationTemplates',
@@ -3042,7 +3042,8 @@ function BusinessSettingsFrame({
   resetMode = 'saved',
   showActionsWhenClean = false,
   previewLabel = '',
-  previewMessage = ''
+  previewMessage = '',
+  validateBeforeSave = null
 }) {
   const { request, user } = useAuth();
   const { push } = useToast();
@@ -3055,6 +3056,7 @@ function BusinessSettingsFrame({
   const [saving, setSaving] = useState(false);
   const savedJson = stableJson(saved);
   const dirty = stableJson(form) !== savedJson;
+  const saveBlockReason = typeof validateBeforeSave === 'function' ? validateBeforeSave(form) : '';
 
   useEffect(() => {
     setForm(clonePlain(saved));
@@ -3072,6 +3074,10 @@ function BusinessSettingsFrame({
     event.preventDefault();
     if (!canEdit) {
       push('You do not have permission to save this settings section', 'error');
+      return;
+    }
+    if (saveBlockReason) {
+      push(saveBlockReason, 'error');
       return;
     }
     setSaving(true);
@@ -3130,7 +3136,7 @@ function BusinessSettingsFrame({
               {previewLabel}
             </button>
           ) : null}
-          <button type="submit" className="btn btn-primary" disabled={!canEdit || saving}>
+          <button type="submit" className="btn btn-primary" disabled={!canEdit || saving || Boolean(saveBlockReason)}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             {saving ? 'Saving...' : saveLabel}
           </button>
@@ -3141,19 +3147,30 @@ function BusinessSettingsFrame({
 }
 
 function DocumentNumberingSection({ onDirtyChange = null, embedded = false }) {
+  const [expandedRow, setExpandedRow] = useState('');
   const rows = [
-    ['invoice', 'Invoice'],
-    ['workOrder', 'Work Order'],
-    ['quotation', 'Quotation'],
-    ['amc', 'AMC'],
-    ['paymentReceipt', 'Payment Receipt']
+    { key: 'invoice', label: 'Invoice', prefix: 'INV', icon: ReceiptText, helper: 'Used for invoice records and billing PDFs.' },
+    { key: 'workOrder', label: 'Work Order', prefix: 'WO', icon: Wrench, helper: 'Used for technician work orders and job documents.' },
+    { key: 'quotation', label: 'Quotation', prefix: 'QUO', icon: ClipboardList, helper: 'Used for estimates and quotation approvals.' },
+    { key: 'amc', label: 'AMC Contract', prefix: 'AMC', icon: BookOpenCheck, helper: 'Used for annual maintenance contracts.' },
+    { key: 'paymentReceipt', label: 'Payment Receipt', prefix: 'RCPT', icon: CreditCard, helper: 'Used for payment acknowledgement receipts.' }
   ];
   const year = new Date().getFullYear();
+  const normalizedNumberingPrefixes = (form = {}) => rows.map((row) => String(form[row.key]?.prefix || row.prefix).trim().toUpperCase());
+  const validateNumbering = (form = {}) => {
+    const prefixes = normalizedNumberingPrefixes(form);
+    if (new Set(prefixes).size !== prefixes.length) return 'Prefixes must be unique before saving.';
+    const invalidPrefix = prefixes.find((prefix) => !/^[A-Z0-9-]{1,12}$/.test(prefix));
+    if (invalidPrefix) return 'Prefixes can use letters, numbers, and hyphens only.';
+    const invalidNumber = rows.find((row) => Number(form[row.key]?.nextNumber || 1) < 1);
+    if (invalidNumber) return 'Next number must be 1 or higher.';
+    return '';
+  };
   return (
     <BusinessSettingsFrame
       section="documentNumbering"
       tabId="documentNumbering"
-      title="Document Numbering"
+      title="Numbering & IDs"
       icon={Hash}
       description="Prepare future prefixes and next numbers for invoices, quotations, work orders, AMC, and payment receipts without changing live generation yet."
       onDirtyChange={onDirtyChange}
@@ -3162,42 +3179,116 @@ function DocumentNumberingSection({ onDirtyChange = null, embedded = false }) {
       resetLabel={embedded ? 'Reset Default' : 'Cancel / Revert'}
       resetMode={embedded ? 'defaults' : 'saved'}
       showActionsWhenClean={embedded}
+      validateBeforeSave={validateNumbering}
     >
       {({ form, setPath, canEdit, saving }) => {
-        const prefixes = rows.map(([key]) => form[key]?.prefix || '');
+        const prefixes = normalizedNumberingPrefixes(form);
         const hasDuplicate = new Set(prefixes).size !== prefixes.length;
+        const clampNextNumber = (value) => Math.max(1, Number.parseInt(value, 10) || 1);
+        const updateNextNumber = (key, value) => setPath(`${key}.nextNumber`, clampNextNumber(value));
         return (
-          <section className="surface admin-control-card p-5">
-            <div className="grid gap-3">
-              {rows.map(([key, label]) => {
-                const item = form[key] || {};
-                const preview = `${item.prefix || label.slice(0, 3).toUpperCase()}-${year}-${String(item.nextNumber || 1).padStart(4, '0')}`;
-                return (
-                  <div key={key} className="grid gap-3 rounded-card border border-white/10 bg-white/[0.035] p-3 lg:grid-cols-[1fr_140px_1fr]">
-                    <label>
-                      <span className="label">{label} prefix</span>
-                      <input className="input uppercase" maxLength={12} value={item.prefix || ''} disabled={!canEdit || saving} onChange={(event) => setPath(`${key}.prefix`, event.target.value.toUpperCase())} />
-                    </label>
-                    <label>
-                      <span className="label">Next number</span>
-                      <input className="input" type="number" min="1" value={item.nextNumber || 1} disabled={!canEdit || saving} onChange={(event) => setPath(`${key}.nextNumber`, event.target.value)} />
-                    </label>
-                    <div>
-                      <span className="label">Preview</span>
-                      <div className="grid min-h-12 place-items-center rounded-card border border-white/10 bg-slate-950/30 px-3 font-black text-sky-100">{preview}</div>
-                    </div>
+          <section className="documents-numbering-settings">
+            <div className="documents-numbering-layout">
+              <section className="surface admin-control-card documents-numbering-card">
+                <div className="documents-numbering-head">
+                  <div>
+                    <p className="documents-numbering-kicker">Admin only</p>
+                    <h2>Numbering & IDs</h2>
+                    <p>Manage document prefixes and running numbers for future generated records.</p>
                   </div>
-                );
-              })}
+                  <span className="documents-numbering-badge">Live preview</span>
+                </div>
+
+                {hasDuplicate ? <p className="documents-numbering-warning">Prefixes must be unique before saving.</p> : null}
+
+                <div className="documents-numbering-table" role="table" aria-label="Document numbering settings">
+                  <div className="documents-numbering-row documents-numbering-row-head" role="row">
+                    <span>Document Type</span>
+                    <span>Prefix</span>
+                    <span>Next Number</span>
+                    <span>Preview</span>
+                    <span>Actions</span>
+                  </div>
+                  {rows.map((row) => {
+                    const item = form[row.key] || {};
+                    const Icon = row.icon;
+                    const prefix = String(item.prefix || row.prefix).toUpperCase();
+                    const nextNumber = clampNextNumber(item.nextNumber || 1);
+                    const preview = `${prefix}-${year}-${String(nextNumber).padStart(4, '0')}`;
+                    const expanded = expandedRow === row.key;
+                    return (
+                      <div key={row.key} className={`documents-numbering-row ${expanded ? 'is-expanded' : ''}`} role="row">
+                        <div className="documents-numbering-type" role="cell" data-label="Document Type">
+                          <span className="documents-numbering-icon"><Icon className="h-4 w-4" /></span>
+                          <span>
+                            <strong>{row.label}</strong>
+                            <small>{row.helper}</small>
+                          </span>
+                        </div>
+                        <label className="documents-numbering-cell" role="cell" data-label="Prefix">
+                          <input
+                            className="input documents-numbering-prefix"
+                            maxLength={12}
+                            value={prefix}
+                            disabled={!canEdit || saving}
+                            onChange={(event) => setPath(`${row.key}.prefix`, event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))}
+                          />
+                        </label>
+                        <div className="documents-numbering-cell" role="cell" data-label="Next Number">
+                          <div className="documents-numbering-stepper">
+                            <button type="button" className="icon-button" disabled={!canEdit || saving || nextNumber <= 1} onClick={() => updateNextNumber(row.key, nextNumber - 1)} title={`Decrease ${row.label} number`}>
+                              <MinusCircle className="h-4 w-4" />
+                            </button>
+                            <input className="input" type="number" min="1" value={nextNumber} disabled={!canEdit || saving} onChange={(event) => updateNextNumber(row.key, event.target.value)} />
+                            <button type="button" className="icon-button" disabled={!canEdit || saving} onClick={() => updateNextNumber(row.key, nextNumber + 1)} title={`Increase ${row.label} number`}>
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="documents-numbering-preview" role="cell" data-label="Preview">{preview}</div>
+                        <div className="documents-numbering-actions" role="cell" data-label="Actions">
+                          <button type="button" className="icon-button documents-numbering-expand" onClick={() => setExpandedRow(expanded ? '' : row.key)} title={expanded ? 'Collapse details' : 'Expand details'}>
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
+                        {expanded ? (
+                          <div className="documents-numbering-expanded">
+                            <Info className="h-4 w-4" />
+                            <span>{row.label} IDs will use this pattern for new documents only. Existing generated records keep their current numbers.</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <details className="documents-numbering-advanced">
+                  <summary>
+                    <span>Advanced</span>
+                    <small>Yearly reset option</small>
+                  </summary>
+                  <label className="documents-numbering-reset-option">
+                    <span>
+                      <strong>Reset running numbers each year</strong>
+                      <small>Stored for future document generation migration. Keep off unless your numbering policy requires it.</small>
+                    </span>
+                    <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={Boolean(form.yearlyReset)} disabled={!canEdit || saving} onChange={(event) => setPath('yearlyReset', event.target.checked)} />
+                  </label>
+                </details>
+              </section>
+
+              <aside className="surface admin-control-card documents-numbering-helper">
+                <div className="documents-numbering-helper-icon"><Hash className="h-5 w-5" /></div>
+                <h3>What is Document Numbering?</h3>
+                <p>Document numbering helps maintain unique and organized records for all business documents.</p>
+                <div className="documents-numbering-example">INV-{year}-0001</div>
+                <div className="documents-numbering-breakdown">
+                  <span><strong>INV</strong><small>Prefix</small></span>
+                  <span><strong>{year}</strong><small>Year</small></span>
+                  <span><strong>0001</strong><small>Running Number</small></span>
+                </div>
+              </aside>
             </div>
-            <label className="mt-4 flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
-              <span>
-                <span className="block font-bold text-slate-100">Yearly reset option</span>
-                <span className="mt-1 block text-xs muted">Stored for future document generation migration.</span>
-              </span>
-              <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={Boolean(form.yearlyReset)} disabled={!canEdit || saving} onChange={(event) => setPath('yearlyReset', event.target.checked)} />
-            </label>
-            {hasDuplicate ? <p className="mt-3 rounded-card border border-amber-300/25 bg-amber-500/10 p-3 text-sm font-semibold text-amber-100">Prefixes must be unique before saving.</p> : null}
           </section>
         );
       }}
@@ -4527,51 +4618,9 @@ function PaymentSettingsSection({ onDirtyChange = null }) {
   );
 }
 
-function PdfTermsSettingsSection({ onDirtyChange = null, embedded = false }) {
-  const fields = [
-    ['invoiceTerms', 'Invoice terms'],
-    ['quotationTerms', 'Quotation terms'],
-    ['serviceReportNotes', 'Service report notes'],
-    ['amcTerms', 'AMC terms'],
-    ['warrantyNote', 'Warranty note'],
-    ['footerNote', 'Footer note']
-  ];
-  return (
-    <BusinessSettingsFrame
-      section="pdfTerms"
-      tabId="pdfTerms"
-      title="PDF Terms & Conditions"
-      icon={FileCog}
-      description="Store reusable terms for future PDFs. Existing generated PDFs remain unchanged."
-      onDirtyChange={onDirtyChange}
-      showHeader={!embedded}
-      saveLabel={embedded ? 'Save Terms' : 'Save Changes'}
-      resetLabel={embedded ? 'Reset Default' : 'Cancel / Revert'}
-      resetMode={embedded ? 'defaults' : 'saved'}
-      showActionsWhenClean={embedded}
-      previewLabel={embedded ? 'Preview in PDF' : ''}
-      previewMessage="PDF preview will use the saved terms and footer notes in future generated documents."
-    >
-      {({ form, setPath, canEdit, saving }) => (
-        <section className="surface admin-control-card p-5">
-          <div className="grid gap-4 lg:grid-cols-2">
-            {fields.map(([key, label]) => (
-              <label key={key}>
-                <span className="label">{label}</span>
-                <textarea className="input min-h-28" value={form[key] || ''} disabled={!canEdit || saving} onChange={(event) => setPath(key, event.target.value)} />
-              </label>
-            ))}
-          </div>
-        </section>
-      )}
-    </BusinessSettingsFrame>
-  );
-}
-
 const documentsPdfTabs = [
   { id: 'templates', label: 'Templates', icon: FileText },
-  { id: 'terms', label: 'Terms & Conditions', icon: FileCog },
-  { id: 'numbering', label: 'Numbering', icon: Hash }
+  { id: 'numbering', label: 'Numbering & IDs', icon: Hash }
 ];
 
 function DocumentsPdfsSection({ onDirtyChange = null }) {
@@ -4594,6 +4643,12 @@ function DocumentsPdfsSection({ onDirtyChange = null }) {
     if (activeDocumentTab !== 'templates') setDesignModeActive(false);
   }, [activeDocumentTab]);
 
+  useEffect(() => {
+    if (!documentsPdfTabs.some((tab) => tab.id === activeDocumentTab)) {
+      setActiveDocumentTab('templates');
+    }
+  }, [activeDocumentTab]);
+
   return (
     <div className={`grid gap-5 pb-32 ${designModeActive ? 'documents-pdfs-design-active' : ''}`} data-documents-pdfs-root>
       {!designModeActive ? <section className="surface admin-control-card p-5">
@@ -4604,7 +4659,7 @@ function DocumentsPdfsSection({ onDirtyChange = null }) {
               <span className="admin-premium-badge">DOCUMENT CONTROL</span>
             </div>
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Documents & PDFs</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage PDF templates, terms, footer notes, and document numbering from one clean workspace.</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage PDF templates, previews, sample downloads, and document numbering from one clean workspace.</p>
           </div>
           <div className="rounded-card border border-sky-300/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
             <div className="flex items-center gap-2 font-black">
@@ -4637,10 +4692,6 @@ function DocumentsPdfsSection({ onDirtyChange = null }) {
 
       {activeDocumentTab === 'templates' ? (
         <PdfTemplatesSection onDirtyChange={(dirty) => setChildDirty('templates', dirty)} onDesignModeChange={setDesignModeActive} />
-      ) : null}
-
-      {activeDocumentTab === 'terms' ? (
-        <PdfTermsSettingsSection embedded onDirtyChange={(dirty) => setChildDirty('terms', dirty)} />
       ) : null}
 
       {activeDocumentTab === 'numbering' ? (

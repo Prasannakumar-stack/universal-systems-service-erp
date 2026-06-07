@@ -519,6 +519,56 @@ function sectionHeightForRole(role = 'details', title = '') {
   return 88;
 }
 
+const rendererSectionFrames = {
+  invoice: [
+    [/header/i, { x: 28, y: 10, width: 539, height: 136, role: 'header' }],
+    [/invoice details/i, { x: 28, y: 154, width: 276, height: 132, role: 'details' }],
+    [/customer details/i, { x: 304, y: 154, width: 263, height: 132, role: 'customer' }],
+    [/service details/i, { x: 28, y: 294, width: 539, height: 108, role: 'details' }],
+    [/item table/i, { x: 28, y: 409, width: 539, height: 88, role: 'table' }],
+    [/amount summary/i, { x: 28, y: 498, width: 539, height: 104, role: 'amount' }],
+    [/work completion/i, { x: 28, y: 614, width: 539, height: 67, role: 'notice' }],
+    [/terms/i, { x: 28, y: 688, width: 539, height: 73, role: 'notice' }],
+    [/footer/i, { x: 28, y: 770, width: 539, height: 67, role: 'footer' }],
+    [/page break/i, { x: 28, y: 752, width: 539, height: 32, role: 'notice' }]
+  ],
+  quotation: [
+    [/header/i, { x: 34, y: 25, width: 527, height: 124, role: 'header' }],
+    [/quotation details/i, { x: 34, y: 158, width: 264, height: 80, role: 'details' }],
+    [/customer details/i, { x: 298, y: 158, width: 263, height: 80, role: 'customer' }],
+    [/service \/ device|service \/ product|service/i, { x: 34, y: 252, width: 270, height: 98, role: 'details' }],
+    [/problem/i, { x: 304, y: 252, width: 257, height: 98, role: 'notice' }],
+    [/item table/i, { x: 34, y: 370, width: 527, height: 92, role: 'table' }],
+    [/total summary/i, { x: 366, y: 466, width: 195, height: 50, role: 'amount' }],
+    [/validity/i, { x: 34, y: 520, width: 318, height: 32, role: 'notice' }],
+    [/terms/i, { x: 34, y: 560, width: 527, height: 96, role: 'notice' }],
+    [/whatsapp|approval|ready/i, { x: 34, y: 664, width: 527, height: 68, role: 'notice' }],
+    [/footer/i, { x: 34, y: 755, width: 527, height: 77, role: 'footer' }],
+    [/page break/i, { x: 34, y: 752, width: 527, height: 32, role: 'notice' }]
+  ]
+};
+
+function rendererFrameForSection(templateKey = '', title = '') {
+  const frames = rendererSectionFrames[templateKey] || [];
+  const match = frames.find(([pattern]) => pattern.test(String(title || '')));
+  return match ? { ...match[1] } : null;
+}
+
+function hasFramePatch(patch = {}) {
+  return ['x', 'y', 'width', 'height', 'pageId'].some((key) => Object.prototype.hasOwnProperty.call(patch || {}, key));
+}
+
+function sectionOverflowRisk(section = {}, content = {}, rows = [], columns = []) {
+  const height = Number(section.height || 0);
+  if (height <= 0) return false;
+  if (content.kind === 'table') return height < 48 + Math.max(1, rows.length) * 18;
+  if (content.kind === 'header') return height < 74;
+  if (content.kind === 'amount') return height < 62 + Math.max(0, rows.length - 2) * 13;
+  const bodyText = [content.title, content.body, ...rows.flat(), ...columns].join(' ');
+  const estimatedLines = Math.ceil(bodyText.length / Math.max(24, Math.floor(Number(section.width || 180) / 6)));
+  return height < 30 + estimatedLines * 13;
+}
+
 function sectionDefaultStyle(role = 'details', draft = {}) {
   const accentColor = getPath(draft, 'design.colors.accentColor', getPath(draft, 'header.accentColor', '#0f2a52'));
   const noticeBackground = getPath(draft, 'design.colors.noticeBackground', '#f1f7ff');
@@ -573,19 +623,20 @@ function buildDefaultTemplateSections(template = {}, sections = [], draft = {}) 
 
   orderedSections.forEach(({ section, index }) => {
     const id = sectionKey(section, index);
-    const role = designLayerRole(section.title);
     const title = cleanLayerTitle(getPath(draft, sectionOptionPath(section, index, 'title'), section.title));
-    const height = sectionHeightForRole(role, section.title);
-    const isHalf = role === 'customer' || role === 'details';
+    const rendererFrame = rendererFrameForSection(template.key, title || section.title);
+    const role = rendererFrame?.role || designLayerRole(section.title);
+    const height = rendererFrame?.height || sectionHeightForRole(role, section.title);
+    const isHalf = !rendererFrame && (role === 'customer' || role === 'details');
     if (!sectionVisible(section, draft)) {
       return;
     }
-    if (!isHalf) flushHalfRow();
-    ensurePage(height);
-    let x = 32;
-    let sectionY = y;
-    let width = builderCanvas.width - 64;
-    if (isHalf) {
+    if (!rendererFrame && !isHalf) flushHalfRow();
+    if (!rendererFrame) ensurePage(height);
+    let x = rendererFrame?.x ?? 32;
+    let sectionY = rendererFrame?.y ?? y;
+    let width = rendererFrame?.width ?? builderCanvas.width - 64;
+    if (!rendererFrame && isHalf) {
       if (!halfRow) {
         halfRow = { y, height };
         x = 32;
@@ -595,7 +646,7 @@ function buildDefaultTemplateSections(template = {}, sections = [], draft = {}) 
         halfRow.height = Math.max(halfRow.height, height);
       }
       width = 259;
-    } else if (role === 'amount') {
+    } else if (!rendererFrame && role === 'amount') {
       x = 304;
       width = 259;
     }
@@ -607,11 +658,13 @@ function buildDefaultTemplateSections(template = {}, sections = [], draft = {}) 
       name: title,
       title,
       role,
-      pageId: `page-${pageNumber}`,
+      pageId: rendererFrame?.pageId || `page-${pageNumber}`,
       x,
       y: sectionY,
       width,
       height,
+      rendererFrame: Boolean(rendererFrame),
+      layoutSource: rendererFrame ? 'renderer' : 'default',
       visible: true,
       enabled: true,
       locked: true,
@@ -622,14 +675,15 @@ function buildDefaultTemplateSections(template = {}, sections = [], draft = {}) 
       content: sectionPreviewContent(template.key, section, draft, template, index),
       style: sectionDefaultStyle(role, draft)
     }, output.length));
-    if (isHalf && x > 32) flushHalfRow();
-    if (!isHalf) y += height + 12;
+    if (!rendererFrame && isHalf && x > 32) flushHalfRow();
+    if (!rendererFrame && !isHalf) y += height + 12;
   });
   flushHalfRow();
   const maxBottom = output.reduce((max, section) => Math.max(max, Number(section.y || 0) + Number(section.height || 0)), 0);
   const minY = output.reduce((min, section) => Math.min(min, Number(section.y || 0)), 30);
   const availableHeight = builderCanvas.height - 58;
-  if (maxBottom > availableHeight && output.length) {
+  const usesRendererFrames = output.some((section) => section.rendererFrame === true);
+  if (!usesRendererFrames && maxBottom > availableHeight && output.length) {
     const scale = Math.max(0.72, Math.min(1, (availableHeight - 28) / Math.max(1, maxBottom - minY)));
     return output.map((section, index) => normalizeBuilderSection({
       ...section,
@@ -682,6 +736,8 @@ function normalizeBuilderSection(section = {}, index = 0) {
     printSafe: section.printSafe !== false,
     zIndex: clampBuilderNumber(section.zIndex, index + 1, 1, 999),
     alignment: section.alignment || style.alignment || 'left',
+    rendererFrame: section.rendererFrame === true,
+    layoutSource: section.layoutSource || (section.rendererFrame === true ? 'renderer' : 'default'),
     content,
     style
   };
@@ -693,9 +749,22 @@ function mergeTemplateSections(defaultSections = [], savedSections = []) {
   const merged = defaultSections.map((defaultSection, index) => {
     const saved = savedById.get(defaultSection.id) || savedById.get(defaultSection.sourceKey) || {};
     mergedIds.add(saved.id || defaultSection.id);
+    const preserveSavedFrame = saved.layoutSource === 'custom';
+    const rendererFrame = defaultSection.rendererFrame === true && !preserveSavedFrame
+      ? {
+          x: defaultSection.x,
+          y: defaultSection.y,
+          width: defaultSection.width,
+          height: defaultSection.height,
+          pageId: defaultSection.pageId,
+          rendererFrame: true,
+          layoutSource: 'renderer'
+        }
+      : {};
     return normalizeBuilderSection({
       ...defaultSection,
       ...saved,
+      ...rendererFrame,
       id: defaultSection.id,
       sourceKey: defaultSection.sourceKey,
       sourceIndex: defaultSection.sourceIndex,
@@ -1435,6 +1504,9 @@ function DesignModeWorkspace({
   restoring,
   onRestore,
   hasUnsavedDesignChanges,
+  previewUrl,
+  previewLoading,
+  previewError,
   onBack,
   onPreview,
   onDownload,
@@ -1534,6 +1606,8 @@ function DesignModeWorkspace({
   const selectedSectionLayer = selectedLayer?.kind === 'section' ? selectedLayer : null;
   const selectedSection = selectedSectionLayer?.sectionDesign || null;
   const currentPage = pages.find((page) => page.id === currentPageId) || pages[0] || { id: 'page-1', name: 'Page 1' };
+  const currentPageIndex = Math.max(0, pages.findIndex((page) => page.id === currentPage.id));
+  const referencePdfUrl = previewUrl ? `${previewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&page=${currentPageIndex + 1}` : '';
   const zoomScale = zoom === '125' ? 1.25 : zoom === '100' ? 1 : zoom === '75' ? 0.75 : zoom === 'fit-width' ? 1.1 : 0.88;
   const previewConfig = useMemo(() => mergeDesignStateForSave(draft, canvasDesign), [draft, canvasDesign]);
   const visiblePageSections = canvasSections
@@ -1614,9 +1688,12 @@ function DesignModeWorkspace({
       const nextSections = current.sections.map((section, index) => {
         if (section.id !== sectionId) return section;
         const patchValue = typeof patch === 'function' ? patch(section) : patch;
+        const frameEdited = hasFramePatch(patchValue);
         const merged = {
           ...section,
           ...patchValue,
+          layoutSource: frameEdited ? 'custom' : section.layoutSource,
+          rendererFrame: frameEdited ? false : section.rendererFrame,
           content: patchValue.content ? { ...(section.content || {}), ...patchValue.content } : section.content,
           style: patchValue.style ? { ...(section.style || {}), ...patchValue.style } : section.style
         };
@@ -1635,7 +1712,13 @@ function DesignModeWorkspace({
       const nextSections = current.sections.map((section, index) => {
         if (section.id !== sectionId) return section;
         const patchValue = typeof patch === 'function' ? patch(section) : patch;
-        return normalizeBuilderSection({ ...section, ...patchValue }, index);
+        const frameEdited = hasFramePatch(patchValue);
+        return normalizeBuilderSection({
+          ...section,
+          ...patchValue,
+          layoutSource: frameEdited ? 'custom' : section.layoutSource,
+          rendererFrame: frameEdited ? false : section.rendererFrame
+        }, index);
       });
       return {
         ...current,
@@ -1808,6 +1891,8 @@ function DesignModeWorkspace({
       sourceIndex: undefined,
       system: false,
       locked: false,
+      rendererFrame: false,
+      layoutSource: 'custom',
       name: `${section.name || section.title || 'Section'} Copy`,
       title: `${section.title || section.name || 'Section'} Copy`,
       pageId: section.pageId || currentPage.id || 'page-1',
@@ -2684,7 +2769,7 @@ function DesignModeWorkspace({
             <div className="pdf-paper-stage" style={{ width: builderCanvas.width * zoomScale, height: builderCanvas.height * zoomScale }}>
               <div
                 ref={paperRef}
-                className={`pdf-a4-page ${gridEnabled ? 'has-grid' : ''}`}
+                className={`pdf-a4-page ${gridEnabled ? 'has-grid' : ''} ${referencePdfUrl ? 'has-reference-layer' : ''}`}
                 style={{
                   width: builderCanvas.width,
                   height: builderCanvas.height,
@@ -2692,6 +2777,21 @@ function DesignModeWorkspace({
                 }}
                 onPointerDown={() => setSelectedLayerId('')}
               >
+                {referencePdfUrl ? (
+                  <>
+                    <iframe
+                      title={`${template.name} rendered PDF reference page ${currentPageIndex + 1}`}
+                      src={referencePdfUrl}
+                      className="pdf-canvas-reference"
+                    />
+                    <div className="pdf-canvas-reference-shield" aria-hidden="true" />
+                  </>
+                ) : (
+                  <div className="pdf-canvas-reference-empty">
+                    <FileText className="h-5 w-5" />
+                    <span>{previewLoading ? 'Loading rendered PDF reference...' : previewError || 'Rendered PDF reference is not available yet.'}</span>
+                  </div>
+                )}
                 {visiblePageSections.map((section) => {
                   const layer = sectionLayers.find((item) => item.id === section.id);
                   return (
@@ -2774,6 +2874,7 @@ function BuilderCanvasSection({ section, layer, selected, disabled, freeLayoutMo
   const content = section.content || {};
   const rows = Array.isArray(content.rows) ? content.rows : [];
   const columns = Array.isArray(content.columns) ? content.columns : [];
+  const overflowRisk = sectionOverflowRisk(section, content, rows, columns);
   return (
     <div
       className={`pdf-builder-section is-${content.kind || section.role || 'details'} ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}`}
@@ -2826,6 +2927,7 @@ function BuilderCanvasSection({ section, layer, selected, disabled, freeLayoutMo
       ) : (
         <div className="pdf-section-body-preview">{content.body || 'Section content preview'}</div>
       )}
+      {overflowRisk ? <span className="pdf-section-overflow-warning">Content may overflow</span> : null}
       {selected && !locked ? ['nw', 'ne', 'sw', 'se'].map((handle) => (
         <button
           key={handle}
@@ -4020,6 +4122,9 @@ function StructuredTemplateEditor({
           restoring={restoring}
           onRestore={onRestore}
           hasUnsavedDesignChanges={designDraftDirty}
+          previewUrl={previewUrl}
+          previewLoading={previewLoading}
+          previewError={previewError}
           onBack={switchToStructuredMode}
           onPreview={onPreview}
           onDownload={onDownload}

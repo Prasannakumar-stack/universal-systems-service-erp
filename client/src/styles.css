@@ -4779,6 +4779,444 @@ button:disabled {
     backdrop-filter: blur(16px);
   }
 
+  .documents-numbering-settings {
+    min-width: 0;
+  }
+
+  .documents-numbering-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem);
+    align-items: start;
+    gap: 1rem;
+  }
+
+  .documents-numbering-card,
+  .documents-numbering-helper {
+    padding: 1rem;
+  }
+
+  .documents-numbering-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .documents-numbering-kicker,
+  .documents-numbering-badge {
+    color: var(--brand);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .documents-numbering-head h2 {
+    margin-top: 0.2rem;
+    color: #f8fafc;
+    font-size: 1.28rem;
+    font-weight: 950;
+  }
+
+  .documents-numbering-head p,
+  .documents-numbering-helper p {
+    margin-top: 0.35rem;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.55;
+  }
+
+  .documents-numbering-badge {
+    display: inline-flex;
+    min-height: 1.8rem;
+    align-items: center;
+    border: 1px solid rgba(125, 211, 252, 0.22);
+    border-radius: 999px;
+    background: rgba(14, 165, 233, 0.1);
+    padding: 0.38rem 0.6rem;
+    color: #bae6fd;
+    white-space: nowrap;
+  }
+
+  .documents-numbering-warning {
+    margin-bottom: 0.75rem;
+    border: 1px solid rgba(245, 158, 11, 0.28);
+    border-radius: 12px;
+    background: rgba(245, 158, 11, 0.1);
+    padding: 0.65rem 0.75rem;
+    color: #fde68a;
+    font-size: 0.78rem;
+    font-weight: 850;
+  }
+
+  .documents-numbering-table {
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 16px;
+    background: rgba(2, 8, 23, 0.18);
+  }
+
+  .documents-numbering-row {
+    display: grid;
+    grid-template-columns: minmax(15rem, 1.45fr) minmax(7.5rem, 0.62fr) minmax(11rem, 0.9fr) minmax(9.5rem, 0.78fr) 4.5rem;
+    align-items: center;
+    gap: 0.75rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.13);
+    padding: 0.72rem 0.8rem;
+  }
+
+  .documents-numbering-row:first-child {
+    border-top: 0;
+  }
+
+  .documents-numbering-row-head {
+    min-height: 2.35rem;
+    background: rgba(15, 42, 82, 0.46);
+    color: #bfdbfe;
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .documents-numbering-row:not(.documents-numbering-row-head) {
+    background: rgba(255, 255, 255, 0.025);
+  }
+
+  .documents-numbering-row.is-expanded {
+    background: rgba(14, 165, 233, 0.07);
+  }
+
+  .documents-numbering-type {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.7rem;
+  }
+
+  .documents-numbering-icon,
+  .documents-numbering-helper-icon {
+    display: inline-grid;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid rgba(125, 211, 252, 0.2);
+    border-radius: 12px;
+    background:
+      radial-gradient(circle at 35% 25%, rgba(34, 211, 238, 0.2), transparent 55%),
+      rgba(14, 165, 233, 0.1);
+    color: #7dd3fc;
+    box-shadow: 0 10px 28px rgba(14, 165, 233, 0.12);
+  }
+
+  .documents-numbering-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .documents-numbering-type strong {
+    display: block;
+    overflow: hidden;
+    color: #f8fafc;
+    font-size: 0.86rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .documents-numbering-type small,
+  .documents-numbering-expanded,
+  .documents-numbering-advanced small,
+  .documents-numbering-reset-option small {
+    color: var(--muted);
+    font-size: 0.69rem;
+    font-weight: 760;
+    line-height: 1.4;
+  }
+
+  .documents-numbering-cell,
+  .documents-numbering-actions {
+    min-width: 0;
+  }
+
+  .documents-numbering-prefix {
+    text-transform: uppercase;
+  }
+
+  .documents-numbering-stepper {
+    display: grid;
+    grid-template-columns: 2.15rem minmax(4.5rem, 1fr) 2.15rem;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .documents-numbering-stepper .input {
+    min-height: 2.25rem;
+    padding-right: 0.35rem;
+    padding-left: 0.35rem;
+    text-align: center;
+  }
+
+  .documents-numbering-preview,
+  .documents-numbering-example {
+    display: grid;
+    min-height: 2.25rem;
+    place-items: center;
+    border: 1px solid rgba(125, 211, 252, 0.18);
+    border-radius: 12px;
+    background:
+      linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(37, 99, 235, 0.08)),
+      rgba(2, 8, 23, 0.32);
+    color: #e0f2fe;
+    font-size: 0.82rem;
+    font-weight: 950;
+    white-space: nowrap;
+  }
+
+  .documents-numbering-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .documents-numbering-expand svg {
+    transition: transform 0.18s ease;
+  }
+
+  .documents-numbering-row.is-expanded .documents-numbering-expand svg {
+    transform: rotate(90deg);
+  }
+
+  .documents-numbering-expanded {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid rgba(125, 211, 252, 0.14);
+    border-radius: 12px;
+    background: rgba(8, 47, 73, 0.18);
+    padding: 0.6rem 0.7rem;
+  }
+
+  .documents-numbering-advanced {
+    margin-top: 0.85rem;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.028);
+  }
+
+  .documents-numbering-advanced summary {
+    display: flex;
+    cursor: pointer;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 0.8rem;
+    color: #e2e8f0;
+    font-size: 0.82rem;
+    font-weight: 950;
+    list-style: none;
+  }
+
+  .documents-numbering-advanced summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .documents-numbering-reset-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    padding: 0.8rem;
+  }
+
+  .documents-numbering-reset-option strong {
+    display: block;
+    color: #f8fafc;
+    font-size: 0.82rem;
+    font-weight: 900;
+  }
+
+  .documents-numbering-helper {
+    position: sticky;
+    top: 1rem;
+  }
+
+  .documents-numbering-helper-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .documents-numbering-helper h3 {
+    color: #f8fafc;
+    font-size: 1.05rem;
+    font-weight: 950;
+  }
+
+  .documents-numbering-example {
+    margin-top: 1rem;
+    min-height: 2.7rem;
+    font-size: 0.95rem;
+  }
+
+  .documents-numbering-breakdown {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+  }
+
+  .documents-numbering-breakdown span {
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.035);
+    padding: 0.55rem 0.35rem;
+    text-align: center;
+  }
+
+  .documents-numbering-breakdown strong,
+  .documents-numbering-breakdown small {
+    display: block;
+  }
+
+  .documents-numbering-breakdown strong {
+    color: #f8fafc;
+    font-size: 0.82rem;
+    font-weight: 950;
+  }
+
+  .documents-numbering-breakdown small {
+    margin-top: 0.2rem;
+    color: var(--muted);
+    font-size: 0.62rem;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 1180px) {
+    .documents-numbering-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .documents-numbering-helper {
+      position: static;
+    }
+  }
+
+  @media (max-width: 860px) {
+    .documents-numbering-row-head {
+      display: none;
+    }
+
+    .documents-numbering-table {
+      display: grid;
+      gap: 0.7rem;
+      border: 0;
+      background: transparent;
+    }
+
+    .documents-numbering-row {
+      grid-template-columns: 1fr;
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.035);
+    }
+
+    .documents-numbering-cell,
+    .documents-numbering-preview,
+    .documents-numbering-actions {
+      display: grid;
+      grid-template-columns: minmax(7rem, 0.35fr) minmax(0, 1fr);
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .documents-numbering-cell::before,
+    .documents-numbering-preview::before,
+    .documents-numbering-actions::before {
+      content: attr(data-label);
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 950;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .documents-numbering-actions {
+      justify-content: stretch;
+    }
+
+    .documents-numbering-actions .icon-button {
+      justify-self: end;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .documents-numbering-card,
+    .documents-numbering-helper {
+      padding: 0.85rem;
+    }
+
+    .documents-numbering-head {
+      flex-direction: column;
+    }
+
+    .documents-numbering-stepper {
+      grid-template-columns: 2rem minmax(3.8rem, 1fr) 2rem;
+    }
+
+    .documents-numbering-breakdown {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .theme-light .documents-numbering-head h2,
+  .theme-light .documents-numbering-type strong,
+  .theme-light .documents-numbering-helper h3,
+  .theme-light .documents-numbering-reset-option strong,
+  .theme-light .documents-numbering-breakdown strong {
+    color: #0f172a;
+  }
+
+  .theme-light .documents-numbering-table {
+    border-color: rgba(15, 23, 42, 0.12);
+    background: rgba(248, 250, 252, 0.72);
+  }
+
+  .theme-light .documents-numbering-row-head {
+    background: rgba(219, 234, 254, 0.85);
+    color: #1d4ed8;
+  }
+
+  .theme-light .documents-numbering-row:not(.documents-numbering-row-head),
+  .theme-light .documents-numbering-advanced,
+  .theme-light .documents-numbering-breakdown span {
+    border-color: rgba(15, 23, 42, 0.1);
+    background: rgba(255, 255, 255, 0.78);
+  }
+
+  .theme-light .documents-numbering-preview,
+  .theme-light .documents-numbering-example {
+    border-color: rgba(14, 165, 233, 0.22);
+    background: linear-gradient(135deg, rgba(224, 242, 254, 0.95), rgba(239, 246, 255, 0.95));
+    color: #075985;
+  }
+
+  .theme-light .documents-numbering-badge,
+  .theme-light .documents-numbering-expanded {
+    border-color: rgba(14, 165, 233, 0.22);
+    background: rgba(224, 242, 254, 0.78);
+    color: #0369a1;
+  }
+
+  .theme-light .documents-numbering-warning {
+    border-color: rgba(217, 119, 6, 0.26);
+    background: rgba(254, 243, 199, 0.8);
+    color: #92400e;
+  }
+
   .settings-overview-toolbar {
     display: grid;
     grid-template-columns: minmax(0, 28rem) auto;
@@ -8994,11 +9432,55 @@ button:disabled {
     box-shadow: 0 28px 70px rgba(0, 8, 22, 0.45);
   }
 
+  .pdf-a4-page.has-reference-layer {
+    background: #ffffff;
+  }
+
   .pdf-a4-page.has-grid {
     background-image:
       linear-gradient(rgba(14, 165, 233, 0.09) 1px, transparent 1px),
       linear-gradient(90deg, rgba(14, 165, 233, 0.09) 1px, transparent 1px);
     background-size: 8px 8px;
+  }
+
+  .pdf-canvas-reference,
+  .pdf-canvas-reference-shield,
+  .pdf-canvas-reference-empty {
+    position: absolute;
+    inset: 0;
+  }
+
+  .pdf-canvas-reference {
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #ffffff;
+    pointer-events: none;
+  }
+
+  .pdf-canvas-reference-shield {
+    z-index: 1;
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.01), rgba(255, 255, 255, 0.01));
+    pointer-events: none;
+  }
+
+  .pdf-canvas-reference-empty {
+    z-index: 0;
+    display: grid;
+    place-items: center;
+    gap: 0.5rem;
+    background: #ffffff;
+    color: #64748b;
+    font-size: 0.78rem;
+    font-weight: 850;
+    text-align: center;
+  }
+
+  .pdf-canvas-reference-empty span {
+    max-width: 18rem;
+    overflow-wrap: anywhere;
   }
 
   .pdf-builder-section,
@@ -9023,6 +9505,28 @@ button:disabled {
     cursor: grab;
     text-align: left;
     user-select: none;
+  }
+
+  .pdf-a4-page.has-reference-layer .pdf-builder-section {
+    background: rgba(14, 165, 233, 0.045) !important;
+    border-color: rgba(14, 165, 233, 0.58) !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+  }
+
+  .pdf-a4-page.has-reference-layer .pdf-builder-section.is-selected {
+    background: rgba(255, 255, 255, 0.72) !important;
+  }
+
+  .pdf-a4-page.has-reference-layer .pdf-builder-section:not(.is-selected) > :not(.pdf-section-topline):not(.pdf-section-overflow-warning) {
+    opacity: 0.22;
+  }
+
+  .pdf-a4-page.has-reference-layer .pdf-section-title,
+  .pdf-a4-page.has-reference-layer .pdf-section-lock {
+    border: 1px solid rgba(15, 42, 82, 0.12);
+    background: rgba(255, 255, 255, 0.82);
+    padding: 0.18rem 0.34rem;
+    backdrop-filter: blur(4px);
   }
 
   .pdf-builder-section.is-locked {
@@ -9197,6 +9701,26 @@ button:disabled {
     font-weight: 850;
     line-height: 1.15;
     white-space: normal;
+  }
+
+  .pdf-section-overflow-warning {
+    position: absolute;
+    right: 0.35rem;
+    bottom: 0.32rem;
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    max-width: calc(100% - 0.7rem);
+    border: 1px solid rgba(245, 158, 11, 0.34);
+    border-radius: 999px;
+    background: rgba(255, 251, 235, 0.92);
+    padding: 0.12rem 0.36rem;
+    color: #92400e;
+    font-size: 0.5rem;
+    font-weight: 950;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
   }
 
   .pdf-builder-element {
@@ -9409,6 +9933,7 @@ button:disabled {
     font-weight: 950;
     text-align: right;
     text-transform: uppercase;
+    z-index: 4;
   }
 
   .pdf-canvas-empty {
