@@ -4,6 +4,7 @@ import { publicUser } from '../auth.js';
 import { SUPPORTED_ROLES, assertPermission, normalizeRole } from '../permissions.js';
 import { appError, clean, required } from '../utils/http.js';
 import { paginatedPayload, paginationMeta, parsePagination, searchRegex, withId } from '../utils/pagination.js';
+import { validatePasswordAgainstPolicy } from '../services/securitySettingsService.js';
 
 const allowedRoles = SUPPORTED_ROLES;
 
@@ -64,7 +65,7 @@ export async function create(req, res) {
     const role = normalizeRole(clean(req.body.role));
     const password = String(req.body.password || '');
     if (!allowedRoles.includes(role)) throw appError('Role is not supported');
-    if (password.length < 6) throw appError('Password must be at least 6 characters');
+    await validatePasswordAgainstPolicy(password);
     await ensureUniqueIdentity({ username, email });
     const user = await User.create({
       username,
@@ -73,6 +74,7 @@ export async function create(req, res) {
       role,
       phone: clean(req.body.phone),
       email,
+      passwordChangedAt: new Date(),
       active: activeFromBody(req.body) ?? true
     });
     res.status(201).json({ success: true, user: safeUser(user), message: 'User created' });
@@ -141,10 +143,13 @@ export async function updateStatus(req, res) {
 export async function resetPassword(req, res) {
   try {
     const password = String(req.body.password || '');
-    if (password.length < 6) throw appError('Password must be at least 6 characters');
+    await validatePasswordAgainstPolicy(password);
     const user = await User.findById(req.params.id);
     if (!user) throw appError('User not found', 404);
     user.passwordHash = await bcrypt.hash(password, 10);
+    user.passwordChangedAt = new Date();
+    user.forcePasswordReset = false;
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
     await user.save();
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (error) {

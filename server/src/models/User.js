@@ -13,6 +13,12 @@ const userSchema = new mongoose.Schema(
     lastLoginAt: { type: Date, default: null },
     lastActivityAt: { type: Date, default: null },
     lastActivityType: { type: String, trim: true, default: '' },
+    failedLoginAttempts: { type: Number, min: 0, default: 0 },
+    lockUntil: { type: Date, default: null },
+    lastFailedLoginAt: { type: Date, default: null },
+    tokenVersion: { type: Number, min: 0, default: 0 },
+    forcePasswordReset: { type: Boolean, default: false },
+    passwordChangedAt: { type: Date, default: null },
     active: { type: Boolean, default: true }
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }

@@ -6,6 +6,7 @@ import { create, download, getStorage, remove, restore, updateStorage, validateE
 import { getBusiness, systemInfo, updateBusinessSection } from '../controllers/businessSettingsController.js';
 import { deleteLogo, getProfile, updateProfile, uploadLogo } from '../controllers/companyProfileController.js';
 import { adminSettings, resetSettings, updateSettings, uploadAsset } from '../controllers/publicWebsiteSettingsController.js';
+import { forceStaffPasswordReset, getSecurity, logoutAll, resetAllSessions, securityEvents, updateSecurity } from '../controllers/securitySettingsController.js';
 import { asyncHandler } from '../utils/http.js';
 
 const router = Router();
@@ -24,6 +25,12 @@ router.delete('/backups/:id', requireRole('admin', 'super_admin'), requirePermis
 router.post('/backups/restore', requireRole('admin', 'super_admin'), requirePermission('manage_backup_storage'), backupUpload.single('backup'), handleUploadErrors, asyncHandler(restore));
 router.get('/business', requirePermission('view_settings'), asyncHandler(getBusiness));
 router.patch('/business/:section', requireRole('admin'), requirePermission('edit_settings'), asyncHandler(updateBusinessSection));
+router.get('/security', requireRole('admin'), requirePermission('edit_settings'), asyncHandler(getSecurity));
+router.put('/security', requireRole('admin'), requirePermission('edit_settings'), asyncHandler(updateSecurity));
+router.get('/security/events', requireRole('admin'), requirePermission('view_audit_logs'), asyncHandler(securityEvents));
+router.post('/security/logout-all-users', requireRole('admin'), requirePermission('edit_settings'), asyncHandler(logoutAll));
+router.post('/security/reset-sessions', requireRole('admin'), requirePermission('edit_settings'), asyncHandler(resetAllSessions));
+router.post('/security/force-password-reset-staff', requireRole('admin'), requirePermission('edit_settings'), asyncHandler(forceStaffPasswordReset));
 router.get('/system-info', requireRole('admin'), requirePermission('view_system_information'), asyncHandler(systemInfo));
 router.get('/public-website', requirePermission('view_settings'), asyncHandler(adminSettings));
 router.patch('/public-website', requireRole('admin'), requirePermission('manage_public_website_settings'), asyncHandler(updateSettings));

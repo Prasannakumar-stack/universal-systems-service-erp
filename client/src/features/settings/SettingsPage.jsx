@@ -157,6 +157,7 @@ import {
   MinusCircle,
   Palette,
   Eye,
+  EyeOff,
   FileCog,
   Globe2,
   Hash,
@@ -1483,6 +1484,42 @@ function CompanyProfileSection({ onDirtyChange = null }) {
     push('Phone number copied to WhatsApp field', 'info');
   }
 
+  async function copyBusinessDetails() {
+    const details = [
+      ['Company name', form?.name],
+      ['Phone', form?.phone],
+      ['Email', form?.email],
+      ['Address', form?.address]
+    ]
+      .filter(([, value]) => String(value || '').trim())
+      .map(([label, value]) => `${label}: ${String(value).trim()}`)
+      .join('\n');
+
+    if (!details) {
+      push('No business details to copy', 'error');
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(details);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = details;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      }
+      push('Business details copied.', 'info');
+    } catch {
+      push('Copy is not available in this browser session.', 'error');
+    }
+  }
+
   function validateForm() {
     if (!companyNameReady) return 'Company name is required.';
     if (!emailValid) return 'Enter a valid email address.';
@@ -1595,7 +1632,13 @@ function CompanyProfileSection({ onDirtyChange = null }) {
               <p>This identity feeds PDF headers, invoices, quotations, public contact details, and admin defaults.</p>
             </div>
           </div>
-          <span className="company-profile-status-pill">{dirty ? 'Unsaved changes' : 'Saved'}</span>
+          <div className="company-profile-head-actions">
+            <button type="button" className="company-profile-copy-button" onClick={copyBusinessDetails}>
+              <Copy className="h-4 w-4" />
+              Copy business details
+            </button>
+            <span className="company-profile-status-pill">{dirty ? 'Unsaved changes' : 'Saved'}</span>
+          </div>
         </div>
 
         <div className="company-profile-form-stack">
@@ -1822,17 +1865,85 @@ function CompanyProfileSection({ onDirtyChange = null }) {
 function AdminProfileSection({ onDirtyChange = null }) {
   const { request, user, setUser } = useAuth();
   const { push } = useToast();
-  const [form, setForm] = useState({ name: user?.name || '', username: user?.username || '', email: user?.email || '', phone: user?.phone || '', avatarUrl: user?.avatarUrl || '' });
+  const profileBaseline = useMemo(() => ({
+    name: user?.name || '',
+    username: user?.username || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
+    avatarUrl: user?.avatarUrl || ''
+  }), [user?.name, user?.username, user?.email, user?.phone, user?.avatarUrl]);
+  const [form, setForm] = useState(profileBaseline);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [passwordVisible, setPasswordVisible] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [confirmRemoveAvatar, setConfirmRemoveAvatar] = useState(false);
   const { data: activityData, loading: activityLoading, reload: reloadActivity } = useResource(() => request('/auth/profile/activity').catch(() => ({ activity: [] })), [request]);
-  const dirty = stableJson(form) !== stableJson({ name: user?.name || '', username: user?.username || '', email: user?.email || '', phone: user?.phone || '', avatarUrl: user?.avatarUrl || '' });
+  const dirty = stableJson(form) !== stableJson(profileBaseline);
+  const emailValid = !form.email?.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  const profileValidation = !form.name?.trim()
+    ? 'Admin name is required.'
+    : !form.username?.trim()
+      ? 'Username is required.'
+      : !emailValid
+        ? 'Enter a valid email address.'
+        : '';
+  const canSaveProfile = dirty && !saving && !profileValidation;
+  const passwordRules = {
+    min: passwordForm.newPassword.length >= 6,
+    letters: /[A-Za-z]/.test(passwordForm.newPassword),
+    numbers: /\d/.test(passwordForm.newPassword),
+    symbol: /[^A-Za-z0-9]/.test(passwordForm.newPassword)
+  };
+  const passwordScore = Object.values(passwordRules).filter(Boolean).length;
+  const passwordStrength = passwordScore >= 4 ? 'Strong' : passwordScore >= 3 ? 'Good' : passwordScore >= 2 ? 'Fair' : passwordForm.newPassword ? 'Weak' : 'Not started';
+  const passwordTouched = Boolean(passwordForm.currentPassword || passwordForm.newPassword || passwordForm.confirmPassword);
+  const passwordValidation = !passwordTouched
+    ? ''
+    : !passwordForm.currentPassword
+      ? 'Current password is required when changing password.'
+      : passwordForm.newPassword.length < 6
+        ? 'New password must be at least 6 characters.'
+        : passwordForm.newPassword !== passwordForm.confirmPassword
+          ? 'Confirm password must match the new password.'
+          : '';
+  const canUpdatePassword = passwordTouched && !passwordValidation && !saving;
+  const profileInitial = String(form.name || form.username || 'A').trim().slice(0, 1).toUpperCase() || 'A';
+  const roleText = roleLabel(user?.role || 'admin') || titleCase(user?.role || 'admin');
+  const accountStatus = user?.active === false ? 'Inactive' : 'Active';
+  const activityItems = useMemo(() => {
+    const items = Array.isArray(activityData?.activity) ? activityData.activity : [];
+    return items.map((item, index) => {
+      const action = String(item.action || item.type || item.title || 'activity');
+      const module = String(item.module || item.section || 'system');
+      const message = String(item.message || item.description || '');
+      const haystack = `${action} ${module} ${message}`.toLowerCase();
+      let meta = null;
+      if (haystack.includes('login')) meta = { title: 'Login', module: 'Auth', icon: Activity };
+      else if (haystack.includes('pdf') && (haystack.includes('reset') || haystack.includes('template'))) meta = { title: 'PDF Template Reset', module: 'PDF Templates', icon: FileCog };
+      else if (haystack.includes('backup') && (haystack.includes('created') || haystack.includes('create'))) meta = { title: 'Backup Created', module: 'Backup', icon: DatabaseBackup };
+      else if (haystack.includes('customer') && haystack.includes('type')) meta = { title: 'Customer Type Changed', module: 'Customers', icon: Users };
+      else if (haystack.includes('payment')) meta = { title: 'Payment Recorded', module: 'Payments', icon: CreditCard };
+      else if (haystack.includes('invoice')) meta = { title: 'Invoice Generated', module: 'Invoices', icon: ReceiptText };
+      if (!meta) return null;
+      return {
+        id: item.id || item._id || `${action}-${item.createdAt || index}`,
+        title: meta.title,
+        module: item.module ? titleCase(item.module) : meta.module,
+        date: item.createdAt ? formatDate(item.createdAt) : 'Not available',
+        icon: meta.icon
+      };
+    }).filter(Boolean).slice(0, 6);
+  }, [activityData?.activity]);
+  const latestActivityText = activityItems[0]
+    ? `${activityItems[0].title} - ${activityItems[0].date}`
+    : user?.lastActivityAt
+      ? `${titleCase(user.lastActivityType || 'Activity')} - ${formatDate(user.lastActivityAt)}`
+      : 'Not recorded yet';
 
   useEffect(() => {
-    setForm({ name: user?.name || '', username: user?.username || '', email: user?.email || '', phone: user?.phone || '', avatarUrl: user?.avatarUrl || '' });
-  }, [user?.name, user?.username, user?.email, user?.phone, user?.avatarUrl]);
+    setForm(profileBaseline);
+  }, [profileBaseline]);
 
   useEffect(() => {
     onDirtyChange?.(dirty || Boolean(passwordForm.currentPassword || passwordForm.newPassword || passwordForm.confirmPassword));
@@ -1844,8 +1955,26 @@ function AdminProfileSection({ onDirtyChange = null }) {
     localStorage.setItem('us_user', JSON.stringify(result.user));
   }
 
+  function updateProfileField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updatePhone(value) {
+    updateProfileField('phone', String(value || '').replace(/[^0-9+\-()\s/,]/g, '').slice(0, 120));
+  }
+
+  function revertProfile() {
+    if (saving) return;
+    setForm(profileBaseline);
+  }
+
   async function saveProfile(event) {
-    event.preventDefault();
+    event?.preventDefault?.();
+    if (profileValidation) {
+      push(profileValidation, 'error');
+      return;
+    }
+    if (!dirty) return;
     setSaving(true);
     try {
       const result = await request('/auth/profile', {
@@ -1859,7 +1988,7 @@ function AdminProfileSection({ onDirtyChange = null }) {
       });
       syncUser(result);
       push(result.message || 'Profile updated');
-      reloadActivity({ silent: true });
+      await reloadActivity({ silent: true });
     } catch (err) {
       push(err.message, 'error');
     } finally {
@@ -1869,24 +1998,24 @@ function AdminProfileSection({ onDirtyChange = null }) {
 
   async function updatePassword(event) {
     event.preventDefault();
-    if (!passwordForm.newPassword || !passwordForm.confirmPassword) {
-      push('New password and confirmation are required', 'error');
+    if (!passwordTouched) {
+      push('Enter a new password before updating.', 'error');
       return;
     }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      push('New password and confirmation must match', 'error');
+    if (passwordValidation) {
+      push(passwordValidation, 'error');
       return;
     }
     setSaving(true);
     try {
       const result = await request('/auth/profile', {
         method: 'PATCH',
-          body: JSON.stringify({ currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword })
+        body: JSON.stringify({ currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword })
       });
       syncUser(result);
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
       push(result.message || 'Password updated');
-      reloadActivity({ silent: true });
+      await reloadActivity({ silent: true });
     } catch (err) {
       push(err.message, 'error');
     } finally {
@@ -1894,8 +2023,24 @@ function AdminProfileSection({ onDirtyChange = null }) {
     }
   }
 
+  function validateAvatarFile(file) {
+    if (!file) return '';
+    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    const allowedExts = ['.jpg', '.jpeg', '.png', '.webp'];
+    const name = String(file.name || '').toLowerCase();
+    const extOk = allowedExts.some((ext) => name.endsWith(ext));
+    if (!allowedTypes.has(file.type) && !extOk) return 'Only JPG, PNG, or WEBP profile photos are allowed.';
+    if (file.size > 5 * 1024 * 1024) return 'Profile photo must be 5 MB or less.';
+    return '';
+  }
+
   async function uploadAvatar(file) {
     if (!file) return;
+    const validationMessage = validateAvatarFile(file);
+    if (validationMessage) {
+      push(validationMessage, 'error');
+      return;
+    }
     const body = new FormData();
     body.append('avatar', file);
     setUploading(true);
@@ -1903,7 +2048,7 @@ function AdminProfileSection({ onDirtyChange = null }) {
       const result = await request('/auth/profile/avatar', { method: 'POST', body });
       syncUser(result);
       push(result.message || 'Profile photo updated');
-      reloadActivity({ silent: true });
+      await reloadActivity({ silent: true });
     } catch (err) {
       push(err.message, 'error');
     } finally {
@@ -1918,7 +2063,7 @@ function AdminProfileSection({ onDirtyChange = null }) {
       syncUser(result);
       setConfirmRemoveAvatar(false);
       push(result.message || 'Profile photo removed');
-      reloadActivity({ silent: true });
+      await reloadActivity({ silent: true });
     } catch (err) {
       push(err.message, 'error');
     } finally {
@@ -1927,84 +2072,182 @@ function AdminProfileSection({ onDirtyChange = null }) {
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section className="surface admin-control-card p-5">
-        <div className="flex items-start gap-3">
-          <div className="admin-control-icon"><UserRound className="h-5 w-5" /></div>
-          <div>
-            <h2 className="text-2xl font-black">Admin Profile</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage your admin account details, avatar, and password.</p>
-          </div>
+    <div className="admin-profile-settings" data-admin-profile-root>
+      <section className="admin-profile-summary">
+        <div className="admin-profile-summary-item">
+          <CheckCircle2 className="h-4 w-4" />
+          <span>Admin Account</span>
+          <strong>{accountStatus}</strong>
         </div>
-        <form className="mt-6 grid gap-4 lg:grid-cols-2" onSubmit={saveProfile}>
-          <label>
-            <span className="label">Admin name <RequiredMark /></span>
-            <input className="input" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
-          </label>
-          <label>
-            <span className="label">Username <RequiredMark /></span>
-            <input className="input" value={form.username} onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))} required />
-          </label>
-          <label>
-            <span className="label">Email</span>
-            <input className="input" type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} />
-          </label>
-          <label>
-            <span className="label">Phone</span>
-            <input className="input" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} />
-          </label>
-          <div className="flex flex-col-reverse gap-2 lg:col-span-2 sm:flex-row sm:justify-end">
-            <button type="button" className="btn btn-secondary" disabled={!dirty || saving} onClick={() => setForm({ name: user?.name || '', username: user?.username || '', email: user?.email || '', phone: user?.phone || '', avatarUrl: user?.avatarUrl || '' })}>Revert</button>
-            <button className="btn btn-primary" disabled={!dirty || saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
+        <div className="admin-profile-summary-item">
+          <ShieldCheck className="h-4 w-4" />
+          <span>Role</span>
+          <strong>{roleText}</strong>
+        </div>
+        <div className="admin-profile-summary-item">
+          <CalendarClock className="h-4 w-4" />
+          <span>Last Login</span>
+          <strong>{user?.lastLoginAt ? formatDate(user.lastLoginAt) : 'Not recorded yet'}</strong>
+        </div>
+        <div className="admin-profile-summary-item admin-profile-summary-wide">
+          <Activity className="h-4 w-4" />
+          <span>Last Activity</span>
+          <strong title={latestActivityText}>{latestActivityText}</strong>
+        </div>
+        <div className="admin-profile-summary-item">
+          <UserRound className="h-4 w-4" />
+          <span>Username</span>
+          <strong>{form.username || 'Not available'}</strong>
+        </div>
+      </section>
+
+      <section className="admin-profile-card admin-profile-main">
+        <div className="admin-profile-section-head">
+          <div className="admin-profile-title">
+            <div className="admin-profile-icon"><UserRound className="h-5 w-5" /></div>
+            <div className="min-w-0">
+              <h2>Admin Profile</h2>
+              <p>Manage the admin identity used for access, audit history, and internal account ownership.</p>
+            </div>
           </div>
+          <span className="admin-profile-status-pill">{dirty ? 'Unsaved changes' : 'Saved'}</span>
+        </div>
+
+        <form className="admin-profile-form" onSubmit={saveProfile}>
+          <div className="admin-profile-field-grid">
+            <label className="admin-profile-field">
+              <span>Admin name <RequiredMark /></span>
+              <input className="input" value={form.name} placeholder="Admin full name" onChange={(event) => updateProfileField('name', event.target.value)} required />
+              <small>Shown in audit records and internal activity notes.</small>
+            </label>
+            <label className="admin-profile-field">
+              <span>Username <RequiredMark /></span>
+              <input className="input" value={form.username} placeholder="admin" onChange={(event) => updateProfileField('username', event.target.value)} required />
+              <small>Used for secure admin login.</small>
+            </label>
+            <label className="admin-profile-field">
+              <span>Email</span>
+              <input className={`input ${emailValid ? '' : 'admin-profile-input-error'}`} type="email" value={form.email} placeholder="admin@example.com" onChange={(event) => updateProfileField('email', event.target.value)} />
+              <small>{emailValid ? 'Optional account contact email.' : 'Enter a valid email address.'}</small>
+            </label>
+            <label className="admin-profile-field">
+              <span>Phone</span>
+              <input className="input" value={form.phone} placeholder="9842781971 / +91 98427 81971" onChange={(event) => updatePhone(event.target.value)} />
+              <small>Allows normal business phone formats.</small>
+            </label>
+          </div>
+
+          {!dirty ? (
+            <div className="admin-profile-clean-actions">
+              <button type="button" className="btn btn-secondary" disabled>Revert</button>
+              <button type="submit" className="btn btn-primary admin-profile-save-muted" disabled>
+                <Save className="h-4 w-4" />
+                Save Changes
+              </button>
+            </div>
+          ) : null}
         </form>
 
-        <form className="mt-6 rounded-card border border-white/10 bg-white/[0.035] p-4" onSubmit={updatePassword}>
-          <div className="mb-4 flex items-center gap-2">
-            <KeyRound className="h-4 w-4 text-[var(--brand)]" />
-            <h3 className="font-black">Change Password</h3>
+        <form className="admin-profile-password-card" onSubmit={updatePassword}>
+          <div className="admin-profile-section-head admin-profile-password-head">
+            <div className="admin-profile-title">
+              <div className="admin-profile-icon"><KeyRound className="h-5 w-5" /></div>
+              <div className="min-w-0">
+                <h3>Change Password</h3>
+                <p>Update the admin login password after confirming the current password.</p>
+              </div>
+            </div>
           </div>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <label>
-              <span className="label">Current password</span>
-              <input className="input" type="password" value={passwordForm.currentPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} />
-            </label>
-            <label>
-              <span className="label">New password</span>
-              <input className="input" type="password" minLength={6} value={passwordForm.newPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))} />
-            </label>
-            <label>
-              <span className="label">Confirm password</span>
-              <input className="input" type="password" minLength={6} value={passwordForm.confirmPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} />
-            </label>
+
+          <div className="admin-profile-password-grid">
+            {[
+              { key: 'currentPassword', label: 'Current password', autoComplete: 'current-password' },
+              { key: 'newPassword', label: 'New password', autoComplete: 'new-password' },
+              { key: 'confirmPassword', label: 'Confirm password', autoComplete: 'new-password' }
+            ].map((field) => {
+              const VisibleIcon = passwordVisible[field.key] ? EyeOff : Eye;
+              return (
+                <label className="admin-profile-field" key={field.key}>
+                  <span>{field.label}</span>
+                  <div className="admin-profile-password-input">
+                    <input
+                      className="input"
+                      type={passwordVisible[field.key] ? 'text' : 'password'}
+                      minLength={field.key === 'currentPassword' ? undefined : 6}
+                      value={passwordForm[field.key]}
+                      autoComplete={field.autoComplete}
+                      onChange={(event) => setPasswordForm((current) => ({ ...current, [field.key]: event.target.value }))}
+                    />
+                    <button
+                      type="button"
+                      className="admin-profile-password-toggle"
+                      aria-label={passwordVisible[field.key] ? `Hide ${field.label}` : `Show ${field.label}`}
+                      onClick={() => setPasswordVisible((current) => ({ ...current, [field.key]: !current[field.key] }))}
+                    >
+                      <VisibleIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </label>
+              );
+            })}
           </div>
-          <p className="mt-3 text-xs font-semibold muted">Use at least 6 characters. Stronger passwords should combine letters, numbers, and a symbol.</p>
-          <div className="mt-4 flex justify-end">
-            <button className="btn btn-secondary" disabled={saving || !passwordForm.newPassword || !passwordForm.confirmPassword}>
-              <KeyRound className="h-4 w-4" />
+
+          <div className="admin-profile-password-meta">
+            <div className="admin-profile-strength">
+              <div>
+                <span>Password strength</span>
+                <strong>{passwordStrength}</strong>
+              </div>
+              <div className="admin-profile-strength-track" aria-hidden="true">
+                <i style={{ width: `${Math.max(passwordScore, passwordForm.newPassword ? 1 : 0) * 25}%` }} />
+              </div>
+            </div>
+            <div className="admin-profile-checklist">
+              {[
+                ['min', 'Minimum 6 characters'],
+                ['letters', 'Contains letters'],
+                ['numbers', 'Contains numbers'],
+                ['symbol', 'Contains symbol']
+              ].map(([key, label]) => (
+                <span key={key} className={passwordRules[key] ? 'is-complete' : ''}>
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {passwordValidation ? <p className="admin-profile-warning">{passwordValidation}</p> : null}
+
+          <div className="admin-profile-password-actions">
+            <button className="btn btn-secondary" disabled={!canUpdatePassword}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
               Update Password
             </button>
           </div>
         </form>
       </section>
 
-      <aside className="grid content-start gap-5">
-        <section className="surface admin-control-card p-5">
-          <div className="flex items-center gap-4">
-            {form.avatarUrl ? (
-              <img className="h-20 w-20 rounded-card border border-white/10 object-cover" src={settingsAssetUrl(form.avatarUrl)} alt="Admin avatar" />
-            ) : (
-              <div className="grid h-20 w-20 place-items-center rounded-card border border-white/10 bg-white/[0.035] text-2xl font-black">{String(user?.name || user?.username || 'A').slice(0, 1).toUpperCase()}</div>
-            )}
-            <div>
-              <h3 className="text-lg font-black">Profile Photo</h3>
-              <p className="mt-1 text-sm muted">JPG, PNG, or WEBP up to 5 MB.</p>
+      <aside className="admin-profile-side">
+        <section className="admin-profile-card admin-profile-photo-card">
+          <div className="admin-profile-avatar-wrap">
+            <div className="admin-profile-avatar">
+              {form.avatarUrl ? (
+                <img src={settingsAssetUrl(form.avatarUrl)} alt="Admin avatar" />
+              ) : (
+                <span>{profileInitial}</span>
+              )}
             </div>
           </div>
-          <div className="mt-4 grid gap-2">
+          <div className="admin-profile-photo-copy">
+            <h3>{form.name || 'Admin user'}</h3>
+            <div className="admin-profile-badge-row">
+              <span className="admin-profile-role-badge">{roleText}</span>
+              <span className="admin-profile-status-badge">{accountStatus}</span>
+            </div>
+            <p>JPG, PNG, or WEBP profile photo up to 5 MB.</p>
+          </div>
+          <div className="admin-profile-photo-actions">
             <label className={`btn btn-secondary justify-center ${uploading ? 'pointer-events-none opacity-60' : ''}`}>
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
               Upload Photo
@@ -2021,22 +2264,78 @@ function AdminProfileSection({ onDirtyChange = null }) {
           </div>
         </section>
 
-        <section className="surface admin-control-card p-5">
-          <h3 className="text-lg font-black">Account Activity</h3>
-          <div className="mt-4 grid gap-3">
-            <SettingsInfoItem icon={CalendarClock} label="Last login" value={user?.lastLoginAt ? formatDate(user.lastLoginAt) : 'Not recorded yet'} />
-            <SettingsInfoItem icon={Activity} label="Last activity" value={user?.lastActivityAt ? `${titleCase(user.lastActivityType || 'Activity')} - ${formatDate(user.lastActivityAt)}` : 'Not recorded yet'} />
-          </div>
-          <div className="mt-4 grid gap-2">
-            {activityLoading ? <p className="text-sm muted">Loading activity...</p> : (activityData?.activity || []).length ? (activityData.activity || []).slice(0, 5).map((item) => (
-              <div key={item.id || item._id} className="rounded-card border border-white/10 bg-white/[0.035] p-3">
-                <p className="text-sm font-black text-slate-100">{titleCase(item.action || 'activity')}</p>
-                <p className="mt-1 text-xs muted">{item.module || 'system'} - {item.createdAt ? formatDate(item.createdAt) : '-'}</p>
+        <section className="admin-profile-card admin-profile-security">
+          <div className="admin-profile-section-head">
+            <div className="admin-profile-title">
+              <div className="admin-profile-icon"><LockKeyhole className="h-5 w-5" /></div>
+              <div className="min-w-0">
+                <h3>Security Status</h3>
+                <p>Frontend-safe account security snapshot.</p>
               </div>
-            )) : <p className="rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm muted">No account activity yet.</p>}
+            </div>
+          </div>
+          <div className="admin-profile-security-list">
+            <SettingsInfoItem icon={CheckCircle2} label="Account Status" value={accountStatus} />
+            <SettingsInfoItem icon={Globe2} label="Active Session" value="Current browser" />
+            <SettingsInfoItem icon={ShieldCheck} label="2FA" value="Coming soon" />
+            <SettingsInfoItem icon={KeyRound} label="Password Last Changed" value={user?.passwordChangedAt || user?.passwordUpdatedAt ? formatDate(user.passwordChangedAt || user.passwordUpdatedAt) : 'Not available'} />
           </div>
         </section>
+
       </aside>
+
+      <section className="admin-profile-card admin-profile-activity admin-profile-activity-wide">
+        <div className="admin-profile-section-head">
+          <div className="admin-profile-title">
+            <div className="admin-profile-icon"><Activity className="h-5 w-5" /></div>
+            <div className="min-w-0">
+              <h3>Account Activity</h3>
+              <p>Latest real account activity from audit history.</p>
+            </div>
+          </div>
+          <Link className="btn btn-secondary admin-profile-activity-link" to="/admin/audit-logs">
+            View Full Activity
+            <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
+        <div className="admin-profile-activity-timeline">
+          {activityLoading ? (
+            <p className="admin-profile-empty-state">Loading activity...</p>
+          ) : activityItems.length ? activityItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.id} className="admin-profile-activity-row">
+                <div className="admin-profile-activity-icon"><Icon className="h-4 w-4" /></div>
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{item.module} - {item.date}</span>
+                </div>
+              </div>
+            );
+          }) : (
+            <p className="admin-profile-empty-state">No recent account activity found.</p>
+          )}
+        </div>
+      </section>
+
+      {dirty ? (
+        <div className="admin-profile-save-bar">
+          <div>
+            <strong>Unsaved admin profile changes</strong>
+            <span>{profileValidation || 'Save to update the admin account details used across this workspace.'}</span>
+          </div>
+          <div className="admin-profile-save-actions">
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={revertProfile}>
+              <RotateCcw className="h-4 w-4" />
+              Revert
+            </button>
+            <button type="button" className="btn btn-primary admin-compact-button" disabled={!canSaveProfile} onClick={saveProfile}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {confirmRemoveAvatar ? (
         <ConfirmModal

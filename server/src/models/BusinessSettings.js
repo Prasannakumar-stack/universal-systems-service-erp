@@ -67,6 +67,7 @@ const businessSettingsSchema = new mongoose.Schema(
       dashboardFocus: { type: Boolean, default: true },
       pdfDocuments: { type: Boolean, default: true }
     },
+    securitySettings: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }

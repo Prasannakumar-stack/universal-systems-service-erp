@@ -5,6 +5,8 @@ import {
   ArrowDown,
   ArrowUp,
   Box,
+  ChevronDown,
+  ChevronUp,
   Columns2,
   Copy,
   Download,
@@ -624,7 +626,20 @@ function buildDefaultTemplateSections(template = {}, sections = [], draft = {}) 
     if (!isHalf) y += height + 12;
   });
   flushHalfRow();
-  return output;
+  const maxBottom = output.reduce((max, section) => Math.max(max, Number(section.y || 0) + Number(section.height || 0)), 0);
+  const minY = output.reduce((min, section) => Math.min(min, Number(section.y || 0)), 30);
+  const availableHeight = builderCanvas.height - 58;
+  if (maxBottom > availableHeight && output.length) {
+    const scale = Math.max(0.72, Math.min(1, (availableHeight - 28) / Math.max(1, maxBottom - minY)));
+    return output.map((section, index) => normalizeBuilderSection({
+      ...section,
+      pageId: 'page-1',
+      y: 28 + (Number(section.y || 0) - minY) * scale,
+      height: Math.max(42, Number(section.height || 0) * scale),
+      zIndex: section.zIndex || index + 1
+    }, index));
+  }
+  return output.map((section, index) => normalizeBuilderSection({ ...section, pageId: 'page-1' }, index));
 }
 
 function normalizeBuilderSection(section = {}, index = 0) {
@@ -701,7 +716,21 @@ function designStateWithTemplateSections(designState = {}, sections = [], draft 
   const normalized = normalizeDesignState(designState);
   const savedSections = Array.isArray(normalized.sections) ? normalized.sections.map((section, index) => normalizeBuilderSection(section, index)) : [];
   const defaultSections = normalized.blank === true ? [] : buildDefaultTemplateSections(template, sections, draft);
-  const mergedSections = defaultSections.length ? mergeTemplateSections(defaultSections, savedSections) : savedSections;
+  const allowedPageIds = new Set(['page-1']);
+  const savedPages = Array.isArray(designState.pages) ? designState.pages : [];
+  savedPages.forEach((page) => {
+    if (!page?.id) return;
+    const hasSavedElements = Array.isArray(page.elements) && page.elements.length > 0;
+    if (page.id === 'page-1' || page.manual === true || page.userAdded === true || hasSavedElements) allowedPageIds.add(page.id);
+  });
+  normalized.elements.forEach((element) => {
+    if (element.pageId) allowedPageIds.add(element.pageId);
+  });
+  const mergedSections = (defaultSections.length ? mergeTemplateSections(defaultSections, savedSections) : savedSections)
+    .map((section, index) => normalizeBuilderSection({
+      ...section,
+      pageId: allowedPageIds.has(section.pageId || 'page-1') ? section.pageId : 'page-1'
+    }, index));
   const next = {
     ...normalized,
     sections: mergedSections,
@@ -836,21 +865,33 @@ function normalizeBuilderElement(element = {}, index = 0) {
 function normalizeDesignPages(source = {}, elements = [], sections = []) {
   const savedPages = Array.isArray(source.pages) ? source.pages : [];
   const pageIds = new Set(['page-1']);
+  const usedPageIds = new Set(['page-1']);
   elements.forEach((element) => {
-    if (element.pageId) pageIds.add(element.pageId);
+    if (element.pageId) {
+      pageIds.add(element.pageId);
+      usedPageIds.add(element.pageId);
+    }
   });
   sections.forEach((section) => {
-    if (section.pageId) pageIds.add(section.pageId);
+    if (section.pageId) {
+      pageIds.add(section.pageId);
+      usedPageIds.add(section.pageId);
+    }
   });
   savedPages.forEach((page) => {
-    if (page?.id) pageIds.add(page.id);
+    if (!page?.id) return;
+    const hasSavedElements = Array.isArray(page.elements) && page.elements.length > 0;
+    if (page.id === 'page-1' || page.manual === true || page.userAdded === true || hasSavedElements || usedPageIds.has(page.id)) {
+      pageIds.add(page.id);
+    }
   });
   return [...pageIds].map((id, index) => {
     const saved = savedPages.find((page) => page?.id === id) || {};
     return {
       id,
       name: saved.name || `Page ${index + 1}`,
-      elements: Array.isArray(saved.elements) ? saved.elements : []
+      elements: Array.isArray(saved.elements) ? saved.elements : [],
+      manual: saved.manual === true || saved.userAdded === true
     };
   });
 }
@@ -1161,6 +1202,7 @@ function CustomSectionsEditor({ draft, setDraft, canEdit, saving, advancedEnable
   const [newType, setNewType] = useState('text');
   const [removeCandidate, setRemoveCandidate] = useState(null);
   const [editingCardId, setEditingCardId] = useState('');
+  const [open, setOpen] = useState(true);
   const enabled = advancedEnabled && customSectionsEnabled;
   const disabled = !canEdit || saving || !enabled;
   const cards = Array.isArray(getPath(draft, 'structured.customSections', [])) ? getPath(draft, 'structured.customSections', []) : [];
@@ -1170,12 +1212,15 @@ function CustomSectionsEditor({ draft, setDraft, canEdit, saving, advancedEnable
   if (!customSectionsEnabled) {
     return (
       <section className="surface admin-control-card pdf-custom-card-empty p-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="admin-control-icon"><Layers className="h-5 w-5" /></div>
-          <div className="min-w-0">
-            <h3 className="text-lg font-black text-[var(--app-text)]">Custom Cards</h3>
-            <p className="mt-1 text-sm muted">Enable custom sections/cards in Advanced Options to add custom cards.</p>
+        <div className="pdf-custom-accordion-head">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="admin-control-icon"><Layers className="h-5 w-5" /></div>
+            <div className="min-w-0">
+              <h3 className="text-lg font-black text-[var(--app-text)]">Custom Sections / Cards</h3>
+              <p className="mt-1 text-sm muted">Enable custom sections/cards in Advanced Layout to add custom cards.</p>
+            </div>
           </div>
+          <span className="pdf-state-badge is-off">OFF</span>
         </div>
       </section>
     );
@@ -1235,12 +1280,24 @@ function CustomSectionsEditor({ draft, setDraft, canEdit, saving, advancedEnable
 
   return (
     <section className="surface admin-control-card pdf-custom-card-editor p-4">
-      <div className="pdf-custom-add-row">
-        <div className="min-w-0">
-          <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Add Custom Card</p>
-          <h3 className="mt-1 text-lg font-black text-[var(--app-text)]">Custom Sections / Cards</h3>
-          <p className="mt-1 text-xs muted">Add optional cards after the fixed PDF sections. Saved PDFs render these only after Advanced Layout is enabled and the template is saved.</p>
+      <div className="pdf-custom-accordion-head">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="admin-control-icon"><Layers className="h-5 w-5" /></div>
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Add Custom Card</p>
+            <h3 className="mt-1 text-lg font-black text-[var(--app-text)]">Custom Sections / Cards</h3>
+            <p className="mt-1 text-xs muted">Add optional cards after the fixed PDF sections. Saved PDFs render these only after Advanced Layout is enabled and the template is saved.</p>
+          </div>
         </div>
+        <button type="button" className="btn btn-secondary h-9 px-3 py-1.5 text-xs" onClick={() => setOpen((current) => !current)}>
+          {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          {open ? 'Collapse' : 'Expand'}
+        </button>
+      </div>
+
+      {open ? (
+        <>
+      <div className="pdf-custom-add-row mt-4">
         <div className="pdf-custom-add-controls">
           <SelectControl label="Card type" value={newType} options={customCardTypes} disabled={disabled} onChange={setNewType} />
           <button type="button" className="btn btn-primary self-end" disabled={disabled} onClick={addCard}>
@@ -1345,6 +1402,8 @@ function CustomSectionsEditor({ draft, setDraft, canEdit, saving, advancedEnable
           <p className="rounded-card border border-dashed border-white/15 bg-white/[0.025] p-4 text-sm muted">No custom cards added.</p>
         )}
       </div>
+        </>
+      ) : null}
       {removeCandidate ? (
         <ConfirmModal
           title="Remove custom card?"
@@ -1401,8 +1460,8 @@ function DesignModeWorkspace({
   const [variableQuery, setVariableQuery] = useState('');
   const [activeInspectorTab, setActiveInspectorTab] = useState('content');
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
-  const [rightInspectorOpen, setRightInspectorOpen] = useState(false);
-  const [fullScreenEditor, setFullScreenEditor] = useState(false);
+  const [rightInspectorOpen, setRightInspectorOpen] = useState(true);
+  const [fullScreenEditor, setFullScreenEditor] = useState(true);
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [interaction, setInteraction] = useState(null);
@@ -1740,6 +1799,49 @@ function DesignModeWorkspace({
     setSelectedLayerId('');
   }
 
+  function duplicateSection(section) {
+    if (!section || disabled) return;
+    const copy = normalizeBuilderSection({
+      ...cloneValue(section),
+      id: `section-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      sourceKey: '',
+      sourceIndex: undefined,
+      system: false,
+      locked: false,
+      name: `${section.name || section.title || 'Section'} Copy`,
+      title: `${section.title || section.name || 'Section'} Copy`,
+      pageId: section.pageId || currentPage.id || 'page-1',
+      x: Math.min(builderCanvas.width - 24, (section.x || 32) + 18),
+      y: Math.min(builderCanvas.height - 12, (section.y || 30) + 18),
+      zIndex: Math.max(...canvasSections.map((item) => item.zIndex || 1), 1) + 1
+    }, canvasSections.length);
+    commitDesign((current) => {
+      const nextSections = [...current.sections, copy];
+      return {
+        ...current,
+        sections: nextSections,
+        pages: normalizeDesignPages(current, current.elements, nextSections)
+      };
+    });
+    setSelectedLayerId(copy.id);
+    setActiveRail('layers');
+  }
+
+  function deleteSection(sectionId) {
+    if (disabled) return;
+    const target = canvasSections.find((section) => section.id === sectionId);
+    if (!target || target.system !== false) return;
+    commitDesign((current) => {
+      const nextSections = current.sections.filter((section) => section.id !== sectionId);
+      return {
+        ...current,
+        sections: nextSections,
+        pages: normalizeDesignPages(current, current.elements, nextSections)
+      };
+    });
+    setSelectedLayerId('');
+  }
+
   function moveElementLayer(elementId, direction) {
     if (disabled) return;
     commitDesign((current) => {
@@ -1761,7 +1863,7 @@ function DesignModeWorkspace({
     const id = `page-${pages.length + 1}`;
     commitDesign((current) => ({
       ...current,
-      pages: [...current.pages, { id, name: `Page ${current.pages.length + 1}`, elements: [] }]
+      pages: [...current.pages, { id, name: `Page ${current.pages.length + 1}`, elements: [], manual: true }]
     }));
     setCurrentPageId(id);
     setActiveRail('pages');
@@ -1799,7 +1901,7 @@ function DesignModeWorkspace({
       const nextSections = [...current.sections, ...copiedSections];
       return {
         ...current,
-        pages: [...current.pages, { id, name: `${page.name || 'Page'} Copy`, elements: copiedElements.map((element) => element.id) }],
+        pages: [...current.pages, { id, name: `${page.name || 'Page'} Copy`, elements: copiedElements.map((element) => element.id), manual: true }],
         elements: nextElements,
         customElements: nextElements,
         sections: nextSections
@@ -2137,8 +2239,8 @@ function DesignModeWorkspace({
                 onToggleVisibility={() => toggleLayerVisibility(layer)}
                 onMoveUp={() => moveElementLayer(layer.id, -1)}
                 onMoveDown={() => moveElementLayer(layer.id, 1)}
-                onDuplicate={() => layer.kind === 'element' && duplicateElement(layer.element)}
-                onDelete={() => layer.kind === 'element' && deleteElement(layer.id)}
+                onDuplicate={() => (layer.kind === 'element' ? duplicateElement(layer.element) : duplicateSection(layer.sectionDesign))}
+                onDelete={() => (layer.kind === 'element' ? deleteElement(layer.id) : deleteSection(layer.id))}
               />
             ))}
           </div>
@@ -2407,6 +2509,18 @@ function DesignModeWorkspace({
                 </button>
               </>
             ) : null}
+            {selectedSection ? (
+              <>
+                <button type="button" className="icon-button" disabled={disabled} onClick={() => duplicateSection(selectedSection)} title="Duplicate section">
+                  <Copy className="h-4 w-4" />
+                </button>
+                {selectedSection.system === false ? (
+                  <button type="button" className="icon-button pdf-danger-icon" disabled={disabled} onClick={() => deleteSection(selectedSection.id)} title="Delete section">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </>
+            ) : null}
             {compact ? (
               <button type="button" className="icon-button" onClick={() => setInspectorCollapsed((value) => !value)} title={inspectorCollapsed ? 'Open properties' : 'Collapse properties'}>
                 {inspectorCollapsed ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
@@ -2616,9 +2730,6 @@ function DesignModeWorkspace({
           </div>
           </main>
 
-          <section className="pdf-builder-bottom-inspector">
-            {renderInspectorPanel({ placement: 'bottom' })}
-          </section>
         </div>
 
         {rightInspectorOpen ? (
@@ -2791,6 +2902,7 @@ function BuilderCanvasElement({ element, selected, disabled, onSelect, onDragSta
 function BuilderLayerRow({ layer, selected, disabled, onSelect, onToggleVisibility, onMoveUp, onMoveDown, onDuplicate, onDelete }) {
   const Icon = layer.kind === 'section' ? (layer.section?.icon || FileText) : elementIconForType(layer.type);
   const elementLayer = layer.kind === 'element';
+  const canDelete = elementLayer || layer.sectionDesign?.system === false;
   return (
     <div className={`pdf-layer-row ${selected ? 'is-active' : ''}`}>
       <button type="button" className="pdf-layer-main" onClick={onSelect}>
@@ -2819,13 +2931,15 @@ function BuilderLayerRow({ layer, selected, disabled, onSelect, onToggleVisibili
             <button type="button" className="icon-button" disabled={disabled} onClick={onMoveDown} title="Move down">
               <ArrowDown className="h-3.5 w-3.5" />
             </button>
-            <button type="button" className="icon-button" disabled={disabled} onClick={onDuplicate} title="Duplicate">
-              <Copy className="h-3.5 w-3.5" />
-            </button>
-            <button type="button" className="icon-button pdf-danger-icon" disabled={disabled} onClick={onDelete} title="Delete">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
           </>
+        ) : null}
+        <button type="button" className="icon-button" disabled={disabled} onClick={onDuplicate} title={elementLayer ? 'Duplicate' : 'Duplicate as custom section'}>
+          <Copy className="h-3.5 w-3.5" />
+        </button>
+        {canDelete ? (
+          <button type="button" className="icon-button pdf-danger-icon" disabled={disabled} onClick={onDelete} title="Delete">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         ) : null}
       </div>
     </div>
@@ -2994,7 +3108,6 @@ function AdvancedLayoutGroup({ title, children }) {
 }
 
 function AdvancedLayoutPanel({ draft, setDraft, canEdit, saving }) {
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('layout');
   const disabled = !canEdit || saving;
   const advancedEnabled = getPath(draft, 'advancedEnabled', false) === true;
@@ -3011,135 +3124,108 @@ function AdvancedLayoutPanel({ draft, setDraft, canEdit, saving }) {
     setDraft((current) => setPath(current, path, value));
   }
 
-  useEffect(() => {
-    if (!advancedEnabled) setSettingsOpen(false);
-  }, [advancedEnabled]);
-
   return (
-    <>
-      <section className="surface admin-control-card pdf-advanced-panel p-4">
-        <div className="pdf-advanced-summary-header">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="admin-control-icon"><Settings2 className="h-5 w-5" /></div>
-            <div className="min-w-0">
-              <h3 className="text-lg font-black text-[var(--app-text)]">Advanced Layout</h3>
-              <p className="mt-1 max-w-3xl text-sm leading-6 muted">Optional tools for section ordering, QR/payment, signature, colors, and custom cards. Existing PDF design changes only after Save.</p>
-            </div>
+    <section className="surface admin-control-card pdf-advanced-panel p-4">
+      <div className="pdf-advanced-summary-header">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="admin-control-icon"><Settings2 className="h-5 w-5" /></div>
+          <div className="min-w-0">
+            <h3 className="text-lg font-black text-[var(--app-text)]">Advanced Layout</h3>
+            <p className="mt-1 max-w-3xl text-sm leading-6 muted">Optional tools for section ordering, QR/payment, signature, colors, and custom cards. Existing PDF design changes only after Save.</p>
           </div>
-          <span className={`pdf-state-badge pdf-advanced-status ${advancedEnabled ? 'is-on' : 'is-off'}`}>
-            {advancedEnabled ? 'ADVANCED ON' : 'ADVANCED OFF'}
-          </span>
         </div>
+        <span className={`pdf-state-badge pdf-advanced-status ${advancedEnabled ? 'is-on' : 'is-off'}`}>
+          {advancedEnabled ? 'ADVANCED ON' : 'ADVANCED OFF'}
+        </span>
+      </div>
 
-        <div className="mt-4 grid gap-3">
-          <FieldRow field={{ type: 'toggle', path: 'advancedEnabled', label: 'Enable Advanced Layout', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-          <p className="rounded-card border border-sky-300/15 bg-sky-500/10 p-3 text-sm font-semibold text-[var(--brand)]">
-            {advancedEnabled ? 'Advanced options are enabled. Configure them in the modal, then save the template to apply.' : 'Default templates remain unchanged unless you enable options and save.'}
-          </p>
-          <button type="button" className="btn btn-secondary w-full justify-center" disabled={!advancedEnabled || disabled} onClick={() => setSettingsOpen(true)}>
-            <Settings2 className="h-4 w-4" />
-            Configure Advanced Options
-          </button>
-        </div>
-      </section>
+      <div className="mt-4 grid gap-3">
+        <FieldRow field={{ type: 'toggle', path: 'advancedEnabled', label: 'Enable Advanced Layout', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+        <p className="rounded-card border border-sky-300/15 bg-sky-500/10 p-3 text-sm font-semibold text-[var(--brand)]">
+          {advancedEnabled ? 'Advanced options are enabled. Configure them below, then save the template to apply.' : 'Default templates remain unchanged unless you enable options and save.'}
+        </p>
+      </div>
 
-      {settingsOpen && advancedEnabled ? (
-        <div className="pdf-modal-overlay" role="presentation">
-          <section className="pdf-advanced-modal" role="dialog" aria-modal="true" aria-label="Configure Advanced Options">
-            <div className="pdf-advanced-modal-header">
-              <div>
-                <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Structured Mode</p>
-                <h3 className="mt-1 text-xl font-black text-[var(--app-text)]">Configure Advanced Options</h3>
-                <p className="mt-1 text-sm muted">These settings are additive and affect saved PDFs only after Save Template.</p>
-              </div>
-              <button type="button" className="icon-button h-10 w-10" onClick={() => setSettingsOpen(false)} aria-label="Close advanced options">
-                <X className="h-5 w-5" />
+      {advancedEnabled ? (
+        <>
+          <div className="pdf-advanced-tabs" role="tablist" aria-label="Advanced layout sections">
+            {tabs.map(([tabId, label]) => (
+              <button
+                key={tabId}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tabId}
+                className={`pdf-advanced-tab ${activeTab === tabId ? 'is-active' : ''}`}
+                onClick={() => setActiveTab(tabId)}
+              >
+                {label}
               </button>
-            </div>
+            ))}
+          </div>
 
-            <div className="pdf-advanced-tabs" role="tablist" aria-label="Advanced layout sections">
-              {tabs.map(([tabId, label]) => (
-                <button
-                  key={tabId}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === tabId}
-                  className={`pdf-advanced-tab ${activeTab === tabId ? 'is-active' : ''}`}
-                  onClick={() => setActiveTab(tabId)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+          <div className="pdf-advanced-inline-body">
+            {activeTab === 'layout' ? (
+              <AdvancedLayoutGroup title="Layout Controls">
+                <FieldRow field={{ type: 'toggle', path: 'structured.allowDragDrop', label: 'Enable section reordering', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                <FieldRow field={{ type: 'toggle', path: 'structured.twoColumnCards', label: 'Allow two-column cards', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                <FieldRow field={{ type: 'toggle', path: 'structured.customCardWidthEnabled', label: 'Enable custom card width', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                <SelectControl label="Default custom card width" value={getPath(draft, 'structured.defaultCardWidth', 'full')} options={cardWidthOptions} disabled={disabled || !customWidthEnabled} onChange={(value) => update('structured.defaultCardWidth', value)} />
+              </AdvancedLayoutGroup>
+            ) : null}
 
-            <div className="pdf-advanced-modal-body">
-              {activeTab === 'layout' ? (
-                <AdvancedLayoutGroup title="Layout Controls">
-                  <FieldRow field={{ type: 'toggle', path: 'structured.allowDragDrop', label: 'Enable section reordering', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                  <FieldRow field={{ type: 'toggle', path: 'structured.twoColumnCards', label: 'Allow two-column cards', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                  <FieldRow field={{ type: 'toggle', path: 'structured.customCardWidthEnabled', label: 'Enable custom card width', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                  <SelectControl label="Default custom card width" value={getPath(draft, 'structured.defaultCardWidth', 'full')} options={cardWidthOptions} disabled={disabled || !customWidthEnabled} onChange={(value) => update('structured.defaultCardWidth', value)} />
-                </AdvancedLayoutGroup>
-              ) : null}
+            {activeTab === 'visual' ? (
+              <AdvancedLayoutGroup title="Visual Controls">
+                <FieldRow field={{ type: 'toggle', path: 'structured.customColorsEnabled', label: 'Enable custom colors', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                <ColorControl label="Accent color" value={getPath(draft, 'design.colors.accentColor', getPath(draft, 'header.accentColor', '#0f2a52'))} disabled={disabled || !customColorsEnabled} onChange={(value) => update('design.colors.accentColor', value)} />
+                <ColorControl label="Card background color" value={getPath(draft, 'design.colors.cardBackground', '#ffffff')} disabled={disabled || !customColorsEnabled} onChange={(value) => update('design.colors.cardBackground', value)} />
+                <SelectControl label="Border style" value={getPath(draft, 'structured.borderStyle', 'default')} options={borderStyleOptions} disabled={disabled} onChange={(value) => update('structured.borderStyle', value)} />
+              </AdvancedLayoutGroup>
+            ) : null}
 
-              {activeTab === 'visual' ? (
-                <AdvancedLayoutGroup title="Visual Controls">
-                  <FieldRow field={{ type: 'toggle', path: 'structured.customColorsEnabled', label: 'Enable custom colors', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                  <ColorControl label="Accent color" value={getPath(draft, 'design.colors.accentColor', getPath(draft, 'header.accentColor', '#0f2a52'))} disabled={disabled || !customColorsEnabled} onChange={(value) => update('design.colors.accentColor', value)} />
-                  <ColorControl label="Card background color" value={getPath(draft, 'design.colors.cardBackground', '#ffffff')} disabled={disabled || !customColorsEnabled} onChange={(value) => update('design.colors.cardBackground', value)} />
-                  <SelectControl label="Border style" value={getPath(draft, 'structured.borderStyle', 'default')} options={borderStyleOptions} disabled={disabled} onChange={(value) => update('structured.borderStyle', value)} />
-                </AdvancedLayoutGroup>
-              ) : null}
+            {activeTab === 'extra' ? (
+              <AdvancedLayoutGroup title="Extra Cards">
+                <FieldRow field={{ type: 'toggle', path: 'structured.customSectionsEnabled', label: 'Enable custom sections/cards', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                <FieldRow field={{ type: 'toggle', path: 'structured.qrPaymentCardEnabled', label: 'Enable QR/payment card', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                <FieldRow field={{ type: 'toggle', path: 'structured.signatureCardEnabled', label: 'Enable signature card', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                {getPath(draft, 'structured.qrPaymentCardEnabled', false) === true ? (
+                  <>
+                    <FieldRow field={{ type: 'text', path: 'structured.qrPaymentCard.title', label: 'Payment title', fallback: 'Payment Details' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                    <FieldRow field={{ type: 'textarea', path: 'structured.qrPaymentCard.note', label: 'Payment note', rows: 3 }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                    <FieldRow field={{ type: 'text', path: 'structured.qrPaymentCard.upiText', label: 'UPI ID / payment text' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                    <FieldRow field={{ type: 'text', path: 'structured.qrPaymentCard.qrValue', label: 'Optional QR image URL or QR text' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                  </>
+                ) : null}
+                {getPath(draft, 'structured.signatureCardEnabled', false) === true ? (
+                  <>
+                    <FieldRow field={{ type: 'text', path: 'structured.signatureCard.title', label: 'Signature title', fallback: 'Authorized Signature' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                    <FieldRow field={{ type: 'text', path: 'structured.signatureCard.personName', label: 'Authorized person name' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                    <FieldRow field={{ type: 'text', path: 'structured.signatureCard.designation', label: 'Role / designation' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                    <FieldRow field={{ type: 'text', path: 'structured.signatureCard.imageUrl', label: 'Optional signature image URL' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                  </>
+                ) : null}
+                <p className="pdf-field-full rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm muted">Custom cards appear in the editor after custom sections/cards are enabled.</p>
+              </AdvancedLayoutGroup>
+            ) : null}
 
-              {activeTab === 'extra' ? (
-                <AdvancedLayoutGroup title="Extra Cards">
-                  <FieldRow field={{ type: 'toggle', path: 'structured.customSectionsEnabled', label: 'Enable custom sections/cards', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                  <FieldRow field={{ type: 'toggle', path: 'structured.qrPaymentCardEnabled', label: 'Enable QR/payment card', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                  <FieldRow field={{ type: 'toggle', path: 'structured.signatureCardEnabled', label: 'Enable signature card', fallback: false }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                  {getPath(draft, 'structured.qrPaymentCardEnabled', false) === true ? (
-                    <>
-                      <FieldRow field={{ type: 'text', path: 'structured.qrPaymentCard.title', label: 'Payment title', fallback: 'Payment Details' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                      <FieldRow field={{ type: 'textarea', path: 'structured.qrPaymentCard.note', label: 'Payment note', rows: 3 }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                      <FieldRow field={{ type: 'text', path: 'structured.qrPaymentCard.upiText', label: 'UPI ID / payment text' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                      <FieldRow field={{ type: 'text', path: 'structured.qrPaymentCard.qrValue', label: 'Optional QR image URL or QR text' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                    </>
-                  ) : null}
-                  {getPath(draft, 'structured.signatureCardEnabled', false) === true ? (
-                    <>
-                      <FieldRow field={{ type: 'text', path: 'structured.signatureCard.title', label: 'Signature title', fallback: 'Authorized Signature' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                      <FieldRow field={{ type: 'text', path: 'structured.signatureCard.personName', label: 'Authorized person name' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                      <FieldRow field={{ type: 'text', path: 'structured.signatureCard.designation', label: 'Role / designation' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                      <FieldRow field={{ type: 'text', path: 'structured.signatureCard.imageUrl', label: 'Optional signature image URL' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                    </>
-                  ) : null}
-                  <p className="pdf-field-full rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm muted">Custom cards appear in the editor after custom sections/cards are enabled.</p>
-                </AdvancedLayoutGroup>
-              ) : null}
-
-              {activeTab === 'safety' ? (
-                <AdvancedLayoutGroup title="Safety">
-                  <FieldRow field={{ type: 'toggle', path: 'pageSettings.preferOnePage', label: 'Prefer one-page PDFs' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                  <FieldRow field={{ type: 'toggle', path: 'pageSettings.safePagination', label: 'Safe pagination' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                  <FieldRow field={{ type: 'toggle', path: 'pageBreaks.repeatTableHeader', label: 'Repeat table header when page breaks' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                  <FieldRow field={{ type: 'toggle', path: 'pageBreaks.keepFooterAtBottom', label: 'Keep footer at bottom' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                  <FieldRow field={{ type: 'toggle', path: 'pageBreaks.showPageNumbers', label: 'Show page numbers' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-                </AdvancedLayoutGroup>
-              ) : null}
-            </div>
-
-            <div className="pdf-advanced-modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setSettingsOpen(false)}>Done</button>
-            </div>
-          </section>
-        </div>
+            {activeTab === 'safety' ? (
+              <AdvancedLayoutGroup title="Safety">
+                <FieldRow field={{ type: 'toggle', path: 'pageSettings.preferOnePage', label: 'Prefer one-page PDFs' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                <FieldRow field={{ type: 'toggle', path: 'pageSettings.safePagination', label: 'Safe pagination' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                <FieldRow field={{ type: 'toggle', path: 'pageBreaks.repeatTableHeader', label: 'Repeat table header when page breaks' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                <FieldRow field={{ type: 'toggle', path: 'pageBreaks.keepFooterAtBottom', label: 'Keep footer at bottom' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+                <FieldRow field={{ type: 'toggle', path: 'pageBreaks.showPageNumbers', label: 'Show page numbers' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+              </AdvancedLayoutGroup>
+            ) : null}
+          </div>
+        </>
       ) : null}
-    </>
+    </section>
   );
 }
 
 function LivePreviewPanel({ template, previewUrl, previewLoading, previewError }) {
   return (
-    <section className="surface admin-control-card pdf-live-preview-panel p-4">
+    <section className="surface admin-control-card pdf-live-preview-panel p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <h3 className="font-black">Live PDF Preview</h3>
@@ -3147,11 +3233,11 @@ function LivePreviewPanel({ template, previewUrl, previewLoading, previewError }
         </div>
         {previewLoading ? <Loader2 className="h-4 w-4 animate-spin text-sky-100" /> : null}
       </div>
-      <div className="overflow-hidden rounded-card border border-white/10 bg-slate-950/45">
+      <div className="pdf-preview-frame">
         {previewUrl ? (
-          <iframe title={`${template.name} preview`} src={previewUrl} className="h-[680px] w-full bg-white" />
+          <iframe title={`${template.name} preview`} src={previewUrl} className="w-full bg-white" />
         ) : (
-          <div className="grid h-[680px] place-items-center p-6 text-center text-sm muted">
+          <div className="pdf-preview-empty grid place-items-center p-6 text-center text-sm muted">
             {previewError || 'Preparing PDF preview...'}
           </div>
         )}
@@ -3162,14 +3248,117 @@ function LivePreviewPanel({ template, previewUrl, previewLoading, previewError }
   );
 }
 
-function SelectedSectionEditor({ section, sectionIndex, draft, setDraft, canEdit, saving }) {
-  if (!section) return null;
-  const Icon = section.icon || FileText;
-  const visibility = visibilityField(section);
+function SelectedCustomCardEditor({ item, draft, setDraft, canEdit, saving, customColorsEnabled }) {
+  const card = item?.card;
+  if (!card) return null;
+  const type = card.type || 'text';
+  const disabled = !canEdit || saving;
+  const isDivider = type === 'spacer';
+  const isQr = type === 'qr';
+  const isSignature = type === 'signature';
+  const contentLabel = isQr ? 'UPI ID or payment note' : isSignature ? 'Name / designation text' : 'Body / content';
+  const variableLabel = isQr ? 'Optional QR text/value' : isSignature ? 'Signature image URL or fallback text' : 'Optional variable value';
+
+  function updateCard(patch) {
+    setDraft((current) => {
+      const cards = Array.isArray(getPath(current, 'structured.customSections', [])) ? getPath(current, 'structured.customSections', []) : [];
+      return setPath(current, 'structured.customSections', cards.map((currentCard, index) => (index === item.index ? { ...currentCard, ...patch } : currentCard)));
+    });
+  }
+
+  function changeCardType(value) {
+    const defaults = makeCustomCard(value);
+    setDraft((current) => {
+      let next = current;
+      if (value === 'qr') next = setPath(next, 'structured.qrPaymentCardEnabled', true);
+      if (value === 'signature') next = setPath(next, 'structured.signatureCardEnabled', true);
+      const cards = Array.isArray(getPath(next, 'structured.customSections', [])) ? getPath(next, 'structured.customSections', []) : [];
+      return setPath(next, 'structured.customSections', cards.map((currentCard, index) => (index === item.index ? {
+        ...currentCard,
+        type: value,
+        minHeight: defaults.minHeight,
+        backgroundColor: currentCard.backgroundColor || defaults.backgroundColor,
+        title: currentCard.title || defaults.title
+      } : currentCard)));
+    });
+  }
+
+  return (
+    <>
+      <div className="pdf-editor-grid mb-4">
+        <SelectControl label="Type" value={type} options={customCardTypes} disabled={disabled} onChange={changeCardType} />
+        <SelectControl label="Width" value={card.width || getPath(draft, 'structured.defaultCardWidth', 'full')} options={cardWidthOptions} disabled={disabled} onChange={(value) => updateCard({ width: value })} />
+        <label className="pdf-control-field">
+          <span className="label">{isDivider ? 'Divider label' : isSignature ? 'Signature label' : isQr ? 'Payment title' : 'Title'}</span>
+          <input className="input" value={card.title || ''} disabled={disabled} onChange={(event) => updateCard({ title: event.target.value })} />
+        </label>
+        <label className="pdf-control-field">
+          <span className="label">Minimum height</span>
+          <input className="input" type="number" min="8" max="260" value={card.minHeight || (isDivider ? 32 : 74)} disabled={disabled} onChange={(event) => updateCard({ minHeight: Number(event.target.value) })} />
+        </label>
+        <label className={`pdf-toggle-row pdf-field-full ${disabled ? 'is-disabled' : ''}`}>
+          <span className="pdf-toggle-label">Show/hide custom card</span>
+          <span className={`pdf-state-badge ${card.enabled !== false ? 'is-on' : 'is-off'}`}>{card.enabled !== false ? 'ON' : 'OFF'}</span>
+          <span className="pdf-toggle-switch-wrap">
+            <input className="sr-only" type="checkbox" checked={card.enabled !== false} disabled={disabled} onChange={(event) => updateCard({ enabled: event.target.checked })} />
+            <span className={`pdf-toggle-switch ${card.enabled !== false ? 'is-on' : ''}`}><span /></span>
+          </span>
+        </label>
+      </div>
+
+      {!isDivider ? (
+        <div className="pdf-editor-grid">
+          <label className="pdf-control-field pdf-field-full">
+            <span className="label">{contentLabel}</span>
+            <textarea className="input min-h-24" rows={4} value={card.content || ''} disabled={disabled} onChange={(event) => updateCard({ content: event.target.value })} />
+          </label>
+          <label className="pdf-control-field pdf-field-full">
+            <span className="label">{variableLabel}</span>
+            <input className="input" value={card.variable || ''} disabled={disabled} onChange={(event) => updateCard({ variable: event.target.value })} />
+          </label>
+          {customColorsEnabled ? (
+            <>
+              <ColorControl label="Accent color" value={card.accentColor} disabled={disabled} onChange={(value) => updateCard({ accentColor: value })} />
+              <ColorControl label="Card background" value={card.backgroundColor} disabled={disabled} onChange={(value) => updateCard({ backgroundColor: value })} />
+              <ColorControl label="Text color" value={card.textColor} disabled={disabled} onChange={(value) => updateCard({ textColor: value })} />
+              <ColorControl label="Border color" value={card.borderColor} disabled={disabled} onChange={(value) => updateCard({ borderColor: value })} />
+            </>
+          ) : null}
+        </div>
+      ) : customColorsEnabled ? (
+        <div className="pdf-editor-grid">
+          <ColorControl label="Accent color" value={card.accentColor} disabled={disabled} onChange={(value) => updateCard({ accentColor: value })} />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function SelectedSectionEditor({
+  selectedItem,
+  items,
+  selectedKey,
+  onSelect,
+  draft,
+  setDraft,
+  canEdit,
+  saving,
+  canMoveUp,
+  canMoveDown,
+  onMoveSelected,
+  customColorsEnabled
+}) {
+  if (!selectedItem) return null;
+  const isCustom = selectedItem.kind === 'custom';
+  const section = selectedItem.section;
+  const sectionIndex = selectedItem.index || 0;
+  const displayTitle = isCustom ? (selectedItem.card?.title || customCardTypeLabel(selectedItem.card?.type)) : getPath(draft, sectionOptionPath(section, sectionIndex, 'title'), section.title);
+  const visible = isCustom ? selectedItem.card?.enabled !== false : sectionVisible(section, draft);
+  const Icon = isCustom ? Layers : section.icon || FileText;
+  const visibility = isCustom ? null : visibilityField(section);
   const advancedEnabled = getPath(draft, 'advancedEnabled', false) === true;
-  const customColorsEnabled = getPath(draft, 'structured.customColorsEnabled', false) === true;
   const customWidthEnabled = getPath(draft, 'structured.customCardWidthEnabled', false) === true;
-  const fields = section.fields.filter((field) => {
+  const fields = isCustom ? [] : section.fields.filter((field) => {
     if (field.path === visibility?.path) return false;
     if (field.type === 'color') return advancedEnabled && customColorsEnabled;
     if (field.type === 'width' || field.type === 'layout') return advancedEnabled;
@@ -3178,100 +3367,82 @@ function SelectedSectionEditor({ section, sectionIndex, draft, setDraft, canEdit
 
   return (
     <section className="surface admin-control-card pdf-section-editor p-5">
-      <div className="mb-4 flex items-start gap-3">
-        <div className="admin-control-icon"><Icon className="h-5 w-5" /></div>
-        <div>
-          <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Selected Section</p>
-          <h3 className="mt-1 text-xl font-black">{section.title}</h3>
-          <p className="mt-1 text-sm muted">Fixed sections can be hidden where supported, but cannot be deleted.</p>
-        </div>
-      </div>
-
-      <div className="pdf-editor-grid mb-4">
-        <label className="pdf-control-field">
-          <span className="label">Section title</span>
-          <input
-            className="input"
-            value={getPath(draft, sectionOptionPath(section, sectionIndex, 'title'), section.title)}
-            disabled={!canEdit || saving}
-            onChange={(event) => setDraft((current) => setPath(current, sectionOptionPath(section, sectionIndex, 'title'), event.target.value))}
-          />
-        </label>
-        {visibility ? (
-          <FieldRow field={{ ...visibility, label: 'Show/hide section' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-        ) : (
-          <label className="pdf-toggle-row is-disabled">
-            <span className="pdf-toggle-label">Show/hide section</span>
-            <span className="pdf-state-badge is-fixed">Fixed</span>
-          </label>
-        )}
-        <FieldRow field={{ type: 'toggle', path: sectionOptionPath(section, sectionIndex, 'showTitle'), label: 'Show/hide title' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-        <FieldRow field={{ type: 'toggle', path: sectionOptionPath(section, sectionIndex, 'showIcon'), label: 'Show/hide icon' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-        {advancedEnabled && customWidthEnabled ? (
-          <SelectControl
-            label="Width / layout"
-            value={getPath(draft, sectionOptionPath(section, sectionIndex, 'width'), 'full')}
-            options={cardWidthOptions}
-            disabled={!canEdit || saving}
-            onChange={(value) => setDraft((current) => setPath(current, sectionOptionPath(section, sectionIndex, 'width'), value))}
-          />
-        ) : null}
-      </div>
-
-      <div className="pdf-editor-grid">
-        {fields.map((field) => (
-          <FieldRow key={field.path} field={field} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function SectionsList({ items, draft, selectedKey, onSelect, canReorder, onMove }) {
-  return (
-    <section className="surface admin-control-card pdf-sections-panel p-4">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="admin-control-icon"><LayoutGrid className="h-5 w-5" /></div>
-        <div>
-          <h3 className="font-black">Template Sections</h3>
-          <p className="mt-1 text-xs muted">Fixed PDF sections in order.</p>
-        </div>
-      </div>
-      <div className="grid gap-2">
-        {items.map(({ section, index }, orderIndex) => {
-          const Icon = section.icon || FileText;
-          const key = sectionKey(section, index);
-          const active = selectedKey === key;
-          const visible = sectionVisible(section, draft);
-          const group = sectionGroupLabel(section);
-          const previousGroup = orderIndex > 0 ? sectionGroupLabel(items[orderIndex - 1].section) : '';
-          return (
-            <div key={key} className="grid gap-2">
-              {group !== previousGroup ? <p className="pdf-section-group-label">{group}</p> : null}
-              <article className={`pdf-section-nav-card ${active ? 'is-active' : ''}`}>
-                <div className="pdf-section-nav-main">
-                  <div className="admin-control-icon h-9 w-9"><Icon className="h-4 w-4" /></div>
-                  <div className="min-w-0 flex-1">
-                    <p className="pdf-section-nav-title">{section.title}</p>
-                    <div className="pdf-section-nav-badges">
-                      <span className={`pdf-state-badge ${visible ? 'is-visible' : 'is-hidden'}`}>{visible ? 'Visible' : 'Hidden'}</span>
-                      <span className="pdf-state-badge is-fixed">Fixed</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="pdf-section-nav-actions">
-                  <button type="button" className="icon-button h-9 w-9" disabled={!canReorder || orderIndex === 0} onClick={() => onMove(orderIndex, -1)} aria-label="Move section up"><ArrowUp className="h-3.5 w-3.5" /></button>
-                  <button type="button" className="icon-button h-9 w-9" disabled={!canReorder || orderIndex === items.length - 1} onClick={() => onMove(orderIndex, 1)} aria-label="Move section down"><ArrowDown className="h-3.5 w-3.5" /></button>
-                  <button type="button" className="btn btn-secondary h-9 justify-center px-3 py-1.5 text-xs" onClick={() => onSelect(key)}>
-                    <Eye className="h-3.5 w-3.5" />
-                    Select
-                  </button>
-                </div>
-              </article>
+      <div className="pdf-section-editor-head">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="admin-control-icon"><Icon className="h-5 w-5" /></div>
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Selected Section Editor</p>
+            <h3 className="mt-1 text-xl font-black">{displayTitle}</h3>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className={`pdf-state-badge ${visible ? 'is-visible' : 'is-hidden'}`}>{visible ? 'Visible' : 'Hidden'}</span>
+              <span className="pdf-state-badge is-fixed">{isCustom ? 'Custom Card' : 'Fixed Section'}</span>
             </div>
-          );
-        })}
+          </div>
+        </div>
+        <div className="pdf-section-editor-actions">
+          <button type="button" className="btn btn-secondary h-9 px-3 py-1.5 text-xs" disabled={!canMoveUp} onClick={() => onMoveSelected(-1)}>
+            <ArrowUp className="h-4 w-4" />
+            Move Up
+          </button>
+          <button type="button" className="btn btn-secondary h-9 px-3 py-1.5 text-xs" disabled={!canMoveDown} onClick={() => onMoveSelected(1)}>
+            <ArrowDown className="h-4 w-4" />
+            Move Down
+          </button>
+        </div>
       </div>
+
+      <div className="pdf-section-select-row">
+        <SelectControl
+          label="Edit Section"
+          value={selectedKey}
+          options={items.map((item) => [item.key, item.kind === 'custom' ? `Custom Card - ${item.card?.title || customCardTypeLabel(item.card?.type)}` : cleanLayerTitle(getPath(draft, sectionOptionPath(item.section, item.index, 'title'), item.section.title))])}
+          disabled={saving}
+          onChange={onSelect}
+        />
+      </div>
+
+      {isCustom ? (
+        <SelectedCustomCardEditor item={selectedItem} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} customColorsEnabled={customColorsEnabled} />
+      ) : (
+        <>
+          <div className="pdf-editor-grid mb-4">
+            <label className="pdf-control-field">
+              <span className="label">Section title</span>
+              <input
+                className="input"
+                value={getPath(draft, sectionOptionPath(section, sectionIndex, 'title'), section.title)}
+                disabled={!canEdit || saving}
+                onChange={(event) => setDraft((current) => setPath(current, sectionOptionPath(section, sectionIndex, 'title'), event.target.value))}
+              />
+            </label>
+            {visibility ? (
+              <FieldRow field={{ ...visibility, label: 'Show/hide section' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+            ) : (
+              <label className="pdf-toggle-row is-disabled">
+                <span className="pdf-toggle-label">Show/hide section</span>
+                <span className="pdf-state-badge is-fixed">Fixed</span>
+              </label>
+            )}
+            <FieldRow field={{ type: 'toggle', path: sectionOptionPath(section, sectionIndex, 'showTitle'), label: 'Show/hide title' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+            <FieldRow field={{ type: 'toggle', path: sectionOptionPath(section, sectionIndex, 'showIcon'), label: 'Show/hide icon' }} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+            {advancedEnabled && customWidthEnabled ? (
+              <SelectControl
+                label="Width / layout"
+                value={getPath(draft, sectionOptionPath(section, sectionIndex, 'width'), 'full')}
+                options={cardWidthOptions}
+                disabled={!canEdit || saving}
+                onChange={(value) => setDraft((current) => setPath(current, sectionOptionPath(section, sectionIndex, 'width'), value))}
+              />
+            ) : null}
+          </div>
+
+          <div className="pdf-editor-grid">
+            {fields.map((field) => (
+              <FieldRow key={field.path} field={field} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+            ))}
+          </div>
+        </>
+      )}
     </section>
   );
 }
@@ -3304,20 +3475,27 @@ function StructuredBuilderWorkspace({
   const customColorsEnabled = advancedEnabled && getPath(draft, 'structured.customColorsEnabled', false) === true;
   const canReorder = getPath(draft, 'advancedEnabled', false) === true && getPath(draft, 'structured.allowDragDrop', false) === true;
   const sectionOrderSignature = stableJson(getPath(draft, 'structured.sectionOrder', []));
+  const customCards = Array.isArray(getPath(draft, 'structured.customSections', [])) ? getPath(draft, 'structured.customSections', []) : [];
+  const customSignature = stableJson(customCards.map((card, index) => ({ id: card.id || index, title: card.title, type: card.type })));
 
   useEffect(() => {
     const keys = sectionKeysFromDraft();
     setSectionOrder(keys);
-    setSelectedKey((current) => (keys.includes(current) ? current : keys[0] || ''));
-  }, [sections, template.key, sectionOrderSignature]);
+    const customKeys = customCards.map((card, index) => `custom:${card.id || index}`);
+    setSelectedKey((current) => ([...keys, ...customKeys].includes(current) ? current : keys[0] || customKeys[0] || ''));
+  }, [sections, template.key, sectionOrderSignature, customSignature]);
 
   const orderedItems = sectionOrder
     .map((key) => {
       const index = sections.findIndex((section, itemIndex) => sectionKey(section, itemIndex) === key);
-      return index >= 0 ? { section: sections[index], index } : null;
+      return index >= 0 ? { kind: 'section', key, section: sections[index], index } : null;
     })
     .filter(Boolean);
-  const selectedItem = orderedItems.find((item) => sectionKey(item.section, item.index) === selectedKey) || orderedItems[0];
+  const customItems = customCards.map((card, index) => ({ kind: 'custom', key: `custom:${card.id || index}`, card, index }));
+  const selectableItems = [...orderedItems, ...customItems];
+  const selectedItem = selectableItems.find((item) => item.key === selectedKey) || selectableItems[0];
+  const selectedSectionOrderIndex = selectedItem?.kind === 'section' ? orderedItems.findIndex((item) => item.key === selectedItem.key) : -1;
+  const selectedCustomIndex = selectedItem?.kind === 'custom' ? selectedItem.index : -1;
 
   function moveSection(orderIndex, direction) {
     if (!canReorder) return;
@@ -3329,13 +3507,47 @@ function StructuredBuilderWorkspace({
     setDraft((current) => setPath(current, 'structured.sectionOrder', next));
   }
 
+  function moveCustomCard(index, direction) {
+    if (index < 0) return;
+    setDraft((current) => {
+      const cards = Array.isArray(getPath(current, 'structured.customSections', [])) ? getPath(current, 'structured.customSections', []) : [];
+      const target = index + direction;
+      if (target < 0 || target >= cards.length) return current;
+      const nextCards = cards.slice();
+      [nextCards[index], nextCards[target]] = [nextCards[target], nextCards[index]];
+      return setPath(current, 'structured.customSections', nextCards);
+    });
+  }
+
+  function moveSelected(direction) {
+    if (selectedItem?.kind === 'section') moveSection(selectedSectionOrderIndex, direction);
+    if (selectedItem?.kind === 'custom') moveCustomCard(selectedCustomIndex, direction);
+  }
+
+  const selectedCanMoveUp = selectedItem?.kind === 'section'
+    ? canReorder && selectedSectionOrderIndex > 0
+    : selectedItem?.kind === 'custom' && selectedCustomIndex > 0;
+  const selectedCanMoveDown = selectedItem?.kind === 'section'
+    ? canReorder && selectedSectionOrderIndex >= 0 && selectedSectionOrderIndex < orderedItems.length - 1
+    : selectedItem?.kind === 'custom' && selectedCustomIndex >= 0 && selectedCustomIndex < customCards.length - 1;
+
   return (
     <div className="pdf-structured-workspace">
-      <div className="pdf-structured-sections">
-        <SectionsList items={orderedItems} draft={draft} selectedKey={selectedKey} onSelect={setSelectedKey} canReorder={canReorder} onMove={moveSection} />
-      </div>
       <main className="pdf-structured-editor">
-        <SelectedSectionEditor section={selectedItem?.section} sectionIndex={selectedItem?.index || 0} draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
+        <SelectedSectionEditor
+          selectedItem={selectedItem}
+          items={selectableItems}
+          selectedKey={selectedKey}
+          onSelect={setSelectedKey}
+          draft={draft}
+          setDraft={setDraft}
+          canEdit={canEdit}
+          saving={saving}
+          canMoveUp={selectedCanMoveUp}
+          canMoveDown={selectedCanMoveDown}
+          onMoveSelected={moveSelected}
+          customColorsEnabled={customColorsEnabled}
+        />
         <AdvancedLayoutPanel draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} />
         <CustomSectionsEditor draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} advancedEnabled={advancedEnabled} customSectionsEnabled={customSectionsEnabled} customColorsEnabled={customColorsEnabled} />
       </main>

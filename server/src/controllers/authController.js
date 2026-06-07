@@ -6,23 +6,43 @@ import { attachEffectivePermissions } from '../permissions.js';
 import { appError, clean, required } from '../utils/http.js';
 import AuditLog from '../models/AuditLog.js';
 import { logAudit } from '../services/auditService.js';
+import {
+  assertUserNotLocked,
+  getSecuritySettings,
+  recordFailedLogin,
+  recordSuccessfulLogin,
+  resetExpiredLock,
+  validatePasswordAgainstPolicy
+} from '../services/securitySettingsService.js';
 
 export async function login(req, res) {
   required(req.body, ['username', 'password']);
 
-  const user = await User.findOne({ username: clean(req.body.username).toLowerCase() });
-  if (!user) throw appError('Invalid username or password', 401);
+  const username = clean(req.body.username).toLowerCase();
+  const user = await User.findOne({ username });
+  if (!user) {
+    await logAudit({
+      userId: null,
+      action: 'login_failed',
+      module: 'auth',
+      after: { username, ip: req.ip || '' }
+    });
+    throw appError('Invalid username or password', 401);
+  }
+  await resetExpiredLock(user);
+  assertUserNotLocked(user);
   if (!user.active) throw appError('Account is inactive. Contact administrator.', 403);
   const ok = await bcrypt.compare(String(req.body.password), user.passwordHash);
-  if (!ok) throw appError('Invalid username or password', 401);
+  if (!ok) {
+    await recordFailedLogin(user, req);
+    throw appError('Invalid username or password', 401);
+  }
   clearLoginRateLimit(req);
-  user.lastLoginAt = new Date();
-  user.lastActivityAt = new Date();
-  user.lastActivityType = 'login';
-  await user.save();
+  await recordSuccessfulLogin(user, req);
   await attachEffectivePermissions(user);
+  const securitySettings = await getSecuritySettings();
 
-  res.json({ success: true, token: signToken(user), user: publicUser(user), role: user.role });
+  res.json({ success: true, token: signToken(user, securitySettings), user: publicUser(user), role: user.role });
 }
 
 export async function me(req, res) {
@@ -61,13 +81,15 @@ export async function updateProfile(req, res) {
   const password = clean(req.body.newPassword || req.body.password);
   let passwordChanged = false;
   if (password) {
-    if (password.length < 6) throw appError('Password must be at least 6 characters');
+    await validatePasswordAgainstPolicy(password);
     const currentPassword = clean(req.body.currentPassword);
     if (currentPassword) {
       const currentOk = await bcrypt.compare(currentPassword, user.passwordHash);
       if (!currentOk) throw appError('Current password is incorrect', 400);
     }
     user.passwordHash = await bcrypt.hash(password, 10);
+    user.passwordChangedAt = new Date();
+    user.forcePasswordReset = false;
     passwordChanged = true;
   }
 
