@@ -3147,7 +3147,6 @@ function BusinessSettingsFrame({
 }
 
 function DocumentNumberingSection({ onDirtyChange = null, embedded = false }) {
-  const [expandedRow, setExpandedRow] = useState('');
   const rows = [
     { key: 'invoice', label: 'Invoice', prefix: 'INV', icon: ReceiptText, helper: 'Used for invoice records and billing PDFs.' },
     { key: 'workOrder', label: 'Work Order', prefix: 'WO', icon: Wrench, helper: 'Used for technician work orders and job documents.' },
@@ -3207,7 +3206,6 @@ function DocumentNumberingSection({ onDirtyChange = null, embedded = false }) {
                     <span>Prefix</span>
                     <span>Next Number</span>
                     <span>Preview</span>
-                    <span>Actions</span>
                   </div>
                   {rows.map((row) => {
                     const item = form[row.key] || {};
@@ -3215,9 +3213,8 @@ function DocumentNumberingSection({ onDirtyChange = null, embedded = false }) {
                     const prefix = String(item.prefix || row.prefix).toUpperCase();
                     const nextNumber = clampNextNumber(item.nextNumber || 1);
                     const preview = `${prefix}-${year}-${String(nextNumber).padStart(4, '0')}`;
-                    const expanded = expandedRow === row.key;
                     return (
-                      <div key={row.key} className={`documents-numbering-row ${expanded ? 'is-expanded' : ''}`} role="row">
+                      <div key={row.key} className="documents-numbering-row" role="row">
                         <div className="documents-numbering-type" role="cell" data-label="Document Type">
                           <span className="documents-numbering-icon"><Icon className="h-4 w-4" /></span>
                           <span>
@@ -3246,31 +3243,25 @@ function DocumentNumberingSection({ onDirtyChange = null, embedded = false }) {
                           </div>
                         </div>
                         <div className="documents-numbering-preview" role="cell" data-label="Preview">{preview}</div>
-                        <div className="documents-numbering-actions" role="cell" data-label="Actions">
-                          <button type="button" className="icon-button documents-numbering-expand" onClick={() => setExpandedRow(expanded ? '' : row.key)} title={expanded ? 'Collapse details' : 'Expand details'}>
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        </div>
-                        {expanded ? (
-                          <div className="documents-numbering-expanded">
-                            <Info className="h-4 w-4" />
-                            <span>{row.label} IDs will use this pattern for new documents only. Existing generated records keep their current numbers.</span>
-                          </div>
-                        ) : null}
                       </div>
                     );
                   })}
                 </div>
 
+                <div className="documents-numbering-info">
+                  <Info className="h-4 w-4" />
+                  <span>Changing prefix or next number affects future documents only. Existing document numbers will not be changed.</span>
+                </div>
+
                 <details className="documents-numbering-advanced">
                   <summary>
                     <span>Advanced</span>
-                    <small>Yearly reset option</small>
+                    <small>Number reset policy</small>
                   </summary>
                   <label className="documents-numbering-reset-option">
                     <span>
                       <strong>Reset running numbers each year</strong>
-                      <small>Stored for future document generation migration. Keep off unless your numbering policy requires it.</small>
+                      <small>Use only if your company wants document numbers to restart every year.</small>
                     </span>
                     <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={Boolean(form.yearlyReset)} disabled={!canEdit || saving} onChange={(event) => setPath('yearlyReset', event.target.checked)} />
                   </label>

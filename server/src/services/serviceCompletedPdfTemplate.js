@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { LOGO_FULL_PATH, LOGO_ICON_PATH } from '../config.js';
-import { drawAdvancedPdfSections } from './pdfTemplateAdvanced.js';
+import { drawAdvancedPdfSections, drawVisualDesignPdf, shouldRenderVisualDesign } from './pdfTemplateAdvanced.js';
 
 const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
 const boldFontPath = 'C:\\Windows\\Fonts\\arialbd.ttf';
@@ -316,6 +316,11 @@ export function renderServiceCompletedPdf(doc, options = {}) {
   };
   const summary = cfgSection(config, 'serviceSummary');
   const title = cleanText(renderText(summary.title || config.headerTitle || 'SERVICE COMPLETED!', context), 'SERVICE COMPLETED!').toUpperCase();
+
+  if (shouldRenderVisualDesign(config)) {
+    drawVisualDesignPdf(doc, { config, context, title, company });
+    return;
+  }
 
   doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT).fill('#ffffff');
   drawHeader(doc, company, config);

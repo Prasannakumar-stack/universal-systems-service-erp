@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { LOGO_FULL_PATH, LOGO_ICON_PATH } from '../config.js';
-import { drawAdvancedPdfSections } from './pdfTemplateAdvanced.js';
+import { drawAdvancedPdfSections, drawVisualDesignPdf, shouldRenderVisualDesign } from './pdfTemplateAdvanced.js';
 
 const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
 const boldFontPath = 'C:\\Windows\\Fonts\\arialbd.ttf';
@@ -659,6 +659,15 @@ export function renderQuotationPdf(doc, options = {}) {
   const title = cleanText(renderText(config.headerTitle || 'QUOTATION', context), 'QUOTATION').toUpperCase();
   const taxSettings = options.taxSettings || {};
   const subtotal = quotation.items.reduce((sum, item) => sum + Number(item.total || 0), 0);
+
+  if (shouldRenderVisualDesign(config)) {
+    const hasGst = taxEnabled(taxSettings, config);
+    const percentage = Number(taxSettings.defaultPercentage ?? 18);
+    const finalTotal = subtotal + (hasGst ? subtotal * (percentage / 100) : 0);
+    drawVisualDesignPdf(doc, { config, context, title, company });
+    drawPageNumbers(doc, config);
+    return { subtotal, finalTotal };
+  }
 
   doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT).fill('#ffffff');
   drawHeader(doc, company, config);

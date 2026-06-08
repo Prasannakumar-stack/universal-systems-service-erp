@@ -22,7 +22,9 @@ const CARD_LABELS = {
   spacer: 'Spacer',
   divider: 'Divider',
   card: 'Card',
-  image: 'Image / Logo'
+  image: 'Image / Logo',
+  table: 'Table',
+  icon: 'Icon'
 };
 
 const CARD_GAP = 12;
@@ -518,11 +520,82 @@ function drawSpacerElement(doc, element, frame) {
   doc.restore();
 }
 
+function drawTableElement(doc, element, frame, context) {
+  const style = element.style || {};
+  const content = contentForElement(element);
+  const accent = style.accentColor || '#0f2a52';
+  const columns = Array.isArray(content.columns) && content.columns.length ? content.columns.slice(0, 6) : ['Description', 'Qty', 'Rate', 'Total'];
+  const rows = Array.isArray(content.rows) && content.rows.length ? content.rows.slice(0, 12) : [['Item', '1', 'Rs. 0', 'Rs. 0']];
+  const paddingX = 10;
+  const titleHeight = content.title ? 16 : 0;
+  const tableX = frame.x + paddingX;
+  const tableY = frame.y + 8 + titleHeight;
+  const tableWidth = Math.max(20, frame.width - paddingX * 2);
+  const rowHeight = clampNumber(style.rowHeight, 18, 12, 34);
+  const columnWidth = tableWidth / columns.length;
+  drawElementShell(doc, element, frame);
+  if (content.title) {
+    useFont(doc, 'BodyBold', 'Helvetica-Bold');
+    doc.fontSize(Math.max(7, clampNumber(style.fontSize, 12, 8, 32) * 0.72)).fillColor(accent)
+      .text(renderText(content.title, context), frame.x + paddingX, frame.y + 8, { width: tableWidth, height: 12 });
+  }
+  doc.roundedRect(tableX, tableY, tableWidth, rowHeight, 4).fill(accent);
+  useFont(doc, 'BodyBold', 'Helvetica-Bold');
+  doc.fontSize(Math.max(5.8, clampNumber(style.fontSize, 10, 8, 32) * 0.62)).fillColor('#ffffff');
+  columns.forEach((column, index) => {
+    doc.text(renderText(column, context), tableX + index * columnWidth + 4, tableY + 5, {
+      width: Math.max(8, columnWidth - 8),
+      height: rowHeight - 6
+    });
+  });
+  useFont(doc, 'Body', 'Helvetica');
+  doc.fontSize(Math.max(5.8, clampNumber(style.fontSize, 10, 8, 32) * 0.6));
+  rows.forEach((row, rowIndex) => {
+    const rowY = tableY + rowHeight + rowIndex * rowHeight;
+    if (rowY + rowHeight > frame.y + frame.height - 6) return;
+    doc.rect(tableX, rowY, tableWidth, rowHeight).fill(rowIndex % 2 ? '#ffffff' : '#f8fafc');
+    (Array.isArray(row) ? row : [row]).slice(0, columns.length).forEach((cell, cellIndex) => {
+      doc.fillColor(style.textColor || '#0f172a').text(renderText(cell, context), tableX + cellIndex * columnWidth + 4, rowY + 5, {
+        width: Math.max(8, columnWidth - 8),
+        height: rowHeight - 6,
+        lineGap: 1
+      });
+    });
+  });
+  const tableHeight = Math.min(rowHeight * (rows.length + 1), Math.max(rowHeight, frame.y + frame.height - tableY - 6));
+  doc.rect(tableX, tableY, tableWidth, tableHeight).strokeColor(style.borderColor || '#d8e5f7').lineWidth(0.5).stroke();
+}
+
+function drawIconElement(doc, element, frame, context) {
+  const style = element.style || {};
+  const content = contentForElement(element);
+  const accent = style.accentColor || '#0284c7';
+  const label = renderText(content.label || content.iconName || element.name || 'Icon', context);
+  drawElementShell(doc, element, frame);
+  const iconSize = Math.min(22, Math.max(12, frame.height - 14), Math.max(12, frame.width * 0.32));
+  const iconX = frame.x + 8;
+  const iconY = frame.y + Math.max(6, (frame.height - iconSize) / 2);
+  doc.roundedRect(iconX, iconY, iconSize, iconSize, Math.max(4, iconSize / 4)).fill(accent);
+  useFont(doc, 'BodyBold', 'Helvetica-Bold');
+  doc.fontSize(Math.max(7, iconSize * 0.42)).fillColor('#ffffff').text(label.slice(0, 1).toUpperCase(), iconX, iconY + iconSize * 0.32, {
+    width: iconSize,
+    align: 'center'
+  });
+  doc.fontSize(clampNumber(style.fontSize, 10, 8, 32)).fillColor(style.textColor || '#0f172a')
+    .text(label, iconX + iconSize + 7, frame.y + Math.max(5, frame.height / 2 - 5), {
+      width: Math.max(8, frame.width - iconSize - 22),
+      height: Math.max(8, frame.height - 10),
+      align: style.alignment || element.alignment || 'left'
+    });
+}
+
 function drawDesignElement(doc, element, context, company) {
   const frame = designElementFrame(element);
   if (element.type === 'section') return drawSectionElement(doc, element, frame, context);
   if (element.type === 'divider') return drawDividerElement(doc, element, frame, context);
   if (element.type === 'spacer') return drawSpacerElement(doc, element, frame);
+  if (element.type === 'table') return drawTableElement(doc, element, frame, context);
+  if (element.type === 'icon') return drawIconElement(doc, element, frame, context);
   if (element.type === 'card') return drawCardElement(doc, element, frame, context);
   if (element.type === 'qr') return drawQrElement(doc, element, frame, context);
   if (element.type === 'signature') return drawSignatureElement(doc, element, frame, context);
@@ -537,7 +610,9 @@ function drawDesignPdfPages(doc, options = {}) {
   let pagesAdded = 0;
   designPagesForElements(config, elements).forEach((page) => {
     if (!page.elements.length) return;
-    doc.addPage({ size: 'A4', margin: 0 });
+    if (pagesAdded > 0 || options.useCurrentPageForFirst !== true) {
+      doc.addPage({ size: 'A4', margin: 0 });
+    }
     pagesAdded += 1;
     doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT).fill(config.design?.page?.backgroundColor || '#ffffff');
     doc.strokeColor('#e2e8f0').lineWidth(0.7).rect(18, 18, PAGE_WIDTH - 36, PAGE_HEIGHT - 36).stroke();
@@ -547,6 +622,16 @@ function drawDesignPdfPages(doc, options = {}) {
       .forEach((element) => drawDesignElement(doc, element, context, company));
   });
   return pagesAdded;
+}
+
+export function shouldRenderVisualDesign(config = {}) {
+  return config.design?.enabled === true
+    && config.design?.visualElementMode !== false
+    && designElements(config).length > 0;
+}
+
+export function drawVisualDesignPdf(doc, options = {}) {
+  return drawDesignPdfPages(doc, { ...options, useCurrentPageForFirst: true });
 }
 
 export function drawAdvancedPdfSections(doc, options = {}) {

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { LOGO_FULL_PATH, LOGO_ICON_PATH } from '../config.js';
-import { drawAdvancedPdfSections } from './pdfTemplateAdvanced.js';
+import { drawAdvancedPdfSections, drawVisualDesignPdf, shouldRenderVisualDesign } from './pdfTemplateAdvanced.js';
 
 const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
 const boldFontPath = 'C:\\Windows\\Fonts\\arialbd.ttf';
@@ -806,6 +806,12 @@ export function renderInvoicePdf(doc, options = {}) {
     balance,
     words: invoice.amountInWords || amountInWords(finalTotal)
   };
+
+  if (shouldRenderVisualDesign(config)) {
+    drawVisualDesignPdf(doc, { config, context, title, company });
+    drawPageNumbers(doc, config);
+    return { subtotal, finalTotal, amountPaid, balance };
+  }
 
   doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT).fill('#ffffff');
   drawHeader(doc, company, config);

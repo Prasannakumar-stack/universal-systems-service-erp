@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { LOGO_FULL_PATH, LOGO_ICON_PATH } from '../config.js';
-import { drawAdvancedPdfSections } from './pdfTemplateAdvanced.js';
+import { drawAdvancedPdfSections, drawVisualDesignPdf, shouldRenderVisualDesign } from './pdfTemplateAdvanced.js';
 
 const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
 const boldFontPath = 'C:\\Windows\\Fonts\\arialbd.ttf';
@@ -604,6 +604,11 @@ export function renderAmcContractPdf(doc, options = {}) {
   const data = { ...sampleAmcContractData(), ...(options.contract || {}) };
   const company = amcCompany(options.company);
   const title = cleanText(renderText(config.headerTitle || 'AMC CONTRACT', context), 'AMC CONTRACT').toUpperCase();
+  if (shouldRenderVisualDesign(config)) {
+    drawVisualDesignPdf(doc, { config, context, title, company });
+    drawPageNumbers(doc, config);
+    return;
+  }
   drawPageBase(doc, title, company, config);
 
   const customerDetails = cfgSection(config, 'customerDetails');
@@ -716,6 +721,11 @@ export function renderAmcServiceVisitPdf(doc, options = {}) {
   const company = amcCompany(options.company);
   const configuredTitle = cleanText(renderText(config.headerTitle || 'AMC SERVICE VISIT REPORT', context), 'AMC SERVICE VISIT REPORT').toUpperCase();
   const title = configuredTitle === 'AMC SERVICE VISIT' ? 'AMC SERVICE VISIT REPORT' : configuredTitle;
+  if (shouldRenderVisualDesign(config)) {
+    drawVisualDesignPdf(doc, { config, context, title, company });
+    drawPageNumbers(doc, config);
+    return;
+  }
   drawPageBase(doc, title, company, config);
 
   const visitDetails = cfgSection(config, 'visitDetails');
@@ -801,6 +811,11 @@ export function renderAmcRenewalPdf(doc, options = {}) {
   const data = { ...sampleAmcRenewalData(), ...(options.renewal || {}) };
   const company = amcCompany(options.company);
   const title = cleanText(renderText(config.headerTitle || 'AMC RENEWAL REMINDER', context), 'AMC RENEWAL REMINDER').toUpperCase();
+  if (shouldRenderVisualDesign(config)) {
+    drawVisualDesignPdf(doc, { config, context, title, company });
+    drawPageNumbers(doc, config);
+    return;
+  }
   drawPageBase(doc, title, company, config);
 
   const amcExpiryDetails = cfgSection(config, 'amcExpiryDetails');

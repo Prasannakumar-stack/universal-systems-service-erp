@@ -79,7 +79,9 @@ const advancedSectionTypes = new Set([
   'custom-field',
   'spacer',
   'divider',
-  'image'
+  'image',
+  'table',
+  'icon'
 ]);
 
 const cardWidths = new Set(['full', 'half', 'third', 'two-thirds', 'auto']);
@@ -312,7 +314,9 @@ function commonStructuredConfig(key, flat = {}) {
           gridSize: 8,
           snap: true
         },
-        gridEnabled: true,
+        gridEnabled: false,
+        layoutGuides: false,
+        visualElementMode: true,
         snapToGrid: true,
         page: {
           size: 'A4',
@@ -639,6 +643,7 @@ function normalizeDesignElementType(type = 'text') {
   if (normalized === 'bank' || normalized === 'payment' || normalized === 'customer-message') return 'card';
   if (normalized === 'warranty' || normalized === 'terms') return 'card';
   if (normalized === 'line') return 'divider';
+  if (normalized === 'rectangle' || normalized === 'shape') return 'card';
   return advancedSectionTypes.has(normalized) ? normalized : 'text';
 }
 
@@ -653,6 +658,7 @@ function sanitizeDesignContent(type = 'text', content = {}, element = {}) {
     helperText: cleanText(source.helperText ?? element.helperText, '', 1000),
     name: cleanText(source.name ?? element.personName, '', 160),
     designation: cleanText(source.designation, '', 160),
+    iconName: cleanText(source.iconName ?? element.iconName, '', 80),
     qrType: ['payment', 'contact', 'company', 'custom'].includes(source.qrType || element.qrType) ? (source.qrType || element.qrType) : 'payment',
     imageMode: ['logo', 'placeholder', 'custom'].includes(source.imageMode || element.imageMode) ? (source.imageMode || element.imageMode) : 'logo',
     twoColumn: boolValue(source.twoColumn ?? element.twoColumn, false),
@@ -664,6 +670,8 @@ function sanitizeDesignContent(type = 'text', content = {}, element = {}) {
   if (type === 'card' && !common.title) common.title = cleanText(element.name, 'Card title', 160);
   if (type === 'qr' && !common.label) common.label = 'QR CODE';
   if (type === 'signature' && !common.label) common.label = 'Authorized Signature';
+  if (type === 'table' && !common.title) common.title = 'Table';
+  if (type === 'icon' && !common.label) common.label = cleanText(source.iconName ?? element.iconName, 'Icon', 80);
   if ((type === 'divider' || type === 'spacer' || type === 'image') && !common.label) common.label = type === 'image' ? 'Image / Logo' : type === 'spacer' ? 'Spacer' : 'Divider';
   if (type === 'text' && !common.text) common.text = cleanText(element.title, 'Text block', 160);
   return common;
@@ -682,6 +690,7 @@ function sanitizeDesignStyle(style = {}, element = {}) {
     fontSize: clampNumber(source.fontSize, 13, 8, 32),
     fontWeight: clampNumber(source.fontWeight, 700, 300, 950),
     alignment: ['left', 'center', 'right'].includes(source.alignment || element.alignment) ? (source.alignment || element.alignment) : 'left',
+    rowHeight: clampNumber(source.rowHeight, 18, 12, 34),
     dividerThickness: clampNumber(source.dividerThickness, 2, 1, 8),
     dividerStyle: ['solid', 'dashed', 'dotted'].includes(source.dividerStyle) ? source.dividerStyle : 'solid'
   };
@@ -747,6 +756,10 @@ function sanitizeDesignElement(element = {}, index = 0) {
           ? 'Spacer'
           : type === 'image'
             ? 'Image / Logo'
+            : type === 'table'
+              ? 'Table'
+              : type === 'icon'
+                ? 'Icon'
             : type === 'card'
               ? 'Card'
               : 'Text';
@@ -774,6 +787,9 @@ function sanitizeDesignElement(element = {}, index = 0) {
     avoidSplit: boolValue(element.avoidSplit, true),
     printSafe: boolValue(element.printSafe, true),
     zIndex: clampNumber(element.zIndex, index + 20, 1, 999),
+    sourceSectionId: cleanText(element.sourceSectionId, '', 120),
+    sourceKey: cleanText(element.sourceKey, '', 120),
+    designGenerated: boolValue(element.designGenerated, false),
     qrType: content.qrType,
     alignment: ['left', 'center', 'right'].includes(element.alignment) ? element.alignment : content.alignment || 'left',
     content,
@@ -883,7 +899,9 @@ function sanitizeConfig(payload = {}, key = '') {
   sanitized.design.canvas.zoom = ['fit', 'fit-width', '75', '100', '125'].includes(String(sanitized.design.canvas.zoom)) ? String(sanitized.design.canvas.zoom) : 'fit-width';
   sanitized.design.canvas.gridSize = clampNumber(sanitized.design.canvas.gridSize, 8, 4, 24);
   sanitized.design.canvas.snap = boolValue(sanitized.design.canvas.snap, true);
-  sanitized.design.gridEnabled = boolValue(sanitized.design.gridEnabled, true);
+  sanitized.design.gridEnabled = boolValue(sanitized.design.gridEnabled, false);
+  sanitized.design.layoutGuides = boolValue(sanitized.design.layoutGuides, false);
+  sanitized.design.visualElementMode = boolValue(sanitized.design.visualElementMode, true);
   sanitized.design.snapToGrid = boolValue(sanitized.design.snapToGrid, sanitized.design.canvas.snap);
   sanitized.design.page = deepMerge(defaults.design.page, sanitized.design.page || {});
   sanitized.design.page.size = sanitized.design.page.size === 'A4' ? 'A4' : 'A4';

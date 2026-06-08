@@ -146,7 +146,9 @@ const builderCanvas = {
 
 const builderElementTypes = [
   { type: 'text', label: 'Add Text', icon: Type },
+  { type: 'table', label: 'Add Table', icon: Columns2 },
   { type: 'card', label: 'Add Card', icon: Square },
+  { type: 'icon', label: 'Add Icon', icon: Box },
   { type: 'qr', label: 'Add QR', icon: QrCode },
   { type: 'signature', label: 'Add Signature', icon: Signature },
   { type: 'divider', label: 'Add Divider', icon: Minus },
@@ -233,6 +235,7 @@ const defaultElementStyles = {
   fontSize: 13,
   fontWeight: 700,
   alignment: 'left',
+  rowHeight: 18,
   dividerThickness: 2,
   dividerStyle: 'solid'
 };
@@ -272,6 +275,12 @@ function designStateFromConfig(config = {}) {
 function mergeDesignStateForSave(config = {}, designState = {}) {
   const currentDesign = config.design || {};
   const normalizedDesign = normalizeDesignState(designState);
+  const visualElementMode = normalizedDesign.visualElementMode !== false;
+  const saveElements = normalizedDesign.elements.map((element, index) => normalizeBuilderElement(element, index));
+  const saveSections = visualElementMode
+    ? []
+    : normalizedDesign.sections.map((section, index) => normalizeBuilderSection(section, index));
+  const savePages = normalizeDesignPages(normalizedDesign, saveElements, saveSections);
   return {
     ...config,
     editMode: 'design',
@@ -295,10 +304,11 @@ function mergeDesignStateForSave(config = {}, designState = {}) {
         ...(currentDesign.colors || {}),
         ...(normalizedDesign.colors || {})
       },
-      pages: normalizedDesign.pages,
-      sections: normalizedDesign.sections,
-      elements: normalizedDesign.elements,
-      customElements: normalizedDesign.customElements,
+      visualElementMode,
+      pages: savePages,
+      sections: saveSections,
+      elements: saveElements,
+      customElements: saveElements,
       enabled: true,
       confirmed: true,
       lockedDefaultSections: true
@@ -569,6 +579,240 @@ function sectionOverflowRisk(section = {}, content = {}, rows = [], columns = []
   return height < 30 + estimatedLines * 13;
 }
 
+function isNonVisualDesignSection(section = {}) {
+  const text = `${section.title || ''} ${section.name || ''} ${section.role || ''} ${section.content?.title || ''}`.toLowerCase();
+  return text.includes('page break') || text.includes('pagination') || text.includes('safe zone');
+}
+
+function makeVisualElementFromSection(section = {}, patch = {}, index = 0) {
+  const role = section.role || designLayerRole(section.title || section.name);
+  const style = { ...sectionDefaultStyle(role), ...(section.style || {}), ...(patch.style || {}) };
+  const type = normalizeElementType(patch.type || 'text');
+  const content = { ...contentDefaultsForElement(type), ...(patch.content || {}) };
+  return normalizeBuilderElement({
+    id: patch.id || `visual-${section.id || section.sourceKey || index}-${patch.key || index}`,
+    type,
+    name: patch.name || patch.title || section.name || section.title || elementNameForType(type),
+    title: patch.title || patch.name || section.title || section.name || elementNameForType(type),
+    pageId: section.pageId || 'page-1',
+    x: Number(section.x || 32) + Number(patch.x || 0),
+    y: Number(section.y || 30) + Number(patch.y || 0),
+    width: patch.width ?? section.width,
+    height: patch.height ?? section.height,
+    widthMode: 'custom',
+    visible: section.visible !== false,
+    enabled: section.enabled !== false,
+    locked: patch.locked ?? false,
+    system: true,
+    sourceSectionId: section.id,
+    sourceKey: section.sourceKey,
+    designGenerated: true,
+    showTitle: false,
+    showIcon: false,
+    zIndex: Number(section.zIndex || 1) * 20 + index,
+    content,
+    style
+  }, index);
+}
+
+function visualElementsFromSections(sections = [], template = {}, draft = {}) {
+  const output = [];
+  const add = (section, patch) => {
+    output.push(makeVisualElementFromSection(section, patch, output.length));
+  };
+
+  sections.filter((section) => !isNonVisualDesignSection(section)).forEach((section) => {
+    const content = section.content || {};
+    const title = content.title || section.title || section.name || 'Section';
+    const rows = Array.isArray(content.rows) ? content.rows : [];
+    const columns = Array.isArray(content.columns) ? content.columns : [];
+    const width = Number(section.width || 220);
+    const height = Number(section.height || 80);
+    const role = content.kind || section.role || 'details';
+    const baseStyle = section.style || {};
+    const softCardStyle = {
+      borderWidth: role === 'header' || role === 'footer' ? 0 : 1,
+      borderRadius: role === 'table' ? 4 : 8,
+      backgroundColor: baseStyle.backgroundColor || '#ffffff',
+      borderColor: baseStyle.borderColor || '#d8e5f7',
+      textColor: baseStyle.textColor || '#0f172a',
+      fontSize: baseStyle.fontSize || 12,
+      fontWeight: baseStyle.fontWeight || 700,
+      shadow: false
+    };
+
+    if (role === 'header') {
+      add(section, {
+        key: 'logo',
+        type: 'image',
+        name: 'Logo',
+        x: 14,
+        y: 18,
+        width: 54,
+        height: 54,
+        content: { label: 'Company Logo', imageMode: 'logo' },
+        style: { borderWidth: 0, backgroundColor: '#ffffff' }
+      });
+      add(section, {
+        key: 'company-name',
+        type: 'text',
+        name: 'Company name',
+        x: 82,
+        y: 16,
+        width: Math.max(120, width - 180),
+        height: 24,
+        content: { text: '{{company_name}}' },
+        style: { ...softCardStyle, borderWidth: 0, fontSize: 16, fontWeight: 800, backgroundColor: '#ffffff' }
+      });
+      add(section, {
+        key: 'company-details',
+        type: 'text',
+        name: 'Company details',
+        x: 82,
+        y: 44,
+        width: Math.max(160, width - 180),
+        height: 45,
+        content: { text: '{{company_phone}} | {{company_email}}\n{{company_address}}' },
+        style: { ...softCardStyle, borderWidth: 0, fontSize: 8, fontWeight: 500, backgroundColor: '#ffffff', textColor: '#475569' }
+      });
+      add(section, {
+        key: 'document-title',
+        type: 'text',
+        name: title,
+        x: Math.max(260, width - 170),
+        y: 18,
+        width: 150,
+        height: 28,
+        content: { text: title },
+        style: { ...softCardStyle, borderWidth: 0, fontSize: 15, fontWeight: 800, alignment: 'right', backgroundColor: '#ffffff' }
+      });
+      add(section, {
+        key: 'header-divider',
+        type: 'divider',
+        name: 'Header divider',
+        x: 0,
+        y: Math.max(90, height - 14),
+        width,
+        height: 10,
+        content: { label: '' },
+        style: { accentColor: baseStyle.accentColor || '#0f2a52', dividerThickness: 2 }
+      });
+      return;
+    }
+
+    if (role === 'table') {
+      add(section, {
+        key: 'table',
+        type: 'table',
+        name: title,
+        x: 0,
+        y: 0,
+        width,
+        height,
+        content: { title, columns, rows },
+        style: { ...softCardStyle, accentColor: baseStyle.accentColor || '#0f2a52', fontSize: 8, borderWidth: 1 }
+      });
+      return;
+    }
+
+    if (role === 'amount') {
+      add(section, {
+        key: 'amount-card',
+        type: 'card',
+        name: title,
+        x: 0,
+        y: 0,
+        width,
+        height,
+        content: { title, body: rows.map(([label, value]) => `${label}: ${value}`).join('\n') },
+        style: { ...softCardStyle, accentColor: '#047857', fontSize: 12 }
+      });
+      return;
+    }
+
+    if (role === 'footer') {
+      add(section, {
+        key: 'footer-text',
+        type: 'text',
+        name: 'Footer text',
+        x: 0,
+        y: 6,
+        width,
+        height: Math.max(28, height - 12),
+        content: { text: content.body || '{{company_phone}} | {{company_email}} | {{company_address}}' },
+        style: { ...softCardStyle, borderWidth: 0, fontSize: 8, fontWeight: 500, alignment: 'center', textColor: '#64748b', backgroundColor: '#ffffff' }
+      });
+      return;
+    }
+
+    if (rows.length) {
+      add(section, {
+        key: 'card-bg',
+        type: 'card',
+        name: `${title} card`,
+        x: 0,
+        y: 0,
+        width,
+        height,
+        content: { title: '', body: '' },
+        style: { ...softCardStyle, fontSize: 1, accentColor: baseStyle.accentColor || '#0f2a52' },
+        locked: true
+      });
+      add(section, {
+        key: 'section-title',
+        type: 'text',
+        name: `${title} title`,
+        x: 16,
+        y: 10,
+        width: Math.max(80, width - 32),
+        height: 18,
+        content: { text: title },
+        style: { ...softCardStyle, borderWidth: 0, fontSize: 9, fontWeight: 800, textColor: baseStyle.accentColor || '#0f2a52', backgroundColor: '#ffffff' }
+      });
+      rows.slice(0, 6).forEach(([label, value], rowIndex) => {
+        const rowY = 34 + rowIndex * 16;
+        add(section, {
+          key: `label-${rowIndex}`,
+          type: 'text',
+          name: `${label} label`,
+          x: 16,
+          y: rowY,
+          width: Math.max(55, width * 0.36),
+          height: 14,
+          content: { text: label },
+          style: { ...softCardStyle, borderWidth: 0, fontSize: 7, fontWeight: 600, textColor: '#64748b', backgroundColor: '#ffffff' }
+        });
+        add(section, {
+          key: `value-${rowIndex}`,
+          type: 'text',
+          name: `${label} value`,
+          x: Math.max(80, width * 0.42),
+          y: rowY,
+          width: Math.max(80, width * 0.55),
+          height: 14,
+          content: { text: value },
+          style: { ...softCardStyle, borderWidth: 0, fontSize: 7.5, fontWeight: 800, backgroundColor: '#ffffff' }
+        });
+      });
+      return;
+    }
+
+    add(section, {
+      key: 'notice-card',
+      type: 'card',
+      name: title,
+      x: 0,
+      y: 0,
+      width,
+      height,
+      content: { title, body: content.body || content.text || '' },
+      style: { ...softCardStyle, accentColor: baseStyle.accentColor || '#2563eb', fontSize: role === 'notice' ? 10 : 12 }
+    });
+  });
+
+  return output.map((element, index) => normalizeBuilderElement({ ...element, zIndex: index + 20 }, index));
+}
+
 function sectionDefaultStyle(role = 'details', draft = {}) {
   const accentColor = getPath(draft, 'design.colors.accentColor', getPath(draft, 'header.accentColor', '#0f2a52'));
   const noticeBackground = getPath(draft, 'design.colors.noticeBackground', '#f1f7ff');
@@ -783,6 +1027,7 @@ function mergeTemplateSections(defaultSections = [], savedSections = []) {
 
 function designStateWithTemplateSections(designState = {}, sections = [], draft = {}, template = {}) {
   const normalized = normalizeDesignState(designState);
+  const visualElementMode = normalized.visualElementMode !== false;
   const savedSections = Array.isArray(normalized.sections) ? normalized.sections.map((section, index) => normalizeBuilderSection(section, index)) : [];
   const defaultSections = normalized.blank === true ? [] : buildDefaultTemplateSections(template, sections, draft);
   const allowedPageIds = new Set(['page-1']);
@@ -800,8 +1045,28 @@ function designStateWithTemplateSections(designState = {}, sections = [], draft 
       ...section,
       pageId: allowedPageIds.has(section.pageId || 'page-1') ? section.pageId : 'page-1'
     }, index));
+
+  if (visualElementMode) {
+    const sourceElements = normalized.elements.length
+      ? normalized.elements
+      : visualElementsFromSections(mergedSections, template, draft);
+    const visualElements = sourceElements.map((element, index) => normalizeBuilderElement({
+      ...element,
+      pageId: allowedPageIds.has(element.pageId || 'page-1') ? element.pageId : 'page-1'
+    }, index));
+    return {
+      ...normalized,
+      visualElementMode: true,
+      sections: [],
+      elements: visualElements,
+      customElements: visualElements,
+      pages: normalizeDesignPages(normalized, visualElements, [])
+    };
+  }
+
   const next = {
     ...normalized,
+    visualElementMode: false,
     sections: mergedSections,
     pages: normalizeDesignPages(normalized, normalized.elements, mergedSections)
   };
@@ -825,11 +1090,14 @@ function normalizeElementType(type = 'text') {
   if (normalized === 'bank' || normalized === 'payment' || normalized === 'customer-message') return 'card';
   if (normalized === 'warranty' || normalized === 'terms') return 'card';
   if (normalized === 'line') return 'divider';
+  if (normalized === 'rectangle' || normalized === 'shape') return 'card';
   if (builderElementTypes.some((item) => item.type === normalized)) return normalized;
   return 'text';
 }
 
 function contentDefaultsForElement(type = 'text') {
+  if (type === 'table') return { title: 'Table', columns: ['Description', 'Qty', 'Rate', 'Total'], rows: [['Item', '1', 'Rs. 0', 'Rs. 0']] };
+  if (type === 'icon') return { label: 'Icon', iconName: 'star' };
   if (type === 'card') return { title: 'Card title', body: 'Add details here', twoColumn: false };
   if (type === 'qr') return { label: 'QR CODE', qrType: 'payment', helperText: 'Payment / contact QR placeholder' };
   if (type === 'signature') return { label: 'Authorized Signature', name: '', designation: '' };
@@ -839,7 +1107,36 @@ function contentDefaultsForElement(type = 'text') {
   return { text: 'New text block' };
 }
 
+function formatTableColumns(columns = []) {
+  return (Array.isArray(columns) && columns.length ? columns : contentDefaultsForElement('table').columns).join(' | ');
+}
+
+function parseTableColumns(value = '') {
+  const columns = String(value || '')
+    .split('|')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  return columns.length ? columns : contentDefaultsForElement('table').columns;
+}
+
+function formatTableRows(rows = []) {
+  const sourceRows = Array.isArray(rows) && rows.length ? rows : contentDefaultsForElement('table').rows;
+  return sourceRows.map((row) => (Array.isArray(row) ? row : [row]).join(' | ')).join('\n');
+}
+
+function parseTableRows(value = '', columnCount = 4) {
+  const rows = String(value || '')
+    .split('\n')
+    .map((line) => line.split('|').map((item) => item.trim()).slice(0, Math.max(1, columnCount)))
+    .filter((row) => row.some(Boolean))
+    .slice(0, 12);
+  return rows.length ? rows : contentDefaultsForElement('table').rows;
+}
+
 function defaultSizeForElement(type = 'text') {
+  if (type === 'table') return { width: 520, height: 132 };
+  if (type === 'icon') return { width: 38, height: 38 };
   if (type === 'card') return { width: 260, height: 118 };
   if (type === 'qr') return { width: 190, height: 132 };
   if (type === 'signature') return { width: 230, height: 96 };
@@ -979,6 +1276,7 @@ function normalizeDesignState(source = {}) {
     enabled: source.enabled === true,
     confirmed: source.confirmed === true,
     lockedDefaultSections: true,
+    visualElementMode: source.visualElementMode !== false,
     blank: source.blank === true,
     freeLayoutMode: source.freeLayoutMode === true,
     canvas: {
@@ -988,7 +1286,8 @@ function normalizeDesignState(source = {}) {
       gridSize: clampBuilderNumber(source.canvas?.gridSize ?? source.gridSize, builderCanvas.gridSize, 4, 24),
       snap: source.canvas?.snap ?? source.snapToGrid ?? true
     },
-    gridEnabled: source.gridEnabled !== false,
+    gridEnabled: source.gridEnabled === true,
+    layoutGuides: source.layoutGuides === true || source.canvas?.layoutGuides === true,
     snapToGrid: source.snapToGrid ?? source.canvas?.snap ?? true,
     page: {
       size: 'A4',
@@ -1018,6 +1317,8 @@ function elementIconForType(type = 'text') {
 
 function elementPrimaryText(element = {}) {
   const content = element.content || {};
+  if (element.type === 'table') return content.title || element.name || 'Table';
+  if (element.type === 'icon') return content.label || content.iconName || element.name || 'Icon';
   if (element.type === 'card') return content.body || content.title || element.name || '';
   if (element.type === 'qr') return content.label || 'QR CODE';
   if (element.type === 'signature') return [content.label, content.name, content.designation].filter(Boolean).join('\n');
@@ -1523,7 +1824,8 @@ function DesignModeWorkspace({
   const pages = canvasDesign.pages;
   const gridSize = canvasDesign.canvas.gridSize || builderCanvas.gridSize;
   const snapEnabled = canvasDesign.canvas.snap !== false && canvasDesign.snapToGrid !== false;
-  const gridEnabled = canvasDesign.gridEnabled !== false;
+  const gridEnabled = canvasDesign.gridEnabled === true;
+  const layoutGuidesEnabled = canvasDesign.layoutGuides === true;
   const freeLayoutMode = canvasDesign.freeLayoutMode === true;
   const [activeRail, setActiveRail] = useState('templates');
   const [selectedLayerId, setSelectedLayerId] = useState('');
@@ -1532,11 +1834,12 @@ function DesignModeWorkspace({
   const [variableQuery, setVariableQuery] = useState('');
   const [activeInspectorTab, setActiveInspectorTab] = useState('content');
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
-  const [rightInspectorOpen, setRightInspectorOpen] = useState(true);
+  const [rightInspectorOpen, setRightInspectorOpen] = useState(false);
   const [fullScreenEditor, setFullScreenEditor] = useState(true);
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [interaction, setInteraction] = useState(null);
+  const [editingElementId, setEditingElementId] = useState('');
   const paperRef = useRef(null);
   const freeLayoutWarningShownRef = useRef(false);
   const normalizedSignature = stableJson(normalizedDesign);
@@ -1605,6 +1908,17 @@ function DesignModeWorkspace({
   const selectedElement = selectedLayer?.kind === 'element' ? selectedLayer.element : null;
   const selectedSectionLayer = selectedLayer?.kind === 'section' ? selectedLayer : null;
   const selectedSection = selectedSectionLayer?.sectionDesign || null;
+  const selectedFrame = selectedElement || selectedSection;
+  const selectedLayerLocked = selectedElement
+    ? selectedElement.locked === true
+    : selectedSection
+      ? selectedSection.locked === true || !freeLayoutMode
+      : false;
+  const selectedCanEditFrame = selectedElement
+    ? !disabled && selectedElement.locked !== true
+    : selectedSection
+      ? !disabled && freeLayoutMode && selectedSection.locked !== true
+      : false;
   const currentPage = pages.find((page) => page.id === currentPageId) || pages[0] || { id: 'page-1', name: 'Page 1' };
   const currentPageIndex = Math.max(0, pages.findIndex((page) => page.id === currentPage.id));
   const referencePdfUrl = previewUrl ? `${previewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&page=${currentPageIndex + 1}` : '';
@@ -1787,12 +2101,17 @@ function DesignModeWorkspace({
 
   function applyDefaultTemplateLayout() {
     if (disabled) return;
+    const defaultSections = buildDefaultTemplateSections(template, sections, draft);
+    const defaultElements = visualElementsFromSections(defaultSections, template, draft);
     commitDesign((current) => ({
       ...current,
       blank: false,
+      visualElementMode: true,
       freeLayoutMode: false,
-      sections: buildDefaultTemplateSections(template, sections, draft),
-      pages: normalizeDesignPages(current, current.elements, buildDefaultTemplateSections(template, sections, draft))
+      sections: [],
+      elements: defaultElements,
+      customElements: defaultElements,
+      pages: normalizeDesignPages(current, defaultElements, [])
     }));
     setSelectedLayerId('');
     setCurrentPageId('page-1');
@@ -1801,10 +2120,11 @@ function DesignModeWorkspace({
 
   function startBlankDesign() {
     if (disabled) return;
-    if (!window.confirm('Start from a blank A4 design? Existing canvas sections and elements in this unsaved draft will be cleared.')) return;
+    if (!window.confirm('Start from a blank A4 design? Existing canvas elements in this unsaved draft will be cleared.')) return;
     commitDesign((current) => ({
       ...current,
       blank: true,
+      visualElementMode: true,
       freeLayoutMode: true,
       sections: [],
       elements: [],
@@ -1925,6 +2245,77 @@ function DesignModeWorkspace({
       };
     });
     setSelectedLayerId('');
+  }
+
+  function patchSelectedLayerFrame(patch) {
+    if (!selectedFrame || !selectedCanEditFrame) return;
+    if (selectedElement) patchElement(selectedElement.id, patch);
+    else if (selectedSection) patchSection(selectedSection.id, patch);
+  }
+
+  function duplicateSelectedLayer() {
+    if (selectedElement) duplicateElement(selectedElement);
+    else if (selectedSection) duplicateSection(selectedSection);
+  }
+
+  function deleteSelectedLayer() {
+    if (selectedElement) deleteElement(selectedElement.id);
+    else if (selectedSection?.system === false) deleteSection(selectedSection.id);
+  }
+
+  function toggleSelectedLayerLock() {
+    if (!selectedLayer || disabled) return;
+    if (selectedElement) {
+      patchElement(selectedElement.id, { locked: !selectedElement.locked });
+      return;
+    }
+    if (selectedSection && freeLayoutMode) {
+      patchSection(selectedSection.id, { locked: !selectedSection.locked });
+    }
+  }
+
+  function bringSelectedLayerForward() {
+    if (!selectedFrame || !selectedCanEditFrame) return;
+    const pool = selectedElement ? elements : canvasSections;
+    const maxZ = Math.max(...pool.map((item) => Number(item.zIndex || 1)), Number(selectedFrame.zIndex || 1));
+    patchSelectedLayerFrame({ zIndex: Math.min(999, maxZ + 1) });
+  }
+
+  function sendSelectedLayerBackward() {
+    if (!selectedFrame || !selectedCanEditFrame) return;
+    const pool = selectedElement ? elements : canvasSections;
+    const minZ = Math.min(...pool.map((item) => Number(item.zIndex || 1)), Number(selectedFrame.zIndex || 1));
+    patchSelectedLayerFrame({ zIndex: Math.max(1, minZ - 1) });
+  }
+
+  function alignSelectedLayerCenter() {
+    if (!selectedFrame || !selectedCanEditFrame) return;
+    patchSelectedLayerFrame({
+      x: Math.round((builderCanvas.width - Number(selectedFrame.width || 0)) / 2)
+    });
+  }
+
+  function editSelectedLayer() {
+    if (!selectedLayer) return;
+    if (selectedElement && ['text', 'card', 'icon'].includes(selectedElement.type) && selectedElement.locked !== true && !disabled) {
+      setEditingElementId(selectedElement.id);
+      return;
+    }
+    setRightInspectorOpen(true);
+    setInspectorCollapsed(false);
+    setActiveInspectorTab('content');
+  }
+
+  function commitInlineElementText(elementId, value) {
+    const target = elements.find((element) => element.id === elementId);
+    if (!target || disabled || target.locked) return;
+    const contentPatch = target.type === 'card'
+      ? { body: value }
+      : target.type === 'icon'
+        ? { label: value }
+        : { text: value };
+    patchElement(elementId, { content: contentPatch });
+    setEditingElementId('');
   }
 
   function moveElementLayer(elementId, direction) {
@@ -2064,6 +2455,7 @@ function DesignModeWorkspace({
     if (disabled || element.locked) return;
     event.preventDefault();
     event.stopPropagation();
+    setEditingElementId('');
     const rect = paperRef.current?.getBoundingClientRect();
     const scale = rect ? rect.width / builderCanvas.width : zoomScale;
     setUndoStack((history) => [...history.slice(-24), currentCanvasDesign(designDraft)]);
@@ -2166,6 +2558,7 @@ function DesignModeWorkspace({
   useEffect(() => {
     function onKeyDown(event) {
       if ((!selectedElement && !selectedSection) || disabled) return;
+      if (editingElementId) return;
       const deltas = {
         ArrowLeft: [-1, 0],
         ArrowRight: [1, 0],
@@ -2192,7 +2585,7 @@ function DesignModeWorkspace({
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedElement, selectedSection, freeLayoutMode, disabled]);
+  }, [selectedElement, selectedSection, freeLayoutMode, disabled, editingElementId]);
 
   function insertVariable(variable) {
     if (!selectedElement && !selectedSection) {
@@ -2346,7 +2739,7 @@ function DesignModeWorkspace({
                   <span className="pdf-page-thumb">{index + 1}</span>
                   <span className="min-w-0">
                     <span className="pdf-page-name">{page.name || `Page ${index + 1}`}</span>
-                    <span className="pdf-page-meta">{pageSections.length} sections / {pageElements.length} elements - A4 Portrait</span>
+                    <span className="pdf-page-meta">{pageElements.length} editable elements - A4 Portrait</span>
                   </span>
                   </button>
                   <div className="pdf-page-actions">
@@ -2364,8 +2757,8 @@ function DesignModeWorkspace({
             Add Page
           </button>
           <div className="pdf-builder-note">
-            <p className="font-black text-slate-100">Page Break Settings</p>
-            <p className="mt-1 text-xs muted">Use the locked Page Break Settings layer to keep final sections away from the footer. Page 2 appears when you add one or place elements there.</p>
+            <p className="font-black text-slate-100">Pages</p>
+            <p className="mt-1 text-xs muted">Only real design pages are shown. Add a page manually when a template needs more than one PDF page.</p>
           </div>
         </div>
       );
@@ -2484,7 +2877,7 @@ function DesignModeWorkspace({
       return (
         <div className="pdf-builder-helper pdf-builder-helper-compact">
           <MousePointerFallback />
-          <p>Select a section or element to edit.</p>
+          <p>Select an element to edit.</p>
         </div>
       );
     }
@@ -2575,7 +2968,7 @@ function DesignModeWorkspace({
         <div className="pdf-inspector-drawer-bar">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Properties</p>
-            <h3>{selectedLayer ? selectedLayer.title : 'Select a section or element to edit.'}</h3>
+            <h3>{selectedLayer ? selectedLayer.title : 'Select an element to edit.'}</h3>
           </div>
           <div className="pdf-inspector-drawer-actions">
             {selectedLayer ? (
@@ -2732,7 +3125,7 @@ function DesignModeWorkspace({
           <div className="pdf-builder-canvas-header">
             <div>
               <h3>A4 Canvas</h3>
-              <p>{currentPage.name || 'Page 1'} - White PDF page - sections and elements snap to {gridSize}px grid</p>
+              <p>{currentPage.name || 'Page 1'} - White PDF page - editable elements snap to {gridSize}px grid</p>
             </div>
             <div className="pdf-canvas-controls">
               <span className={`pdf-canvas-mode-pill ${freeLayoutMode ? 'is-free' : 'is-safe'}`}>
@@ -2755,6 +3148,10 @@ function DesignModeWorkspace({
                 <Grid2X2 className="h-3.5 w-3.5" />
                 Grid
               </button>
+              <button type="button" className={`pdf-canvas-pill ${layoutGuidesEnabled ? 'is-active' : ''}`} onClick={() => updateCanvasOption('layoutGuides', !layoutGuidesEnabled)}>
+                {layoutGuidesEnabled ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                Show Layout Guides
+              </button>
               <button type="button" className={`pdf-canvas-pill ${snapEnabled ? 'is-active' : ''}`} onClick={() => updateCanvasOption('canvas.snap', !snapEnabled)}>
                 <Move className="h-3.5 w-3.5" />
                 Snap
@@ -2769,7 +3166,7 @@ function DesignModeWorkspace({
             <div className="pdf-paper-stage" style={{ width: builderCanvas.width * zoomScale, height: builderCanvas.height * zoomScale }}>
               <div
                 ref={paperRef}
-                className={`pdf-a4-page ${gridEnabled ? 'has-grid' : ''} ${referencePdfUrl ? 'has-reference-layer' : ''}`}
+                className={`pdf-a4-page ${gridEnabled ? 'has-grid' : ''} ${referencePdfUrl ? 'has-reference-layer' : ''} ${layoutGuidesEnabled ? 'show-layout-guides' : ''}`}
                 style={{
                   width: builderCanvas.width,
                   height: builderCanvas.height,
@@ -2814,11 +3211,34 @@ function DesignModeWorkspace({
                     element={element}
                     selected={selectedLayerId === element.id}
                     disabled={disabled}
+                    editing={editingElementId === element.id}
                     onSelect={() => setSelectedLayerId(element.id)}
+                    onEditStart={() => {
+                      setSelectedLayerId(element.id);
+                      setEditingElementId(element.id);
+                    }}
+                    onInlineCommit={(value) => commitInlineElementText(element.id, value)}
+                    onInlineCancel={() => setEditingElementId('')}
                     onDragStart={(event) => beginElementInteraction(event, element, 'move')}
                     onResizeStart={(event, handle) => beginElementInteraction(event, element, 'resize', handle)}
                   />
                 ))}
+                {selectedLayer && selectedFrame ? (
+                  <FloatingLayerToolbar
+                    frame={selectedFrame}
+                    locked={selectedLayerLocked}
+                    canEditFrame={selectedCanEditFrame}
+                    canDelete={Boolean(selectedElement) || selectedSection?.system === false}
+                    canToggleLock={Boolean(selectedElement) || (Boolean(selectedSection) && freeLayoutMode)}
+                    onEdit={editSelectedLayer}
+                    onDuplicate={duplicateSelectedLayer}
+                    onDelete={deleteSelectedLayer}
+                    onToggleLock={toggleSelectedLayerLock}
+                    onBringForward={bringSelectedLayerForward}
+                    onSendBackward={sendSelectedLayerBackward}
+                    onAlign={alignSelectedLayerCenter}
+                  />
+                ) : null}
                 <div className="pdf-page-break-guide">Page break safe zone</div>
                 {visiblePageSections.length === 0 && visiblePageElements.length === 0 ? (
                   <div className="pdf-canvas-empty">
@@ -2891,7 +3311,7 @@ function BuilderCanvasSection({ section, layer, selected, disabled, freeLayoutMo
         {section.showTitle !== false ? (
           <span className="pdf-section-title"><Icon className="h-3.5 w-3.5" />{content.title || section.title || section.name}</span>
         ) : <span />}
-        <span className="pdf-section-lock">{locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}{locked ? 'Locked' : 'Free'}</span>
+        {selected && locked ? <span className="pdf-section-lock"><Lock className="h-3 w-3" />Locked</span> : null}
       </div>
       {content.kind === 'header' ? (
         <div className="pdf-section-header-preview">
@@ -2927,7 +3347,7 @@ function BuilderCanvasSection({ section, layer, selected, disabled, freeLayoutMo
       ) : (
         <div className="pdf-section-body-preview">{content.body || 'Section content preview'}</div>
       )}
-      {overflowRisk ? <span className="pdf-section-overflow-warning">Content may overflow</span> : null}
+      {selected && overflowRisk ? <span className="pdf-section-overflow-warning">Content may overflow</span> : null}
       {selected && !locked ? ['nw', 'ne', 'sw', 'se'].map((handle) => (
         <button
           key={handle}
@@ -2941,11 +3361,33 @@ function BuilderCanvasSection({ section, layer, selected, disabled, freeLayoutMo
   );
 }
 
-function BuilderCanvasElement({ element, selected, disabled, onSelect, onDragStart, onResizeStart }) {
+function BuilderCanvasElement({ element, selected, disabled, editing = false, onSelect, onEditStart, onInlineCommit, onInlineCancel, onDragStart, onResizeStart }) {
   const Icon = elementIconForType(element.type);
   const style = styleForBuilderElement(element, selected);
   const content = element.content || {};
   const locked = element.locked || disabled;
+  const inlineInputRef = useRef(null);
+  const [inlineValue, setInlineValue] = useState(elementPrimaryText(element));
+  const inlineEditable = ['text', 'card', 'icon'].includes(element.type);
+
+  useEffect(() => {
+    if (editing) setInlineValue(elementPrimaryText(element));
+  }, [editing, element.id, element.type, content.text, content.body, content.label]);
+
+  useEffect(() => {
+    if (!editing) return;
+    const timer = window.setTimeout(() => {
+      inlineInputRef.current?.focus();
+      inlineInputRef.current?.select();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [editing]);
+
+  function finishInlineEdit() {
+    if (!editing) return;
+    onInlineCommit?.(inlineValue);
+  }
+
   return (
     <div
       className={`pdf-builder-element is-${element.type} ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}`}
@@ -2953,13 +3395,55 @@ function BuilderCanvasElement({ element, selected, disabled, onSelect, onDragSta
       onPointerDown={(event) => {
         event.stopPropagation();
         onSelect();
+        if (editing) return;
         if (!locked) onDragStart(event);
+      }}
+      onDoubleClick={(event) => {
+        if (!inlineEditable || locked) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onEditStart?.();
       }}
       role="button"
       tabIndex={0}
     >
       <div className="pdf-element-grip"><GripVertical className="h-3.5 w-3.5" /></div>
-      {element.type === 'qr' ? (
+      {editing && inlineEditable ? (
+        <textarea
+          ref={inlineInputRef}
+          className="pdf-inline-text-editor"
+          value={inlineValue}
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => setInlineValue(event.target.value)}
+          onBlur={finishInlineEdit}
+          onKeyDown={(event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') finishInlineEdit();
+            if (event.key === 'Escape') {
+              setInlineValue(elementPrimaryText(element));
+              onInlineCancel?.();
+            }
+          }}
+        />
+      ) : element.type === 'table' ? (
+        <div className="pdf-canvas-table">
+          {content.title ? <p>{content.title}</p> : null}
+          <div className="pdf-canvas-table-grid">
+            <div className="pdf-canvas-table-head" style={{ gridTemplateColumns: `repeat(${Math.max(1, (content.columns || []).length || 4)}, minmax(0, 1fr))`, minHeight: element.style?.rowHeight || 18 }}>
+              {(content.columns?.length ? content.columns : contentDefaultsForElement('table').columns).slice(0, 6).map((column, columnIndex) => <span key={`${column}-${columnIndex}`}>{column}</span>)}
+            </div>
+            {(content.rows?.length ? content.rows : contentDefaultsForElement('table').rows).slice(0, 5).map((row, rowIndex) => (
+              <div key={`table-row-${rowIndex}`} className="pdf-canvas-table-row" style={{ gridTemplateColumns: `repeat(${Math.max(1, (content.columns || []).length || 4)}, minmax(0, 1fr))`, minHeight: element.style?.rowHeight || 18 }}>
+                {(Array.isArray(row) ? row : [row]).slice(0, Math.max(1, (content.columns || []).length || 4)).map((cell, cellIndex) => <span key={`${cell}-${cellIndex}`}>{cell}</span>)}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : element.type === 'icon' ? (
+        <div className="pdf-canvas-icon">
+          <Box className="h-4 w-4" />
+          <span>{content.label || content.iconName || 'Icon'}</span>
+        </div>
+      ) : element.type === 'qr' ? (
         <div className="pdf-canvas-qr">
           <div className="pdf-qr-placeholder">QR</div>
           <span>{content.label || 'QR CODE'}</span>
@@ -2987,7 +3471,7 @@ function BuilderCanvasElement({ element, selected, disabled, onSelect, onDragSta
       ) : (
         <div className="pdf-canvas-text">{elementPrimaryText(element) || 'New text block'}</div>
       )}
-      {element.locked ? <span className="pdf-element-lock"><Lock className="h-3 w-3" /></span> : null}
+      {selected && element.locked ? <span className="pdf-element-lock"><Lock className="h-3 w-3" /></span> : null}
       {selected && !locked ? ['nw', 'ne', 'sw', 'se'].map((handle) => (
         <button
           key={handle}
@@ -2997,6 +3481,57 @@ function BuilderCanvasElement({ element, selected, disabled, onSelect, onDragSta
           aria-label={`Resize ${handle}`}
         />
       )) : null}
+    </div>
+  );
+}
+
+function FloatingLayerToolbar({
+  frame,
+  locked,
+  canEditFrame,
+  canDelete,
+  canToggleLock,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onToggleLock,
+  onBringForward,
+  onSendBackward,
+  onAlign
+}) {
+  const width = 292;
+  const top = Number(frame.y || 0) > 42
+    ? Number(frame.y || 0) - 40
+    : Number(frame.y || 0) + Number(frame.height || 0) + 8;
+  const left = clampBuilderNumber(Number(frame.x || 0), 8, 8, Math.max(8, builderCanvas.width - width - 8));
+  return (
+    <div
+      className="pdf-floating-toolbar"
+      style={{ left, top }}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <button type="button" className="pdf-floating-tool is-primary" onClick={onEdit} title="Edit content">
+        <Edit3 className="h-3.5 w-3.5" />
+        <span>Edit</span>
+      </button>
+      <button type="button" className="pdf-floating-tool" onClick={onDuplicate} title="Duplicate">
+        <Copy className="h-3.5 w-3.5" />
+      </button>
+      <button type="button" className="pdf-floating-tool pdf-floating-danger" disabled={!canDelete} onClick={onDelete} title={canDelete ? 'Delete' : 'Only custom sections can be deleted'}>
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+      <button type="button" className="pdf-floating-tool" disabled={!canToggleLock} onClick={onToggleLock} title={locked ? 'Unlock' : 'Lock'}>
+        {locked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+      </button>
+      <button type="button" className="pdf-floating-tool" disabled={!canEditFrame} onClick={onBringForward} title="Bring forward">
+        <ArrowUp className="h-3.5 w-3.5" />
+      </button>
+      <button type="button" className="pdf-floating-tool" disabled={!canEditFrame} onClick={onSendBackward} title="Send backward">
+        <ArrowDown className="h-3.5 w-3.5" />
+      </button>
+      <button type="button" className="pdf-floating-tool" disabled={!canEditFrame} onClick={onAlign} title="Align center on page">
+        <AlignCenter className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
@@ -3118,6 +3653,32 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables })
           <BuilderTextInput label="Title" value={content.title} disabled={disabled} onChange={(value) => onPatch({ content: { title: value } })} />
           <BuilderTextarea label="Body/content text" value={content.body} disabled={disabled} onChange={(value) => onPatch({ content: { body: value } })} />
         </>
+      ) : element.type === 'table' ? (
+        <>
+          <BuilderTextInput label="Table title" value={content.title} disabled={disabled} onChange={(value) => onPatch({ content: { title: value } })} />
+          <BuilderTextarea
+            label="Columns, separated with |"
+            value={formatTableColumns(content.columns)}
+            disabled={disabled}
+            rows={2}
+            onChange={(value) => {
+              const columns = parseTableColumns(value);
+              onPatch({ content: { columns, rows: parseTableRows(formatTableRows(content.rows), columns.length) } });
+            }}
+          />
+          <BuilderTextarea
+            label="Rows, one row per line"
+            value={formatTableRows(content.rows)}
+            disabled={disabled}
+            rows={5}
+            onChange={(value) => onPatch({ content: { rows: parseTableRows(value, (content.columns || []).length || 4) } })}
+          />
+        </>
+      ) : element.type === 'icon' ? (
+        <>
+          <BuilderTextInput label="Icon label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} />
+          <BuilderTextInput label="Icon name" value={content.iconName} disabled={disabled} onChange={(value) => onPatch({ content: { iconName: value } })} />
+        </>
       ) : element.type === 'qr' ? (
         <>
           <BuilderTextInput label="QR label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} />
@@ -3188,6 +3749,9 @@ function ElementStyleControls({ element, disabled, onPatch }) {
       <BuilderToggle label="Shadow" checked={style.shadow === true} disabled={disabled || element.type === 'divider'} onChange={(checked) => onPatch({ style: { shadow: checked } })} />
       <BuilderNumberInput label="Font size" value={style.fontSize ?? 13} min={8} max={32} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontSize: value } })} />
       <BuilderSelect label="Font weight" value={String(style.fontWeight || 700)} options={[['400', 'Regular'], ['600', 'Semi bold'], ['700', 'Bold'], ['800', 'Extra bold']]} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontWeight: Number(value) } })} />
+      {element.type === 'table' ? (
+        <BuilderNumberInput label="Table row height" value={style.rowHeight ?? 18} min={12} max={34} disabled={disabled} onChange={(value) => onPatch({ style: { rowHeight: value } })} />
+      ) : null}
       {element.type === 'divider' ? (
         <>
           <BuilderNumberInput label="Thickness" value={style.dividerThickness ?? 2} min={1} max={8} disabled={disabled} onChange={(value) => onPatch({ style: { dividerThickness: value } })} />
