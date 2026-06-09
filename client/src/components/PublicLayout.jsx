@@ -1,8 +1,22 @@
 import { useMemo, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { Mail, MapPin, Menu, MessageCircle, Phone, ShieldCheck, Wrench, X } from 'lucide-react';
+import {
+  ArrowRight,
+  BadgeCheck,
+  Clock3,
+  CreditCard,
+  Mail,
+  MapPin,
+  Menu,
+  MessageCircle,
+  Phone,
+  Search,
+  ShieldCheck,
+  Wrench,
+  X
+} from 'lucide-react';
 import { PublicWebsiteSettingsProvider, usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
-import { phoneHref, publicAssetUrl, publicPhoneList, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
+import { phoneHref, publicAssetUrl, publicPhoneList, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const baseLinks = [
   { to: '/', label: 'Home' },
@@ -10,6 +24,23 @@ const baseLinks = [
   { to: '/services', label: 'Services' },
   { to: '/contact', label: 'Contact' },
   { to: '/book-service', label: 'Book Service', booking: true }
+];
+
+const footerHighlights = [
+  { label: 'Same-day Support', Icon: Clock3 },
+  { label: 'AMC Available', Icon: BadgeCheck },
+  { label: 'WhatsApp Updates', Icon: MessageCircle },
+  { label: 'Clear Diagnosis', Icon: Search },
+  { label: 'Pay After Confirmation', Icon: CreditCard }
+];
+
+const footerServiceLinks = [
+  'OS Installation & Setup',
+  'Laptop Repair',
+  'Desktop Repair',
+  'Printer Service / Toner Refilling',
+  'CCTV Installation & Maintenance',
+  'Networking Support'
 ];
 
 function NavItems({ onClick, links }) {
@@ -105,10 +136,6 @@ function PublicLayoutShell() {
     () => baseLinks.filter((link) => !link.booking || booking.publicBookingEnabled),
     [booking.publicBookingEnabled]
   );
-  const footerServices = useMemo(
-    () => visiblePublicServices(settings).slice(0, 6).map((service) => service.title),
-    [settings]
-  );
   const phones = publicPhoneList(contact);
   const primaryPhone = phones[0] || '';
   const accentColor = branding?.accentColor || '#75c4ff';
@@ -171,58 +198,73 @@ function PublicLayoutShell() {
       </a>
 
       <footer className="public-footer border-t border-[var(--line)] bg-[var(--surface)]">
-        <div className="container-page grid gap-8 py-10 md:grid-cols-2 xl:grid-cols-[1.35fr_0.85fr_0.9fr_1fr]">
+        <div className="container-page grid gap-8 py-10 md:grid-cols-2 lg:grid-cols-[1.45fr_0.78fr_1fr_1fr]">
           <div className="footer-brand-block">
             <PublicNavbarLogo branding={branding} />
-            <p className="muted max-w-md text-sm leading-6">
+            <p className="footer-brand-description muted max-w-md text-sm leading-6">
               Computer repair, OS installation, printer service, software support, data recovery, and maintenance solutions in Mettur Dam.
             </p>
+            <div className="footer-trust-chips" aria-label="Universal Systems service highlights">
+              {footerHighlights.map(({ label, Icon }) => (
+                <span className="footer-trust-chip" key={label}>
+                  <Icon aria-hidden="true" />
+                  {label}
+                </span>
+              ))}
+            </div>
           </div>
           <div>
-            <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Quick Links</h3>
+            <h3 className="footer-heading">Quick Links</h3>
             <div className="footer-link-list grid gap-2 text-sm">
               {links.map((link) => (
-                <NavLink key={link.to} to={link.to} className="muted hover:text-[var(--brand-2)]">
-                  {link.label}
+                <NavLink key={link.to} to={link.to} className="footer-link-row">
+                  <span>{link.label}</span>
+                  <ArrowRight className="footer-link-arrow" aria-hidden="true" />
                 </NavLink>
               ))}
-              <NavLink to="/technician/login" className="muted hover:text-[var(--brand-2)]">
-                Technician Login
+              <NavLink to="/technician/login" className="footer-link-row">
+                <span>Technician Login</span>
+                <ArrowRight className="footer-link-arrow" aria-hidden="true" />
               </NavLink>
             </div>
           </div>
           <div>
-            <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Services</h3>
+            <h3 className="footer-heading">Services</h3>
             <div className="footer-link-list grid gap-2 text-sm">
-              {footerServices.map((service) => (
-                <NavLink key={service} to="/services" className="muted hover:text-[var(--brand-2)]">
-                  {service}
+              {footerServiceLinks.map((service) => (
+                <NavLink key={service} to="/services" className="footer-link-row">
+                  <span>{service}</span>
+                  <ArrowRight className="footer-link-arrow" aria-hidden="true" />
                 </NavLink>
               ))}
             </div>
           </div>
           <div>
-            <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-[var(--brand)]">Contact</h3>
+            <h3 className="footer-heading">Contact</h3>
             <div className="footer-contact-list space-y-3 text-sm">
               {primaryPhone ? (
-                <a className="flex gap-2 hover:text-[var(--brand-2)]" href={phoneHref(primaryPhone)}>
-                  <Phone className="h-4 w-4 shrink-0" /> {contact.phoneNumber}
+                <a className="footer-contact-row" href={phoneHref(primaryPhone)}>
+                  <Phone className="h-4 w-4 shrink-0" />
+                  <span>{contact.phoneNumber}</span>
                 </a>
               ) : null}
-              <a className="flex gap-2 hover:text-[var(--brand-2)]" href={whatsappHref(contact.whatsappNumber)} target="_blank" rel="noreferrer">
-                <MessageCircle className="h-4 w-4 shrink-0" /> WhatsApp support
+              <a className="footer-contact-row" href={whatsappHref(contact.whatsappNumber)} target="_blank" rel="noreferrer">
+                <MessageCircle className="h-4 w-4 shrink-0" />
+                <span>WhatsApp support</span>
               </a>
-              <a className="flex gap-2 hover:text-[var(--brand-2)]" href={`mailto:${contact.email}`}>
-                <Mail className="h-4 w-4 shrink-0" /> {contact.email}
+              <a className="footer-contact-row" href={`mailto:${contact.email}`}>
+                <Mail className="h-4 w-4 shrink-0" />
+                <span>{contact.email}</span>
               </a>
-              <p className="flex gap-2 leading-6">
-                <MapPin className="mt-1 h-4 w-4 shrink-0" /> {contact.address}
+              <p className="footer-contact-row">
+                <MapPin className="mt-1 h-4 w-4 shrink-0" />
+                <span>{contact.address}</span>
               </p>
             </div>
           </div>
         </div>
         <div className="footer-copyright border-t border-[var(--line)] py-4 text-center text-xs muted">
-          <span>&copy; {new Date().getFullYear()} Universal Systems. All rights reserved.</span>
+          <span>&copy; 2026 Universal Systems. All rights reserved.</span>
         </div>
       </footer>
     </div>

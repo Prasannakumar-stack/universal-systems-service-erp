@@ -77,9 +77,11 @@ const heroStats = [
   { value: '4.8/5', label: 'Customer rating', icon: Star },
   { value: '5000+', label: 'Services completed', icon: Wrench },
   { value: '10+', label: 'Years experience', icon: ShieldCheck },
-  { value: 'Warranty', label: 'On repairs', icon: CheckCircle2 },
-  { value: '24/7', label: 'Support available', icon: Phone }
+  { value: 'Warranty', label: 'On repairs', icon: CheckCircle2 }
 ];
+
+const legacyHeroSubtitle = 'Computer, laptop, printer, CCTV, and networking service for homes, students, shops, and offices with clear diagnosis, careful repair, and simple booking.';
+const polishedHeroSubtitle = 'Clear diagnosis and careful repair for computers, laptops, printers, CCTV, and networks, with simple booking for homes, students, shops, and offices.';
 
 const testimonials = [
   {
@@ -191,6 +193,7 @@ export default function Home() {
   const callHref = useMemo(() => phoneHref(primaryPhone), [primaryPhone]);
   const contactWhatsappHref = useMemo(() => whatsappHref(contact.whatsappNumber), [contact.whatsappNumber]);
   const activeReview = testimonials[activeTestimonial];
+  const heroSubtitle = settings.hero.subtitle === legacyHeroSubtitle ? polishedHeroSubtitle : settings.hero.subtitle;
   const heroCardClass = settings.hero.glassmorphismAnimation === false ? 'public-hero-card public-hero-static' : 'public-hero-card public-hero-glass';
 
   return (
@@ -205,41 +208,41 @@ export default function Home() {
           />
           <div className="page-hero-overlay" aria-hidden="true" />
 
-          <div className="page-hero-content hero-sequence hero-content max-w-3xl">
+          <div className="page-hero-content home-hero-content hero-sequence hero-content">
             <div className="premium-eyebrow-chip hero-reveal">
               <Sparkles className="h-4 w-4" />
               Premium local technology service
             </div>
-            <h1 className="hero-reveal mt-5 max-w-4xl text-4xl font-black leading-[1.02] text-white sm:text-5xl xl:text-7xl">
+            <h1 className="home-hero-title hero-reveal mt-7 text-white">
               {settings.hero.title}
             </h1>
-            <p className="hero-reveal mt-6 max-w-2xl text-base leading-8 text-slate-300 md:text-lg">
-              {settings.hero.subtitle}
+            <p className="home-hero-copy hero-reveal mt-7">
+              {heroSubtitle}
             </p>
-            <div className="hero-reveal mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="home-hero-actions hero-reveal mt-9 flex flex-col sm:flex-row">
               {booking.publicBookingEnabled ? (
-                <Link to="/book-service" className="btn btn-primary btn-xl shine-button w-full sm:w-auto">
+                <Link to="/book-service" className="btn btn-primary btn-xl shine-button home-hero-button w-full sm:w-auto">
                   <BookOpenCheck className="h-5 w-5" />
                   {settings.hero.primaryButtonText || booking.bookingButtonText}
                   <ArrowRight className="btn-arrow h-5 w-5" />
                 </Link>
               ) : null}
-              <a href={contactWhatsappHref} target="_blank" rel="noreferrer" className="btn btn-secondary btn-xl shine-button w-full sm:w-auto">
+              <a href={contactWhatsappHref} target="_blank" rel="noreferrer" className="btn btn-secondary btn-xl shine-button home-hero-button w-full sm:w-auto">
                 <MessageCircle className="h-5 w-5" />
                 {settings.hero.secondaryButtonText}
               </a>
             </div>
-            <div className="hero-trust-pill hero-reveal mt-4">
+            <div className="hero-trust-pill home-trust-chip hero-reveal mt-6">
               <CheckCircle2 className="h-4 w-4 text-cyan-300" />
-              <span>No upfront payment required. Pay only after service confirmation.</span>
+              <span>No upfront payment. Pay after service.</span>
             </div>
 
-            <div className="hero-stats-bar hero-reveal" aria-label="Universal Systems trust highlights">
+            <div className="hero-stats-bar home-hero-stats hero-reveal" aria-label="Universal Systems trust highlights">
               {heroStats.map((stat) => {
                 const Icon = stat.icon;
                 return (
                   <div className="hero-stat" key={stat.label}>
-                    <Icon className="h-5 w-5" />
+                    <Icon className="h-4 w-4" />
                     <span className="hero-stat-value">{stat.value}</span>
                     <span className="hero-stat-label">{stat.label}</span>
                   </div>
@@ -250,18 +253,22 @@ export default function Home() {
         </div>
       </section>
 
-      <BrandLogoStrip as="div" className="home-section public-brand-home reveal-on-scroll" size="large" />
-
       <section className="home-section premium-section-alt">
         <div className="container-page">
-          <SectionHeading
-            eyebrow="Services"
-            title="Expert service for the devices that keep your day moving"
-            text="Choose the support you need. Every card leads into the booking flow, so your request is simple and direct."
-          />
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="home-services-header reveal-on-scroll">
+            <div className="home-services-heading-copy">
+              <p className="premium-eyebrow">Services</p>
+              <h2 className="mt-3 text-3xl font-black leading-tight text-white md:text-5xl">Expert service for the devices that keep your day moving</h2>
+              <p className="mt-4 text-base leading-7 text-slate-300">Choose the support you need. Every card leads into the booking flow, so your request is simple and direct.</p>
+            </div>
+            <Link to="/services" className="home-services-view-all services-book-button">
+              View All Services <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="home-services-grid grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {homeServices.map((service, index) => {
               const imageUrl = publicAssetUrl(service.imageUrl || service.image);
+              const serviceActionText = booking.publicBookingEnabled ? 'Book Now' : 'Contact Now';
               return (
                 <Link
                   key={service.title}
@@ -275,6 +282,9 @@ export default function Home() {
                   <div className="service-card-content">
                     <h3 className="text-xl font-black text-white">{service.title}</h3>
                     <p className="mt-3 text-sm leading-6 text-slate-300">{service.description || service.text}</p>
+                    <span className="home-service-book-button services-book-button mt-5">
+                      {serviceActionText} <ArrowRight className="h-4 w-4" />
+                    </span>
                   </div>
                   <div className="service-card-image-wrap" aria-hidden="true">
                     <img
@@ -444,25 +454,41 @@ export default function Home() {
         </div>
       </section>
 
+      <BrandLogoStrip as="div" className="home-section public-brand-home reveal-on-scroll" size="large" subtitle="" />
+
       <section className="home-section premium-section cta-section-compact">
         <div className="container-page">
           <div className="urgent-support-banner reveal-on-scroll">
-            <div className="relative z-10 max-w-2xl">
-              <p className="premium-eyebrow">Urgent support</p>
-              <h2 className="mt-3 text-3xl font-black leading-tight text-white md:text-5xl">Need urgent support today?</h2>
-              <p className="mt-4 text-base leading-7 text-slate-300">We are just a call away. Our team is ready to help you!</p>
-              <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <div className="urgent-support-content relative z-10 max-w-2xl">
+              <p className="urgent-support-badge">URGENT SUPPORT</p>
+              <h2 className="urgent-support-title mt-4 text-white">Need urgent support today?</h2>
+              <p className="mt-4 text-base leading-7 text-slate-300">We are just a call away. Our team is ready to help you.</p>
+              <div className="urgent-support-actions mt-7 flex flex-col gap-3 sm:flex-row">
                 {booking.publicBookingEnabled ? (
-                  <Link to="/book-service" className="btn btn-primary btn-xl shine-button w-full sm:w-auto">
+                  <Link to="/book-service" className="btn btn-primary btn-xl shine-button urgent-primary-action w-full sm:w-auto">
                     <BookOpenCheck className="h-5 w-5" />
                     {booking.bookingButtonText}
                     <ArrowRight className="btn-arrow h-5 w-5" />
                   </Link>
                 ) : null}
-                <a href={callHref} className="btn btn-secondary btn-xl shine-button w-full sm:w-auto">
+                <a href={callHref} className="btn btn-secondary btn-xl shine-button urgent-secondary-action w-full sm:w-auto">
                   <Phone className="h-5 w-5" />
                   Call Now
                 </a>
+              </div>
+              <div className="urgent-trust-chips" aria-label="Urgent support trust highlights">
+                <span className="urgent-trust-chip">
+                  <CheckCircle2 aria-hidden="true" />
+                  Fast response
+                </span>
+                <span className="urgent-trust-chip">
+                  <CheckCircle2 aria-hidden="true" />
+                  Clear diagnosis
+                </span>
+                <span className="urgent-trust-chip">
+                  <CheckCircle2 aria-hidden="true" />
+                  Pay after confirmation
+                </span>
               </div>
             </div>
             <div className="urgent-support-image" aria-hidden="true">

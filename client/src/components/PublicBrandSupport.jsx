@@ -49,16 +49,21 @@ function resolveBrands(brands = SUPPORTED_BRANDS) {
 
 function BrandLogoImage({ brand, loading = 'lazy' }) {
   return (
-    <img
-      className={`brand-logo-img brand-logo-img-${brand.key}`}
-      src={brand.logo}
-      alt={brand.name}
-      width={brand.width}
-      height={brand.height}
-      loading={loading}
-      decoding="async"
-      fetchPriority={loading === 'eager' ? 'high' : undefined}
-    />
+    <>
+      <img
+        className={`brand-logo-img brand-logo-img-${brand.key}`}
+        src={brand.logo}
+        alt={brand.name}
+        width={brand.width}
+        height={brand.height}
+        loading={loading}
+        decoding="async"
+        fetchpriority={loading === 'eager' ? 'high' : undefined}
+      />
+      <span className={`brand-logo-wordmark brand-logo-wordmark-${brand.key}`} aria-hidden="true">
+        {brand.name}
+      </span>
+    </>
   );
 }
 

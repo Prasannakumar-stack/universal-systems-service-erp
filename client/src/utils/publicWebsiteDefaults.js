@@ -10,7 +10,7 @@ export const defaultPublicWebsiteSettings = {
   },
   hero: {
     title: 'Fast, Reliable & Professional Tech Support You Can Trust',
-    subtitle: 'Computer, laptop, printer, CCTV, and networking service for homes, students, shops, and offices with clear diagnosis, careful repair, and simple booking.',
+    subtitle: 'Clear diagnosis and careful repair for computers, laptops, printers, CCTV, and networks, with simple booking for homes, students, shops, and offices.',
     primaryButtonText: 'Book a Service',
     secondaryButtonText: 'Contact / WhatsApp',
     imageUrl: '/Home%20Page%20image.png',
