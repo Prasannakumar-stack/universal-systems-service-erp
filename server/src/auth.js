@@ -28,6 +28,7 @@ export function publicUser(user) {
     name: user.name,
     role: user.role,
     phone: user.phone || '',
+    whatsappNumber: user.whatsappNumber || '',
     email: user.email || '',
     avatarUrl: user.avatarUrl || '',
     lastLoginAt: user.lastLoginAt,

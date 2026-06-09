@@ -22,6 +22,7 @@ import {
   isToday,
   KeyRound,
   Link,
+  Loader2,
   LoadingBlock,
   PackagePlus,
   PageHeader,
@@ -40,13 +41,15 @@ import {
   useDebouncedValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useToast,
+  uploadedAssetUrl,
   UserRound,
   Users,
   Wrench
 } from '../../shared/phase1Shared.jsx';
-import { Palette } from 'lucide-react';
+import { Camera, Eye, EyeOff, Palette, UploadCloud } from 'lucide-react';
 import { themePreferenceOptions, useThemePreference } from '../../utils/theme.js';
 
 function text(value) {
@@ -682,8 +685,8 @@ function settingsFallback(value) {
   return normalizedValue || 'Not available';
 }
 
-function technicianEmployeeId(user) {
-  return settingsFallback(user?.employeeId || user?.employeeCode || user?.id || user?._id);
+function stableJson(value) {
+  return JSON.stringify(value || {});
 }
 
 function technicianInitial(user) {
@@ -697,33 +700,86 @@ function accountStatus(user) {
   return 'Not available';
 }
 
+function technicianSettingsAssetUrl(url = '') {
+  const value = text(url);
+  if (!value) return '';
+  if (value.startsWith('/uploads/')) return uploadedAssetUrl(value);
+  return value;
+}
+
+function cleanContactNumber(value) {
+  return String(value || '').replace(/[^0-9+\-()\s]/g, '').slice(0, 40);
+}
+
+const technicianNotificationDefaults = {
+  newJobAssigned: true,
+  partRequestApproved: true,
+  paymentPending: true,
+  amcVisitDue: true,
+  workOrderStatusUpdated: true
+};
+
+const technicianNotificationOptions = [
+  ['newJobAssigned', 'New job assigned', 'High-priority assignment alerts'],
+  ['partRequestApproved', 'Part request approved', 'Approvals and stock movement updates'],
+  ['paymentPending', 'Payment pending', 'Invoice and collection reminders'],
+  ['amcVisitDue', 'AMC visit due', 'Upcoming maintenance visit alerts'],
+  ['workOrderStatusUpdated', 'Work order status updated', 'Changes on assigned service jobs']
+];
+
+function technicianPreferenceStorageKey(user) {
+  return `us_technician_notifications:${recordId(user) || user?.username || 'local'}`;
+}
+
+function readTechnicianPreferences(user) {
+  if (typeof window === 'undefined') return technicianNotificationDefaults;
+  try {
+    const stored = window.localStorage.getItem(technicianPreferenceStorageKey(user));
+    if (!stored) return technicianNotificationDefaults;
+    return { ...technicianNotificationDefaults, ...JSON.parse(stored) };
+  } catch {
+    return technicianNotificationDefaults;
+  }
+}
+
+function validateAvatarFile(file) {
+  if (!file) return '';
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  const name = String(file.name || '').toLowerCase();
+  const extOk = ['.jpg', '.jpeg', '.png', '.webp'].some((ext) => name.endsWith(ext));
+  if (!allowedTypes.has(file.type) && !extOk) return 'Only JPG, PNG, or WEBP profile photos are allowed.';
+  if (file.size > 5 * 1024 * 1024) return 'Profile photo must be 5 MB or less.';
+  return '';
+}
+
 function SettingsCard({ icon: Icon, title, description, children, className = '' }) {
   return (
-    <section className={`surface p-5 ${className}`}>
-      <div className="flex items-start gap-3">
-        <div className="inline-grid h-10 w-10 shrink-0 place-items-center rounded-card border border-white/10 bg-[var(--surface-2)] text-[var(--brand-2)]">
+    <section className={`technician-settings-card ${className}`}>
+      <div className="technician-settings-card-head">
+        <div className="technician-settings-card-icon">
           <Icon className="h-5 w-5" />
         </div>
-        <div>
-          <h2 className="text-lg font-black text-slate-100">{title}</h2>
-          {description ? <p className="mt-1 text-sm leading-5 muted">{description}</p> : null}
+        <div className="min-w-0">
+          <h2>{title}</h2>
+          {description ? <p>{description}</p> : null}
         </div>
       </div>
-      <div className="mt-5">{children}</div>
+      <div className="technician-settings-card-body">{children}</div>
     </section>
   );
 }
 
 function ThemePreferenceButtons({ value, onChange }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-3">
+    <div className="technician-theme-options">
       {themePreferenceOptions.map((option) => {
         const active = value === option.value;
         return (
           <button
             key={option.value}
             type="button"
-            className={`btn justify-center ${active ? 'btn-primary' : 'btn-secondary'}`}
+            className={`technician-theme-option ${active ? 'is-active' : ''}`}
+            aria-pressed={active}
             onClick={() => onChange(option.value)}
           >
             {option.label}
@@ -734,12 +790,53 @@ function ThemePreferenceButtons({ value, onChange }) {
   );
 }
 
-function AccountDetailRow({ label, value }) {
+function AccountStatusRow({ label, value, status = false }) {
   return (
-    <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
-      <p className="text-xs font-black uppercase tracking-wide muted">{label}</p>
-      <p className="mt-1 break-words font-bold text-slate-100">{settingsFallback(value)}</p>
+    <div className="technician-account-status-row">
+      <span>{label}</span>
+      <strong className={status ? 'technician-account-status-value' : ''}>{settingsFallback(value)}</strong>
     </div>
+  );
+}
+
+function PasswordInput({ label, field, value, visible, autoComplete, onChange, onToggle }) {
+  const VisibleIcon = visible ? EyeOff : Eye;
+  return (
+    <label className="technician-settings-field">
+      <span>{label}</span>
+      <div className="technician-password-field">
+        <input
+          className="input"
+          type={visible ? 'text' : 'password'}
+          value={value}
+          autoComplete={autoComplete}
+          minLength={field === 'currentPassword' ? undefined : 6}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <button
+          type="button"
+          className="technician-password-toggle"
+          aria-label={visible ? `Hide ${label}` : `Show ${label}`}
+          onClick={onToggle}
+        >
+          <VisibleIcon className="h-4 w-4" />
+        </button>
+      </div>
+    </label>
+  );
+}
+
+function PremiumSwitch({ label, description, checked, onChange }) {
+  return (
+    <button type="button" className="technician-premium-switch-row" role="switch" aria-checked={checked} onClick={onChange}>
+      <span>
+        <strong>{label}</strong>
+        <small>{description}</small>
+      </span>
+      <span className={`technician-premium-switch ${checked ? 'is-on' : ''}`} aria-hidden="true">
+        <i />
+      </span>
+    </button>
   );
 }
 
@@ -747,26 +844,46 @@ export function TechnicianSettingsPage() {
   const { request, user, setUser } = useAuth();
   const { push } = useToast();
   const { themePreference, resolvedTheme, setThemePreference } = useThemePreference();
-  const [profileForm, setProfileForm] = useState({ name: user?.name || '', phone: user?.phone || '' });
-  const [passwordForm, setPasswordForm] = useState({ password: '', confirmPassword: '' });
-  const [preferences, setPreferences] = useState({
-    newJobAssigned: true,
-    partRequestApproved: true,
-    paymentPending: true,
-    amcVisitDue: true,
-    workOrderStatusUpdated: true
-  });
+  const photoInputRef = useRef(null);
+  const profileBaseline = useMemo(() => ({
+    name: user?.name || '',
+    phone: user?.phone || '',
+    whatsappNumber: user?.whatsappNumber || user?.whatsapp || ''
+  }), [user?.name, user?.phone, user?.whatsapp, user?.whatsappNumber]);
+  const [profileForm, setProfileForm] = useState(profileBaseline);
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [passwordVisible, setPasswordVisible] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
+  const preferenceStorageKey = useMemo(() => technicianPreferenceStorageKey(user), [user?.id, user?._id, user?.username]);
+  const [preferences, setPreferences] = useState(() => readTechnicianPreferences(user));
+  const [savedPreferences, setSavedPreferences] = useState(preferences);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState('');
   const lastUpdatedTime = useMemo(
     () => new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
     []
   );
-  const employeeId = technicianEmployeeId(user);
   const displayName = settingsFallback(user?.name || user?.username);
   const username = settingsFallback(user?.username);
+  const profileDirty = stableJson(profileForm) !== stableJson(profileBaseline);
+  const preferencesDirty = stableJson(preferences) !== stableJson(savedPreferences);
+  const passwordTouched = Boolean(passwordForm.currentPassword || passwordForm.newPassword || passwordForm.confirmPassword);
+  const avatarSrc = photoPreviewUrl || technicianSettingsAssetUrl(user?.avatarUrl);
 
   useEffect(() => {
-    setProfileForm({ name: user?.name || '', phone: user?.phone || '' });
-  }, [user?.name, user?.phone]);
+    setProfileForm(profileBaseline);
+  }, [profileBaseline]);
+
+  useEffect(() => {
+    const nextPreferences = readTechnicianPreferences(user);
+    setPreferences(nextPreferences);
+    setSavedPreferences(nextPreferences);
+  }, [preferenceStorageKey]);
+
+  useEffect(() => () => {
+    if (photoPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(photoPreviewUrl);
+  }, [photoPreviewUrl]);
 
   function syncUser(result) {
     if (!result?.user) return;
@@ -774,41 +891,108 @@ export function TechnicianSettingsPage() {
     localStorage.setItem('us_user', JSON.stringify(result.user));
   }
 
+  function updateProfileField(field, value) {
+    setProfileForm((current) => ({ ...current, [field]: field === 'name' ? value : cleanContactNumber(value) }));
+  }
+
   async function saveProfile(event) {
     event.preventDefault();
+    if (!profileForm.name.trim()) {
+      push('Full Name is required', 'error');
+      return;
+    }
+    if (!profileForm.phone.trim()) {
+      push('Phone Number is required', 'error');
+      return;
+    }
+    setProfileSaving(true);
     try {
       const result = await request('/auth/profile', {
         method: 'PATCH',
-        body: JSON.stringify({ name: profileForm.name, phone: profileForm.phone })
+        body: JSON.stringify({
+          name: profileForm.name,
+          phone: profileForm.phone,
+          whatsappNumber: profileForm.whatsappNumber
+        })
       });
       syncUser(result);
-      push('Profile updated');
+      push(result.message || 'Profile updated');
     } catch (err) {
       push(err.message, 'error');
+    } finally {
+      setProfileSaving(false);
     }
   }
 
   async function updatePassword(event) {
     event.preventDefault();
-    if (!passwordForm.password || !passwordForm.confirmPassword) {
-      push('New password and confirmation are required', 'error');
+    if (!passwordTouched) {
+      push('Enter your current password and new password', 'error');
       return;
     }
-    if (passwordForm.password !== passwordForm.confirmPassword) {
-      push('New password and confirmation must match', 'error');
+    if (!passwordForm.currentPassword) {
+      push('Current Password is required', 'error');
       return;
     }
+    if (passwordForm.newPassword.length < 6) {
+      push('New Password must be at least 6 characters', 'error');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      push('Confirm Password must match New Password', 'error');
+      return;
+    }
+    setPasswordSaving(true);
     try {
       const result = await request('/auth/profile', {
         method: 'PATCH',
-        body: JSON.stringify({ password: passwordForm.password })
+        body: JSON.stringify({
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword
+        })
       });
       syncUser(result);
-      setPasswordForm({ password: '', confirmPassword: '' });
-      push('Password updated');
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      push(result.message || 'Password updated');
     } catch (err) {
       push(err.message, 'error');
+    } finally {
+      setPasswordSaving(false);
     }
+  }
+
+  function togglePasswordVisibility(field) {
+    setPasswordVisible((current) => ({ ...current, [field]: !current[field] }));
+  }
+
+  async function uploadProfilePhoto(file) {
+    const validationMessage = validateAvatarFile(file);
+    if (validationMessage) {
+      push(validationMessage, 'error');
+      return;
+    }
+    const preview = URL.createObjectURL(file);
+    setPhotoPreviewUrl(preview);
+    const body = new FormData();
+    body.append('avatar', file);
+    setPhotoUploading(true);
+    try {
+      const result = await request('/auth/profile/avatar', { method: 'POST', body });
+      syncUser(result);
+      setPhotoPreviewUrl('');
+      push(result.message || 'Profile photo updated');
+    } catch (err) {
+      setPhotoPreviewUrl('');
+      push(err.message, 'error');
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
+
+  function handlePhotoChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file) uploadProfilePhoto(file);
   }
 
   function updatePreference(key) {
@@ -817,7 +1001,13 @@ export function TechnicianSettingsPage() {
 
   function savePreferences(event) {
     event.preventDefault();
-    push('Notification preferences saved locally');
+    try {
+      window.localStorage.setItem(preferenceStorageKey, JSON.stringify(preferences));
+      setSavedPreferences(preferences);
+      push('Notification preferences saved');
+    } catch {
+      push('Unable to save notification preferences', 'error');
+    }
   }
 
   function updateThemePreference(nextPreference) {
@@ -826,12 +1016,12 @@ export function TechnicianSettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6">
+    <div className="technician-settings-page mx-auto max-w-[1600px] space-y-6">
       <PageHeader
         title="Settings"
         eyebrow="TECHNICIAN"
         action={(
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-bold muted">
+          <div className="technician-settings-updated-pill">
             <CalendarClock className="h-4 w-4 text-[var(--brand-2)]" />
             Last updated: Today, {lastUpdatedTime}
           </div>
@@ -840,126 +1030,144 @@ export function TechnicianSettingsPage() {
         Manage your profile, security settings, and account preferences.
       </PageHeader>
 
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+      <div className="technician-settings-layout">
+        <div className="technician-settings-main-column">
         <SettingsCard icon={UserRound} title="Profile Information" description="Keep your technician contact details current.">
-          <form className="grid gap-4" onSubmit={saveProfile}>
-            <label>
-              <span className="label">Full Name</span>
+          <form className="technician-settings-form" onSubmit={saveProfile}>
+            <div className="technician-settings-field-grid">
+              <label className="technician-settings-field">
+                <span>Full Name</span>
               <input
                 className="input"
                 value={profileForm.name}
-                onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="Your full name"
+                onChange={(event) => updateProfileField('name', event.target.value)}
+                required
               />
             </label>
-            <label>
-              <span className="label">Phone Number</span>
+              <label className="technician-settings-field">
+                <span>Phone Number</span>
               <input
                 className="input"
                 value={profileForm.phone}
-                onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
+                placeholder="+91 98427 81971"
+                onChange={(event) => updateProfileField('phone', event.target.value)}
+                required
               />
             </label>
-            <button className="btn btn-primary justify-center" type="submit">
-              <Save className="h-4 w-4" />
-              Save Profile
+              <label className="technician-settings-field">
+                <span>WhatsApp Number <small>Optional</small></span>
+                <input
+                  className="input"
+                  value={profileForm.whatsappNumber}
+                  placeholder="+91 98427 81971"
+                  onChange={(event) => updateProfileField('whatsappNumber', event.target.value)}
+                />
+              </label>
+            </div>
+            <button className="btn btn-primary technician-settings-action" type="submit" disabled={profileSaving || !profileDirty}>
+              {profileSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {profileSaving ? 'Saving...' : 'Save Profile'}
             </button>
           </form>
         </SettingsCard>
 
         <SettingsCard icon={KeyRound} title="Change Password" description="Update your account password securely.">
-          <form className="grid gap-4" onSubmit={updatePassword}>
-            <label>
-              <span className="label">New Password</span>
-              <input
-                className="input"
-                type="password"
-                value={passwordForm.password}
-                onChange={(event) => setPasswordForm((current) => ({ ...current, password: event.target.value }))}
+          <form className="technician-settings-form" onSubmit={updatePassword}>
+            <div className="technician-password-grid">
+              <PasswordInput
+                field="currentPassword"
+                label="Current Password"
+                value={passwordForm.currentPassword}
+                visible={passwordVisible.currentPassword}
+                autoComplete="current-password"
+                onChange={(value) => setPasswordForm((current) => ({ ...current, currentPassword: value }))}
+                onToggle={() => togglePasswordVisibility('currentPassword')}
               />
-            </label>
-            <label>
-              <span className="label">Confirm New Password</span>
-              <input
-                className="input"
-                type="password"
+              <PasswordInput
+                field="newPassword"
+                label="New Password"
+                value={passwordForm.newPassword}
+                visible={passwordVisible.newPassword}
+                autoComplete="new-password"
+                onChange={(value) => setPasswordForm((current) => ({ ...current, newPassword: value }))}
+                onToggle={() => togglePasswordVisibility('newPassword')}
+              />
+              <PasswordInput
+                field="confirmPassword"
+                label="Confirm Password"
                 value={passwordForm.confirmPassword}
-                onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+                visible={passwordVisible.confirmPassword}
+                autoComplete="new-password"
+                onChange={(value) => setPasswordForm((current) => ({ ...current, confirmPassword: value }))}
+                onToggle={() => togglePasswordVisibility('confirmPassword')}
               />
-            </label>
-            <button className="btn btn-primary justify-center" type="submit">
-              <KeyRound className="h-4 w-4" />
-              Update Password
+            </div>
+            <div className="technician-password-note">
+              <CheckCircle2 className="h-4 w-4" />
+              New password must be at least 6 characters.
+            </div>
+            <button className="btn btn-primary technician-settings-action" type="submit" disabled={passwordSaving}>
+              {passwordSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+              {passwordSaving ? 'Updating...' : 'Update Password'}
             </button>
           </form>
         </SettingsCard>
 
-        <SettingsCard icon={FileText} title="Profile Photo" description="Your technician identity shown across the panel.">
-          <div className="grid justify-items-center gap-4 text-center">
-            <div className="grid h-24 w-24 place-items-center rounded-full border border-sky-400/30 bg-sky-500/15 text-3xl font-black text-sky-100 shadow-[0_16px_50px_rgba(14,165,233,0.16)]">
-              {technicianInitial(user)}
-            </div>
-            <div>
-              <p className="text-lg font-black text-slate-100">{displayName}</p>
-              <div className="mt-2 flex flex-wrap justify-center gap-2">
-                <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-emerald-200">
-                  Technician
-                </span>
-                <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-xs font-bold muted">
-                  {username !== 'Not available' ? username : employeeId}
-                </span>
-              </div>
-            </div>
-            <button className="btn btn-secondary justify-center" type="button" onClick={() => push('Profile photo upload is not available yet')}>
-              <UserRound className="h-4 w-4" />
-              Change Photo
-            </button>
-          </div>
-        </SettingsCard>
-      </div>
-
-      <div className="grid gap-5 md:grid-cols-2">
-        <SettingsCard icon={ShieldCheck} title="Account Details" description="Read-only technician account information.">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <AccountDetailRow label="Employee ID" value={employeeId} />
-            <AccountDetailRow label="Branch / Location" value={user?.branch || user?.location} />
-            <AccountDetailRow label="Role" value="Technician" />
-            <AccountDetailRow label="Username" value={user?.username} />
-            <AccountDetailRow label="Phone" value={user?.phone} />
-            <AccountDetailRow label="Account Status" value={accountStatus(user)} />
-            <AccountDetailRow label="Last Login" value={user?.lastLogin ? formatDate(user.lastLogin) : ''} />
-          </div>
-        </SettingsCard>
-
-        <SettingsCard icon={Palette} title="Appearance / Theme" description="Choose the local app theme for this device.">
-          <ThemePreferenceButtons value={themePreference} onChange={updateThemePreference} />
-          <p className="mt-3 text-xs font-semibold muted">Current theme: {resolvedTheme === 'light' ? 'Light' : 'Dark'}</p>
-        </SettingsCard>
-
         <SettingsCard icon={Bell} title="Notification Preferences" description="Choose the operational alerts you want highlighted.">
-          <form className="grid gap-3" onSubmit={savePreferences}>
-            {[
-              ['newJobAssigned', 'New job assigned'],
-              ['partRequestApproved', 'Part request approved'],
-              ['paymentPending', 'Payment pending'],
-              ['amcVisitDue', 'AMC visit due'],
-              ['workOrderStatusUpdated', 'Work order status updated']
-            ].map(([key, label]) => (
-              <label key={key} className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
-                <span className="text-sm font-bold text-slate-100">{label}</span>
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-[var(--brand)]"
-                  checked={preferences[key]}
-                  onChange={() => updatePreference(key)}
-                />
-              </label>
+          <form className="technician-notification-form" onSubmit={savePreferences}>
+            {technicianNotificationOptions.map(([key, label, description]) => (
+              <PremiumSwitch
+                key={key}
+                label={label}
+                description={description}
+                checked={preferences[key]}
+                onChange={() => updatePreference(key)}
+              />
             ))}
-            <button className="btn btn-primary mt-2 justify-center" type="submit">
+            <button className="btn btn-primary technician-settings-action" type="submit" disabled={!preferencesDirty}>
               <Save className="h-4 w-4" />
               Save Preferences
             </button>
           </form>
         </SettingsCard>
+        </div>
+
+        <aside className="technician-settings-side-column">
+        <SettingsCard icon={Camera} title="Profile Photo" description="Your technician identity shown across the panel." className="technician-photo-card">
+          <div className="technician-photo-panel">
+            <div className="technician-photo-avatar">
+              {avatarSrc ? <img src={avatarSrc} alt="Technician profile preview" /> : <span>{technicianInitial(user)}</span>}
+            </div>
+            <div className="technician-photo-copy">
+              <h3>{displayName}</h3>
+              <div>
+                <span>Technician</span>
+                <span>{username}</span>
+              </div>
+              <p>JPG, PNG, or WEBP up to 5 MB.</p>
+            </div>
+            <input ref={photoInputRef} type="file" className="hidden" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handlePhotoChange} />
+            <button className="btn btn-secondary technician-settings-action" type="button" disabled={photoUploading} onClick={() => photoInputRef.current?.click()}>
+              {photoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+              {photoUploading ? 'Uploading...' : 'Change Photo'}
+            </button>
+          </div>
+        </SettingsCard>
+
+        <SettingsCard icon={ShieldCheck} title="Account Status" description="Compact read-only account state." className="technician-status-card">
+          <div className="technician-account-status-list">
+            <AccountStatusRow label="Role" value="Technician" />
+            <AccountStatusRow label="Username" value={user?.username} />
+            <AccountStatusRow label="Status" value={accountStatus(user)} status />
+          </div>
+        </SettingsCard>
+
+        <SettingsCard icon={Palette} title="Appearance / Theme" description="Local theme for this device." className="technician-theme-card">
+          <ThemePreferenceButtons value={themePreference} onChange={updateThemePreference} />
+          <p className="technician-theme-current">Current theme: {resolvedTheme === 'light' ? 'Light' : 'Dark'}</p>
+        </SettingsCard>
+        </aside>
       </div>
     </div>
   );

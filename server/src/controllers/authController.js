@@ -78,15 +78,18 @@ export async function updateProfile(req, res) {
     user.phone = clean(req.body.phone);
   }
 
+  if (req.body.whatsappNumber !== undefined || req.body.whatsapp !== undefined) {
+    user.whatsappNumber = clean(req.body.whatsappNumber ?? req.body.whatsapp);
+  }
+
   const password = clean(req.body.newPassword || req.body.password);
   let passwordChanged = false;
   if (password) {
     await validatePasswordAgainstPolicy(password);
     const currentPassword = clean(req.body.currentPassword);
-    if (currentPassword) {
-      const currentOk = await bcrypt.compare(currentPassword, user.passwordHash);
-      if (!currentOk) throw appError('Current password is incorrect', 400);
-    }
+    if (!currentPassword) throw appError('Current password is required', 400);
+    const currentOk = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!currentOk) throw appError('Current password is incorrect', 400);
     user.passwordHash = await bcrypt.hash(password, 10);
     user.passwordChangedAt = new Date();
     user.forcePasswordReset = false;

@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     role: { type: String, enum: SUPPORTED_ROLES, required: true },
     phone: { type: String, trim: true, default: '' },
+    whatsappNumber: { type: String, trim: true, default: '' },
     email: { type: String, trim: true, default: '' },
     avatarUrl: { type: String, trim: true, default: '' },
     lastLoginAt: { type: Date, default: null },
