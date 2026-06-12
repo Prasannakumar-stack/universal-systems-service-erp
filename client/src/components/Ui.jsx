@@ -1,4 +1,14 @@
-import { AlertCircle, Search } from 'lucide-react';
+import { AlertCircle, CalendarClock, Search } from 'lucide-react';
+
+function formatDateFilterValue(value) {
+  const [year, month, day] = String(value || '').split('-').map(Number);
+  if (!year || !month || !day) return value;
+  return new Date(year, month - 1, day).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+}
 
 export function PageHeader({ title, eyebrow, action, children }) {
   return (
@@ -39,6 +49,30 @@ export function SearchBox({ value, onChange, placeholder = 'Search' }) {
           if (event.key === 'Enter') event.preventDefault();
         }}
         placeholder={placeholder}
+      />
+    </label>
+  );
+}
+
+export function DateFilterInput({ value, onChange, placeholder, ariaLabel, className = '', disabled = false }) {
+  const displayValue = value ? formatDateFilterValue(value) : placeholder;
+
+  function openPicker(event) {
+    event.currentTarget.showPicker?.();
+  }
+
+  return (
+    <label className={`admin-date-filter ${value ? 'has-value' : ''} ${className}`.trim()} aria-disabled={disabled}>
+      <span className="admin-date-filter-text">{displayValue}</span>
+      <CalendarClock className="admin-date-filter-icon" aria-hidden="true" />
+      <input
+        className="admin-date-filter-native"
+        type="date"
+        aria-label={ariaLabel || placeholder}
+        value={value}
+        disabled={disabled}
+        onClick={openPicker}
+        onChange={(event) => onChange(event.target.value)}
       />
     </label>
   );

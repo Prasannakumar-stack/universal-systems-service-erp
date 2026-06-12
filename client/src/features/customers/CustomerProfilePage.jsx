@@ -33,6 +33,7 @@ import {
   customerPhone,
   customerTabs,
   customerWhatsAppHref,
+  DateFilterInput,
   DashboardChart,
   dateInputValue,
   dateInRange,
@@ -218,10 +219,15 @@ export function CustomerProfilePage({ role = 'admin' }) {
   const noAmcAdded = 'No active AMC';
   const noWarrantyAdded = 'No warranty record';
   const noteSuggestions = ['Diagnosis note', 'Customer instruction', 'Payment follow-up', 'Warranty note'];
-  const visibleCustomerTabs = customerTabs.filter((tab) => tab.id !== 'devices');
+  const visibleCustomerTabs = customerTabs.filter((tab) => {
+    if (tab.id === 'devices') return false;
+    if (isTechnician && tab.id === 'timeline') return false;
+    return true;
+  });
   useEffect(() => {
     if (activeTab === 'devices') setActiveTab('overview');
-  }, [activeTab]);
+    if (isTechnician && activeTab === 'timeline') setActiveTab('overview');
+  }, [activeTab, isTechnician]);
   const totalSpent = invoices.reduce((sum, invoice) => sum + Number(invoice.paidAmount || 0), 0);
   const pendingBalance = invoices.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0);
   const activeOrders = serviceHistory.filter(isActiveJob);
@@ -788,18 +794,8 @@ export function CustomerProfilePage({ role = 'admin' }) {
               <option value="">All service types</option>
               {serviceTypes.map((item) => <option key={item}>{item}</option>)}
             </select>
-            <label className="date-input-shell relative block">
-              <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
-                <CalendarClock className="h-4 w-4" />
-              </span>
-              <input className="input pl-10" type="date" aria-label="Start date" value={historyDateFrom} onChange={(event) => setHistoryDateFrom(event.target.value)} />
-            </label>
-            <label className="date-input-shell relative block">
-              <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
-                <CalendarClock className="h-4 w-4" />
-              </span>
-              <input className="input pl-10" type="date" aria-label="End date" value={historyDateTo} onChange={(event) => setHistoryDateTo(event.target.value)} />
-            </label>
+            <DateFilterInput value={historyDateFrom} onChange={setHistoryDateFrom} placeholder="From date" ariaLabel="Start date" />
+            <DateFilterInput value={historyDateTo} onChange={setHistoryDateTo} placeholder="To date" ariaLabel="End date" />
             {hasHistoryFilters ? (
               <button
                 className="btn h-10 border border-[var(--brand-2)]/70 bg-[rgba(31,140,255,0.08)] px-4 text-[var(--brand)] shadow-[0_0_24px_rgba(31,140,255,0.16)] hover:bg-[rgba(31,140,255,0.16)]"

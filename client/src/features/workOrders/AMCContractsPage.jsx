@@ -145,6 +145,7 @@ import {
 } from '../../shared/amcCoverage.js';
 import { ADMIN_ASSIGNMENT_LABEL } from '../../utils/assignment.js';
 import { can, normalizeRole } from '../../utils/roles.js';
+import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 
 function defaultAmcForm() {
   const start = new Date();
@@ -325,6 +326,7 @@ export function AMCContractsPage({ role = 'admin' }) {
       setForm(defaultAmcForm());
       setFormOpen(false);
       reload();
+      emitSidebarBadgesUpdated();
     } catch (err) {
       push(err.message, 'error');
     }
@@ -338,6 +340,7 @@ export function AMCContractsPage({ role = 'admin' }) {
         body: JSON.stringify({ issue: `AMC service visit for ${contract.contractType}` })
       });
       push('Repair & Service Job created from AMC');
+      emitSidebarBadgesUpdated();
       navigate(`${base}/work-orders/${recordId(result.workOrder)}`);
     } catch (err) {
       push(err.message, 'error');
@@ -364,6 +367,7 @@ export function AMCContractsPage({ role = 'admin' }) {
       const invoiceId = recordId(result.invoice);
       push('AMC invoice created');
       await reload({ silent: true });
+      emitSidebarBadgesUpdated();
       if (invoiceId) navigate(`${base}/payments?invoiceId=${invoiceId}`);
     } catch (err) {
       push(err.message, 'error');

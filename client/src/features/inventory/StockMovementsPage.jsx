@@ -142,6 +142,7 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 import { can } from '../../utils/roles.js';
+import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 import { AdminDateFilter } from './AdminDateFilter.jsx';
 
 export function StockMovementsPage({ embedded = false }) {
@@ -197,6 +198,7 @@ export function StockMovementsPage({ embedded = false }) {
         setForm({ partId: '', type: 'ADD', quantity: 1, source: 'Manual', note: '' });
         push('Stock movement recorded');
         reload({ silent: true });
+        emitSidebarBadgesUpdated();
       });
     } catch (err) {
       push(err.message, 'error');

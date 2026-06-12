@@ -141,6 +141,7 @@ import {
 } from '../../shared/phase1Shared.jsx';
 import { normalizeAmcCoverageType } from '../../shared/amcCoverage.js';
 import { can, normalizeRole } from '../../utils/roles.js';
+import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 
 export function AMCRenewalsPage({ role = 'admin' }) {
   const { request, user } = useAuth();
@@ -172,6 +173,7 @@ export function AMCRenewalsPage({ role = 'admin' }) {
       });
       push('Repair & Service Job created from AMC');
       reload();
+      emitSidebarBadgesUpdated();
       navigate(`${base}/work-orders/${recordId(result.workOrder)}`);
     } catch (err) {
       push(err.message, 'error');

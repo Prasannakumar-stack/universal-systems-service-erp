@@ -34,6 +34,7 @@ import {
   customerTabs,
   customerTypeLabel,
   customerWhatsAppHref,
+  DateFilterInput,
   DashboardChart,
   dateInputValue,
   dateInRange,
@@ -264,8 +265,8 @@ export function DocumentsPage() {
           <option disabled>Locked</option>
         </select>
         <SearchBox value={customerSearch} onChange={setCustomerSearch} placeholder="Filter by customer or service job" />
-        <input className="input" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+          <DateFilterInput value={dateFrom} onChange={setDateFrom} placeholder="From date" ariaLabel="Document from date" />
+          <DateFilterInput value={dateTo} onChange={setDateTo} placeholder="To date" ariaLabel="Document to date" />
       </div>
       {!documents.length ? <EmptyState title="No documents generated yet" message="Create quotation or invoice from a work order." action={canCreateDocument ? <Link className="btn btn-primary" to="/admin/documents/new">Create Document</Link> : null} /> : (
         <>

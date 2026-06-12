@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, Bell, BookOpenCheck, Boxes, CalendarClock, CheckCircle2, ClipboardList, CreditCard, Download, Edit3, FileText, KeyRound, Loader2, PackagePlus, PhoneCall as PhoneCallIcon, Plus, ReceiptText, Save, Send, ShieldCheck, Trash2, UserRound, Users, Wrench, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ConfirmModal, EmptyState, PageHeader, SearchBox, StatCard } from '../components/Ui.jsx';
+import { ConfirmModal, DateFilterInput, EmptyState, PageHeader, SearchBox, StatCard } from '../components/Ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { apiBase, company, serviceTypes } from '../utils/constants.js';
@@ -98,6 +98,7 @@ export {
   XAxis,
   YAxis,
   ConfirmModal,
+  DateFilterInput,
   EmptyState,
   PageHeader,
   SearchBox,
@@ -339,6 +340,7 @@ export const workOrderTabs = [
   { id: 'parts', label: 'Parts' },
   { id: 'partRequests', label: 'Part Requests' },
   { id: 'billing', label: 'Billing' },
+  { id: 'photos', label: 'Photos' },
   { id: 'documents', label: 'Documents' },
   { id: 'timeline', label: 'Timeline' },
   { id: 'notes', label: 'Notes' }

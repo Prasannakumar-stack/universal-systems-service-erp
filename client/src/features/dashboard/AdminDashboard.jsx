@@ -102,7 +102,6 @@ function filterDashboardRecords(records, fields, period) {
 function filterDashboardRevenueRows(rows, period) {
   const chartRows = rows || [];
   if (!chartRows.length) return [];
-  const originalTotal = dashboardRevenueTotal(chartRows);
   const datedRows = chartRows.map((row) => ({
     row,
     date: dashboardRecordDate(row, ['key', 'date', 'createdAt'])
@@ -114,9 +113,13 @@ function filterDashboardRevenueRows(rows, period) {
     .filter((item) => item.date >= start && item.date <= end)
     .map((item) => item.row);
 
-  if (!filteredRows.length) return chartRows;
-  if (dashboardRevenueTotal(filteredRows) > 0) return filteredRows;
-  return originalTotal > 0 ? chartRows : filteredRows;
+  return filteredRows;
+}
+
+function dashboardPeriodMeta(period) {
+  if (period === 'today') return { label: 'Selected Period', detail: 'Today' };
+  if (period === 'month') return { label: 'Selected Period', detail: 'This Month' };
+  return { label: 'Selected Period', detail: '7 Days' };
 }
 
 function DashboardPeriodFilter({ value, onChange }) {
@@ -471,7 +474,7 @@ function RevenueTooltip({ active, payload, label }) {
   );
 }
 
-function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0 }) {
+function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0, dashboardPeriod = '7d' }) {
   const safeChartData = Array.isArray(chartData) ? chartData : [];
   const totalRevenue = dashboardRevenueTotal(safeChartData);
   const hasRevenue = safeChartData.length > 0 && totalRevenue > 0;
@@ -484,6 +487,7 @@ function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0 }) {
   const hasTrend = Number.isFinite(trend);
   const trendTone = !hasTrend ? 'neutral' : trend >= 0 ? 'positive' : 'negative';
   const trendLabel = hasTrend ? `${trend >= 0 ? '+' : ''}${trend.toFixed(Math.abs(trend) >= 10 ? 0 : 1)}%` : 'Trend pending';
+  const selectedPeriodMeta = dashboardPeriodMeta(dashboardPeriod);
 
   return (
     <section className="dashboard-revenue-modern-card xl:col-span-2">
@@ -511,10 +515,12 @@ function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0 }) {
           <div className="dashboard-revenue-summary-item dashboard-revenue-summary-primary">
             <p>This Month</p>
             <strong title={dashboardCurrency(monthlyRevenue)}>{dashboardCurrency(monthlyRevenue)}</strong>
+            <span>calendar month revenue</span>
           </div>
           <div className="dashboard-revenue-summary-item">
-            <p>Chart Total</p>
+            <p>{selectedPeriodMeta.label}</p>
             <strong title={dashboardCurrency(totalRevenue)}>{dashboardCurrency(totalRevenue)}</strong>
+            <span>{selectedPeriodMeta.detail}</span>
           </div>
           <div className="dashboard-revenue-summary-item">
             <p>Best Day</p>
@@ -558,7 +564,7 @@ function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0 }) {
             </div>
           ) : (
             <div className="dashboard-revenue-empty-shell">
-              <DashboardEmpty title="No revenue trend available yet." message="Revenue trends will appear after payments are recorded." compact />
+              <DashboardEmpty title="No revenue in the selected period." message="Revenue trends will appear here after payments are recorded for this period." compact />
             </div>
           )}
         </div>
@@ -883,7 +889,7 @@ export function AdminDashboard() {
           </div>
         </DashboardPanel>
 
-        <RevenueOverviewCard chartData={filteredRevenueRows} monthlyRevenue={monthlyRevenue} />
+        <RevenueOverviewCard chartData={filteredRevenueRows} monthlyRevenue={monthlyRevenue} dashboardPeriod={dashboardPeriod} />
 
         <TechnicianWorkloadBars technicians={dashboardData.technicianWorkload || []} />
         <ActivityFeedPanel notifications={periodNotifications} reminders={periodReminders} className="xl:col-span-2" />

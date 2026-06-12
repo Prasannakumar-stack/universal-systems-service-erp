@@ -73,11 +73,15 @@ const workOrderSchema = new mongoose.Schema(
     ],
     images: [
       {
+        type: { type: String, enum: ['customer_problem', 'before_service', 'after_service'], default: 'before_service' },
         url: { type: String, required: true },
         filename: { type: String, required: true },
         originalName: { type: String, default: '' },
         mimetype: { type: String, default: '' },
         size: { type: Number, min: 0, default: 0 },
+        uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        uploadedByRole: { type: String, enum: ['', 'customer', 'technician', 'admin', 'system'], default: '' },
+        uploadedAt: { type: Date, default: Date.now },
         createdAt: { type: Date, default: Date.now }
       }
     ],

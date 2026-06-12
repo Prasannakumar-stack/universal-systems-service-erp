@@ -34,6 +34,7 @@ import {
   customerTabs,
   customerTypeLabel,
   customerWhatsAppHref,
+  DateFilterInput,
   DashboardChart,
   dateInputValue,
   dateInRange,
@@ -234,18 +235,8 @@ export function CustomersPage({ role = 'admin' }) {
             <SearchBox value={search} onChange={setSearch} placeholder="Search customer ID, name, phone, work order, invoice, payment" />
           </div>
           <div className="customers-date-filter-group">
-            <label className="date-input-shell relative block">
-              <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
-                <CalendarClock className="h-4 w-4" />
-              </span>
-              <input className="input pl-10" type="date" aria-label="Start date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-            </label>
-            <label className="date-input-shell relative block">
-              <span className="date-input-icon pointer-events-none muted" aria-hidden="true">
-                <CalendarClock className="h-4 w-4" />
-              </span>
-              <input className="input pl-10" type="date" aria-label="End date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-            </label>
+            <DateFilterInput value={dateFrom} onChange={setDateFrom} placeholder="From date" ariaLabel="Start date" />
+            <DateFilterInput value={dateTo} onChange={setDateTo} placeholder="To date" ariaLabel="End date" />
             <button
               className="btn customers-clear-filter-button h-10 shrink-0 border border-white/10 bg-white/[0.045] px-3.5 text-xs font-black text-sky-100 shadow-[0_0_18px_rgba(56,189,248,0.08)] hover:border-sky-300/35 hover:bg-sky-400/10 hover:text-white"
               type="button"
@@ -290,18 +281,18 @@ export function CustomersPage({ role = 'admin' }) {
             })}
           </div>
         ) : null}
-        <div className={`table-wrap bg-[var(--surface)] xl:overflow-x-visible ${isTechnician ? 'technician-desktop-table' : ''}`}>
-          <table className="data-table min-w-[900px] table-fixed xl:min-w-0">
+        <div className={`table-wrap customers-table-wrap bg-[var(--surface)] ${isTechnician ? 'technician-desktop-table' : ''}`}>
+          <table className="data-table customers-data-table">
             <colgroup>
-              <col className="w-[27%]" />
-              <col className="w-[19%]" />
-              <col className="w-[9%]" />
-              <col className="w-[12%]" />
-              <col className="w-[11%]" />
-              <col className="w-[10%]" />
-              <col className="w-[12%]" />
+              <col style={{ width: '260px' }} />
+              <col style={{ width: '190px' }} />
+              <col style={{ width: '120px' }} />
+              <col style={{ width: '130px' }} />
+              <col style={{ width: '130px' }} />
+              <col style={{ width: '130px' }} />
+              <col style={{ width: '170px' }} />
             </colgroup>
-          <thead><tr><th>Customer</th><th>Device / Service</th><th>{isTechnician ? 'Assigned / Attended Jobs' : 'Jobs'}</th><th>Balance</th><th>Spent</th><th>Created</th><th className="text-center">Action</th></tr></thead>
+          <thead><tr><th>Customer</th><th>Device / Service</th><th>{isTechnician ? 'Assigned' : 'Jobs'}</th><th className="text-right">Balance</th><th className="text-right">Spent</th><th>Created</th><th className="customers-action-header">Action</th></tr></thead>
           <tbody className="divide-y divide-[var(--line)]">
             {visibleCustomers.map((customer) => {
               const metrics = metricsByCustomer.get(recordId(customer)) || { jobs: [], invoices: [] };
@@ -345,12 +336,12 @@ export function CustomersPage({ role = 'admin' }) {
                       {activeJobs.length ? `${activeJobs.length} Active` : 'None'}
                     </span>
                   </td>
-                  <td className={pendingBalance > 0 ? 'font-black text-amber-100' : 'muted'}>{currency(pendingBalance)}</td>
-                  <td className={totalSpent > 0 ? 'font-black text-emerald-100' : 'muted'}>{currency(totalSpent)}</td>
+                  <td className={`text-right ${pendingBalance > 0 ? 'font-black text-amber-100' : 'muted'}`}>{currency(pendingBalance)}</td>
+                  <td className={`text-right ${totalSpent > 0 ? 'font-black text-emerald-100' : 'muted'}`}>{currency(totalSpent)}</td>
                   <td>{formatListDate(customer.createdAt)}</td>
-                  <td className="whitespace-nowrap text-center align-middle">
+                  <td className="customers-action-cell whitespace-nowrap align-middle">
                     <Link
-                      className="btn btn-secondary inline-flex h-8 items-center justify-center whitespace-nowrap border-sky-300/25 bg-sky-400/10 px-2.5 py-1 text-[11px] font-black text-sky-100 hover:bg-sky-400/15"
+                      className="btn btn-secondary customers-action-button inline-flex h-8 items-center justify-center whitespace-nowrap border-sky-300/25 bg-sky-400/10 px-2.5 py-1 text-[11px] font-black text-sky-100 hover:bg-sky-400/15"
                       to={`${base}/customers/${customer.id}`}
                     >
                       View 360 Profile

@@ -38,6 +38,7 @@ import {
   timeAgo,
   unreadNotificationCount
 } from '../features/notifications/notificationCenterData.js';
+import { SIDEBAR_BADGES_UPDATED_EVENT } from '../utils/sidebarBadges.js';
 
 const TopbarBookingModal = lazy(() => import('../features/bookings/BookingsPage.jsx').then((module) => ({ default: module.BookingModal })));
 
@@ -502,10 +503,21 @@ function SidebarBadge({ badge }) {
   const value = Number(badge?.value || 0);
   if (!value) return null;
   return (
-    <span className={`enterprise-sidebar-badge ${sidebarBadgeClass(badge.tone)}`}>
+    <span className={`enterprise-sidebar-badge ${sidebarBadgeClass(badge.tone)}`} aria-label={`${value > 99 ? '99+' : value} items`}>
       {value > 99 ? '99+' : value}
     </span>
   );
+}
+
+const technicianHiddenBadgeKeys = new Set(['customers', 'amcContracts']);
+
+function shouldHideTechnicianSidebarBadge(link) {
+  const label = String(link?.label || '').trim().toLowerCase();
+  const to = String(link?.to || '').trim().toLowerCase();
+  return label === 'customers'
+    || label === 'amc contracts'
+    || to === '/tech/customers'
+    || to === '/tech/amc-contracts';
 }
 
 function SidebarItem({ link, close, badge }) {
@@ -579,11 +591,13 @@ function AdminSidebar({ close }) {
     window.addEventListener('focus', loadSidebarBadges);
     window.addEventListener('us:billing-updated', loadSidebarBadges);
     window.addEventListener('us:notifications-updated', loadSidebarBadges);
+    window.addEventListener(SIDEBAR_BADGES_UPDATED_EVENT, loadSidebarBadges);
     return () => {
       mounted = false;
       window.removeEventListener('focus', loadSidebarBadges);
       window.removeEventListener('us:billing-updated', loadSidebarBadges);
       window.removeEventListener('us:notifications-updated', loadSidebarBadges);
+      window.removeEventListener(SIDEBAR_BADGES_UPDATED_EVENT, loadSidebarBadges);
     };
   }, [location.pathname, location.search, request]);
 
@@ -640,7 +654,7 @@ function AdminSidebar({ close }) {
 
       <div className="enterprise-sidebar-footer border-t border-white/10 p-3">
         <div className="mb-3 flex items-center gap-3 rounded-card border border-white/10 bg-white/[0.045] p-3">
-          <CurrentUserAvatar user={user} fallback="A" className="h-9 w-9 text-sm" />
+          <CurrentUserAvatar user={user} fallback="A" className="h-12 w-12 text-base" />
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">{user?.name || 'Admin User'}</p>
             <span className="admin-role-badge mt-1 inline-flex">{roleLabel(user?.role || 'admin')}</span>
@@ -686,10 +700,12 @@ function TechnicianSidebar({ close }) {
     loadTechnicianSidebarBadges();
     window.addEventListener('focus', loadTechnicianSidebarBadges);
     window.addEventListener('us:billing-updated', loadTechnicianSidebarBadges);
+    window.addEventListener(SIDEBAR_BADGES_UPDATED_EVENT, loadTechnicianSidebarBadges);
     return () => {
       mounted = false;
       window.removeEventListener('focus', loadTechnicianSidebarBadges);
       window.removeEventListener('us:billing-updated', loadTechnicianSidebarBadges);
+      window.removeEventListener(SIDEBAR_BADGES_UPDATED_EVENT, loadTechnicianSidebarBadges);
     };
   }, [badgeKeySignature, location.pathname, location.search, request, user]);
 
@@ -726,7 +742,14 @@ function TechnicianSidebar({ close }) {
               </div>
             ) : null}
             <div className="space-y-1">
-              {group.links.map((link) => <SidebarItem key={`${group.title}-${link.label}`} link={link} close={close} badge={badges[link.badgeKey]} />)}
+              {group.links.map((link) => (
+                <SidebarItem
+                  key={`${group.title}-${link.label}`}
+                  link={link}
+                  close={close}
+                  badge={shouldHideTechnicianSidebarBadge(link) || technicianHiddenBadgeKeys.has(link.badgeKey) ? null : badges[link.badgeKey]}
+                />
+              ))}
             </div>
           </div>
         ))}
@@ -734,7 +757,7 @@ function TechnicianSidebar({ close }) {
 
       <div className="enterprise-sidebar-footer border-t border-white/10 p-3">
         <div className="mb-3 flex items-center gap-3 rounded-card border border-white/10 bg-white/[0.045] p-3">
-          <CurrentUserAvatar user={user} fallback="T" className="h-9 w-9 text-sm" />
+          <CurrentUserAvatar user={user} fallback="T" className="h-12 w-12 text-base" />
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">{user?.name || 'Technician'}</p>
             <span className="admin-role-badge mt-1 inline-flex">{roleLabel(user?.role || 'technician')}</span>
@@ -1147,7 +1170,7 @@ function AdminTopBar({ role, openSidebar }) {
             </NavLink>
             <NotificationCenter role={userRole} />
             <div className="enterprise-user-chip">
-              <CurrentUserAvatar user={user} fallback={isTechnician ? 'T' : 'A'} className="h-8 w-8 text-xs" />
+              <CurrentUserAvatar user={user} fallback={isTechnician ? 'T' : 'A'} className="h-11 w-11 text-sm" />
               <div className="min-w-0">
                 <p className="max-w-36 truncate text-sm font-bold">{user?.name || 'Admin User'}</p>
                 <span className="admin-role-badge mt-1 inline-flex">{roleLabel(userRole)}</span>

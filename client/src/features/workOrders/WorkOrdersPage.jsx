@@ -32,6 +32,7 @@ import {
   customerTabs,
   customerTypeLabel,
   customerWhatsAppHref,
+  DateFilterInput,
   DashboardChart,
   dateInputValue,
   dateInRange,
@@ -146,6 +147,7 @@ import {
 import { MoreHorizontal, Search, X } from 'lucide-react';
 import { ADMIN_ASSIGNMENT_LABEL, technicianNameOrAdmin } from '../../utils/assignment.js';
 import { can, normalizeRole } from '../../utils/roles.js';
+import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 
 const WORK_ORDER_SOURCES = ['Walk-in', 'Call', 'Website'];
 const ADMIN_TECHNICIAN_FILTER_VALUE = 'admin';
@@ -321,6 +323,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
         await request(`/work-orders/${id}/auto-assign`, { method: 'POST' });
         push('Service job auto-assigned');
         reload({ silent: true });
+        emitSidebarBadgesUpdated();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -341,6 +344,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
         push(nextTechnicianId ? 'Work order assigned' : 'Work order assigned to Admin');
         setActionMenuId('');
         reload({ silent: true });
+        emitSidebarBadgesUpdated();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -361,6 +365,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
         setDeleteOrder(null);
         setActionMenuId('');
         reload({ silent: true });
+        emitSidebarBadgesUpdated();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -385,6 +390,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
         await request(`/work-orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) });
         push('Service job status updated');
         reload({ silent: true });
+        emitSidebarBadgesUpdated();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -462,8 +468,8 @@ export function WorkOrdersPage({ role = 'admin' }) {
             <option value="">All sources</option>
             {WORK_ORDER_SOURCES.map((item) => <option key={item} value={item}>{SOURCE_DISPLAY[item]}</option>)}
           </select>
-          <input className={`${workOrdersDateClass} lg:col-span-2`} type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} aria-label="Date from" />
-          <input className={`${workOrdersDateClass} lg:col-span-2`} type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} aria-label="Date to" />
+          <DateFilterInput className={`${workOrdersDateClass} lg:col-span-2`} value={dateFrom} onChange={setDateFrom} placeholder="From date" ariaLabel="Date from" />
+          <DateFilterInput className={`${workOrdersDateClass} lg:col-span-2`} value={dateTo} onChange={setDateTo} placeholder="To date" ariaLabel="Date to" />
           {canAssignTechnician ? (
             <select className={`${workOrdersFilterClass} lg:col-span-3`} value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}>
               <option value="">All technicians</option>

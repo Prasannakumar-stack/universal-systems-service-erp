@@ -145,6 +145,7 @@ import {
 import { FileImage, ImageUp, UploadCloud } from 'lucide-react';
 import { ADMIN_ASSIGNMENT_LABEL } from '../../utils/assignment.js';
 import { can, normalizeRole } from '../../utils/roles.js';
+import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 
 const bookingsFocusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
@@ -256,6 +257,7 @@ export function BookingsPage({ role = 'admin' }) {
         await request('/work-orders', { method: 'POST', body: JSON.stringify({ bookingId, technicianId: technicianId || undefined }) });
         push('Booking converted to service job');
         reload({ silent: true });
+        emitSidebarBadgesUpdated();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -603,6 +605,7 @@ export function BookingModal({ initialCustomer = null, onClose, onSaved }) {
       await request('/bookings', { method: 'POST', body: JSON.stringify(form) });
       push('Booking created');
       resetBookingExtras();
+      emitSidebarBadgesUpdated();
       onSaved();
       onClose();
     } catch (err) {

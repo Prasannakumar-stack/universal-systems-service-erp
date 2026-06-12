@@ -33,6 +33,7 @@ import {
   customerTabs,
   customerTypeLabel,
   customerWhatsAppHref,
+  DateFilterInput,
   DashboardChart,
   dateInputValue,
   dateInRange,
@@ -365,8 +366,8 @@ export function PaymentsPage({ role = 'admin' }) {
           <option value="">All methods</option>
           {(data.methods || ['Cash', 'UPI']).map((item) => <option key={item}>{item}</option>)}
         </select>
-        <input className="input" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        <DateFilterInput value={dateFrom} onChange={setDateFrom} placeholder="From date" ariaLabel="Payment from date" />
+        <DateFilterInput value={dateTo} onChange={setDateTo} placeholder="To date" ariaLabel="Payment to date" />
         <button type="button" className="btn btn-secondary h-10 whitespace-nowrap px-4" disabled={!hasActiveFilters} onClick={resetFilters}>Reset Filters</button>
       </div>
 

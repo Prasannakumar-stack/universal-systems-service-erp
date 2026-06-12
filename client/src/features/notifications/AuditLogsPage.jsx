@@ -34,6 +34,7 @@ import {
   customerTabs,
   customerTypeLabel,
   customerWhatsAppHref,
+  DateFilterInput,
   DashboardChart,
   dateInputValue,
   dateInRange,
@@ -239,8 +240,8 @@ export function AuditLogsPage() {
           {['booking_created', 'invoice_generated', 'created', 'updated', 'payment_recorded', 'stock_movement', 'stock_changed', 'status_changed', 'part_used', 'amc_visit_work_order_created', 'auto_assigned'].map((item) => <option key={item}>{item}</option>)}
         </select>
         <SearchBox value={userSearch} onChange={setUserSearch} placeholder="Filter by user" />
-        <input className="input" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        <input className="input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        <DateFilterInput value={dateFrom} onChange={setDateFrom} placeholder="From date" ariaLabel="Audit log from date" />
+        <DateFilterInput value={dateTo} onChange={setDateTo} placeholder="To date" ariaLabel="Audit log to date" />
         <button type="button" className="btn btn-secondary admin-compact-button" disabled={!hasActiveFilters} onClick={resetFilters}>Reset Filters</button>
       </div>
 

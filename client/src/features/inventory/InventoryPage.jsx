@@ -143,6 +143,7 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 import { can } from '../../utils/roles.js';
+import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 import { AddStockChoiceModal, InventoryModuleTabs, PurchaseImportModal, PurchaseRegisterTab, SuppliersTab } from './PurchaseImportComponents.jsx';
 import { StockMovementsPage } from './StockMovementsPage.jsx';
 
@@ -254,6 +255,7 @@ export function InventoryPage({ role = 'admin' }) {
         setEditor(null);
         push(partForm.id ? 'Inventory part updated' : 'Inventory part added');
         reload({ silent: true });
+        emitSidebarBadgesUpdated();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -272,6 +274,7 @@ export function InventoryPage({ role = 'admin' }) {
         push('Inventory part deleted');
         setDeletePart(null);
         reload({ silent: true });
+        emitSidebarBadgesUpdated();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -303,6 +306,7 @@ export function InventoryPage({ role = 'admin' }) {
         push('Stock added');
         setQuickStockPart(null);
         reload({ silent: true });
+        emitSidebarBadgesUpdated();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -329,7 +333,10 @@ export function InventoryPage({ role = 'admin' }) {
       {activeTab === 'stock-movements' ? (
         <StockMovementsPage embedded />
       ) : activeTab === 'purchases' ? (
-        <PurchaseRegisterTab parts={parts} onPartsChanged={() => reload({ silent: true })} />
+        <PurchaseRegisterTab parts={parts} onPartsChanged={() => {
+          reload({ silent: true });
+          emitSidebarBadgesUpdated();
+        }} />
       ) : activeTab === 'suppliers' ? (
         <SuppliersTab />
       ) : (
@@ -462,7 +469,10 @@ export function InventoryPage({ role = 'admin' }) {
           initialPart={purchasePart}
           parts={parts}
           onClose={() => setPurchasePart(null)}
-          onSaved={() => reload({ silent: true })}
+          onSaved={() => {
+            reload({ silent: true });
+            emitSidebarBadgesUpdated();
+          }}
         />
       ) : null}
       {canDeletePart && deletePart ? (

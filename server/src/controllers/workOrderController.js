@@ -101,7 +101,7 @@ export async function patchMovePartRequestToUsed(req, res) {
 }
 
 export async function postImages(req, res) {
-  const workOrder = await addImages(req.params.id, req.files, req.user);
+  const workOrder = await addImages(req.params.id, req.files, req.user, req.body || {});
   res.status(201).json({ workOrder, message: 'Images uploaded' });
 }
 

@@ -22,7 +22,8 @@ const populateWorkOrder = [
   { path: 'partRequests.userId', select: 'name username role' },
   { path: 'partRequests.approvedBy', select: 'name username role' },
   { path: 'partRequests.rejectedBy', select: 'name username role' },
-  { path: 'bookingId', select: 'bookingCode serviceType bookingSource problemImage' },
+  { path: 'images.uploadedBy', select: 'name username role' },
+  { path: 'bookingId', select: 'bookingCode serviceType bookingSource problemImage createdAt' },
   {
     path: 'amcContractId',
     select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices contractValue startDate endDate status includedVisits invoiceId',
@@ -42,6 +43,7 @@ const detailPopulateWorkOrder = [
 
 const pendingPartRequestStatuses = ['Pending', 'Requested', 'Reserved'];
 const WORK_ORDER_PRIORITIES = ['Low', 'Normal', 'High', 'Urgent'];
+const WORK_ORDER_IMAGE_TYPES = ['customer_problem', 'before_service', 'after_service'];
 
 function assertPartsUnlocked(workOrder) {
   if (workOrder.invoiceId) {
@@ -111,6 +113,22 @@ function normalizeWorkOrderPriority(value) {
   if (WORK_ORDER_PRIORITIES.includes(raw)) return raw;
   const aliases = { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent', medium: 'Normal', critical: 'Urgent' };
   return aliases[raw.toLowerCase()] || 'Normal';
+}
+
+function normalizeWorkOrderImageType(value, fallback = 'before_service') {
+  const raw = clean(value).toLowerCase();
+  if (WORK_ORDER_IMAGE_TYPES.includes(raw)) return raw;
+  if (raw === 'customer' || raw === 'customer_problem_photo') return 'customer_problem';
+  if (raw === 'before' || raw === 'before-service') return 'before_service';
+  if (raw === 'after' || raw === 'after-service' || raw === 'completion') return 'after_service';
+  return fallback;
+}
+
+function uploadedByRoleForUser(user) {
+  const role = clean(user?.role).toLowerCase();
+  if (role === 'technician') return 'technician';
+  if (role === 'admin') return 'admin';
+  return 'system';
 }
 
 async function releasePartReservation(inventoryPartId, quantity) {
@@ -231,11 +249,14 @@ export async function createWorkOrder(payload, user) {
   const status = technicianId ? 'In Progress' : 'Pending';
   const bookingImages = sourceBooking?.problemImage?.url
     ? [{
+        type: 'customer_problem',
         url: sourceBooking.problemImage.url,
         filename: sourceBooking.problemImage.filename || 'booking-problem-image',
         originalName: sourceBooking.problemImage.originalName || '',
         mimetype: sourceBooking.problemImage.mimetype || '',
-        size: sourceBooking.problemImage.size || 0
+        size: sourceBooking.problemImage.size || 0,
+        uploadedByRole: 'customer',
+        uploadedAt: sourceBooking.createdAt || new Date()
       }]
     : [];
   const workOrder = await WorkOrder.create({
@@ -977,20 +998,34 @@ export async function deleteWorkOrder(id, user) {
   return { id: String(workOrder._id) };
 }
 
-export async function addImages(id, files, user) {
+export async function addImages(id, files, user, payload = {}) {
   assertPermission(user, 'upload_photos');
   if (!files?.length) throw appError('Select at least one image');
   const workOrder = await getWorkOrder(id, user);
+  const photoType = normalizeWorkOrderImageType(payload.photoCategory || payload.type, 'before_service');
   files.forEach((file) => {
     workOrder.images.push({
+      type: photoType,
       url: `/uploads/${file.filename}`,
       filename: file.filename,
       originalName: file.originalname,
       mimetype: file.mimetype || '',
-      size: file.size || 0
+      size: file.size || 0,
+      uploadedBy: user?._id || null,
+      uploadedByRole: uploadedByRoleForUser(user),
+      uploadedAt: new Date()
     });
   });
-  workOrder.timeline.push({ status: workOrder.status, message: `${files.length} image(s) uploaded`, userId: user._id });
+  const timelineLabel = photoType === 'after_service'
+    ? 'after-completion'
+    : photoType === 'customer_problem'
+      ? 'customer problem'
+      : 'before-service';
+  workOrder.timeline.push({
+    status: workOrder.status,
+    message: `${files.length} ${timelineLabel} photo(s) uploaded`,
+    userId: user._id
+  });
   await workOrder.save();
   return getWorkOrder(id, user);
 }

@@ -164,6 +164,7 @@ import {
 } from '../../shared/partWorkflow.jsx';
 import { isPdfSentViaWhatsapp } from '../../shared/whatsappPdfMessage.js';
 import { can, normalizeRole } from '../../utils/roles.js';
+import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 import { RotateCcw } from 'lucide-react';
 
 const detailFocusRing =
@@ -187,6 +188,13 @@ const amcChargeTypeOptions = [
   { value: coveredAmcPart, label: 'Covered By AMC' },
   { value: 'Chargeable', label: 'Chargeable' }
 ];
+const workOrderPhotoTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const workOrderPhotoMaxSize = 5 * 1024 * 1024;
+const photoCategoryLabels = {
+  customer_problem: 'Customer Problem Photo',
+  before_service: 'Before Service Photo',
+  after_service: 'After Completion Photo'
+};
 
 function normalizeAmcChargeTypeSelectValue(value) {
   const raw = String(value || '').trim();
@@ -194,6 +202,27 @@ function normalizeAmcChargeTypeSelectValue(value) {
   if (raw === coveredAmcPart || raw === 'Covered By AMC') return coveredAmcPart;
   if (raw === 'Chargeable') return 'Chargeable';
   return autoAmcPartChargeType;
+}
+
+function normalizePhotoCategory(value, fallback = 'before_service') {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'customer_problem') return 'customer_problem';
+  if (raw === 'after_service') return 'after_service';
+  if (raw === 'before_service') return 'before_service';
+  return fallback;
+}
+
+function validatePhotoFiles(files = []) {
+  for (const file of files) {
+    const extOk = /\.(jpe?g|png|webp)$/i.test(file?.name || '');
+    if (!workOrderPhotoTypes.has(file?.type || '') && !extOk) {
+      return 'Only JPG, JPEG, PNG, and WEBP photos are allowed.';
+    }
+    if (Number(file?.size || 0) > workOrderPhotoMaxSize) {
+      return 'Each photo must be 5 MB or less.';
+    }
+  }
+  return '';
 }
 
 function resolvedAmcChargeType(value, contract = {}) {
@@ -416,7 +445,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const [labourCharge, setLabourCharge] = useState(0);
   const [pdfBusy, setPdfBusy] = useState('');
   const [activeTab, setActiveTab] = useState('parts');
-  const [photoFiles, setPhotoFiles] = useState([]);
+  const [photoFiles, setPhotoFiles] = useState({ before_service: [], after_service: [] });
+  const [photoUploadingType, setPhotoUploadingType] = useState('');
   const [partAction, setPartAction] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [moveToUsedUnitPrice, setMoveToUsedUnitPrice] = useState('');
@@ -429,6 +459,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const [voidUnlockConfirm, setVoidUnlockConfirm] = useState(false);
   const [priorityValue, setPriorityValue] = useState('Normal');
   const permissionRefreshAttemptedRef = useRef(false);
+  const beforeServiceInputRef = useRef(null);
+  const afterServiceInputRef = useRef(null);
   const { data, loading, error, reload } = useResource(() => request(`/work-orders/${id}`), [request, id]);
   const [liveOrder, setLiveOrder] = useState(null);
   const order = liveOrder || data?.workOrder;
@@ -494,6 +526,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     setMoveToUsedZeroReason('');
   }, [partAction?.requestId, partAction?.type]);
 
+  async function reloadSidebarAware() {
+    await reload({ silent: true });
+    emitSidebarBadgesUpdated();
+  }
+
   async function saveStatus(nextStatus) {
     if (!canUpdateWorkOrderStatus) {
       push('You do not have permission to update job status', 'error');
@@ -504,7 +541,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         const result = await request(`/work-orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) });
         if (result?.workOrder) setLiveOrder(result.workOrder);
         push('Status updated');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -528,7 +565,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         await request(`/work-orders/${id}/notes`, { method: 'POST', body: JSON.stringify({ text: note }) });
         setNote('');
         push('Note added');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -612,7 +649,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         setPart({ partName: '', quantity: 1, unitPrice: 0, inventoryPartId: '', chargeType: isAmcLinked ? autoAmcPartChargeType : 'Chargeable' });
         setAddPartDupKind(null);
         push('Part added');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -655,7 +692,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         await request(`/work-orders/${id}/parts/${partId}`, { method: 'PATCH', body: JSON.stringify(body) });
         setEditPartRow(null);
         push('Part updated');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -680,7 +717,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/parts/${partId}`, { method: 'DELETE' });
         push('Part removed');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -699,7 +736,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         await request(`/work-orders/${id}/part-requests`, { method: 'POST', body: JSON.stringify(partRequest) });
         setPartRequest({ inventoryPartId: '', partName: '', quantity: 1, note: '' });
         push('Part request submitted');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -713,7 +750,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         await request(`/work-orders/${id}/priority`, { method: 'PATCH', body: JSON.stringify({ priority: nextPriority }) });
         setPriorityValue(nextPriority);
         push('Priority updated');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -856,13 +893,13 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         setMoveToUsedChargeType(autoAmcPartChargeType);
         setMoveToUsedNote('');
         setMoveToUsedZeroReason('');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       if (err.message === 'This request was already moved to Parts Used.') {
         push(err.message, 'error');
         setPartAction(null);
-        reload({ silent: true });
+        await reloadSidebarAware();
         return;
       }
       push(err.message, 'error');
@@ -880,7 +917,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       await preserveScroll(async () => {
         await request('/invoices', { method: 'POST', body: JSON.stringify({ workOrderId: id, labourCharge: serviceCharge || labourCharge }) });
         push(isAmcLinked ? 'Extra charges invoice generated' : 'Invoice generated');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -911,7 +948,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           })
         });
         push(action === 'void-regenerate' ? 'Extra invoice voided and regenerated' : 'Adjustment invoice created');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -943,6 +980,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         if (refreshed.workOrder) setLiveOrder(refreshed.workOrder);
         setVoidUnlockConfirm(false);
         push('Unpaid extra invoice voided. Parts unlocked.');
+        emitSidebarBadgesUpdated();
       });
     } catch (err) {
       setVoidUnlockConfirm(false);
@@ -979,7 +1017,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         });
         const invoiceId = recordId(result.invoice);
         push('AMC invoice created');
-        reload({ silent: true });
+        await reloadSidebarAware();
         if (invoiceId) navigate(`${paymentsBase}?invoiceId=${encodeURIComponent(invoiceId)}`);
       });
     } catch (err) {
@@ -1001,7 +1039,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           body: JSON.stringify({ serviceCharge })
         });
         push('Service charge updated');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -1019,7 +1057,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/auto-assign`, { method: 'POST' });
         push('Service job auto-assigned');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
@@ -1097,7 +1135,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         const result = await request(`/work-orders/${id}/pdf/${flow.type}/send-whatsapp`, { method: 'POST' });
         if (result.sentViaApi) {
           push(result.message || `${getPdfLabel(flow.type)} sent via WhatsApp`);
-          reload({ silent: true });
+          await reloadSidebarAware();
           return;
         }
         await downloadPdfFile(flow.type, flow.filename);
@@ -1128,29 +1166,38 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           body: JSON.stringify({ approvalStatus })
         });
         push(approvalStatus === 'approved' ? 'Marked as Approved' : 'Marked as Denied');
-        reload({ silent: true });
+        await reloadSidebarAware();
       });
     } catch (err) {
       push('Failed to update approval', 'error');
     }
   }
 
-  async function uploadPhotos(event) {
+  async function uploadPhotos(event, category) {
     event.preventDefault();
     event.stopPropagation();
     if (!canUploadPhotos) {
       push('You do not have permission to upload photos', 'error');
       return;
     }
-    if (!photoFiles.length) {
+    const normalizedCategory = normalizePhotoCategory(category);
+    const selectedFiles = photoFiles[normalizedCategory] || [];
+    if (!selectedFiles.length) {
       push('Select at least one photo', 'error');
+      return;
+    }
+    const validationMessage = validatePhotoFiles(selectedFiles);
+    if (validationMessage) {
+      push(validationMessage, 'error');
       return;
     }
 
     const formData = new FormData();
-    photoFiles.forEach((file) => formData.append('images', file));
+    formData.append('photoCategory', normalizedCategory);
+    selectedFiles.forEach((file) => formData.append('images', file));
 
     try {
+      setPhotoUploadingType(normalizedCategory);
       await preserveScroll(async () => {
         const response = await fetch(`${apiBase}/work-orders/${id}/images`, {
           method: 'POST',
@@ -1159,12 +1206,16 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.message || 'Photo upload failed');
-        setPhotoFiles([]);
-        push('Photo uploaded');
-        reload({ silent: true });
+        setPhotoFiles((current) => ({ ...current, [normalizedCategory]: [] }));
+        const inputRef = normalizedCategory === 'after_service' ? afterServiceInputRef : beforeServiceInputRef;
+        if (inputRef.current) inputRef.current.value = '';
+        push(`${photoCategoryLabels[normalizedCategory]} uploaded`);
+        await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
+    } finally {
+      setPhotoUploadingType('');
     }
   }
 
@@ -1218,7 +1269,46 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const activeExtraInvoicesHavePayment = activeExtraInvoices.some((invoice) => invoiceHasPayment(invoice));
   const canVoidRegenerateExtraInvoice = extraInvoiceNeedsRefresh && activeExtraInvoicesAreUnpaid;
   const canCreateAdjustmentInvoice = extraInvoiceNeedsRefresh && activeExtraInvoicesHavePayment && extraInvoiceDifference > 0.5;
-  const imageItems = (order.images?.length ? order.images : order.bookingId?.problemImage?.url ? [order.bookingId.problemImage] : []) || [];
+  const bookingProblemUrl = order.bookingId?.problemImage?.url || '';
+  const mergedPhotoMap = new Map();
+  const rawPhotoEntries = [
+    order.bookingId?.problemImage?.url
+      ? {
+          ...order.bookingId.problemImage,
+          type: 'customer_problem',
+          uploadedByRole: 'customer',
+          uploadedAt: order.bookingId?.createdAt || order.createdAt
+        }
+      : null,
+    ...((order.images || []).map((image) => ({
+      ...image,
+      uploadedAt: image.uploadedAt || image.createdAt || order.createdAt
+    })))
+  ].filter(Boolean);
+  rawPhotoEntries.forEach((image, index) => {
+    const inferredCategory =
+      image.type
+        ? normalizePhotoCategory(image.type)
+        : bookingProblemUrl && image.url === bookingProblemUrl
+          ? 'customer_problem'
+          : String(image.uploadedByRole || '').toLowerCase() === 'customer'
+            ? 'customer_problem'
+            : 'before_service';
+    const key = image.url || `${image.filename || 'photo'}-${index}`;
+    const existing = mergedPhotoMap.get(key);
+    const normalizedImage = {
+      ...existing,
+      ...image,
+      type: inferredCategory,
+      uploadedByRole: image.uploadedByRole || existing?.uploadedByRole || (inferredCategory === 'customer_problem' ? 'customer' : ''),
+      uploadedAt: image.uploadedAt || existing?.uploadedAt || order.createdAt
+    };
+    mergedPhotoMap.set(key, normalizedImage);
+  });
+  const photoItems = Array.from(mergedPhotoMap.values());
+  const customerProblemPhotos = photoItems.filter((image) => image.type === 'customer_problem');
+  const beforeServicePhotos = photoItems.filter((image) => image.type === 'before_service');
+  const afterServicePhotos = photoItems.filter((image) => image.type === 'after_service');
   const workOrderDisplayId = getWorkOrderDisplayId(order);
   const customerDisplayId = getCustomerDisplayId(order.customerId);
   const invoiceDisplayId = order.invoiceId ? getInvoiceDisplayId(order.invoiceId) : '';
@@ -1310,12 +1400,30 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const completedStatuses = ['Completed', 'Delivered', 'Returned'];
   const showCompletedDate = completedStatuses.includes(order.status);
   const completedDateDisplay = workOrderCompletedDateDisplay(order, formatDate);
+  const renderPhotoPriorityBadge = () => <WorkOrderPriorityBadge priority={jobPriority(order)} />;
   const timelineDateTime = (value) => {
     if (!value) return 'Not added yet';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return 'Not added yet';
     return date.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
+  const photoMetaDateTime = (value) => {
+    if (!value) return 'Recently uploaded';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Recently uploaded';
+    return date.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+  const photoUploadedBy = (image) => (
+    image?.uploadedBy?.name
+      || image?.uploadedBy?.username
+      || (String(image?.uploadedByRole || '').toLowerCase() === 'customer'
+        ? 'Customer'
+        : String(image?.uploadedByRole || '').toLowerCase() === 'technician'
+          ? 'Technician'
+          : String(image?.uploadedByRole || '').toLowerCase() === 'admin'
+            ? 'Admin'
+            : 'Team')
+  );
   const completionReversalEntry = order.completedAt && !showCompletedDate
     ? {
         status: order.status,
@@ -1325,6 +1433,116 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       }
     : null;
   const visibleTimeline = completionReversalEntry ? [completionReversalEntry, ...(order.timeline || [])] : (order.timeline || []);
+
+  function renderPhotoSection(title, items, helperText, emptyTitle, emptyMessage, className = '') {
+    return (
+      <section className={`${detailPanelClass} work-order-photo-section ${className}`.trim()}>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="text-base font-black text-white">{title}</h3>
+            <p className="mt-1 text-sm leading-5 muted">{helperText}</p>
+          </div>
+        </div>
+        {items.length ? (
+          <div className="work-order-photo-gallery mt-3">
+            {items.map((image, index) => (
+              <a
+                key={`${title}-${image.url || image.filename || index}`}
+                className="technician-photo-card work-order-photo-card"
+                href={uploadedAssetUrl(image.url)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span className="technician-photo-preview">
+                  <img src={uploadedAssetUrl(image.url)} alt={image.originalName || image.filename || `${title} ${index + 1}`} loading="lazy" />
+                </span>
+                <span className="mt-3 block truncate text-sm font-black text-white" title={image.originalName || image.filename || `${title} ${index + 1}`}>
+                  {image.originalName || image.filename || `${title} ${index + 1}`}
+                </span>
+                <span className="mt-2 inline-flex w-fit rounded-full border border-sky-400/20 bg-sky-500/10 px-2.5 py-1 text-[11px] font-bold text-sky-100">
+                  {photoCategoryLabels[image.type] || title}
+                </span>
+                <span className="mt-2 block text-xs muted">Uploaded by {photoUploadedBy(image)}</span>
+                <span className="mt-1 block text-xs muted">{photoMetaDateTime(image.uploadedAt || image.createdAt)}</span>
+                <span className="work-order-photo-action mt-3 inline-flex min-h-[2.15rem] items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-slate-100 transition hover:border-sky-300/45 hover:text-white">
+                  View Full Photo
+                </span>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <div className="work-order-photo-empty mt-3">
+            <p className="text-sm font-black text-white">{emptyTitle}</p>
+            <p className="mt-1 text-sm leading-5 muted">{emptyMessage}</p>
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  function photoFilesChanged(category, files) {
+    const normalizedCategory = normalizePhotoCategory(category);
+    const nextFiles = Array.from(files || []);
+    const validationMessage = validatePhotoFiles(nextFiles);
+    if (validationMessage) {
+      push(validationMessage, 'error');
+      const inputRef = normalizedCategory === 'after_service' ? afterServiceInputRef : beforeServiceInputRef;
+      if (inputRef.current) inputRef.current.value = '';
+      setPhotoFiles((current) => ({ ...current, [normalizedCategory]: [] }));
+      return;
+    }
+    setPhotoFiles((current) => ({ ...current, [normalizedCategory]: nextFiles }));
+  }
+
+  function renderTechnicianPhotoUpload(category, title, helperText, inputRef) {
+    const normalizedCategory = normalizePhotoCategory(category);
+    const selectedFiles = photoFiles[normalizedCategory] || [];
+    const uploading = photoUploadingType === normalizedCategory;
+    const inputId = `work-order-photo-upload-${normalizedCategory}`;
+    return (
+      <form className={`${detailPanelClass} work-order-photo-upload-card`} onSubmit={(event) => uploadPhotos(event, normalizedCategory)}>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-wide text-sky-100">{title}</h3>
+            <p className="mt-1 text-sm leading-5 muted">{helperText}</p>
+          </div>
+        </div>
+        <input
+          id={inputId}
+          ref={inputRef}
+          className="hidden"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          multiple
+          onChange={(event) => photoFilesChanged(normalizedCategory, event.target.files)}
+        />
+        <div className="work-order-photo-upload-row mt-3 flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="work-order-photo-upload-copy min-w-0">
+            <p className="work-order-photo-upload-status text-sm font-semibold text-slate-100">
+              {selectedFiles.length
+                ? `${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'} selected`
+                : 'No file selected yet'}
+            </p>
+            <p className="work-order-photo-upload-format mt-1 text-xs leading-5 muted">JPG, JPEG, PNG, WEBP up to 5 MB.</p>
+          </div>
+          <div className="work-order-photo-upload-actions flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label htmlFor={inputId} className="btn btn-secondary min-h-11 cursor-pointer justify-center whitespace-nowrap">
+              <FileText className="h-4 w-4" />
+              Choose Photos
+            </label>
+            <button
+              type="submit"
+              className="btn btn-primary min-h-11 justify-center whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={uploading || !selectedFiles.length}
+            >
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackagePlus className="h-4 w-4" />}
+              {uploading ? 'Uploading...' : `Upload ${title}`}
+            </button>
+          </div>
+        </div>
+      </form>
+    );
+  }
 
   function renderPartsLockNotice(className = 'mt-2') {
     if (!partsLocked) return null;
@@ -1727,22 +1945,22 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         {activeTab === 'photos' ? (
           <div className="grid gap-4">
             <div className={detailSectionClass}>
-              <h2 className="text-xl font-black">Photos / Problem Image</h2>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {imageItems.length ? imageItems.map((image, index) => (
-                  <a key={image.url || image.filename || index} className="rounded-card border border-[var(--line)] bg-[var(--surface-2)] p-4 transition hover:border-sky-300/60" href={uploadedAssetUrl(image.url)} target="_blank" rel="noreferrer">
-                    <FileText className="mb-3 h-5 w-5 text-[var(--brand)]" />
-                    <p className="font-black">{index === 0 ? 'Customer problem image' : `Service photo ${index}`}</p>
-                    <p className="mt-1 text-sm muted">{image.originalName || image.filename || `Image ${index + 1}`}</p>
-                  </a>
-                )) : <EmptyState title="No image uploaded" message="Customer problem images and technician photos will appear here." />}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-black">Photos</h2>
+                  <p className="mt-1 text-sm muted">Customer problem photos and technician progress photos are grouped here for quick review.</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Priority</p>
+                  <div className="mt-1">{renderPhotoPriorityBadge()}</div>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                {renderPhotoSection('Customer Problem Photo', customerProblemPhotos, 'Customer uploaded issue/device photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.', 'xl:col-span-2')}
+                {renderPhotoSection('Before Service Photos', beforeServicePhotos, 'Technician before-service photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
+                {renderPhotoSection('After Completion Photos', afterServicePhotos, 'Technician after-completion photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
               </div>
             </div>
-            <form className={detailSectionClass} onSubmit={uploadPhotos}>
-              <h2 className="text-xl font-black">Upload Technician Photos</h2>
-              <input className="input mt-4" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => setPhotoFiles(Array.from(event.target.files || []))} />
-              <button type="submit" className="btn btn-primary mt-3"><PackagePlus className="h-4 w-4" />Upload Photos</button>
-            </form>
           </div>
         ) : null}
 
@@ -2385,25 +2603,25 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           </div>
 
           <div className={activeTab === 'photos' ? detailSectionClass : 'hidden'}>
-            <h2 className="text-xl font-black">Photos</h2>
-            <p className="mt-1 text-sm muted">Upload job photos such as device issue, damaged part, or completed work.</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {imageItems.length ? imageItems.map((image, index) => (
-                <a key={image.url || image.filename || index} className="technician-photo-card" href={uploadedAssetUrl(image.url)} target="_blank" rel="noreferrer">
-                  <span className="technician-photo-preview">
-                    <img src={uploadedAssetUrl(image.url)} alt={image.originalName || image.filename || `Job photo ${index + 1}`} loading="lazy" />
-                  </span>
-                  <span className="mt-3 block font-black">{index === 0 ? 'Customer problem image' : `Service photo ${index}`}</span>
-                  <span className="mt-1 block text-sm muted">{image.originalName || image.filename || `Image ${index + 1}`}</span>
-                </a>
-              )) : <EmptyState title="No image uploaded" message="Customer problem images and technician photos will appear here." />}
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black">Photos</h2>
+                <p className="mt-1 text-sm muted">Review the customer issue photo, then upload before-service and after-completion photos here.</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Priority</p>
+                <div className="mt-1">{renderPhotoPriorityBadge()}</div>
+              </div>
             </div>
-            {canUploadPhotos ? <form className={`${detailPanelClass} mt-4`} onSubmit={uploadPhotos}>
-              <h3 className="text-xs font-black uppercase tracking-wide text-sky-100">Upload Technician Photos</h3>
-              <p className="mt-1 text-sm muted">Upload job photos such as device issue, damaged part, or completed work.</p>
-              <input className="input mt-3 min-h-12" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => setPhotoFiles(Array.from(event.target.files || []))} />
-              <button type="submit" className="btn btn-primary mt-3 min-h-11 w-full sm:w-auto"><PackagePlus className="h-4 w-4" />Upload Photos</button>
-            </form> : null}
+            <div className="mt-4 grid gap-4 xl:grid-cols-2">
+              {renderPhotoSection('Customer Problem Photo', customerProblemPhotos, 'Customer uploaded issue/device photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.', 'xl:col-span-2')}
+              {renderPhotoSection('Before Service Photos', beforeServicePhotos, 'Take photos before repair work starts so Admin can review the device condition.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
+              {renderPhotoSection('After Completion Photos', afterServicePhotos, 'Upload completion photos after the work is finished so Admin can verify the result.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
+            </div>
+            {canUploadPhotos ? <div className="mt-4 grid gap-4 xl:grid-cols-2">
+              {renderTechnicianPhotoUpload('before_service', 'Before Service Photo', 'Capture the device condition before repair or service starts.', beforeServiceInputRef)}
+              {renderTechnicianPhotoUpload('after_service', 'After Completion Photo', 'Capture the finished repair or completed service result.', afterServiceInputRef)}
+            </div> : null}
           </div>
         </div>
         <div className={sideTabs.includes(activeTab) ? 'grid content-start gap-4' : 'hidden'}>

@@ -33,6 +33,7 @@ import {
   customerTabs,
   customerTypeLabel,
   customerWhatsAppHref,
+  DateFilterInput,
   DashboardChart,
   dateInputValue,
   dateInRange,
@@ -1129,8 +1130,8 @@ function ReportsPremiumRangeBar({ range, setRange, customFrom, setCustomFrom, cu
       </select>
       {range === 'Custom Range' ? (
         <>
-          <input className="input" type="date" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} />
-          <input className="input" type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} />
+          <DateFilterInput value={customFrom} onChange={setCustomFrom} placeholder="From date" ariaLabel="Report from date" />
+          <DateFilterInput value={customTo} onChange={setCustomTo} placeholder="To date" ariaLabel="Report to date" />
         </>
       ) : <><div className="hidden lg:block" /><div className="hidden lg:block" /></>}
       <button type="button" className="btn btn-secondary reports-compact-button reports-reset-filter-button" disabled={!hasRangeFilter} onClick={onReset}>Reset Filters</button>

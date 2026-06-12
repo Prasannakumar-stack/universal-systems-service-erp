@@ -553,7 +553,7 @@ button:disabled {
     position: relative;
     display: inline-flex;
     width: 100%;
-    min-width: 180px;
+    min-width: 0;
     height: var(--admin-filter-control-height);
     min-height: var(--admin-filter-control-height);
     align-items: center;
@@ -577,6 +577,11 @@ button:disabled {
   .admin-date-filter:focus-within {
     border-color: rgba(117, 196, 255, 0.62);
     box-shadow: 0 0 0 3px rgba(31, 140, 255, 0.16);
+  }
+
+  .admin-date-filter[aria-disabled='true'] {
+    opacity: 0.68;
+    cursor: not-allowed;
   }
 
   .admin-date-filter-text {
@@ -864,20 +869,20 @@ button:disabled {
   }
 
   .inventory-filter-bar :where(.input, .btn, .admin-date-filter),
-  .billing-filter-bar :where(.input, .btn),
-  .admin-filter-bar :where(.input, .btn),
-  .reports-premium-range :where(.input, .btn),
-  .reports-range-bar :where(.input, .btn) {
+  .billing-filter-bar :where(.input, .btn, .admin-date-filter),
+  .admin-filter-bar :where(.input, .btn, .admin-date-filter),
+  .reports-premium-range :where(.input, .btn, .admin-date-filter),
+  .reports-range-bar :where(.input, .btn, .admin-date-filter) {
     min-height: var(--admin-filter-control-height) !important;
     height: var(--admin-filter-control-height) !important;
     align-items: center;
   }
 
   .inventory-filter-bar :where(.input, select.input),
-  .billing-filter-bar :where(.input, select.input),
-  .admin-filter-bar :where(.input, select.input),
-  .reports-premium-range :where(.input, select.input),
-  .reports-range-bar :where(.input, select.input) {
+  .billing-filter-bar :where(.input, select.input, .admin-date-filter),
+  .admin-filter-bar :where(.input, select.input, .admin-date-filter),
+  .reports-premium-range :where(.input, select.input, .admin-date-filter),
+  .reports-range-bar :where(.input, select.input, .admin-date-filter) {
     border-radius: var(--admin-filter-control-radius);
     font-size: 0.875rem;
   }
@@ -2658,10 +2663,11 @@ button:disabled {
     margin-top: 0.25rem;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
     color: #7dd3fc;
     font-size: 0.74rem;
     font-weight: 800;
+    line-height: 1.3;
+    white-space: normal;
   }
 
   .admin-dashboard-page .dashboard-revenue-trend-positive {
@@ -4372,7 +4378,7 @@ button:disabled {
     box-shadow: 0 16px 42px rgba(0, 8, 22, 0.14);
   }
 
-  .billing-filter-bar .input {
+  .billing-filter-bar :where(.input, .admin-date-filter) {
     min-height: 2.625rem;
   }
 
@@ -11513,7 +11519,8 @@ button:disabled {
   }
 
   .bookings-filter-bar .input,
-  .bookings-filter-control {
+  .bookings-filter-control,
+  .bookings-filter-bar .admin-date-filter {
     height: 2.75rem;
     border-radius: 0.75rem;
     border-color: rgba(148, 163, 184, 0.18);
@@ -11523,7 +11530,8 @@ button:disabled {
   }
 
   .bookings-filter-bar .input:focus-visible,
-  .bookings-filter-control:focus-visible {
+  .bookings-filter-control:focus-visible,
+  .bookings-filter-bar .admin-date-filter:focus-within {
     border-color: rgba(56, 189, 248, 0.45);
     box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14);
   }
@@ -11773,7 +11781,8 @@ button:disabled {
   }
 
   .work-orders-filter-bar .input,
-  .work-orders-filter-control {
+  .work-orders-filter-control,
+  .work-orders-filter-bar .admin-date-filter {
     height: 2.75rem;
     border-radius: 0.75rem;
     border-color: rgba(148, 163, 184, 0.18);
@@ -11783,7 +11792,8 @@ button:disabled {
   }
 
   .work-orders-filter-bar select.work-orders-filter-control,
-  .work-orders-filter-bar input[type='date'].work-orders-filter-control {
+  .work-orders-filter-bar input[type='date'].work-orders-filter-control,
+  .work-orders-filter-bar .admin-date-filter.work-orders-filter-control {
     padding-right: 2.5rem;
     appearance: auto;
   }
@@ -12115,6 +12125,8 @@ button:disabled {
     min-height: 2.35rem;
     align-items: center;
     gap: 0.75rem;
+    min-width: 0;
+    overflow: visible;
     border: 1px solid transparent;
     border-radius: 8px;
     padding: 0.64rem 0.72rem;
@@ -12143,16 +12155,18 @@ button:disabled {
   .enterprise-sidebar-badge {
     margin-left: auto;
     display: inline-flex;
-    min-width: 1.45rem;
-    height: 1.25rem;
+    flex-shrink: 0;
+    min-width: 1.65rem;
+    height: 1.35rem;
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    padding: 0 0.42rem;
-    font-size: 0.66rem;
+    padding: 0 0.48rem;
+    font-size: 0.68rem;
     font-weight: 900;
     line-height: 1;
     white-space: nowrap;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
   .enterprise-sidebar-badge-blue {
@@ -12302,7 +12316,7 @@ button:disabled {
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.045);
-    padding: 0.55rem 0.72rem;
+    padding: 0.5rem 0.72rem;
   }
 
   .current-user-avatar {
@@ -12321,7 +12335,9 @@ button:disabled {
   .current-user-avatar img {
     width: 100%;
     height: 100%;
+    border-radius: inherit;
     object-fit: cover;
+    object-position: center;
   }
 
   .enterprise-topbar .input {
@@ -13047,6 +13063,69 @@ button:disabled {
     border-color: rgba(148, 163, 184, 0.22) !important;
     background: rgba(148, 163, 184, 0.08) !important;
     color: #cbd5e1 !important;
+  }
+
+  .customers-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.2rem;
+  }
+
+  .customers-data-table {
+    width: 100%;
+    min-width: 1130px;
+    table-layout: fixed;
+  }
+
+  .customers-data-table th,
+  .customers-data-table td {
+    padding: 0.9rem 1rem;
+  }
+
+  .customers-data-table th {
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+  }
+
+  .customers-data-table th:nth-child(3),
+  .customers-data-table td:nth-child(3) {
+    text-align: center;
+  }
+
+  .customers-data-table th:nth-child(4),
+  .customers-data-table td:nth-child(4),
+  .customers-data-table th:nth-child(5),
+  .customers-data-table td:nth-child(5) {
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+  }
+
+  .customers-data-table th:last-child,
+  .customers-data-table td:last-child {
+    padding-right: 1.35rem;
+  }
+
+  .customers-data-table .customers-action-header {
+    text-align: center;
+  }
+
+  .customers-data-table td:nth-child(2) {
+    min-width: 0;
+  }
+
+  .customers-data-table .customers-action-cell {
+    text-align: center;
+    width: 170px;
+  }
+
+  .customers-data-table .customers-action-button {
+    min-width: 140px;
+  }
+
+  .customers-data-table .customers-action-cell .btn {
+    margin-left: auto;
+    margin-right: auto;
   }
 
   @media (min-width: 640px) {
@@ -26448,6 +26527,74 @@ a.contact-detail-row:focus-visible,
   object-fit: cover;
 }
 
+.work-order-photo-section {
+  min-width: 0;
+  align-content: start;
+  gap: 0;
+  padding: 0.95rem;
+}
+
+.work-order-photo-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0;
+  padding: 0.7rem;
+  width: min(100%, 16.25rem);
+}
+
+.work-order-photo-card .technician-photo-preview {
+  aspect-ratio: 16 / 10;
+  height: 10.25rem;
+  min-height: 10.25rem;
+}
+
+.work-order-photo-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 260px));
+  gap: 0.85rem;
+  justify-content: start;
+}
+
+.work-order-photo-empty {
+  width: min(100%, 26rem);
+  border: 1px dashed rgba(148, 163, 184, 0.2);
+  border-radius: 0.95rem;
+  background: rgba(15, 23, 42, 0.26);
+  padding: 0.9rem 1rem;
+}
+
+.work-order-photo-upload-card {
+  padding: 0.95rem;
+}
+
+.work-order-photo-upload-card .btn {
+  min-width: 11rem;
+}
+
+.work-order-photo-action {
+  width: auto;
+  align-self: flex-start;
+  white-space: nowrap;
+}
+
+.work-order-photo-upload-row {
+  align-items: center;
+}
+
+.work-order-photo-upload-copy {
+  flex: 1 1 15rem;
+}
+
+.work-order-photo-upload-status,
+.work-order-photo-upload-format {
+  white-space: nowrap;
+}
+
+.work-order-photo-upload-actions {
+  flex: 0 0 auto;
+}
+
 @media (max-width: 900px) {
   .technician-mobile-card-list,
   .technician-detail-card-grid {
@@ -26482,9 +26629,33 @@ a.contact-detail-row:focus-visible,
     flex-wrap: nowrap;
     padding-bottom: 0.25rem;
   }
+
+  .work-order-photo-card .technician-photo-preview {
+    height: 9.5rem;
+    min-height: 9.5rem;
+  }
 }
 
 @media (max-width: 520px) {
+  .work-order-photo-gallery {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .work-order-photo-card,
+  .work-order-photo-empty {
+    width: 100%;
+  }
+
+  .work-order-photo-upload-status,
+  .work-order-photo-upload-format {
+    white-space: normal;
+  }
+
+  .work-order-photo-upload-actions .btn,
+  .work-order-photo-upload-actions .btn.btn-secondary {
+    width: 100%;
+  }
+
   .technician-dashboard-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.7rem;

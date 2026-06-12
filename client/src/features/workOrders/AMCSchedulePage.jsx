@@ -141,6 +141,7 @@ import {
 } from '../../shared/phase1Shared.jsx';
 import { ADMIN_ASSIGNMENT_LABEL } from '../../utils/assignment.js';
 import { can, normalizeRole } from '../../utils/roles.js';
+import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 
 export function AMCSchedulePage({ role = 'admin' }) {
   const { request, user } = useAuth();
@@ -183,6 +184,7 @@ export function AMCSchedulePage({ role = 'admin' }) {
       });
       push('Repair & Service Job created from AMC visit');
       reload();
+      emitSidebarBadgesUpdated();
       navigate(`${base}/work-orders/${recordId(result.workOrder)}`);
     } catch (err) {
       push(err.message, 'error');
