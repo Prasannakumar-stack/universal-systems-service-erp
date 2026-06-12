@@ -21,10 +21,10 @@ import { serviceTypes } from '../utils/constants.js';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
 import { BrandLogoStrip } from '../components/PublicBrandSupport.jsx';
 import { createContactBooking, createContactRequest } from '../utils/publicApi.js';
-import { phoneHref, publicAssetUrl, publicPhoneList, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
+import { phoneHref, publicAssetUrl, publicPageHeroImage, publicPhoneList, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 import { useToast } from '../context/ToastContext.jsx';
 
-const empty = { name: '', phone: '', serviceInterest: 'OS Installation', message: '' };
+const empty = { name: '', phone: '', serviceInterest: '', message: '' };
 
 const trustBadges = [
   { label: 'Fast Response', icon: PhoneCall },
@@ -85,9 +85,29 @@ function phoneDigits(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
+function validateContactField(field, value) {
+  if (field === 'name') {
+    return value.trim() ? '' : 'Name is required.';
+  }
+
+  if (field === 'phone') {
+    const digits = phoneDigits(value);
+    if (!digits) return 'Phone is required.';
+    if (digits.length !== 10) return 'Phone must be exactly 10 digits.';
+    return '';
+  }
+
+  if (field === 'message') {
+    return value.trim() ? '' : 'Message is required.';
+  }
+
+  return '';
+}
+
 export default function Contact() {
   const { settings, contact, booking } = usePublicWebsiteSettings();
   const [form, setForm] = useState(empty);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const { push } = useToast();
@@ -97,7 +117,7 @@ export default function Contact() {
   const publicServices = useMemo(() => visiblePublicServices(settings).map((service) => service.title), [settings]);
   const contactServiceOptions = useMemo(() => {
     const base = publicServices.length ? publicServices : serviceTypes;
-    return base.includes(empty.serviceInterest) ? base : [empty.serviceInterest, ...base];
+    return Array.from(new Set(base.filter(Boolean)));
   }, [publicServices]);
   const phones = publicPhoneList(contact);
   const primaryPhone = phones[0] || '';
@@ -137,26 +157,41 @@ export default function Contact() {
   ];
 
   function update(field, value) {
+    const nextValue = field === 'phone' ? phoneDigits(value).slice(0, 10) : value;
     setSubmitError('');
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => ({ ...current, [field]: nextValue }));
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      return { ...current, [field]: validateContactField(field, nextValue) };
+    });
+  }
+
+  function handleBlur(field) {
+    setFieldErrors((current) => ({ ...current, [field]: validateContactField(field, form[field] || '') }));
+  }
+
+  function validateForm() {
+    const nextErrors = {
+      name: validateContactField('name', form.name),
+      phone: validateContactField('phone', form.phone),
+      message: validateContactField('message', form.message)
+    };
+
+    setFieldErrors(nextErrors);
+    return nextErrors;
   }
 
   async function submit(event) {
     event.preventDefault();
     if (loading) return;
+    const nextErrors = validateForm();
+    const firstError = Object.values(nextErrors).find(Boolean);
+    if (firstError) {
+      push(firstError, 'error');
+      return;
+    }
+
     const digits = phoneDigits(form.phone);
-    if (!form.name.trim()) {
-      push('Name is required', 'error');
-      return;
-    }
-    if (digits.length !== 10) {
-      push('Phone must be 10 digits', 'error');
-      return;
-    }
-    if (!form.message.trim()) {
-      push('Message is required', 'error');
-      return;
-    }
     setSubmitError('');
     setLoading(true);
     try {
@@ -167,6 +202,7 @@ export default function Contact() {
       }
       push('Request sent successfully. Our team will contact you soon.');
       setForm(empty);
+      setFieldErrors({});
     } catch (error) {
       console.error('Contact request submit failed', error);
       const friendlyMessage = getContactErrorMessage(error);
@@ -183,7 +219,7 @@ export default function Contact() {
         <section className={`contact-hero contact-reveal page-hero hero-with-bg ${heroCardClass}`}>
           <img
             className="page-hero-bg-image"
-            src={publicAssetUrl(settings.hero.imageUrl || '/Contact%20Page%20image.png')}
+            src={publicAssetUrl(publicPageHeroImage('contact'))}
             alt="Universal Systems hero"
           />
           <div className="page-hero-overlay" aria-hidden="true" />
@@ -334,7 +370,7 @@ export default function Contact() {
             </a>
           </div>
 
-          <form className="contact-form-card contact-reveal" onSubmit={submit}>
+          <form className="contact-form-card contact-reveal" onSubmit={submit} noValidate>
             <div className="contact-card-heading">
               <span className="contact-icon-shell">
                 <Send className="h-5 w-5" />
@@ -351,23 +387,33 @@ export default function Contact() {
                 <input
                   id="contact-name"
                   className="input"
+                  aria-describedby={fieldErrors.name ? 'contact-name-error' : undefined}
+                  aria-invalid={fieldErrors.name ? 'true' : 'false'}
                   autoComplete="name"
                   value={form.name}
                   onChange={(event) => update('name', event.target.value)}
+                  onBlur={() => handleBlur('name')}
                   placeholder="Enter your name"
                 />
+                {fieldErrors.name ? <p id="contact-name-error" className="contact-field-error">{fieldErrors.name}</p> : null}
               </div>
               <div className="contact-field">
                 <label className="label" htmlFor="contact-phone">Phone</label>
                 <input
                   id="contact-phone"
                   className="input"
+                  aria-describedby={fieldErrors.phone ? 'contact-phone-error' : undefined}
+                  aria-invalid={fieldErrors.phone ? 'true' : 'false'}
                   type="tel"
                   autoComplete="tel"
+                  inputMode="numeric"
+                  maxLength={10}
                   value={form.phone}
                   onChange={(event) => update('phone', event.target.value)}
+                  onBlur={() => handleBlur('phone')}
                   placeholder="Phone or WhatsApp number"
                 />
+                {fieldErrors.phone ? <p id="contact-phone-error" className="contact-field-error">{fieldErrors.phone}</p> : null}
               </div>
               <div className="contact-field">
                 <label className="label" htmlFor="contact-service-interest">Service Interest</label>
@@ -377,8 +423,11 @@ export default function Contact() {
                   value={form.serviceInterest}
                   onChange={(event) => update('serviceInterest', event.target.value)}
                 >
+                  <option value="" disabled>
+                    Select service interest
+                  </option>
                   {contactServiceOptions.map((service) => (
-                    <option key={service}>{service}</option>
+                    <option key={service} value={service}>{service}</option>
                   ))}
                 </select>
               </div>
@@ -387,10 +436,14 @@ export default function Contact() {
                 <textarea
                   id="contact-message"
                   className="input min-h-32"
+                  aria-describedby={fieldErrors.message ? 'contact-message-error' : undefined}
+                  aria-invalid={fieldErrors.message ? 'true' : 'false'}
                   value={form.message}
                   onChange={(event) => update('message', event.target.value)}
+                  onBlur={() => handleBlur('message')}
                   placeholder="Tell us what support you need"
                 />
+                {fieldErrors.message ? <p id="contact-message-error" className="contact-field-error">{fieldErrors.message}</p> : null}
               </div>
             </div>
 
@@ -429,9 +482,9 @@ export default function Contact() {
 
         <BrandLogoStrip
           className="contact-brand-support contact-reveal"
-          size="small"
-          heading="Need support for these brands?"
-          subtitle=""
+          size="medium"
+          heading="Brands We Service & Support"
+          subtitle="Trusted service support for leading computer, printer and security brands."
         />
 
         <section className="contact-urgent-cta contact-reveal">

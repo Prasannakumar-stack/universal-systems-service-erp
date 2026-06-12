@@ -14403,7 +14403,7 @@ button:disabled {
 .technician-settings-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.38fr);
-  gap: 1rem;
+  gap: 0.9rem;
   align-items: start;
 }
 
@@ -14411,7 +14411,7 @@ button:disabled {
 .technician-settings-side-column {
   display: grid;
   min-width: 0;
-  gap: 1rem;
+  gap: 0.9rem;
 }
 
 .technician-settings-side-column {
@@ -14422,11 +14422,11 @@ button:disabled {
 .technician-settings-card {
   overflow: hidden;
   border: 1px solid rgba(125, 211, 252, 0.16);
-  border-radius: 8px;
+  border-radius: 12px;
   background:
     linear-gradient(145deg, rgba(13, 38, 70, 0.86), rgba(5, 19, 39, 0.94)),
     rgba(5, 19, 39, 0.9);
-  padding: 1rem;
+  padding: 1rem 1rem 0.96rem;
   box-shadow:
     0 20px 52px rgba(0, 8, 24, 0.22),
     0 0 0 1px rgba(255, 255, 255, 0.025) inset;
@@ -14478,13 +14478,13 @@ button:disabled {
 }
 
 .technician-settings-card-body {
-  margin-top: 1rem;
+  margin-top: 0.9rem;
 }
 
 .technician-settings-form,
 .technician-notification-form {
   display: grid;
-  gap: 0.78rem;
+  gap: 0.72rem;
 }
 
 .technician-settings-field-grid {
@@ -14496,7 +14496,7 @@ button:disabled {
 .technician-settings-field {
   display: grid;
   min-width: 0;
-  gap: 0.3rem;
+  gap: 0.34rem;
 }
 
 .technician-settings-field > span {
@@ -14517,6 +14517,14 @@ button:disabled {
   text-transform: uppercase;
 }
 
+.technician-settings-inline-error {
+  color: #fca5a5;
+  font-size: 0.72rem;
+  font-weight: 760;
+  line-height: 1.35;
+  text-transform: none;
+}
+
 .technician-settings-page .input {
   min-height: 2.65rem;
   border-color: rgba(125, 211, 252, 0.18);
@@ -14532,7 +14540,8 @@ button:disabled {
 
 .technician-settings-action {
   width: fit-content;
-  min-width: 10.5rem;
+  min-width: 11rem;
+  min-height: 2.9rem;
   justify-self: end;
   white-space: nowrap;
 }
@@ -14579,7 +14588,7 @@ button:disabled {
   align-items: center;
   gap: 0.45rem;
   border: 1px solid rgba(251, 191, 36, 0.28);
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(245, 158, 11, 0.1);
   padding: 0.5rem 0.65rem;
   color: #fde68a;
@@ -14590,7 +14599,7 @@ button:disabled {
 .technician-photo-panel {
   display: grid;
   justify-items: center;
-  gap: 0.82rem;
+  gap: 0.76rem;
   text-align: center;
 }
 
@@ -14679,12 +14688,18 @@ button:disabled {
   width: 100%;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .technician-photo-actions .technician-settings-action {
-  width: auto;
-  min-width: 8.8rem;
+  width: calc(50% - 0.3rem);
+  min-width: 9.6rem;
+  justify-content: center;
+}
+
+.technician-change-photo-button {
+  border-color: rgba(125, 211, 252, 0.22);
+  color: #d9f0ff;
 }
 
 .technician-remove-photo-button {
@@ -14698,6 +14713,12 @@ button:disabled {
   background: rgba(248, 113, 113, 0.12);
 }
 
+.technician-remove-photo-button:disabled {
+  border-color: rgba(248, 113, 113, 0.14);
+  background: rgba(248, 113, 113, 0.04);
+  color: rgba(254, 202, 202, 0.5);
+}
+
 .technician-account-status-list {
   display: grid;
   gap: 0.48rem;
@@ -14709,7 +14730,7 @@ button:disabled {
   justify-content: space-between;
   gap: 0.8rem;
   border: 1px solid rgba(125, 211, 252, 0.12);
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.035);
   padding: 0.68rem 0.72rem;
 }
@@ -14737,7 +14758,7 @@ button:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.35rem;
   border: 1px solid rgba(125, 211, 252, 0.12);
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(2, 8, 23, 0.32);
   padding: 0.3rem;
 }
@@ -14776,7 +14797,7 @@ button:disabled {
   justify-content: space-between;
   gap: 0.8rem;
   border: 1px solid rgba(125, 211, 252, 0.12);
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.035);
   padding: 0.72rem;
   text-align: left;
@@ -14862,6 +14883,10 @@ button:disabled {
   .technician-settings-action {
     width: 100%;
     justify-self: stretch;
+  }
+
+  .technician-photo-actions .technician-settings-action {
+    width: 100%;
   }
 }
 
@@ -24209,6 +24234,99 @@ footer a:hover {
   max-height: 24px;
 }
 
+.contact-brand-support {
+  padding: clamp(1rem, 2.4vw, 1.35rem);
+}
+
+.contact-brand-support .public-brand-inner {
+  width: 100%;
+  gap: 0.9rem;
+}
+
+.contact-brand-support .public-brand-logo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0;
+  padding: 0.55rem 0.35rem;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.contact-brand-support .public-brand-logo-strip::before {
+  opacity: 0.28;
+}
+
+.contact-brand-support .public-brand-logo-tile {
+  flex: 1 1 152px;
+  min-width: 120px;
+  min-height: 58px;
+  padding: 0.45rem 1rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.contact-brand-support .public-brand-logo-tile:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(226, 232, 240, 0.18), transparent);
+}
+
+.contact-brand-support .brand-logo-img,
+.contact-brand-support .brand-logo-wordmark {
+  opacity: 0.9;
+  filter: grayscale(1) brightness(1.5) contrast(1.05) saturate(0) drop-shadow(0 4px 14px rgba(0, 0, 0, 0.12));
+  transition: opacity 220ms ease, filter 220ms ease, transform 220ms ease;
+}
+
+.contact-brand-support .brand-logo-img {
+  max-width: min(100%, 7.25rem);
+}
+
+.contact-brand-support .brand-logo-wordmark {
+  color: #d7dee9;
+}
+
+.contact-brand-support .brand-logo-img-lenovo {
+  display: none;
+}
+
+.contact-brand-support .brand-logo-wordmark-lenovo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #dfe6f0;
+  font-size: clamp(1rem, 1.55vw, 1.2rem);
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  text-transform: none;
+  opacity: 0.96;
+  transform: translateY(0.02em);
+}
+
+.contact-brand-support .brand-logo-card:hover {
+  transform: translateY(-1px);
+}
+
+.contact-brand-support .brand-logo-card:hover .brand-logo-img,
+.contact-brand-support .brand-logo-card:hover .brand-logo-wordmark {
+  opacity: 1;
+  filter: grayscale(1) brightness(1.65) contrast(1.08) saturate(0) drop-shadow(0 5px 16px rgba(148, 163, 184, 0.16));
+}
+
+.contact-brand-support .brand-logo-card:hover .brand-logo-wordmark-lenovo {
+  opacity: 1;
+}
+
 .public-brand-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -25248,7 +25366,7 @@ footer a:hover {
 .contact-hero {
   position: relative;
   overflow: hidden;
-  margin-bottom: 1.2rem;
+  margin-bottom: 0.95rem;
 }
 
 .contact-hero-glow {
@@ -25352,7 +25470,7 @@ footer a:hover {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.85rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.65rem;
 }
 
 .contact-action-helper {
@@ -25365,7 +25483,8 @@ footer a:hover {
 }
 
 .contact-action-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   min-height: 112px;
   align-items: center;
   gap: 0.9rem;
@@ -25384,10 +25503,10 @@ footer a:hover {
 
 .contact-action-card:hover,
 .contact-action-card:focus-visible {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   border-color: rgba(103, 232, 249, 0.35);
   background: rgba(255, 255, 255, 0.055);
-  box-shadow: 0 24px 64px rgba(0, 8, 24, 0.34), 0 0 34px rgba(14, 165, 233, 0.16);
+  box-shadow: 0 22px 56px rgba(0, 8, 24, 0.3), 0 0 26px rgba(14, 165, 233, 0.12);
 }
 
 .contact-action-green:hover,
@@ -25429,6 +25548,10 @@ footer a:hover {
   line-height: 1.45;
 }
 
+.contact-action-card > span:nth-child(2) {
+  min-width: 0;
+}
+
 .contact-action-arrow {
   margin-left: auto;
   flex: 0 0 auto;
@@ -25446,14 +25569,15 @@ footer a:hover {
 
 .contact-main-grid {
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  gap: 1rem;
+  grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
+  align-items: start;
+  gap: 0.8rem;
 }
 
 .contact-left-column {
   display: grid;
   align-content: start;
-  gap: 1rem;
+  gap: 0.9rem;
 }
 
 .contact-details-card,
@@ -25462,7 +25586,7 @@ footer a:hover {
 .contact-quick-response-card,
 .contact-availability-strip,
 .contact-urgent-cta {
-  padding: clamp(1rem, 2.4vw, 1.35rem);
+  padding: clamp(0.95rem, 2.2vw, 1.25rem);
 }
 
 .contact-card-heading {
@@ -25557,12 +25681,15 @@ a.contact-detail-row:focus-visible,
 
 .contact-full-action {
   width: 100%;
-  margin-top: 1rem;
+  margin-top: 0.9rem;
   min-height: 2.85rem;
 }
 
 .contact-location-card {
   overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1.05fr);
+  align-items: stretch;
   padding: 0;
   color: inherit;
   cursor: pointer;
@@ -25580,10 +25707,10 @@ a.contact-detail-row:focus-visible,
 .contact-location-visual {
   position: relative;
   display: grid;
-  min-height: 210px;
+  min-height: 100%;
   place-items: center;
   overflow: hidden;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   background:
     radial-gradient(circle at 50% 42%, rgba(14, 165, 233, 0.22), transparent 12rem),
     linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(2, 8, 23, 0.34));
@@ -25636,7 +25763,10 @@ a.contact-detail-row:focus-visible,
 }
 
 .contact-location-copy {
-  padding: 1rem;
+  display: grid;
+  align-content: center;
+  gap: 0.15rem;
+  padding: clamp(0.95rem, 2vw, 1.2rem);
 }
 
 .contact-section-eyebrow {
@@ -25670,7 +25800,7 @@ a.contact-detail-row:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  margin-top: 0.85rem;
+  margin-top: 0.7rem;
   border: 1px solid rgba(125, 211, 252, 0.28);
   border-radius: 999px;
   background:
@@ -25745,6 +25875,13 @@ a.contact-detail-row:focus-visible,
   gap: 0.45rem;
 }
 
+.contact-field-error {
+  color: #fecaca;
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .contact-page .label {
   color: #eaf6ff;
   font-size: 0.78rem;
@@ -25788,6 +25925,13 @@ a.contact-detail-row:focus-visible,
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16), 0 0 24px rgba(14, 165, 233, 0.12);
 }
 
+.contact-page .input[aria-invalid='true'] {
+  border-color: rgba(248, 113, 113, 0.72);
+  box-shadow:
+    0 0 0 3px rgba(248, 113, 113, 0.14),
+    0 0 22px rgba(248, 113, 113, 0.12);
+}
+
 .contact-error-panel {
   display: flex;
   align-items: center;
@@ -25827,8 +25971,16 @@ a.contact-detail-row:focus-visible,
 }
 
 .contact-submit-button {
-  min-height: 2.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 0.75rem 1.25rem;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
   margin-top: 1rem;
+  box-shadow: 0 18px 42px rgba(14, 165, 233, 0.28), 0 0 28px rgba(56, 189, 248, 0.18);
   transition: transform 260ms ease, box-shadow 260ms ease;
 }
 
@@ -25845,7 +25997,21 @@ a.contact-detail-row:focus-visible,
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
-  margin-top: 1rem;
+  margin-top: 0.8rem;
+}
+
+.contact-brand-support .public-brand-copy {
+  max-width: 720px;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.contact-brand-support .public-brand-copy p {
+  margin-inline: auto;
+}
+
+.contact-brand-support {
+  margin-top: 0.8rem;
 }
 
 .contact-availability-item {
@@ -25881,7 +26047,7 @@ a.contact-detail-row:focus-visible,
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-top: 1rem;
+  margin-top: 0.8rem;
   border-color: rgba(34, 211, 238, 0.2);
   background:
     radial-gradient(circle at 78% 12%, rgba(34, 197, 94, 0.12), transparent 13rem),
@@ -25891,10 +26057,40 @@ a.contact-detail-row:focus-visible,
 }
 
 .contact-cta-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.65rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 0.75rem;
+  width: min(100%, 36rem);
+}
+
+.contact-whatsapp-action,
+.contact-call-action,
+.contact-book-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 56px;
+  height: 56px;
+  padding: 0.75rem 1.25rem;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+
+.contact-page.section {
+  padding-top: clamp(1.6rem, 3.2vw, 2.4rem);
+  padding-bottom: clamp(2.1rem, 4.2vw, 3.2rem);
+}
+
+.contact-brand-support {
+  margin-top: 0.9rem;
 }
 
 .contact-whatsapp-action {
@@ -25914,6 +26110,10 @@ a.contact-detail-row:focus-visible,
   color: #dff4ff !important;
 }
 
+.contact-cta-actions .btn {
+  align-self: stretch;
+}
+
 @media (max-width: 960px) {
   .contact-action-grid,
   .contact-main-grid,
@@ -25927,7 +26127,10 @@ a.contact-detail-row:focus-visible,
   }
 
   .contact-cta-actions {
-    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .contact-cta-actions .btn {
     width: 100%;
   }
 }
@@ -25945,6 +26148,20 @@ a.contact-detail-row:focus-visible,
   .contact-hero h1 {
     font-size: clamp(2rem, 11vw, 3rem);
     line-height: 1.06;
+  }
+
+  .contact-location-card {
+    grid-template-columns: 1fr;
+  }
+
+  .contact-location-visual {
+    min-height: 185px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .contact-location-copy {
+    padding: 0.95rem;
   }
 
   .contact-trust-pill {
@@ -26000,6 +26217,10 @@ a.contact-detail-row:focus-visible,
   .contact-full-action,
   .contact-cta-actions .btn {
     width: 100%;
+  }
+
+  .contact-cta-actions {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -26785,13 +27006,16 @@ a.about-contact-row:focus-visible,
 
 .about-whatsapp-button,
 .about-whatsapp-action {
-  margin-top: 0.85rem;
   border-color: rgba(34, 197, 94, 0.26) !important;
   background:
     linear-gradient(135deg, rgba(34, 197, 94, 0.16), rgba(14, 165, 233, 0.08)),
     rgba(2, 8, 23, 0.48) !important;
   color: #dcfce7 !important;
   box-shadow: 0 0 28px rgba(34, 197, 94, 0.14);
+}
+
+.about-whatsapp-button {
+  margin-top: 0.85rem;
 }
 
 .about-brand-support {
@@ -26923,24 +27147,35 @@ a.about-contact-row:focus-visible,
 .about-cta-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
-  gap: 0.65rem;
+  gap: 1rem;
 }
 
 .about-book-button,
 .about-cta-button,
 .about-whatsapp-action,
 .about-whatsapp-button {
-  min-height: 3rem;
-  padding-inline: 1.2rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  min-height: 56px;
+  height: 56px;
+  padding: 0.75rem 1.25rem;
   transition: transform 260ms ease, border-color 260ms ease, box-shadow 260ms ease, background 260ms ease;
 }
 
 .about-cta-actions .about-cta-button {
+  display: inline-flex;
   flex: 1 1 0;
   width: 0;
   min-width: 0;
+  align-items: center;
   justify-content: center;
+  align-self: stretch;
+  margin-top: 0;
+  vertical-align: middle;
 }
 
 .about-book-button:hover,
@@ -26986,6 +27221,7 @@ a.about-contact-row:focus-visible,
 
   .about-cta-actions .about-cta-button {
     width: 100%;
+    min-width: 100%;
   }
 }
 
@@ -26997,6 +27233,7 @@ a.about-contact-row:focus-visible,
 
   .about-cta-actions .about-cta-button {
     width: 0;
+    min-width: 0;
   }
 }
 

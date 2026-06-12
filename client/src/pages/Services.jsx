@@ -14,7 +14,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
-import { publicAssetUrl, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
+import { publicAssetUrl, publicPageHeroImage, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const categoryChips = [
   'All Services',
@@ -176,7 +176,7 @@ export default function Services() {
         <section className={`services-page-hero services-reveal page-hero hero-with-bg ${heroCardClass}`}>
           <img
             className="page-hero-bg-image"
-            src={publicAssetUrl(settings.hero.imageUrl || '/Service%20page%20image.png')}
+            src={publicAssetUrl(publicPageHeroImage('services'))}
             alt="Universal Systems hero"
           />
           <div className="page-hero-overlay" aria-hidden="true" />

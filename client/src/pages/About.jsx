@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
 import { BrandLogoStrip } from '../components/PublicBrandSupport.jsx';
-import { phoneHref, publicAssetUrl, publicPhoneList, whatsappHref } from '../utils/publicWebsiteDefaults.js';
+import { phoneHref, publicAssetUrl, publicPageHeroImage, publicPhoneList, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const serviceFocus = [
   'OS installation & setup',
@@ -112,7 +112,7 @@ export default function About() {
         <section className={`about-premium-hero about-reveal page-hero hero-with-bg ${heroCardClass}`}>
           <img
             className="page-hero-bg-image"
-            src={publicAssetUrl(settings.hero.imageUrl || '/About%20page%20image.png')}
+            src={publicAssetUrl(publicPageHeroImage('about'))}
             alt="Universal Systems hero"
           />
           <div className="page-hero-overlay" aria-hidden="true" />

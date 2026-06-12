@@ -142,6 +142,14 @@ export const defaultPublicWebsiteSettings = {
   }
 };
 
+const publicPageHeroImages = {
+  home: '/Home%20Page%20image.png',
+  about: '/About%20page%20image.png',
+  services: '/Service%20page%20image.png',
+  contact: '/Contact%20Page%20image.png',
+  bookService: '/Book%20Service%20Page%20image.png'
+};
+
 export function mergePublicWebsiteSettings(settings = {}) {
   const merged = {
     ...defaultPublicWebsiteSettings,
@@ -165,6 +173,10 @@ export function publicAssetUrl(value) {
   if (/^https?:\/\//i.test(url) || url.startsWith('data:') || url.startsWith('blob:')) return url;
   if (url.startsWith('/uploads/')) return `${apiOrigin}${url}`;
   return url;
+}
+
+export function publicPageHeroImage(page) {
+  return publicPageHeroImages[page] || publicPageHeroImages.home;
 }
 
 export function publicPhoneList(contact = defaultPublicWebsiteSettings.contact) {

@@ -711,6 +711,14 @@ function cleanContactNumber(value) {
   return String(value || '').replace(/[^0-9+\-()\s]/g, '').slice(0, 40);
 }
 
+function digitsOnly(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function validTechnicianPhone(value) {
+  return digitsOnly(value).length === 10;
+}
+
 const technicianNotificationDefaults = {
   newJobAssigned: true,
   partRequestApproved: true,
@@ -799,7 +807,7 @@ function AccountStatusRow({ label, value, status = false }) {
   );
 }
 
-function PasswordInput({ label, field, value, visible, autoComplete, onChange, onToggle }) {
+function PasswordInput({ label, field, value, visible, autoComplete, error, onChange, onToggle }) {
   const VisibleIcon = visible ? EyeOff : Eye;
   return (
     <label className="technician-settings-field">
@@ -822,6 +830,7 @@ function PasswordInput({ label, field, value, visible, autoComplete, onChange, o
           <VisibleIcon className="h-4 w-4" />
         </button>
       </div>
+      {error ? <small className="technician-settings-inline-error">{error}</small> : null}
     </label>
   );
 }
@@ -858,6 +867,7 @@ export function TechnicianSettingsPage() {
   const [savedPreferences, setSavedPreferences] = useState(preferences);
   const [profileSaving, setProfileSaving] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
+  const [preferencesSaving, setPreferencesSaving] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState('');
   const lastUpdatedTime = useMemo(
@@ -870,6 +880,39 @@ export function TechnicianSettingsPage() {
   const preferencesDirty = stableJson(preferences) !== stableJson(savedPreferences);
   const avatarSrc = photoPreviewUrl || technicianSettingsAssetUrl(user?.avatarUrl);
   const hasCustomPhoto = Boolean(photoPreviewUrl || user?.avatarUrl);
+  const profileErrors = useMemo(() => ({
+    name: profileForm.name.trim() ? '' : 'Full Name is required.',
+    phone: profileForm.phone.trim()
+      ? (validTechnicianPhone(profileForm.phone) ? '' : 'Phone Number must be exactly 10 digits.')
+      : 'Phone Number is required.',
+    whatsappNumber: profileForm.whatsappNumber.trim() && !validTechnicianPhone(profileForm.whatsappNumber)
+      ? 'WhatsApp Number must be exactly 10 digits.'
+      : ''
+  }), [profileForm]);
+  const profileValid = !profileErrors.name && !profileErrors.phone && !profileErrors.whatsappNumber;
+  const passwordErrors = useMemo(() => ({
+    currentPassword: passwordForm.currentPassword ? '' : 'Current Password is required.',
+    newPassword: passwordForm.newPassword
+      ? (passwordForm.newPassword.length >= 6 ? '' : 'New password must be at least 6 characters.')
+      : 'New Password is required.',
+    confirmPassword: passwordForm.confirmPassword
+      ? (passwordForm.confirmPassword === passwordForm.newPassword ? '' : 'Confirm password must match.')
+      : 'Confirm Password is required.'
+  }), [passwordForm]);
+  const passwordReady = Boolean(
+    passwordForm.currentPassword
+    && passwordForm.newPassword
+    && passwordForm.confirmPassword
+    && !passwordErrors.currentPassword
+    && !passwordErrors.newPassword
+    && !passwordErrors.confirmPassword
+  );
+  const themeLabel = useMemo(() => {
+    if (themePreference === 'system') {
+      return `System Default (${resolvedTheme === 'light' ? 'Light' : 'Dark'})`;
+    }
+    return themePreference === 'light' ? 'Light' : 'Dark';
+  }, [resolvedTheme, themePreference]);
 
   useEffect(() => {
     setProfileForm(profileBaseline);
@@ -897,12 +940,9 @@ export function TechnicianSettingsPage() {
 
   async function saveProfile(event) {
     event.preventDefault();
-    if (!profileForm.name.trim()) {
-      push('Full Name is required', 'error');
-      return;
-    }
-    if (!profileForm.phone.trim()) {
-      push('Phone Number is required', 'error');
+    const profileError = profileErrors.name || profileErrors.phone || profileErrors.whatsappNumber;
+    if (profileError) {
+      push(profileError, 'error');
       return;
     }
     setProfileSaving(true);
@@ -926,24 +966,9 @@ export function TechnicianSettingsPage() {
 
   async function updatePassword(event) {
     event.preventDefault();
-    if (!passwordForm.currentPassword) {
-      push('Current Password is required', 'error');
-      return;
-    }
-    if (!passwordForm.newPassword) {
-      push('New Password is required', 'error');
-      return;
-    }
-    if (!passwordForm.confirmPassword) {
-      push('Confirm Password is required', 'error');
-      return;
-    }
-    if (passwordForm.newPassword.length < 6) {
-      push('New Password must be at least 6 characters', 'error');
-      return;
-    }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      push('Confirm Password must match New Password', 'error');
+    const passwordError = passwordErrors.currentPassword || passwordErrors.newPassword || passwordErrors.confirmPassword;
+    if (passwordError) {
+      push(passwordError, 'error');
       return;
     }
     setPasswordSaving(true);
@@ -1001,9 +1026,9 @@ export function TechnicianSettingsPage() {
       if (user?.avatarUrl) {
         const result = await request('/auth/profile/avatar', { method: 'DELETE' });
         syncUser(result);
-        push(result.message || 'Profile photo removed');
+        push('Profile photo removed.');
       } else {
-        push('Profile photo removed');
+        push('Profile photo removed.');
       }
     } catch (err) {
       push(err.message, 'error');
@@ -1024,12 +1049,16 @@ export function TechnicianSettingsPage() {
 
   function savePreferences(event) {
     event.preventDefault();
+    if (!preferencesDirty) return;
+    setPreferencesSaving(true);
     try {
       window.localStorage.setItem(preferenceStorageKey, JSON.stringify(preferences));
       setSavedPreferences(preferences);
       push('Notification preferences saved');
     } catch {
       push('Unable to save notification preferences', 'error');
+    } finally {
+      setPreferencesSaving(false);
     }
   }
 
@@ -1067,6 +1096,7 @@ export function TechnicianSettingsPage() {
                 onChange={(event) => updateProfileField('name', event.target.value)}
                 required
               />
+              {profileErrors.name ? <small className="technician-settings-inline-error">{profileErrors.name}</small> : null}
             </label>
               <label className="technician-settings-field">
                 <span>Phone Number</span>
@@ -1077,6 +1107,7 @@ export function TechnicianSettingsPage() {
                 onChange={(event) => updateProfileField('phone', event.target.value)}
                 required
               />
+              {profileErrors.phone ? <small className="technician-settings-inline-error">{profileErrors.phone}</small> : null}
             </label>
               <label className="technician-settings-field">
                 <span>WhatsApp Number <small>Optional</small></span>
@@ -1086,9 +1117,10 @@ export function TechnicianSettingsPage() {
                   placeholder="+91 98427 81971"
                   onChange={(event) => updateProfileField('whatsappNumber', event.target.value)}
                 />
+                {profileErrors.whatsappNumber ? <small className="technician-settings-inline-error">{profileErrors.whatsappNumber}</small> : null}
               </label>
             </div>
-            <button className="btn btn-primary technician-settings-action" type="submit" disabled={profileSaving || !profileDirty}>
+            <button className="btn btn-primary technician-settings-action" type="submit" disabled={profileSaving || !profileDirty || !profileValid}>
               {profileSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {profileSaving ? 'Saving...' : 'Save Profile'}
             </button>
@@ -1104,6 +1136,7 @@ export function TechnicianSettingsPage() {
                 value={passwordForm.currentPassword}
                 visible={passwordVisible.currentPassword}
                 autoComplete="current-password"
+                error=""
                 onChange={(value) => setPasswordForm((current) => ({ ...current, currentPassword: value }))}
                 onToggle={() => togglePasswordVisibility('currentPassword')}
               />
@@ -1113,6 +1146,7 @@ export function TechnicianSettingsPage() {
                 value={passwordForm.newPassword}
                 visible={passwordVisible.newPassword}
                 autoComplete="new-password"
+                error={passwordErrors.newPassword && passwordForm.newPassword ? passwordErrors.newPassword : ''}
                 onChange={(value) => setPasswordForm((current) => ({ ...current, newPassword: value }))}
                 onToggle={() => togglePasswordVisibility('newPassword')}
               />
@@ -1122,15 +1156,16 @@ export function TechnicianSettingsPage() {
                 value={passwordForm.confirmPassword}
                 visible={passwordVisible.confirmPassword}
                 autoComplete="new-password"
+                error={passwordErrors.confirmPassword && passwordForm.confirmPassword ? passwordErrors.confirmPassword : ''}
                 onChange={(value) => setPasswordForm((current) => ({ ...current, confirmPassword: value }))}
                 onToggle={() => togglePasswordVisibility('confirmPassword')}
               />
             </div>
             <div className="technician-password-note">
               <AlertTriangle className="h-4 w-4" />
-              New password must be at least 6 characters.
+              Minimum 6 characters. Use a strong password.
             </div>
-            <button className="btn btn-primary technician-settings-action" type="submit" disabled={passwordSaving}>
+            <button className="btn btn-primary technician-settings-action" type="submit" disabled={passwordSaving || !passwordReady}>
               {passwordSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
               {passwordSaving ? 'Updating...' : 'Update Password'}
             </button>
@@ -1148,9 +1183,9 @@ export function TechnicianSettingsPage() {
                 onChange={() => updatePreference(key)}
               />
             ))}
-            <button className="btn btn-primary technician-settings-action" type="submit" disabled={!preferencesDirty}>
-              <Save className="h-4 w-4" />
-              Save Preferences
+            <button className="btn btn-primary technician-settings-action" type="submit" disabled={!preferencesDirty || preferencesSaving}>
+              {preferencesSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {preferencesSaving ? 'Saving...' : 'Save Preferences'}
             </button>
           </form>
         </SettingsCard>
@@ -1172,16 +1207,14 @@ export function TechnicianSettingsPage() {
             </div>
             <input ref={photoInputRef} type="file" className="hidden" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handlePhotoChange} />
             <div className="technician-photo-actions">
-              <button className="btn btn-secondary technician-settings-action" type="button" disabled={photoUploading} onClick={() => photoInputRef.current?.click()}>
+              <button className="btn btn-secondary technician-settings-action technician-change-photo-button" type="button" disabled={photoUploading} onClick={() => photoInputRef.current?.click()}>
                 {photoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
                 {photoUploading ? 'Working...' : 'Change Photo'}
               </button>
-              {hasCustomPhoto ? (
-                <button className="btn btn-secondary technician-settings-action technician-remove-photo-button" type="button" disabled={photoUploading} onClick={removeProfilePhoto}>
-                  <Trash2 className="h-4 w-4" />
-                  Remove Photo
-                </button>
-              ) : null}
+              <button className="btn btn-secondary technician-settings-action technician-remove-photo-button" type="button" disabled={!hasCustomPhoto || photoUploading} onClick={removeProfilePhoto}>
+                <Trash2 className="h-4 w-4" />
+                Remove Photo
+              </button>
             </div>
           </div>
         </SettingsCard>
@@ -1196,7 +1229,7 @@ export function TechnicianSettingsPage() {
 
         <SettingsCard icon={Palette} title="Appearance / Theme" description="Local theme for this device." className="technician-theme-card">
           <ThemePreferenceButtons value={themePreference} onChange={updateThemePreference} />
-          <p className="technician-theme-current">Current theme: {resolvedTheme === 'light' ? 'Light' : 'Dark'}</p>
+          <p className="technician-theme-current">Current theme: {themeLabel}</p>
         </SettingsCard>
         </aside>
       </div>

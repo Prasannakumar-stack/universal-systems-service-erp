@@ -21,9 +21,8 @@ import {
 } from 'lucide-react';
 import { serviceTypes } from '../utils/constants.js';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
-import { BookingBrandSupport } from '../components/PublicBrandSupport.jsx';
 import { createBooking } from '../utils/publicApi.js';
-import { publicAssetUrl, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
+import { publicAssetUrl, publicPageHeroImage, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 import { useToast } from '../context/ToastContext.jsx';
 
 const initial = {
@@ -32,6 +31,7 @@ const initial = {
   address: '',
   serviceType: '',
   device: '',
+  deviceBrandModel: '',
   bookingSource: 'Website',
   problemDescription: '',
   preferredDate: '',
@@ -153,6 +153,7 @@ export default function BookService() {
     if (targetStep === 2) {
       if (booking.showServiceSelection && !form.serviceType.trim()) errors.serviceType = 'Select a service type.';
       if (!form.device.trim()) errors.device = 'Device is required.';
+      if (form.deviceBrandModel.trim() && form.deviceBrandModel.trim().length < 2) errors.deviceBrandModel = 'Brand / model should be at least 2 characters.';
       if (!form.problemDescription.trim()) errors.problemDescription = 'Issue / problem description is required.';
       if (!form.bookingSource.trim()) errors.bookingSource = 'Booking source is required.';
     }
@@ -265,6 +266,7 @@ export default function BookService() {
     ['Address', form.address],
     ['Service', form.serviceType],
     ['Device', form.device],
+    ['Device Brand / Model', form.deviceBrandModel || 'Not provided'],
     ['Problem', form.problemDescription],
     ...(booking.showPreferredDateTime ? [
       ['Preferred Date', form.preferredDate || 'Not selected'],
@@ -300,7 +302,7 @@ export default function BookService() {
         <section className={`booking-hero page-hero hero-with-bg ${heroCardClass}`}>
           <img
             className="page-hero-bg-image"
-            src={publicAssetUrl(settings.hero.imageUrl || '/Book%20Service%20Page%20image.png')}
+            src={publicAssetUrl(publicPageHeroImage('bookService'))}
             alt="Universal Systems hero"
           />
           <div className="page-hero-overlay" aria-hidden="true" />
@@ -432,7 +434,6 @@ export default function BookService() {
                   <FieldError id="booking-service-type-error" message={fieldErrors.serviceType} />
                   </div>
                 ) : null}
-                <BookingBrandSupport serviceTitle={form.serviceType} />
                 <div className="booking-field">
                   <label className="label" htmlFor="booking-device">Device</label>
                   <input
@@ -445,6 +446,22 @@ export default function BookService() {
                     placeholder="Laptop, desktop, printer, CCTV, UPS..."
                   />
                   <FieldError id="booking-device-error" message={fieldErrors.device} />
+                </div>
+                <div className="booking-field">
+                  <div className="booking-label-row">
+                    <label className="label" htmlFor="booking-device-brand-model">Device Brand / Model</label>
+                    <span className="booking-optional">Optional</span>
+                  </div>
+                  <input
+                    id="booking-device-brand-model"
+                    className="input"
+                    aria-invalid={fieldErrors.deviceBrandModel ? 'true' : 'false'}
+                    aria-describedby={fieldErrors.deviceBrandModel ? 'booking-device-brand-model-error' : undefined}
+                    value={form.deviceBrandModel}
+                    onChange={(event) => update('deviceBrandModel', event.target.value)}
+                    placeholder="Dell laptop, HP printer, Hikvision camera..."
+                  />
+                  <FieldError id="booking-device-brand-model-error" message={fieldErrors.deviceBrandModel} />
                 </div>
                 <div className="booking-field">
                   <label className="label" htmlFor="booking-problem">Issue / problem description</label>

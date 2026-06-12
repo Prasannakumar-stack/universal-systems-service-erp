@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
 import { BrandLogoStrip } from '../components/PublicBrandSupport.jsx';
-import { phoneHref, publicAssetUrl, publicPhoneList, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
+import { phoneHref, publicAssetUrl, publicPageHeroImage, publicPhoneList, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const steps = [
   { title: 'Book Service', text: 'Share your device issue and preferred time.', icon: BookOpenCheck },
@@ -204,7 +204,7 @@ export default function Home() {
         <div className={`premium-hero-grid page-hero hero-with-bg ${heroCardClass} container-page relative z-10`}>
           <img
             className="page-hero-bg-image"
-            src={publicAssetUrl(settings.hero.imageUrl)}
+            src={publicAssetUrl(publicPageHeroImage('home'))}
             alt="Universal Systems hero"
           />
           <div className="page-hero-overlay" aria-hidden="true" />
