@@ -49,7 +49,7 @@ import {
   Users,
   Wrench
 } from '../../shared/phase1Shared.jsx';
-import { Camera, Eye, EyeOff, Palette, UploadCloud } from 'lucide-react';
+import { Camera, Eye, EyeOff, Palette, Trash2, UploadCloud } from 'lucide-react';
 import { themePreferenceOptions, useThemePreference } from '../../utils/theme.js';
 
 function text(value) {
@@ -868,8 +868,8 @@ export function TechnicianSettingsPage() {
   const username = settingsFallback(user?.username);
   const profileDirty = stableJson(profileForm) !== stableJson(profileBaseline);
   const preferencesDirty = stableJson(preferences) !== stableJson(savedPreferences);
-  const passwordTouched = Boolean(passwordForm.currentPassword || passwordForm.newPassword || passwordForm.confirmPassword);
   const avatarSrc = photoPreviewUrl || technicianSettingsAssetUrl(user?.avatarUrl);
+  const hasCustomPhoto = Boolean(photoPreviewUrl || user?.avatarUrl);
 
   useEffect(() => {
     setProfileForm(profileBaseline);
@@ -926,12 +926,16 @@ export function TechnicianSettingsPage() {
 
   async function updatePassword(event) {
     event.preventDefault();
-    if (!passwordTouched) {
-      push('Enter your current password and new password', 'error');
-      return;
-    }
     if (!passwordForm.currentPassword) {
       push('Current Password is required', 'error');
+      return;
+    }
+    if (!passwordForm.newPassword) {
+      push('New Password is required', 'error');
+      return;
+    }
+    if (!passwordForm.confirmPassword) {
+      push('Confirm Password is required', 'error');
       return;
     }
     if (passwordForm.newPassword.length < 6) {
@@ -983,6 +987,25 @@ export function TechnicianSettingsPage() {
       push(result.message || 'Profile photo updated');
     } catch (err) {
       setPhotoPreviewUrl('');
+      push(err.message, 'error');
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
+
+  async function removeProfilePhoto() {
+    if (!hasCustomPhoto || photoUploading) return;
+    setPhotoUploading(true);
+    try {
+      if (photoPreviewUrl) setPhotoPreviewUrl('');
+      if (user?.avatarUrl) {
+        const result = await request('/auth/profile/avatar', { method: 'DELETE' });
+        syncUser(result);
+        push(result.message || 'Profile photo removed');
+      } else {
+        push('Profile photo removed');
+      }
+    } catch (err) {
       push(err.message, 'error');
     } finally {
       setPhotoUploading(false);
@@ -1104,7 +1127,7 @@ export function TechnicianSettingsPage() {
               />
             </div>
             <div className="technician-password-note">
-              <CheckCircle2 className="h-4 w-4" />
+              <AlertTriangle className="h-4 w-4" />
               New password must be at least 6 characters.
             </div>
             <button className="btn btn-primary technician-settings-action" type="submit" disabled={passwordSaving}>
@@ -1148,10 +1171,18 @@ export function TechnicianSettingsPage() {
               <p>JPG, PNG, or WEBP up to 5 MB.</p>
             </div>
             <input ref={photoInputRef} type="file" className="hidden" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handlePhotoChange} />
-            <button className="btn btn-secondary technician-settings-action" type="button" disabled={photoUploading} onClick={() => photoInputRef.current?.click()}>
-              {photoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-              {photoUploading ? 'Uploading...' : 'Change Photo'}
-            </button>
+            <div className="technician-photo-actions">
+              <button className="btn btn-secondary technician-settings-action" type="button" disabled={photoUploading} onClick={() => photoInputRef.current?.click()}>
+                {photoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                {photoUploading ? 'Working...' : 'Change Photo'}
+              </button>
+              {hasCustomPhoto ? (
+                <button className="btn btn-secondary technician-settings-action technician-remove-photo-button" type="button" disabled={photoUploading} onClick={removeProfilePhoto}>
+                  <Trash2 className="h-4 w-4" />
+                  Remove Photo
+                </button>
+              ) : null}
+            </div>
           </div>
         </SettingsCard>
 

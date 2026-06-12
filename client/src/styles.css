@@ -12305,6 +12305,25 @@ button:disabled {
     padding: 0.55rem 0.72rem;
   }
 
+  .current-user-avatar {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(125, 211, 252, 0.18);
+    border-radius: 8px;
+    background: rgba(56, 189, 248, 0.15);
+    color: #e0f2fe;
+    font-weight: 950;
+    line-height: 1;
+  }
+
+  .current-user-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
   .enterprise-topbar .input {
     min-width: 14rem;
   }
@@ -14559,11 +14578,11 @@ button:disabled {
   width: fit-content;
   align-items: center;
   gap: 0.45rem;
-  border: 1px solid rgba(52, 211, 153, 0.18);
+  border: 1px solid rgba(251, 191, 36, 0.28);
   border-radius: 8px;
-  background: rgba(16, 185, 129, 0.08);
+  background: rgba(245, 158, 11, 0.1);
   padding: 0.5rem 0.65rem;
-  color: #bbf7d0;
+  color: #fde68a;
   font-size: 0.76rem;
   font-weight: 820;
 }
@@ -14653,6 +14672,30 @@ button:disabled {
   color: #93a4b8;
   font-size: 0.74rem;
   font-weight: 780;
+}
+
+.technician-photo-actions {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.technician-photo-actions .technician-settings-action {
+  width: auto;
+  min-width: 8.8rem;
+}
+
+.technician-remove-photo-button {
+  border-color: rgba(248, 113, 113, 0.24);
+  color: #fecaca;
+}
+
+.technician-remove-photo-button:hover,
+.technician-remove-photo-button:focus-visible {
+  border-color: rgba(248, 113, 113, 0.42);
+  background: rgba(248, 113, 113, 0.12);
 }
 
 .technician-account-status-list {
@@ -14856,6 +14899,12 @@ button:disabled {
 .theme-light .technician-premium-switch-row strong,
 .theme-light .technician-theme-option.is-active {
   color: #0f172a;
+}
+
+.theme-light .technician-password-note {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: rgba(245, 158, 11, 0.12);
+  color: #92400e;
 }
 
 .theme-light .technician-settings-card-head p,
@@ -26745,6 +26794,99 @@ a.about-contact-row:focus-visible,
   box-shadow: 0 0 28px rgba(34, 197, 94, 0.14);
 }
 
+.about-brand-support {
+  padding: clamp(1rem, 2.4vw, 1.4rem);
+}
+
+.about-brand-support .public-brand-inner {
+  width: 100%;
+  gap: 0.9rem;
+}
+
+.about-brand-support .public-brand-logo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0;
+  padding: 0.55rem 0.35rem;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.about-brand-support .public-brand-logo-strip::before {
+  opacity: 0.25;
+}
+
+.about-brand-support .public-brand-logo-tile {
+  flex: 1 1 152px;
+  min-width: 120px;
+  min-height: 58px;
+  padding: 0.45rem 1rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.about-brand-support .public-brand-logo-tile:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(226, 232, 240, 0.18), transparent);
+}
+
+.about-brand-support .brand-logo-img,
+.about-brand-support .brand-logo-wordmark {
+  opacity: 0.9;
+  filter: grayscale(1) brightness(1.52) contrast(1.08) saturate(0) drop-shadow(0 4px 14px rgba(0, 0, 0, 0.12));
+  transition: opacity 220ms ease, filter 220ms ease, transform 220ms ease;
+}
+
+.about-brand-support .brand-logo-img {
+  max-width: min(100%, 7.25rem);
+}
+
+.about-brand-support .brand-logo-wordmark {
+  color: #d7dee9;
+}
+
+.about-brand-support .brand-logo-img-lenovo {
+  display: none;
+}
+
+.about-brand-support .brand-logo-wordmark-lenovo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #d8e0eb;
+  font-size: clamp(1rem, 1.55vw, 1.2rem);
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  text-transform: none;
+  opacity: 0.92;
+  transform: translateY(0.02em);
+}
+
+.about-brand-support .brand-logo-card:hover {
+  transform: translateY(-1px);
+}
+
+.about-brand-support .brand-logo-card:hover .brand-logo-img,
+.about-brand-support .brand-logo-card:hover .brand-logo-wordmark {
+  opacity: 1;
+  filter: grayscale(1) brightness(1.68) contrast(1.08) saturate(0) drop-shadow(0 5px 16px rgba(148, 163, 184, 0.16));
+}
+
+.about-brand-support .brand-logo-card:hover .brand-logo-wordmark-lenovo {
+  opacity: 0.98;
+}
+
 .about-care-card {
   display: flex;
   gap: 0.9rem;
@@ -26786,10 +26928,19 @@ a.about-contact-row:focus-visible,
 }
 
 .about-book-button,
+.about-cta-button,
 .about-whatsapp-action,
 .about-whatsapp-button {
-  min-height: 2.75rem;
+  min-height: 3rem;
+  padding-inline: 1.2rem;
   transition: transform 260ms ease, border-color 260ms ease, box-shadow 260ms ease, background 260ms ease;
+}
+
+.about-cta-actions .about-cta-button {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  justify-content: center;
 }
 
 .about-book-button:hover,
@@ -26831,6 +26982,21 @@ a.about-contact-row:focus-visible,
   .about-cta-actions {
     justify-content: flex-start;
     width: 100%;
+  }
+
+  .about-cta-actions .about-cta-button {
+    width: 100%;
+  }
+}
+
+@media (min-width: 861px) {
+  .about-cta-actions {
+    flex-wrap: nowrap;
+    width: min(100%, 28rem);
+  }
+
+  .about-cta-actions .about-cta-button {
+    width: 0;
   }
 }
 
@@ -26898,7 +27064,8 @@ a.about-contact-row:focus-visible,
   }
 
   .about-cta-actions .btn,
-  .about-whatsapp-button {
+  .about-whatsapp-button,
+  .about-cta-button {
     width: 100%;
   }
 }
@@ -29478,7 +29645,7 @@ a.about-contact-row:focus-visible,
 
 /* Compact Home brand trust strip */
 .premium-home .public-brand-home.home-section {
-  padding-block: clamp(1.05rem, 2.2vw, 1.55rem);
+  padding-block: clamp(0.65rem, 1.1vw, 0.95rem);
 }
 
 .premium-home .public-brand-home {
@@ -29503,8 +29670,8 @@ a.about-contact-row:focus-visible,
 }
 
 .premium-home .public-brand-home .public-brand-inner {
-  width: min(1080px, calc(100% - 2rem));
-  gap: clamp(0.7rem, 1.5vw, 0.95rem);
+  width: min(1140px, calc(100% - 1.5rem));
+  gap: clamp(0.35rem, 0.8vw, 0.6rem);
   justify-items: center;
   text-align: center;
 }
@@ -29515,28 +29682,47 @@ a.about-contact-row:focus-visible,
 
 .premium-home .public-brand-home .public-brand-copy h2 {
   color: rgba(231, 238, 247, 0.82);
-  font-size: clamp(0.98rem, 1.45vw, 1.18rem);
+  font-size: clamp(1rem, 1.5vw, 1.2rem);
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: -0.015em;
 }
 
 .premium-home .public-brand-home .public-brand-copy p {
-  display: none;
+  max-width: none;
+  margin-top: 0.3rem;
+  color: rgba(196, 208, 222, 0.86);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  white-space: nowrap;
 }
 
 .premium-home .public-brand-home .public-brand-logo-strip {
+  position: relative;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: clamp(1rem, 2.35vw, 2rem);
+  gap: 0;
   width: 100%;
-  padding: 0;
+  margin-top: clamp(0.12rem, 0.35vw, 0.3rem);
+  padding: clamp(0.62rem, 1.25vw, 0.82rem) clamp(0.55rem, 1.05vw, 0.78rem);
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(148, 196, 229, 0.12);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(4, 14, 30, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(125, 211, 252, 0.05),
+    0 18px 48px rgba(0, 8, 24, 0.22);
+  backdrop-filter: blur(16px) saturate(1.08);
 }
 
 .premium-home .public-brand-home .public-brand-logo-strip::before {
-  inset: 18% 4%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.055), transparent);
-  filter: blur(16px);
-  opacity: 0.45;
+  inset: 12% 3%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  filter: blur(14px);
+  opacity: 0.35;
 }
 
 .premium-home .public-brand-home .public-brand-logo-tile {
@@ -29544,7 +29730,7 @@ a.about-contact-row:focus-visible,
   place-items: center;
   width: 100%;
   min-width: 0;
-  height: 40px;
+  height: 36px;
   padding: 0;
   overflow: visible;
   border: 0;
@@ -29552,19 +29738,27 @@ a.about-contact-row:focus-visible,
   box-shadow: none;
 }
 
+.premium-home .public-brand-home .public-brand-logo-tile:not(:first-child) {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.premium-home .public-brand-home .public-brand-logo-tile:nth-child(2n + 1) {
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
 .premium-home .public-brand-home .brand-logo-img {
   width: auto;
-  height: var(--home-brand-height, 25px);
+  height: var(--home-brand-height, 24px);
   max-width: min(var(--home-brand-width, 128px), 100%);
-  max-height: var(--home-brand-height, 25px);
+  max-height: var(--home-brand-height, 24px);
   object-fit: contain;
   filter:
     grayscale(1)
     brightness(0)
     invert(1)
     drop-shadow(0 7px 16px rgba(0, 8, 24, 0.18));
-  opacity: 0.62;
-  transition: opacity 220ms ease, filter 220ms ease, transform 220ms ease;
+  opacity: 0.56;
+  transition: opacity 180ms ease, filter 180ms ease;
 }
 
 .premium-home .public-brand-home .brand-logo-img-dell {
@@ -29610,17 +29804,17 @@ a.about-contact-row:focus-visible,
 }
 
 .premium-home .public-brand-home .brand-logo-card:hover {
-  transform: translateY(-1px);
+  transform: none;
   filter: none;
 }
 
 .premium-home .public-brand-home .brand-logo-card:hover .brand-logo-img {
-  opacity: 0.82;
+  opacity: 0.78;
   filter:
     grayscale(1)
     brightness(0)
     invert(1)
-    drop-shadow(0 0 16px rgba(220, 238, 255, 0.14));
+    drop-shadow(0 0 14px rgba(220, 238, 255, 0.12));
 }
 
 .premium-home .public-brand-home .brand-logo-card:hover .brand-logo-wordmark-lenovo {
@@ -29633,7 +29827,13 @@ a.about-contact-row:focus-visible,
   .premium-home .public-brand-home .public-brand-logo-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     width: min(540px, 100%);
-    gap: 0.7rem 1rem;
+    gap: 0;
+    padding: 0.65rem 0.5rem;
+  }
+
+  .premium-home .public-brand-home .public-brand-logo-tile {
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
 }
 
@@ -29648,7 +29848,8 @@ a.about-contact-row:focus-visible,
 
   .premium-home .public-brand-home .public-brand-logo-strip {
     width: min(100%, 30rem);
-    gap: 0.6rem 0.8rem;
+    gap: 0;
+    padding: 0.6rem 0.45rem;
   }
 
   .premium-home .public-brand-home .public-brand-logo-tile {
@@ -29657,6 +29858,11 @@ a.about-contact-row:focus-visible,
 
   .premium-home .public-brand-home .brand-logo-img {
     transform: scale(0.9);
+  }
+
+  .premium-home .public-brand-home .public-brand-copy p {
+    font-size: 0.86rem;
+    white-space: normal;
   }
 
   .premium-home .public-brand-home .brand-logo-wordmark-lenovo {
@@ -29678,18 +29884,21 @@ a.about-contact-row:focus-visible,
 
 .premium-home .urgent-support-banner {
   position: relative;
-  display: grid;
-  min-height: clamp(370px, 35vw, 430px);
-  align-items: center;
+  min-height: clamp(300px, 26vw, 340px);
   overflow: hidden;
   border: 1px solid rgba(139, 218, 255, 0.3);
   border-radius: 26px;
-  background: rgba(2, 8, 23, 0.78);
-  padding: clamp(1.5rem, 4.5vw, 3.75rem);
+  background:
+    linear-gradient(135deg, rgba(5, 13, 31, 0.95), rgba(2, 8, 23, 0.82)),
+    rgba(2, 8, 23, 0.78);
+  padding: 0;
   box-shadow:
     0 34px 90px rgba(0, 8, 24, 0.48),
     0 0 0 1px rgba(255, 255, 255, 0.055) inset,
-    0 0 38px rgba(34, 211, 238, 0.13);
+    0 0 38px rgba(34, 211, 238, 0.13),
+    0 0 78px rgba(34, 211, 238, 0.08),
+    inset 0 -28px 56px rgba(2, 8, 23, 0.18),
+    inset 0 18px 32px rgba(255, 255, 255, 0.025);
   backdrop-filter: blur(22px) saturate(1.12);
   -webkit-backdrop-filter: blur(22px) saturate(1.12);
 }
@@ -29703,12 +29912,14 @@ a.about-contact-row:focus-visible,
     linear-gradient(
       90deg,
       rgba(2, 7, 18, 0.98) 0%,
-      rgba(2, 8, 23, 0.95) 30%,
-      rgba(2, 8, 23, 0.72) 49%,
-      rgba(2, 8, 23, 0.27) 70%,
-      rgba(2, 8, 23, 0.08) 100%
+      rgba(2, 8, 23, 0.985) 28%,
+      rgba(2, 10, 24, 0.95) 42%,
+      rgba(2, 8, 23, 0.82) 50%,
+      rgba(2, 8, 23, 0.46) 61%,
+      rgba(2, 8, 23, 0.18) 77%,
+      rgba(2, 8, 23, 0.06) 100%
     ),
-    linear-gradient(180deg, rgba(2, 8, 23, 0.06), rgba(2, 8, 23, 0.42)),
+    linear-gradient(180deg, rgba(2, 8, 23, 0.16), rgba(2, 8, 23, 0.44)),
     radial-gradient(circle at 20% 18%, rgba(103, 232, 249, 0.14), transparent 23rem),
     radial-gradient(circle at 84% 46%, rgba(34, 211, 238, 0.1), transparent 25rem);
   opacity: 1;
@@ -29733,18 +29944,25 @@ a.about-contact-row:focus-visible,
 }
 
 .premium-home .urgent-support-content {
-  z-index: 3;
-  max-width: 620px;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.1rem;
+  padding: clamp(1.55rem, 3vw, 2.35rem);
+  max-width: 46%;
 }
 
 .premium-home .urgent-support-badge {
   display: inline-flex;
   width: fit-content;
   align-items: center;
+  gap: 0.42rem;
   border: 1px solid rgba(125, 211, 252, 0.28);
   border-radius: 999px;
   background: rgba(2, 8, 23, 0.36);
-  padding: 0.45rem 0.68rem;
+  padding: 0.48rem 0.74rem;
   color: #9ee8ff;
   font-size: 0.72rem;
   font-weight: 900;
@@ -29756,11 +29974,18 @@ a.about-contact-row:focus-visible,
   backdrop-filter: blur(14px);
 }
 
+.premium-home .urgent-support-badge svg {
+  width: 0.82rem;
+  height: 0.82rem;
+  color: #7fe7ff;
+  filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.34));
+}
+
 .premium-home .urgent-support-title {
   max-width: 560px;
-  font-size: clamp(2.1rem, 3.65vw, 3.35rem);
+  font-size: clamp(2.05rem, 3.1vw, 2.95rem);
   font-weight: 800;
-  line-height: 1.06;
+  line-height: 1.02;
   letter-spacing: -0.04em;
   text-wrap: balance;
   text-shadow: 0 14px 38px rgba(0, 0, 0, 0.36);
@@ -29847,31 +30072,64 @@ a.about-contact-row:focus-visible,
 
 .premium-home .urgent-support-image {
   position: absolute;
-  inset: 0;
-  z-index: 0;
-  width: 100%;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 64%;
   height: 100%;
+  margin: 0;
+  padding: 0;
+  z-index: 1;
+  isolation: isolate;
+  overflow: hidden;
   opacity: 1;
 }
 
 .premium-home .urgent-support-image::before {
-  content: none;
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(2, 7, 18, 0.998) 0%, rgba(2, 8, 23, 0.96) 18%, rgba(2, 8, 23, 0.72) 34%, rgba(2, 8, 23, 0.3) 52%, rgba(2, 8, 23, 0.18) 100%),
+    linear-gradient(180deg, rgba(2, 8, 23, 0.06), rgba(2, 8, 23, 0.26));
+  pointer-events: none;
+}
+
+.premium-home .urgent-support-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    radial-gradient(circle at 78% 22%, rgba(125, 211, 252, 0.14), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    linear-gradient(180deg, rgba(2, 8, 23, 0.01) 0%, rgba(2, 8, 23, 0.15) 100%),
+    linear-gradient(270deg, rgba(2, 8, 23, 0) 0%, rgba(2, 8, 23, 0.12) 100%);
+  mix-blend-mode: screen;
+  opacity: 0.58;
+  pointer-events: none;
 }
 
 .premium-home .urgent-support-image img {
+  position: absolute;
+  inset: -1px -2px -1px 0;
+  z-index: 0;
   width: 100%;
   height: 100%;
+  display: block;
   object-fit: cover;
-  object-position: 72% 48%;
+  object-position: 60% 52%;
   opacity: 1;
-  filter: brightness(1.12) contrast(1.06) saturate(0.96);
+  transform: scale(1.012);
+  filter: brightness(1.02) contrast(1.08) saturate(0.98);
 }
 
 @media (max-width: 768px) {
   .premium-home .urgent-support-banner {
-    min-height: 430px;
+    min-height: unset;
     border-radius: 20px;
-    padding: 1.35rem;
+    padding: 0;
   }
 
   .premium-home .urgent-support-banner::before {
@@ -29879,14 +30137,34 @@ a.about-contact-row:focus-visible,
       linear-gradient(
         90deg,
         rgba(2, 7, 18, 0.98) 0%,
-        rgba(2, 8, 23, 0.94) 54%,
-        rgba(2, 8, 23, 0.62) 100%
+        rgba(2, 8, 23, 0.96) 58%,
+        rgba(2, 8, 23, 0.5) 100%
       ),
       linear-gradient(180deg, rgba(2, 8, 23, 0.16), rgba(2, 8, 23, 0.76));
   }
 
+  .premium-home .urgent-support-content {
+    padding: 1.2rem 1.2rem 0.95rem;
+    max-width: 100%;
+  }
+
+  .premium-home .urgent-support-image {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    min-height: 220px;
+    order: 2;
+    width: 100%;
+  }
+
+  .premium-home .urgent-support-image img {
+    transform: scale(1.005);
+    object-position: center 38%;
+  }
+
   .premium-home .urgent-support-title {
-    font-size: clamp(1.95rem, 7.5vw, 2.7rem);
+    font-size: clamp(1.8rem, 7.2vw, 2.45rem);
     line-height: 1.07;
   }
 
@@ -29895,13 +30173,191 @@ a.about-contact-row:focus-visible,
     align-items: stretch;
   }
 
-  .premium-home .urgent-trust-chips {
-    gap: 0.45rem;
+  .premium-home .urgent-support-actions .btn {
+    width: 100%;
+  }
+}
+
+/* Active Home urgent support cinematic override */
+.premium-home .urgent-support-banner.urgent-support-banner--cinematic {
+  position: relative;
+  min-height: clamp(300px, 26vw, 338px);
+  overflow: hidden;
+  border: 1px solid rgba(139, 218, 255, 0.28);
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(6, 14, 34, 0.94), rgba(2, 8, 23, 0.84)),
+    rgba(2, 8, 23, 0.82);
+  box-shadow:
+    0 32px 88px rgba(0, 8, 24, 0.46),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+    0 0 44px rgba(34, 211, 238, 0.12),
+    inset 0 18px 30px rgba(255, 255, 255, 0.022),
+    inset 0 -26px 54px rgba(2, 8, 23, 0.22);
+  backdrop-filter: blur(20px) saturate(1.08);
+  -webkit-backdrop-filter: blur(20px) saturate(1.08);
+}
+
+.premium-home .urgent-support-banner.urgent-support-banner--cinematic::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(2, 7, 18, 0.985) 0%,
+      rgba(2, 8, 23, 0.99) 36%,
+      rgba(2, 8, 23, 0.97) 50%,
+      rgba(2, 8, 23, 0.86) 58%,
+      rgba(2, 8, 23, 0.48) 68%,
+      rgba(2, 8, 23, 0.18) 84%,
+      rgba(2, 8, 23, 0.08) 100%
+    ),
+    linear-gradient(180deg, rgba(2, 8, 23, 0.18), rgba(2, 8, 23, 0.42)),
+    radial-gradient(circle at 18% 16%, rgba(103, 232, 249, 0.12), transparent 22rem),
+    radial-gradient(circle at 82% 30%, rgba(34, 211, 238, 0.1), transparent 26rem);
+  pointer-events: none;
+}
+
+.premium-home .urgent-support-banner.urgent-support-banner--cinematic::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: 4;
+  border-radius: 27px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent 28%),
+    radial-gradient(circle at 84% 40%, rgba(125, 211, 252, 0.08), transparent 44%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(125, 211, 252, 0.06);
+  pointer-events: none;
+}
+
+.premium-home .urgent-support-content.urgent-support-content--cinematic {
+  position: relative;
+  z-index: 3;
+  max-width: min(58%, 620px);
+  padding: clamp(1.6rem, 3.2vw, 2.4rem);
+}
+
+.premium-home .urgent-support-image.urgent-support-image--cinematic {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  z-index: 1;
+  width: 53%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.premium-home .urgent-support-image.urgent-support-image--cinematic::before {
+  content: none;
+}
+
+.premium-home .urgent-support-image.urgent-support-image--cinematic::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    radial-gradient(circle at 78% 22%, rgba(125, 211, 252, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(2, 8, 23, 0.01), rgba(2, 8, 23, 0.12)),
+    linear-gradient(270deg, rgba(2, 8, 23, 0) 0%, rgba(2, 8, 23, 0.1) 100%);
+  opacity: 0.48;
+  pointer-events: none;
+}
+
+.premium-home .urgent-support-image.urgent-support-image--cinematic img {
+  position: absolute;
+  inset: -1px -1px -1px 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  object-fit: cover;
+  object-position: 72% 32%;
+  transform: scale(1);
+  filter: brightness(1.08) contrast(1.05) saturate(1);
+  opacity: 1;
+}
+
+.premium-home .urgent-support-content.urgent-support-content--cinematic {
+  max-width: min(60%, 640px);
+  padding: clamp(1.85rem, 3.45vw, 2.8rem);
+  padding-left: clamp(2.05rem, 3.45vw, 3rem);
+  padding-right: clamp(1.45rem, 2.55vw, 2.05rem);
+}
+
+.premium-home .urgent-support-content.urgent-support-content--cinematic .urgent-support-badge {
+  margin-bottom: 0.45rem;
+}
+
+.premium-home .urgent-support-content.urgent-support-content--cinematic .urgent-support-title {
+  margin-top: 0.7rem;
+  font-size: clamp(1.95rem, 2.85vw, 2.7rem);
+  line-height: 1.08;
+}
+
+.premium-home .urgent-support-content.urgent-support-content--cinematic p:not(.urgent-support-badge) {
+  max-width: 580px;
+  line-height: 1.86;
+}
+
+.premium-home .urgent-support-content.urgent-support-content--cinematic .urgent-support-actions {
+  gap: 0.8rem;
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 768px) {
+  .premium-home .urgent-support-banner.urgent-support-banner--cinematic {
+    min-height: 360px;
+    border-radius: 20px;
   }
 
-  .premium-home .urgent-trust-chip {
-    min-height: 34px;
-    padding: 0.48rem 0.68rem;
-    font-size: 0.75rem;
+  .premium-home .urgent-support-banner.urgent-support-banner--cinematic::before {
+    background:
+      linear-gradient(
+        180deg,
+        rgba(2, 7, 18, 0.96) 0%,
+        rgba(2, 8, 23, 0.94) 42%,
+        rgba(2, 8, 23, 0.68) 68%,
+        rgba(2, 8, 23, 0.42) 100%
+      ),
+      linear-gradient(90deg, rgba(2, 8, 23, 0.18), rgba(2, 8, 23, 0.06));
+  }
+
+  .premium-home .urgent-support-banner.urgent-support-banner--cinematic::after {
+    border-radius: 19px;
+  }
+
+  .premium-home .urgent-support-content.urgent-support-content--cinematic {
+    max-width: 100%;
+    padding: 1.2rem 1.2rem 1rem;
+  }
+
+  .premium-home .urgent-support-image.urgent-support-image--cinematic {
+    position: relative;
+    left: auto;
+    width: 100%;
+    min-height: 220px;
+  }
+
+  .premium-home .urgent-support-image.urgent-support-image--cinematic img {
+    object-position: 70% 18%;
+    transform: scale(1);
   }
 }

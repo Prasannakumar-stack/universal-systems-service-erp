@@ -295,17 +295,17 @@ export default function About() {
               <HeartHandshake className="h-4 w-4" />
               Service support
             </p>
-            <h2>Ready to get your device checked?</h2>
+            <h2>Ready to get your device checked by our team?</h2>
             <p>Book a service or message us on WhatsApp. Our team will guide you clearly before any service starts.</p>
           </div>
           <div className="about-cta-actions">
             {booking.publicBookingEnabled ? (
-              <Link className="btn btn-primary shine-button about-book-button" to="/book-service">
+              <Link className="btn btn-primary shine-button about-book-button about-cta-button" to="/book-service">
                 <CalendarClock className="h-4 w-4" />
                 {booking.bookingButtonText}
               </Link>
             ) : null}
-            <a className="btn btn-secondary about-whatsapp-action" href={contactWhatsappHref} target="_blank" rel="noreferrer">
+            <a className="btn btn-secondary about-whatsapp-action about-cta-button" href={contactWhatsappHref} target="_blank" rel="noreferrer">
               <MessageCircle className="h-4 w-4" />
               WhatsApp Support
             </a>

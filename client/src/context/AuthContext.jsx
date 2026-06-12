@@ -11,17 +11,26 @@ async function parseResponse(response) {
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('us_token') || '');
-  const [user, setUser] = useState(() => {
+  const [user, setUserState] = useState(() => {
     const stored = localStorage.getItem('us_user');
     return stored ? JSON.parse(stored) : null;
   });
   const [loading, setLoading] = useState(Boolean(token));
 
+  const setUser = useCallback((nextUser) => {
+    setUserState((current) => {
+      const resolved = typeof nextUser === 'function' ? nextUser(current) : nextUser;
+      if (resolved) localStorage.setItem('us_user', JSON.stringify(resolved));
+      else localStorage.removeItem('us_user');
+      return resolved;
+    });
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem('us_token');
     localStorage.removeItem('us_user');
     setToken('');
-    setUser(null);
+    setUserState(null);
   }, []);
 
   const request = useCallback(

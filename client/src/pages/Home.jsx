@@ -17,7 +17,8 @@ import {
   Truck,
   UserCog,
   Users,
-  Wrench
+  Wrench,
+  Zap
 } from 'lucide-react';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
 import { BrandLogoStrip } from '../components/PublicBrandSupport.jsx';
@@ -454,13 +455,21 @@ export default function Home() {
         </div>
       </section>
 
-      <BrandLogoStrip as="div" className="home-section public-brand-home reveal-on-scroll" size="large" subtitle="" />
+      <BrandLogoStrip
+        as="div"
+        className="home-section public-brand-home reveal-on-scroll"
+        size="large"
+        subtitle="Trusted service support for leading computer, printer and security brands."
+      />
 
       <section className="home-section premium-section cta-section-compact">
         <div className="container-page">
-          <div className="urgent-support-banner reveal-on-scroll">
-            <div className="urgent-support-content relative z-10 max-w-2xl">
-              <p className="urgent-support-badge">URGENT SUPPORT</p>
+          <div className="urgent-support-banner urgent-support-banner--cinematic reveal-on-scroll">
+            <div className="urgent-support-content urgent-support-content--cinematic">
+              <p className="urgent-support-badge">
+                <Zap aria-hidden="true" />
+                URGENT SUPPORT
+              </p>
               <h2 className="urgent-support-title mt-4 text-white">Need urgent support today?</h2>
               <p className="mt-4 text-base leading-7 text-slate-300">We are just a call away. Our team is ready to help you.</p>
               <div className="urgent-support-actions mt-7 flex flex-col gap-3 sm:flex-row">
@@ -476,22 +485,8 @@ export default function Home() {
                   Call Now
                 </a>
               </div>
-              <div className="urgent-trust-chips" aria-label="Urgent support trust highlights">
-                <span className="urgent-trust-chip">
-                  <CheckCircle2 aria-hidden="true" />
-                  Fast response
-                </span>
-                <span className="urgent-trust-chip">
-                  <CheckCircle2 aria-hidden="true" />
-                  Clear diagnosis
-                </span>
-                <span className="urgent-trust-chip">
-                  <CheckCircle2 aria-hidden="true" />
-                  Pay after confirmation
-                </span>
-              </div>
             </div>
-            <div className="urgent-support-image" aria-hidden="true">
+            <div className="urgent-support-image urgent-support-image--cinematic" aria-hidden="true">
               <img
                 src="/technician-hero.png"
                 alt=""

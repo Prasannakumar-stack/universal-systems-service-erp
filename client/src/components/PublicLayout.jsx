@@ -222,10 +222,6 @@ function PublicLayoutShell() {
                   <ArrowRight className="footer-link-arrow" aria-hidden="true" />
                 </NavLink>
               ))}
-              <NavLink to="/technician/login" className="footer-link-row">
-                <span>Technician Login</span>
-                <ArrowRight className="footer-link-arrow" aria-hidden="true" />
-              </NavLink>
             </div>
           </div>
           <div>

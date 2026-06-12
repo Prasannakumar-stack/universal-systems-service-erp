@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { company } from '../utils/constants.js';
+import { apiBase, company } from '../utils/constants.js';
 import { currency } from '../utils/format.js';
 import { getCustomerDisplayId, getInvoiceDisplayId, getPaymentDisplayId, getWorkOrderDisplayId } from '../shared/idHelpers.js';
 import { adminWorkspaceRoles, can, canAny, canAccessRoles, normalizeRole, roleLabel } from '../utils/roles.js';
@@ -42,6 +42,7 @@ import {
 const TopbarBookingModal = lazy(() => import('../features/bookings/BookingsPage.jsx').then((module) => ({ default: module.BookingModal })));
 
 const fullAccessRoles = ['admin', 'super_admin'];
+const assetBase = apiBase.replace(/\/api\/?$/, '');
 
 const adminGroups = [
   {
@@ -189,6 +190,27 @@ function canSeeLink(link, subject) {
 
 function roleFromSubject(subject) {
   return typeof subject === 'string' ? subject : subject?.role;
+}
+
+function currentUserAvatarUrl(user) {
+  const value = String(user?.avatarUrl || '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${assetBase}${value.startsWith('/') ? value : `/${value}`}`;
+}
+
+function currentUserInitial(user, fallback = 'A') {
+  return String(user?.name || user?.username || fallback).trim().slice(0, 1).toUpperCase() || fallback;
+}
+
+function CurrentUserAvatar({ user, fallback = 'A', className = '' }) {
+  const avatarUrl = currentUserAvatarUrl(user);
+  const initial = currentUserInitial(user, fallback);
+  return (
+    <div className={`current-user-avatar ${className}`}>
+      {avatarUrl ? <img src={avatarUrl} alt={`${user?.name || user?.username || 'User'} avatar`} /> : <span>{initial}</span>}
+    </div>
+  );
 }
 
 function visibleAdminGroups(subject) {
@@ -618,9 +640,7 @@ function AdminSidebar({ close }) {
 
       <div className="enterprise-sidebar-footer border-t border-white/10 p-3">
         <div className="mb-3 flex items-center gap-3 rounded-card border border-white/10 bg-white/[0.045] p-3">
-          <div className="grid h-9 w-9 place-items-center rounded-card bg-sky-400/15 text-sm font-black text-sky-100">
-            {user?.name?.slice(0, 1) || 'A'}
-          </div>
+          <CurrentUserAvatar user={user} fallback="A" className="h-9 w-9 text-sm" />
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">{user?.name || 'Admin User'}</p>
             <span className="admin-role-badge mt-1 inline-flex">{roleLabel(user?.role || 'admin')}</span>
@@ -714,9 +734,7 @@ function TechnicianSidebar({ close }) {
 
       <div className="enterprise-sidebar-footer border-t border-white/10 p-3">
         <div className="mb-3 flex items-center gap-3 rounded-card border border-white/10 bg-white/[0.045] p-3">
-          <div className="grid h-9 w-9 place-items-center rounded-card bg-sky-400/15 text-sm font-black text-sky-100">
-            {user?.name?.slice(0, 1) || 'T'}
-          </div>
+          <CurrentUserAvatar user={user} fallback="T" className="h-9 w-9 text-sm" />
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">{user?.name || 'Technician'}</p>
             <span className="admin-role-badge mt-1 inline-flex">{roleLabel(user?.role || 'technician')}</span>
@@ -1129,7 +1147,7 @@ function AdminTopBar({ role, openSidebar }) {
             </NavLink>
             <NotificationCenter role={userRole} />
             <div className="enterprise-user-chip">
-              <div className="grid h-8 w-8 place-items-center rounded-card bg-sky-400/15 text-xs font-black text-sky-100">{user?.name?.slice(0, 1) || 'A'}</div>
+              <CurrentUserAvatar user={user} fallback={isTechnician ? 'T' : 'A'} className="h-8 w-8 text-xs" />
               <div className="min-w-0">
                 <p className="max-w-36 truncate text-sm font-bold">{user?.name || 'Admin User'}</p>
                 <span className="admin-role-badge mt-1 inline-flex">{roleLabel(userRole)}</span>

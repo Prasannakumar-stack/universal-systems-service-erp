@@ -1869,9 +1869,8 @@ function AdminProfileSection({ onDirtyChange = null }) {
     name: user?.name || '',
     username: user?.username || '',
     email: user?.email || '',
-    phone: user?.phone || '',
-    avatarUrl: user?.avatarUrl || ''
-  }), [user?.name, user?.username, user?.email, user?.phone, user?.avatarUrl]);
+    phone: user?.phone || ''
+  }), [user?.name, user?.username, user?.email, user?.phone]);
   const [form, setForm] = useState(profileBaseline);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordVisible, setPasswordVisible] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
@@ -1909,6 +1908,7 @@ function AdminProfileSection({ onDirtyChange = null }) {
           : '';
   const canUpdatePassword = passwordTouched && !passwordValidation && !saving;
   const profileInitial = String(form.name || form.username || 'A').trim().slice(0, 1).toUpperCase() || 'A';
+  const currentAvatarUrl = user?.avatarUrl || '';
   const roleText = roleLabel(user?.role || 'admin') || titleCase(user?.role || 'admin');
   const accountStatus = user?.active === false ? 'Inactive' : 'Active';
   const activityItems = useMemo(() => {
@@ -2232,8 +2232,8 @@ function AdminProfileSection({ onDirtyChange = null }) {
         <section className="admin-profile-card admin-profile-photo-card">
           <div className="admin-profile-avatar-wrap">
             <div className="admin-profile-avatar">
-              {form.avatarUrl ? (
-                <img src={settingsAssetUrl(form.avatarUrl)} alt="Admin avatar" />
+              {currentAvatarUrl ? (
+                <img src={settingsAssetUrl(currentAvatarUrl)} alt="Admin avatar" />
               ) : (
                 <span>{profileInitial}</span>
               )}
@@ -2257,7 +2257,7 @@ function AdminProfileSection({ onDirtyChange = null }) {
                 uploadAvatar(file);
               }} />
             </label>
-            <button type="button" className="btn btn-secondary justify-center text-rose-100" disabled={uploading || !form.avatarUrl} onClick={() => setConfirmRemoveAvatar(true)}>
+            <button type="button" className="btn btn-secondary justify-center text-rose-100" disabled={uploading || !currentAvatarUrl} onClick={() => setConfirmRemoveAvatar(true)}>
               <Trash2 className="h-4 w-4" />
               Remove Photo
             </button>
