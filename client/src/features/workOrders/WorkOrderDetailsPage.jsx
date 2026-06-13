@@ -305,6 +305,12 @@ function detailTabButtonClass(active) {
   ].join(' ');
 }
 
+function photoEvidenceTone(hasItems) {
+  return hasItems
+    ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
+    : 'border-slate-500/25 bg-slate-500/10 text-slate-200';
+}
+
 function pdfWorkflowCardClass(enabled) {
   return [
     'rounded-xl border p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
@@ -1309,6 +1315,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const customerProblemPhotos = photoItems.filter((image) => image.type === 'customer_problem');
   const beforeServicePhotos = photoItems.filter((image) => image.type === 'before_service');
   const afterServicePhotos = photoItems.filter((image) => image.type === 'after_service');
+  const totalPhotoCount = customerProblemPhotos.length + beforeServicePhotos.length + afterServicePhotos.length;
+  const showTechnicianPhotoUploads = role === 'technician' && canUploadPhotos;
   const workOrderDisplayId = getWorkOrderDisplayId(order);
   const customerDisplayId = getCustomerDisplayId(order.customerId);
   const invoiceDisplayId = order.invoiceId ? getInvoiceDisplayId(order.invoiceId) : '';
@@ -1400,7 +1408,6 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const completedStatuses = ['Completed', 'Delivered', 'Returned'];
   const showCompletedDate = completedStatuses.includes(order.status);
   const completedDateDisplay = workOrderCompletedDateDisplay(order, formatDate);
-  const renderPhotoPriorityBadge = () => <WorkOrderPriorityBadge priority={jobPriority(order)} />;
   const timelineDateTime = (value) => {
     if (!value) return 'Not added yet';
     const date = new Date(value);
@@ -1436,7 +1443,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
   function renderPhotoSection(title, items, helperText, emptyTitle, emptyMessage, className = '') {
     return (
-      <section className={`${detailPanelClass} work-order-photo-section ${className}`.trim()}>
+      <section className={`${detailPanelClass} work-order-photo-section photo-section-card ${className}`.trim()}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h3 className="text-base font-black text-white">{title}</h3>
@@ -1477,6 +1484,46 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           </div>
         )}
       </section>
+    );
+  }
+
+  function renderPhotoEvidenceStrip() {
+    const items = [
+      {
+        label: 'Customer Photo',
+        status: customerProblemPhotos.length ? 'Uploaded' : 'Missing',
+        hasItems: customerProblemPhotos.length > 0,
+        count: customerProblemPhotos.length
+      },
+      {
+        label: 'Before Service',
+        status: beforeServicePhotos.length ? 'Uploaded' : 'Missing',
+        hasItems: beforeServicePhotos.length > 0,
+        count: beforeServicePhotos.length
+      },
+      {
+        label: 'After Completion',
+        status: afterServicePhotos.length ? 'Uploaded' : 'Missing',
+        hasItems: afterServicePhotos.length > 0,
+        count: afterServicePhotos.length
+      }
+    ];
+    return (
+      <div className="work-order-photo-evidence photo-evidence-summary mt-4 grid gap-3 md:grid-cols-3">
+        {items.map((item) => (
+          <div key={item.label} className="photo-summary-card rounded-2xl border border-white/10 bg-slate-950/28 px-4 py-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">{item.label}</p>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <span className={`inline-flex min-h-[1.8rem] items-center rounded-full border px-2.5 py-1 text-xs font-bold ${photoEvidenceTone(item.hasItems)}`}>
+                {item.status}
+              </span>
+              <span className="text-xs font-semibold text-slate-300">
+                {item.count} photo{item.count === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
     );
   }
 
@@ -1770,7 +1817,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             {technicianWorkOrderTabs.map((tab) => (
               <button key={tab.id} type="button" className={detailTabButtonClass(activeTab === tab.id)} onClick={() => setActiveTab(tab.id)}>
-                {tab.label}
+                <span>{tab.label}</span>
+                {tab.id === 'photos' ? <span className="work-order-photo-tab-badge">{totalPhotoCount}</span> : null}
               </button>
             ))}
           </div>
@@ -1943,22 +1991,19 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         ) : null}
 
         {activeTab === 'photos' ? (
-          <div className="grid gap-4">
-            <div className={detailSectionClass}>
+          <div className="work-order-photos-panel grid gap-4">
+            <div className={`${detailSectionClass} photos-tab-header`}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-black">Photos</h2>
-                  <p className="mt-1 text-sm muted">Customer problem photos and technician progress photos are grouped here for quick review.</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Priority</p>
-                  <div className="mt-1">{renderPhotoPriorityBadge()}</div>
+                  <p className="mt-1 text-sm muted">Review customer issue photos and upload before-service / after-completion photos.</p>
                 </div>
               </div>
-              <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                {renderPhotoSection('Customer Problem Photo', customerProblemPhotos, 'Customer uploaded issue/device photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.', 'xl:col-span-2')}
-                {renderPhotoSection('Before Service Photos', beforeServicePhotos, 'Technician before-service photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
-                {renderPhotoSection('After Completion Photos', afterServicePhotos, 'Technician after-completion photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
+              {renderPhotoEvidenceStrip()}
+              <div className="photo-gallery-grid mt-4 grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {renderPhotoSection('Customer Problem Photo', customerProblemPhotos, 'Customer uploaded issue/device photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
+                {renderPhotoSection('Before Service Photos', beforeServicePhotos, 'Technician before-service photos will appear here.', 'No photo uploaded yet.', 'Upload before-service photos before starting work.')}
+                {renderPhotoSection('After Completion Photos', afterServicePhotos, 'Technician after-completion photos will appear here.', 'No photo uploaded yet.', 'Upload completion photos after finishing the job.')}
               </div>
             </div>
           </div>
@@ -2097,7 +2142,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {visibleWorkOrderTabs.map((tab) => (
             <button key={tab.id} type="button" className={detailTabButtonClass(activeTab === tab.id)} onClick={() => setActiveTab(tab.id)}>
-              {tab.label}
+              <span>{tab.label}</span>
+              {tab.id === 'photos' ? <span className="work-order-photo-tab-badge">{totalPhotoCount}</span> : null}
             </button>
           ))}
         </div>
@@ -2602,23 +2648,20 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <div className="mt-4 grid gap-3">{order.notes?.length ? order.notes.map((item) => <div key={item._id || item.createdAt} className="rounded-xl border border-white/10 bg-slate-950/25 p-4"><p className="text-sm leading-6 text-slate-100">{item.text}</p><p className="mt-2 text-xs muted">{item.userId?.name || item.userId?.username || (item.userId ? 'Recorded user' : 'Team')} - {formatDate(item.createdAt)}</p></div>) : <EmptyState title="No notes yet." message="Add diagnosis, customer instruction, or work completion notes." />}</div>
           </div>
 
-          <div className={activeTab === 'photos' ? detailSectionClass : 'hidden'}>
+          <div className={activeTab === 'photos' ? `${detailSectionClass} work-order-photos-panel photos-tab-header` : 'hidden'}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-black">Photos</h2>
-                <p className="mt-1 text-sm muted">Review the customer issue photo, then upload before-service and after-completion photos here.</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-slate-950/35 px-3 py-2">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Priority</p>
-                <div className="mt-1">{renderPhotoPriorityBadge()}</div>
+                <p className="mt-1 text-sm muted">Review customer issue photos and upload before-service / after-completion photos.</p>
               </div>
             </div>
-            <div className="mt-4 grid gap-4 xl:grid-cols-2">
-              {renderPhotoSection('Customer Problem Photo', customerProblemPhotos, 'Customer uploaded issue/device photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.', 'xl:col-span-2')}
-              {renderPhotoSection('Before Service Photos', beforeServicePhotos, 'Take photos before repair work starts so Admin can review the device condition.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
-              {renderPhotoSection('After Completion Photos', afterServicePhotos, 'Upload completion photos after the work is finished so Admin can verify the result.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
+            {renderPhotoEvidenceStrip()}
+            <div className="photo-gallery-grid mt-4 grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {renderPhotoSection('Customer Problem Photo', customerProblemPhotos, 'Customer uploaded issue/device photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
+              {renderPhotoSection('Before Service Photos', beforeServicePhotos, 'Take photos before repair work starts so Admin can review the device condition.', 'No photo uploaded yet.', 'Upload before-service photos before starting work.')}
+              {renderPhotoSection('After Completion Photos', afterServicePhotos, 'Upload completion photos after the work is finished so Admin can verify the result.', 'No photo uploaded yet.', 'Upload completion photos after finishing the job.')}
             </div>
-            {canUploadPhotos ? <div className="mt-4 grid gap-4 xl:grid-cols-2">
+            {showTechnicianPhotoUploads ? <div className="mt-4 grid gap-4 xl:grid-cols-2">
               {renderTechnicianPhotoUpload('before_service', 'Before Service Photo', 'Capture the device condition before repair or service starts.', beforeServiceInputRef)}
               {renderTechnicianPhotoUpload('after_service', 'After Completion Photo', 'Capture the finished repair or completed service result.', afterServiceInputRef)}
             </div> : null}

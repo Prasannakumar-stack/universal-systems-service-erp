@@ -26534,13 +26534,32 @@ a.contact-detail-row:focus-visible,
   padding: 0.95rem;
 }
 
+.work-order-photos-panel,
+.photos-tab-header,
+.photo-gallery-grid,
+.photo-evidence-summary {
+  min-width: 0;
+}
+
+.photo-gallery-grid {
+  align-items: start;
+}
+
+.photo-summary-card {
+  display: flex;
+  min-height: 5.6rem;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
 .work-order-photo-card {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 0;
   padding: 0.7rem;
-  width: min(100%, 16.25rem);
+  width: 100%;
+  max-width: 16.25rem;
 }
 
 .work-order-photo-card .technician-photo-preview {
@@ -26580,10 +26599,12 @@ a.contact-detail-row:focus-visible,
 
 .work-order-photo-upload-row {
   align-items: center;
+  gap: 0.85rem;
 }
 
 .work-order-photo-upload-copy {
   flex: 1 1 15rem;
+  min-width: 0;
 }
 
 .work-order-photo-upload-status,
@@ -26593,6 +26614,22 @@ a.contact-detail-row:focus-visible,
 
 .work-order-photo-upload-actions {
   flex: 0 0 auto;
+}
+
+.work-order-photo-tab-badge {
+  display: inline-flex;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 211, 252, 0.24);
+  background: rgba(14, 165, 233, 0.12);
+  padding: 0 0.45rem;
+  color: #d7f2ff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
 }
 
 @media (max-width: 900px) {
@@ -26634,11 +26671,19 @@ a.contact-detail-row:focus-visible,
     height: 9.5rem;
     min-height: 9.5rem;
   }
+
+  .photo-summary-card {
+    min-height: 5rem;
+  }
 }
 
 @media (max-width: 520px) {
   .work-order-photo-gallery {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .photo-summary-card {
+    min-height: 0;
   }
 
   .work-order-photo-card,
