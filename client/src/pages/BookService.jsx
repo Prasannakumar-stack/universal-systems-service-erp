@@ -32,7 +32,7 @@ const initial = {
   serviceType: '',
   device: '',
   deviceBrandModel: '',
-  bookingSource: 'Website',
+  bookingSource: 'Website Booking',
   problemDescription: '',
   preferredDate: '',
   preferredTime: ''

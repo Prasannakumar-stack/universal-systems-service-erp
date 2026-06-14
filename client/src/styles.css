@@ -484,6 +484,10 @@ button:disabled {
     box-sizing: border-box;
     border-radius: var(--admin-filter-control-radius);
     background-color: var(--admin-filter-control-bg);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23d6ebfb' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.75' y='5.25' width='16.5' height='15' rx='2.25'/%3E%3Cpath d='M8 3.75v3.5M16 3.75v3.5M3.75 9.5h16.5'/%3E%3C/svg%3E");
+    background-position: right 0.95rem center;
+    background-repeat: no-repeat;
+    background-size: 1rem 1rem;
     border-color: var(--admin-filter-control-border);
     color: var(--admin-filter-date-text);
     color-scheme: dark;
@@ -531,22 +535,40 @@ button:disabled {
   input[type='date'].input::-webkit-calendar-picker-indicator,
   input[type='date'].work-orders-date-input::-webkit-calendar-picker-indicator,
   .work-orders-filter-bar input[type='date'].work-orders-filter-control::-webkit-calendar-picker-indicator {
-    width: 1.05rem;
-    height: 1.05rem;
-    margin: 0 0.35rem 0 0.5rem;
-    padding: 0.2rem;
+    width: 1.6rem;
+    height: 1.6rem;
+    margin: 0 0.2rem 0 auto;
+    padding: 0;
     border-radius: 999px;
     cursor: pointer;
-    opacity: 0.82;
-    filter: invert(83%) sepia(16%) saturate(708%) hue-rotate(176deg) brightness(94%) contrast(93%);
+    opacity: 0.02;
+    background: transparent;
+    box-shadow: none;
+    filter: invert(96%) sepia(19%) saturate(510%) hue-rotate(176deg) brightness(104%) contrast(96%);
     transform: none;
+    transition: opacity 160ms ease, background 160ms ease, box-shadow 160ms ease, filter 160ms ease;
   }
 
   input[type='date'].input:hover::-webkit-calendar-picker-indicator,
   input[type='date'].work-orders-date-input:hover::-webkit-calendar-picker-indicator,
   .work-orders-filter-bar input[type='date'].work-orders-filter-control:hover::-webkit-calendar-picker-indicator {
-    background: rgba(117, 196, 255, 0.12);
-    opacity: 1;
+    opacity: 0.06;
+  }
+
+  input[type='date'].input:focus::-webkit-calendar-picker-indicator,
+  input[type='date'].work-orders-date-input:focus::-webkit-calendar-picker-indicator,
+  .work-orders-filter-bar input[type='date'].work-orders-filter-control:focus::-webkit-calendar-picker-indicator {
+    opacity: 0.08;
+  }
+
+  input[type='date'].input:disabled::-webkit-calendar-picker-indicator,
+  input[type='date'].work-orders-date-input:disabled::-webkit-calendar-picker-indicator,
+  .work-orders-filter-bar input[type='date'].work-orders-filter-control:disabled::-webkit-calendar-picker-indicator,
+  input[type='date'].input[readonly]::-webkit-calendar-picker-indicator,
+  input[type='date'].work-orders-date-input[readonly]::-webkit-calendar-picker-indicator,
+  .work-orders-filter-bar input[type='date'].work-orders-filter-control[readonly]::-webkit-calendar-picker-indicator {
+    opacity: 0.56;
+    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.12);
   }
 
   .admin-date-filter {
@@ -19024,11 +19046,17 @@ button:disabled {
   color: var(--admin-filter-date-text);
 }
 
+.theme-light input[type='date'].input,
+.theme-light input[type='date'].work-orders-date-input,
+.theme-light .work-orders-filter-bar input[type='date'].work-orders-filter-control {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23334b67' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.75' y='5.25' width='16.5' height='15' rx='2.25'/%3E%3Cpath d='M8 3.75v3.5M16 3.75v3.5M3.75 9.5h16.5'/%3E%3C/svg%3E");
+}
+
 .theme-light input[type='date'].input::-webkit-calendar-picker-indicator,
 .theme-light input[type='date'].work-orders-date-input::-webkit-calendar-picker-indicator,
 .theme-light .work-orders-filter-bar input[type='date'].work-orders-filter-control::-webkit-calendar-picker-indicator {
   filter: none;
-  opacity: 0.68;
+  opacity: 0.06;
 }
 
 .theme-light .date-input-shell:has(input[type='date']) .date-input-icon {
@@ -26528,9 +26556,12 @@ a.contact-detail-row:focus-visible,
 }
 
 .work-order-photo-section {
+  display: flex;
   min-width: 0;
   align-content: start;
+  flex-direction: column;
   gap: 0;
+  overflow: visible;
   padding: 0.95rem;
 }
 
@@ -26543,6 +26574,7 @@ a.contact-detail-row:focus-visible,
 
 .photo-gallery-grid {
   align-items: start;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .photo-summary-card {
@@ -26554,37 +26586,54 @@ a.contact-detail-row:focus-visible,
 
 .work-order-photo-card {
   display: flex;
+  box-sizing: border-box;
   min-width: 0;
+  min-height: 15.75rem;
   flex-direction: column;
   gap: 0;
   padding: 0.7rem;
   width: 100%;
-  max-width: 16.25rem;
+  max-width: none;
 }
 
 .work-order-photo-card .technician-photo-preview {
   aspect-ratio: 16 / 10;
-  height: 10.25rem;
-  min-height: 10.25rem;
+  height: 8.75rem;
+  min-height: 8.75rem;
+  overflow: hidden;
+  border-radius: 0.9rem;
 }
 
 .work-order-photo-gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 260px));
+  box-sizing: border-box;
+  min-height: 0;
+  grid-template-columns: repeat(auto-fit, minmax(11.25rem, 1fr));
   gap: 0.85rem;
+  overflow: visible;
+  padding-right: 0;
+  padding-bottom: 0;
+  scroll-padding-bottom: 0;
+  align-content: start;
   justify-content: start;
+}
+
+.work-order-photo-gallery--preview {
+  grid-template-columns: repeat(auto-fit, minmax(11.75rem, 1fr));
 }
 
 .work-order-photo-empty {
   width: min(100%, 26rem);
+  min-height: 5.75rem;
   border: 1px dashed rgba(148, 163, 184, 0.2);
   border-radius: 0.95rem;
   background: rgba(15, 23, 42, 0.26);
-  padding: 0.9rem 1rem;
+  padding: 0.8rem 0.9rem;
 }
 
 .work-order-photo-upload-card {
-  padding: 0.95rem;
+  margin-top: auto;
+  padding-top: 0.85rem;
 }
 
 .work-order-photo-upload-card .btn {
@@ -26592,14 +26641,132 @@ a.contact-detail-row:focus-visible,
 }
 
 .work-order-photo-action {
-  width: auto;
-  align-self: flex-start;
+  flex: 0 0 auto;
+  width: 100%;
+  margin-top: auto;
+  align-self: stretch;
   white-space: nowrap;
 }
 
-.work-order-photo-upload-row {
+.work-order-photo-view-all {
+  display: inline-flex;
+  align-self: flex-start;
   align-items: center;
-  gap: 0.85rem;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  background: rgba(14, 165, 233, 0.08);
+  padding: 0.45rem 0.85rem;
+  color: #d6ebfb;
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.work-order-photo-view-all:hover,
+.work-order-photo-view-all:focus-visible {
+  border-color: rgba(125, 211, 252, 0.3);
+  background: rgba(14, 165, 233, 0.14);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.work-order-photo-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(2, 6, 23, 0.76);
+  backdrop-filter: blur(10px);
+}
+
+.work-order-photo-modal {
+  width: min(100%, 72rem);
+  max-height: min(86vh, 56rem);
+  overflow: hidden;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  background:
+    linear-gradient(180deg, rgba(10, 28, 53, 0.96), rgba(6, 18, 36, 0.98)),
+    rgba(6, 18, 36, 0.96);
+}
+
+.work-order-photo-modal-header,
+.work-order-photo-modal-body {
+  padding: 1.15rem;
+}
+
+.work-order-photo-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.12);
+}
+
+.work-order-photo-modal-count {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  background: rgba(14, 165, 233, 0.12);
+  padding: 0 0.8rem;
+  color: #d6ebfb;
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.work-order-photo-modal-close {
+  flex-shrink: 0;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.work-order-photo-modal-body {
+  max-height: calc(min(86vh, 56rem) - 6.3rem);
+  overflow-y: auto;
+  scrollbar-color: rgba(125, 211, 252, 0.35) rgba(15, 23, 42, 0.28);
+  scrollbar-width: thin;
+}
+
+.work-order-photo-modal-body::-webkit-scrollbar {
+  width: 0.5rem;
+}
+
+.work-order-photo-modal-body::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.work-order-photo-modal-body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(125, 211, 252, 0.35);
+}
+
+.work-order-photo-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.work-order-photo-card--modal {
+  min-height: 17.25rem;
+}
+
+.work-order-photo-card--modal .technician-photo-preview {
+  height: 10rem;
+  min-height: 10rem;
+}
+
+.work-order-photo-upload-row {
+  display: grid;
+  gap: 0.65rem;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .work-order-photo-upload-copy {
@@ -26610,26 +26777,38 @@ a.contact-detail-row:focus-visible,
 .work-order-photo-upload-status,
 .work-order-photo-upload-format {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .work-order-photo-upload-actions {
-  flex: 0 0 auto;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.work-order-photo-upload-actions .btn,
+.work-order-photo-upload-actions .btn.btn-secondary {
+  width: 100%;
 }
 
 .work-order-photo-tab-badge {
   display: inline-flex;
-  min-width: 1.5rem;
-  min-height: 1.5rem;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
+  min-width: 1.65rem;
+  height: 1.5rem;
+  margin-left: 0.5rem;
   border-radius: 999px;
   border: 1px solid rgba(125, 211, 252, 0.24);
   background: rgba(14, 165, 233, 0.12);
-  padding: 0 0.45rem;
+  padding: 0 0.5rem;
   color: #d7f2ff;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 900;
   line-height: 1;
+  white-space: nowrap;
 }
 
 @media (max-width: 900px) {
@@ -26668,12 +26847,75 @@ a.contact-detail-row:focus-visible,
   }
 
   .work-order-photo-card .technician-photo-preview {
-    height: 9.5rem;
-    min-height: 9.5rem;
+    height: 8.5rem;
+    min-height: 8.5rem;
   }
 
   .photo-summary-card {
     min-height: 5rem;
+  }
+}
+
+@media (max-width: 1200px) {
+  .photo-gallery-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 640px) {
+  .work-order-photo-upload-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .work-order-photo-upload-actions {
+    grid-template-columns: repeat(2, minmax(11rem, max-content));
+    justify-content: end;
+    align-items: center;
+  }
+}
+
+@media (min-width: 1180px) {
+  .work-order-photo-upload-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .work-order-photo-upload-actions {
+    grid-template-columns: auto auto;
+  }
+}
+
+.photo-section-card .work-order-photo-upload-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.photo-section-card .work-order-photo-upload-actions {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 768px) {
+  .photo-gallery-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .work-order-photo-modal-backdrop {
+    padding: 0.85rem;
+  }
+
+  .work-order-photo-modal {
+    max-height: 92vh;
+  }
+
+  .work-order-photo-modal-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .work-order-photo-modal-header .flex.items-center.gap-2 {
+    justify-content: space-between;
+  }
+
+  .work-order-photo-modal-body {
+    max-height: calc(92vh - 8rem);
   }
 }
 
@@ -26689,11 +26931,6 @@ a.contact-detail-row:focus-visible,
   .work-order-photo-card,
   .work-order-photo-empty {
     width: 100%;
-  }
-
-  .work-order-photo-upload-status,
-  .work-order-photo-upload-format {
-    white-space: normal;
   }
 
   .work-order-photo-upload-actions .btn,

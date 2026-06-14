@@ -47,7 +47,8 @@ export async function publicWebsiteOpenGate(req, _res, next) {
 }
 
 export async function publicBookingOpenGate(req, _res, next) {
-  const settings = await assertPublicBookingOpen();
+  const isContactFormEnquiry = String(req.body?.bookingSource || req.body?.source || '').trim().toLowerCase() === 'contact form';
+  const settings = isContactFormEnquiry ? await assertPublicWebsiteOpen() : await assertPublicBookingOpen();
   req.publicWebsiteSettings = settings;
   req.body = {
     ...req.body,

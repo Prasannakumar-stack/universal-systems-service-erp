@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import Booking from '../models/Booking.js';
 import { upsertCustomer } from './customerService.js';
-import { clean } from '../utils/http.js';
+import { appError, clean } from '../utils/http.js';
 import { logAudit } from './auditService.js';
 import { createNotification } from './notificationService.js';
 
-const bookingSources = ['Walk-in', 'Call', 'Website', 'WhatsApp', 'Referral'];
-const bookingStatuses = ['Pending', 'Converted'];
+const bookingSources = ['Walk-in', 'Call', 'Website', 'Website Booking', 'Contact Form', 'WhatsApp', 'Referral'];
+const bookingStatuses = ['Pending', 'New Enquiry', 'Contacted', 'Waiting Customer', 'Pending Enquiry', 'Closed', 'Converted'];
+const contactEnquiryStatuses = ['New Enquiry', 'Contacted', 'Waiting Customer', 'Closed'];
+const urgentEnquiryPattern = /\b(urgent|emergency|not working|today|immediately|no power|dead|broken|stopped)\b/i;
 
 function bookingCode() {
   const now = new Date();
@@ -20,9 +22,22 @@ function cleanBookingSource(value) {
   return bookingSources.includes(source) ? source : source;
 }
 
-function validBookingStatus(value) {
+function isContactFormSource(value) {
+  return clean(value).toLowerCase() === 'contact form';
+}
+
+function validBookingStatus(value, source = '') {
   const status = clean(value);
+  if (isContactFormSource(source) && (!status || status === 'Pending')) return 'New Enquiry';
   return bookingStatuses.includes(status) ? status : 'Pending';
+}
+
+function enquiryPriorityValue(payload, source = '') {
+  const explicit = clean(payload.enquiryPriority || payload.priority);
+  if (['Normal', 'Urgent'].includes(explicit)) return explicit;
+  if (!isContactFormSource(source)) return 'Normal';
+  const text = `${payload.issue || ''} ${payload.problemDescription || ''} ${payload.problem || ''} ${payload.message || ''}`;
+  return urgentEnquiryPattern.test(text) ? 'Urgent' : 'Normal';
 }
 
 function preferredDateValue(value) {
@@ -64,13 +79,19 @@ export async function createBooking(payload, user = null) {
     issue: clean(payload.issue || payload.problemDescription || payload.problem || 'Service request'),
     preferredDate: preferredDateValue(payload.preferredDate),
     preferredTime: clean(payload.preferredTime),
-    status: validBookingStatus(payload.status),
+    status: validBookingStatus(payload.status, bookingSource),
+    enquiryPriority: enquiryPriorityValue(payload, bookingSource),
+    adminNote: clean(payload.adminNote),
+    followUpReminder: clean(payload.followUpReminder),
+    followUpAt: preferredDateValue(payload.followUpAt),
     technicianId: payload.technicianId || payload.assignedTo || (user?.role === 'technician' ? user._id : null)
   });
 
   await createNotification({
     title: 'New booking received',
-    message: `${booking.customerName} booked service for ${booking.device}.`,
+    message: isContactFormSource(bookingSource)
+      ? `${booking.customerName} sent a contact enquiry for ${booking.device}.`
+      : `${booking.customerName} booked service for ${booking.device}.`,
     type: 'BOOKING',
     role: 'admin',
     sourceId: booking._id
@@ -90,6 +111,8 @@ export async function createBooking(payload, user = null) {
         phone: booking.phone,
         serviceType: booking.serviceType,
         bookingSource: booking.bookingSource,
+        status: booking.status,
+        enquiryPriority: booking.enquiryPriority,
         problemImage: booking.problemImage?.url || '',
         device: booking.device,
         preferredDate: booking.preferredDate,
@@ -102,4 +125,52 @@ export async function createBooking(payload, user = null) {
   }
 
   return booking;
+}
+
+export async function updateBookingEnquiry(id, payload, user = null) {
+  const booking = await Booking.findById(id);
+  if (!booking) throw appError('Booking not found', 404);
+  const before = {
+    status: booking.status,
+    adminNote: booking.adminNote,
+    followUpReminder: booking.followUpReminder,
+    followUpAt: booking.followUpAt
+  };
+  const isContact = isContactFormSource(booking.bookingSource);
+
+  if (payload.status !== undefined) {
+    const nextStatus = clean(payload.status);
+    if (!bookingStatuses.includes(nextStatus)) throw appError('Invalid enquiry status', 400);
+    if (nextStatus === 'Converted' && !booking.workOrderId) throw appError('Use Convert to create the service job first', 400);
+    if (isContact && !contactEnquiryStatuses.includes(nextStatus) && nextStatus !== 'Converted') {
+      throw appError('Invalid Contact Form enquiry status', 400);
+    }
+    booking.status = nextStatus;
+  }
+
+  if (payload.adminNote !== undefined) booking.adminNote = clean(payload.adminNote);
+  if (payload.followUpReminder !== undefined) booking.followUpReminder = clean(payload.followUpReminder);
+  if (payload.followUpAt !== undefined) booking.followUpAt = preferredDateValue(payload.followUpAt);
+
+  await booking.save();
+
+  try {
+    await logAudit({
+      userId: user?._id || user?.id || null,
+      action: 'booking_enquiry_updated',
+      module: 'booking',
+      recordId: booking._id,
+      before,
+      after: {
+        status: booking.status,
+        adminNote: booking.adminNote,
+        followUpReminder: booking.followUpReminder,
+        followUpAt: booking.followUpAt
+      }
+    });
+  } catch (error) {
+    console.warn('Audit log failed for booking enquiry update:', error.message);
+  }
+
+  return booking.populate('customerId technicianId workOrderId');
 }

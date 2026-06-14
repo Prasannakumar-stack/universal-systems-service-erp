@@ -22,7 +22,11 @@ const bookingSchema = new mongoose.Schema(
     preferredDate: { type: Date, default: null },
     preferredTime: { type: String, trim: true, default: '' },
     technicianId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    status: { type: String, enum: ['Pending', 'Converted'], default: 'Pending' },
+    status: { type: String, enum: ['Pending', 'New Enquiry', 'Contacted', 'Waiting Customer', 'Pending Enquiry', 'Closed', 'Converted'], default: 'Pending' },
+    enquiryPriority: { type: String, enum: ['Normal', 'Urgent'], default: 'Normal' },
+    adminNote: { type: String, trim: true, default: '' },
+    followUpReminder: { type: String, trim: true, default: '' },
+    followUpAt: { type: Date, default: null },
     workOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'WorkOrder', default: null }
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }

@@ -149,7 +149,10 @@ import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 
 const bookingsFocusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
-const finalBookingSources = ['Walk-in', 'Call', 'Website'];
+const finalBookingSources = ['Walk-in', 'Call', 'Website Booking', 'Contact Form', 'WhatsApp', 'Referral'];
+const enquiryWorkflowStatuses = ['New Enquiry', 'Contacted', 'Waiting Customer', 'Closed'];
+const finalBookingStatuses = ['Pending', 'New Enquiry', 'Contacted', 'Waiting Customer', 'Converted', 'Closed'];
+const urgentEnquiryPattern = /\b(urgent|emergency|not working|today|immediately|no power|dead|broken|stopped)\b/i;
 
 function normalizeBookingSource(source) {
   const raw = String(
@@ -166,18 +169,54 @@ function normalizeBookingSource(source) {
   ).trim().toLowerCase().replace(/\s+/g, ' ');
 
   if (!raw) return 'Walk-in';
-  if (raw.includes('call') || raw.includes('phone') || raw.includes('whatsapp')) return 'Call';
-  if (raw.includes('website') || raw.includes('web') || raw.includes('online')) return 'Website';
+  if (raw.includes('contact form') || raw.includes('enquiry') || raw.includes('inquiry')) return 'Contact Form';
+  if (raw.includes('website') || raw.includes('web') || raw.includes('online')) return 'Website Booking';
+  if (raw.includes('whatsapp')) return 'WhatsApp';
+  if (raw.includes('call') || raw.includes('phone')) return 'Call';
+  if (raw.includes('referral')) return 'Referral';
   if (raw.includes('walk') || raw.includes('shop') || raw === 'walkin' || raw === 'manual') return 'Walk-in';
   return 'Walk-in';
+}
+
+function bookingSourceQueryValue(source) {
+  const label = normalizeBookingSource(source);
+  return label === 'Website Booking' ? 'Website' : label;
+}
+
+function isContactFormBooking(booking) {
+  return normalizeBookingSource(booking) === 'Contact Form';
+}
+
+function displayBookingStatus(booking) {
+  const status = String(booking?.status || '').trim();
+  if (isContactFormBooking(booking) && (!status || status === 'Pending')) return 'New Enquiry';
+  return status || 'Pending';
+}
+
+function enquiryPriority(booking) {
+  const stored = String(booking?.enquiryPriority || booking?.priority || '').trim();
+  if (stored === 'Urgent') return 'Urgent';
+  const text = `${booking?.issue || ''} ${booking?.device || ''} ${booking?.serviceType || ''}`;
+  return isContactFormBooking(booking) && urgentEnquiryPattern.test(text) ? 'Urgent' : 'Normal';
+}
+
+function dateTimeLocalValue(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
 function BookingSourceBadge({ source }) {
   const label = normalizeBookingSource(source);
   const tones = {
     Call: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
+    'Contact Form': 'border-amber-400/25 bg-amber-400/10 text-amber-200',
+    Referral: 'border-fuchsia-400/20 bg-fuchsia-400/10 text-fuchsia-200',
+    WhatsApp: 'border-green-400/20 bg-green-400/10 text-green-200',
     'Walk-in': 'border-sky-500/20 bg-sky-500/10 text-sky-300',
-    Website: 'border-purple-500/20 bg-purple-500/10 text-purple-300'
+    'Website Booking': 'border-purple-500/20 bg-purple-500/10 text-purple-300'
   };
 
   return (
@@ -199,6 +238,8 @@ export function BookingsPage({ role = 'admin' }) {
   const canAssignTechnician = can(permissionSubject, 'assign_technician');
   const workOrdersBase = isTechnician ? '/tech/work-orders' : '/admin/work-orders';
   const [formOpen, setFormOpen] = useState(false);
+  const [detailsBooking, setDetailsBooking] = useState(null);
+  const [detailsSaving, setDetailsSaving] = useState(false);
   const [technicians, setTechnicians] = useState([]);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -212,7 +253,7 @@ export function BookingsPage({ role = 'admin' }) {
     if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
     if (status) params.set('status', status);
     if (serviceType) params.set('serviceType', serviceType);
-    if (source) params.set('source', normalizeBookingSource(source));
+    if (source) params.set('source', bookingSourceQueryValue(source));
     return `?${params}`;
   }, [debouncedSearch, limit, page, serviceType, source, status]);
   const customerBookingSeed = useMemo(() => {
@@ -250,7 +291,7 @@ export function BookingsPage({ role = 'admin' }) {
   async function convert(bookingId, technicianId) {
     if (!canConvertBooking) {
       push('You do not have permission to create work orders', 'error');
-      return;
+      return false;
     }
     try {
       await preserveScroll(async () => {
@@ -259,8 +300,27 @@ export function BookingsPage({ role = 'admin' }) {
         reload({ silent: true });
         emitSidebarBadgesUpdated();
       });
+      return true;
     } catch (err) {
       push(err.message, 'error');
+      return false;
+    }
+  }
+
+  async function saveEnquiryDetails(bookingId, payload) {
+    setDetailsSaving(true);
+    try {
+      const result = await request(`/bookings/${bookingId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      const updated = result.booking;
+      if (updated) setDetailsBooking(updated);
+      push('Enquiry details saved');
+      reload({ silent: true });
+      return true;
+    } catch (err) {
+      push(err.message, 'error');
+      return false;
+    } finally {
+      setDetailsSaving(false);
     }
   }
 
@@ -302,8 +362,7 @@ export function BookingsPage({ role = 'admin' }) {
           <SearchBox value={search} onChange={setSearch} placeholder="Search booking, customer, phone, device, issue" />
           <select className={`input bookings-filter-control ${bookingsFocusRing}`} value={status} onChange={(event) => setStatus(event.target.value)}>
             <option value="">All statuses</option>
-            <option>Pending</option>
-            <option>Converted</option>
+            {finalBookingStatuses.map((item) => <option key={item}>{item}</option>)}
           </select>
           <select className={`input bookings-filter-control ${bookingsFocusRing}`} value={serviceType} onChange={(event) => setServiceType(event.target.value)}>
             <option value="">All service types</option>
@@ -344,11 +403,12 @@ export function BookingsPage({ role = 'admin' }) {
           <table className={`data-table bookings-table ${isTechnician ? 'bookings-table--technician' : 'bookings-table--admin'}`}>
             <colgroup>
               <col className="booking-col-booking" style={{ width: '11%' }} />
-              <col className="booking-col-customer" style={{ width: '16%' }} />
-              <col className="booking-col-source booking-source-column" style={{ width: '8%' }} />
+              <col className="booking-col-customer" style={{ width: '15%' }} />
+              <col className="booking-col-source booking-source-column" style={{ width: '9%' }} />
               <col className="booking-col-device" style={{ width: '13%' }} />
-              <col className="booking-col-issue" style={{ width: '29%' }} />
-              <col className="booking-col-action" style={{ width: isTechnician ? '120px' : '23%', minWidth: isTechnician ? '120px' : '15rem' }} />
+              <col className="booking-col-issue" style={{ width: '24%' }} />
+              <col className="booking-col-status" style={{ width: '13%' }} />
+              <col className="booking-col-action" style={{ width: isTechnician ? '120px' : '15%', minWidth: isTechnician ? '120px' : '14rem' }} />
             </colgroup>
           <thead>
             <tr>
@@ -357,6 +417,7 @@ export function BookingsPage({ role = 'admin' }) {
               <th className="booking-source-column">Source</th>
               <th>Device / Service</th>
               <th>Issue</th>
+              <th>Status / Priority</th>
               <th className="bookings-action-header">{isTechnician || !canConvertBooking ? 'Actions' : 'Convert / Open'}</th>
             </tr>
           </thead>
@@ -370,6 +431,7 @@ export function BookingsPage({ role = 'admin' }) {
                 <td className="bookings-cell-customer">
                   <span className="block truncate font-bold text-slate-100" title={booking.customerName || 'Customer'}>{booking.customerName || 'Customer'}</span>
                   <span className="mt-1 block truncate text-xs font-medium text-slate-500" title={`Phone: ${booking.phone || '-'}`}>Phone: {booking.phone || '-'}</span>
+                  {booking.duplicateInfo?.hasDuplicate ? <span className="mt-2 inline-flex rounded-full border border-amber-400/20 bg-amber-500/10 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-amber-200">Duplicate</span> : null}
                   <span className="booking-source-inline mt-2"><BookingSourceBadge source={booking} /></span>
                 </td>
                 <td className="booking-source-column">
@@ -387,12 +449,28 @@ export function BookingsPage({ role = 'admin' }) {
                   <span className="booking-line-clamp max-w-full text-sm leading-5 text-slate-300" title={booking.issue || 'No issue captured'}>
                     {booking.issue || 'No issue captured'}
                   </span>
+                  {booking.followUpAt || booking.followUpReminder ? (
+                    <span className="mt-2 inline-flex max-w-full truncate rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-sky-200" title={booking.followUpReminder || formatDate(booking.followUpAt)}>
+                      Follow-up set
+                    </span>
+                  ) : null}
+                </td>
+                <td className="bookings-cell-status">
+                  <div className="flex flex-col gap-2">
+                    <EnquiryStatusBadge status={displayBookingStatus(booking)} />
+                    {isContactFormBooking(booking) ? <EnquiryPriorityBadge priority={enquiryPriority(booking)} /> : null}
+                  </div>
                 </td>
                 <td className={`bookings-cell-action ${isTechnician ? 'min-w-[120px]' : 'min-w-[15rem]'}`}>
                   {isTechnician ? (
                     <TechnicianBookingActions booking={booking} workOrdersBase={workOrdersBase} />
                   ) : (
-                    <ConvertBooking booking={booking} technicians={technicians} onConvert={convert} workOrdersBase={workOrdersBase} canConvert={canConvertBooking} canAssignTechnician={canAssignTechnician} />
+                    <div className="booking-action-cell booking-action-cell--stacked">
+                      <button type="button" className={`btn btn-secondary booking-action-button ${bookingsFocusRing}`} onClick={() => setDetailsBooking(booking)}>
+                        View Details
+                      </button>
+                      <ConvertBooking booking={booking} technicians={technicians} onConvert={convert} workOrdersBase={workOrdersBase} canConvert={canConvertBooking} canAssignTechnician={canAssignTechnician} />
+                    </div>
                   )}
                 </td>
               </tr>
@@ -405,7 +483,218 @@ export function BookingsPage({ role = 'admin' }) {
         </div>
         </>
       )}
+      {detailsBooking ? (
+        <EnquiryDetailsDrawer
+          booking={detailsBooking}
+          technicians={technicians}
+          workOrdersBase={workOrdersBase}
+          canConvert={canConvertBooking}
+          canAssignTechnician={canAssignTechnician}
+          saving={detailsSaving}
+          onClose={() => setDetailsBooking(null)}
+          onSave={saveEnquiryDetails}
+          onConvert={convert}
+        />
+      ) : null}
       {canCreateBooking && formOpen ? <BookingModal initialCustomer={customerBookingSeed.open ? customerBookingSeed : null} onClose={() => setFormOpen(false)} onSaved={reload} /> : null}
+    </div>
+  );
+}
+
+function EnquiryStatusBadge({ status }) {
+  const label = status || 'Pending';
+  const tones = {
+    'New Enquiry': 'border-sky-400/25 bg-sky-500/10 text-sky-200',
+    Contacted: 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200',
+    'Waiting Customer': 'border-amber-400/25 bg-amber-500/10 text-amber-200',
+    Converted: 'border-green-400/25 bg-green-500/10 text-green-200',
+    Closed: 'border-slate-400/20 bg-slate-500/10 text-slate-300',
+    Pending: 'border-slate-400/20 bg-slate-500/10 text-slate-300'
+  };
+  return (
+    <span className={`inline-flex w-fit items-center justify-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${tones[label] || tones.Pending}`}>
+      {label}
+    </span>
+  );
+}
+
+function EnquiryPriorityBadge({ priority }) {
+  const urgent = priority === 'Urgent';
+  return (
+    <span className={`inline-flex w-fit items-center justify-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${urgent ? 'border-rose-400/25 bg-rose-500/10 text-rose-200' : 'border-cyan-400/20 bg-cyan-500/10 text-cyan-200'}`}>
+      {urgent ? 'Urgent' : 'Normal'}
+    </span>
+  );
+}
+
+function DetailPill({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-950/25 p-3">
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="mt-1 break-words text-sm font-bold text-slate-100">{value || '-'}</p>
+    </div>
+  );
+}
+
+function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert, canAssignTechnician, saving, onClose, onSave, onConvert }) {
+  const [form, setForm] = useState(() => ({
+    status: displayBookingStatus(booking),
+    adminNote: booking.adminNote || '',
+    followUpReminder: booking.followUpReminder || '',
+    followUpAt: dateTimeLocalValue(booking.followUpAt)
+  }));
+  const [technicianId, setTechnicianId] = useState(booking.technicianId?.id || '');
+  const isContact = isContactFormBooking(booking);
+  const workOrderId = recordId(booking.workOrderId);
+  const priority = enquiryPriority(booking);
+
+  useEffect(() => {
+    setForm({
+      status: displayBookingStatus(booking),
+      adminNote: booking.adminNote || '',
+      followUpReminder: booking.followUpReminder || '',
+      followUpAt: dateTimeLocalValue(booking.followUpAt)
+    });
+    setTechnicianId(booking.technicianId?.id || '');
+  }, [booking]);
+
+  const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+
+  async function submit(event) {
+    event.preventDefault();
+    await onSave(booking.id, form);
+  }
+
+  async function convertFromDrawer() {
+    const converted = await onConvert(booking.id, technicianId);
+    if (converted) onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex justify-end bg-black/55 p-3 backdrop-blur-sm sm:p-5" role="presentation" onClick={onClose}>
+      <aside
+        className="surface flex h-full w-full max-w-2xl flex-col overflow-hidden border border-white/10 bg-[#081426]/95 shadow-[0_28px_90px_rgba(0,0,0,0.5)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="booking-enquiry-details-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-sky-300/90">Enquiry Details</p>
+            <h2 id="booking-enquiry-details-title" className="mt-1 truncate text-2xl font-black text-white">{booking.customerName || 'Customer'}</h2>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <BookingSourceBadge source={booking} />
+              <EnquiryStatusBadge status={displayBookingStatus(booking)} />
+              {isContact ? <EnquiryPriorityBadge priority={priority} /> : null}
+            </div>
+          </div>
+          <button type="button" className="icon-button h-10 w-10 shrink-0" onClick={onClose} aria-label="Close enquiry details">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <DetailPill label="Booking / Enquiry ID" value={booking.bookingCode || booking.id} />
+              <DetailPill label="Phone number" value={booking.phone || '-'} />
+              <DetailPill label="Service interest" value={booking.serviceType || booking.device || 'General Service'} />
+              <DetailPill label="Created" value={formatDate(booking.createdAt)} />
+            </div>
+
+            {booking.duplicateInfo?.hasDuplicate ? (
+              <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 p-4 text-amber-100">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-black">{booking.duplicateInfo.message || 'Existing customer/enquiry found.'}</p>
+                    <div className="mt-2 grid gap-2">
+                      {(booking.duplicateInfo.matches || []).map((match, index) => (
+                        <p key={`${match.type}-${match.label}-${index}`} className="rounded-xl border border-amber-300/15 bg-black/10 px-3 py-2 text-xs font-semibold text-amber-50/90">
+                          {match.type}: {match.label}{match.reference ? ` - ${match.reference}` : ''}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-200/80">Full message</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-100">{booking.issue || 'No message captured.'}</p>
+            </section>
+
+            {isContact ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="booking-modal-field">
+                    <span className="booking-modal-label">Enquiry status</span>
+                    <select className={`input booking-modal-control ${bookingsFocusRing}`} value={form.status} onChange={(event) => update('status', event.target.value)} disabled={displayBookingStatus(booking) === 'Converted'}>
+                      {displayBookingStatus(booking) === 'Converted' ? <option>Converted</option> : enquiryWorkflowStatuses.map((item) => <option key={item}>{item}</option>)}
+                    </select>
+                  </label>
+                  <label className="booking-modal-field">
+                    <span className="booking-modal-label">Follow-up date/time</span>
+                    <input className={`input booking-modal-control ${bookingsFocusRing}`} type="datetime-local" value={form.followUpAt} onChange={(event) => update('followUpAt', event.target.value)} />
+                  </label>
+                </div>
+                <label className="booking-modal-field">
+                  <span className="booking-modal-label">Follow-up reminder</span>
+                  <input className={`input booking-modal-control ${bookingsFocusRing}`} value={form.followUpReminder} onChange={(event) => update('followUpReminder', event.target.value)} placeholder="Remind to follow up tomorrow." />
+                </label>
+                <label className="booking-modal-field">
+                  <span className="booking-modal-label">Admin notes</span>
+                  <textarea className={`input booking-modal-control booking-modal-textarea ${bookingsFocusRing}`} value={form.adminNote} onChange={(event) => update('adminNote', event.target.value)} placeholder="Customer asked price, call again tomorrow." />
+                </label>
+              </>
+            ) : (
+              <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-300/80">Booking status</p>
+                <div className="mt-2"><EnquiryStatusBadge status={displayBookingStatus(booking)} /></div>
+              </section>
+            )}
+          </div>
+
+          <div className="border-t border-white/10 p-5">
+            {!workOrderId && canAssignTechnician && canConvert ? (
+              <label className="booking-modal-field mb-3">
+                <span className="booking-modal-label">Assign technician on convert</span>
+                <select className={`input booking-modal-control ${bookingsFocusRing}`} value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}>
+                  <option value="">{ADMIN_ASSIGNMENT_LABEL}</option>
+                  {technicians.map((tech) => <option key={tech.id} value={tech.id}>{tech.name}</option>)}
+                </select>
+              </label>
+            ) : null}
+            {isContact ? (
+              <>
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <button type="submit" className="btn btn-secondary min-h-11 flex-1" disabled={saving}>
+                    <Save className="h-4 w-4" />
+                    {saving ? 'Saving...' : 'Save Enquiry'}
+                  </button>
+                  {workOrderId ? (
+                    <Link className="btn btn-primary min-h-11 flex-1" to={`${workOrdersBase}/${workOrderId}`}>
+                      Open Service Job
+                    </Link>
+                  ) : canConvert ? (
+                    <button type="button" className="btn btn-primary min-h-11 flex-1" onClick={convertFromDrawer}>
+                      Convert
+                    </button>
+                  ) : null}
+                </div>
+                <button type="button" className="btn btn-secondary w-full" onClick={onClose}>Close</button>
+              </>
+            ) : (
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {workOrderId ? <Link className="btn btn-primary flex-1" to={`${workOrdersBase}/${workOrderId}`}>Open Service Job</Link> : null}
+                <button type="button" className="btn btn-secondary flex-1" onClick={onClose}>Close</button>
+              </div>
+            )}
+          </div>
+        </form>
+      </aside>
     </div>
   );
 }
@@ -485,15 +774,16 @@ function ConvertBooking({ booking, technicians, onConvert, workOrdersBase = '/ad
   const [technicianId, setTechnicianId] = useState(booking.technicianId?.id || '');
   const focusRing =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
+  const workOrderId = recordId(booking.workOrderId);
 
-  if (booking.status === 'Converted') {
+  if (displayBookingStatus(booking) === 'Converted' || workOrderId) {
     return (
       <div className="booking-action-cell">
-        {booking.workOrderId ? (
+        {workOrderId ? (
           <Link
             className={`btn btn-secondary booking-action-button booking-open-job-btn inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-sky-100 transition-all hover:-translate-y-0.5 hover:border-sky-400/30 hover:bg-white/10 hover:text-white ${focusRing}`}
             style={{ maxWidth: 'none', minWidth: '9.25rem' }}
-            to={`${workOrdersBase}/${booking.workOrderId.id || booking.workOrderId}`}
+            to={`${workOrdersBase}/${workOrderId}`}
           >
             Open Service Job
           </Link>

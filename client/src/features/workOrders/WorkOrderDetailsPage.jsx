@@ -311,6 +311,16 @@ function photoEvidenceTone(hasItems) {
     : 'border-slate-500/25 bg-slate-500/10 text-slate-200';
 }
 
+function photoSortTime(image) {
+  const value = image?.uploadedAt || image?.createdAt || '';
+  const timestamp = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function sortPhotosNewestFirst(items) {
+  return [...items].sort((left, right) => photoSortTime(right) - photoSortTime(left));
+}
+
 function pdfWorkflowCardClass(enabled) {
   return [
     'rounded-xl border p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
@@ -433,9 +443,18 @@ function invoiceIsUnpaid(invoice) {
   return String(invoice?.status || '') === 'Pending' && invoicePaidAmount(invoice) <= 0;
 }
 
+function invoicePaymentLabel({ status, paidAmount, balanceAmount, locked }) {
+  const normalizedStatus = String(status || '');
+  if (normalizedStatus === 'Void') return 'Void';
+  if (paidAmount > 0 && balanceAmount > 0) return 'Partial';
+  if (paidAmount > 0 && balanceAmount <= 0) return 'Paid';
+  if (normalizedStatus === 'Partial' || normalizedStatus === 'Paid') return normalizedStatus;
+  return locked ? 'Pending' : 'Pending';
+}
+
 function partsLockedInvoiceMessage(invoice) {
   const invoiceNo = getInvoiceDisplayId(invoice) || 'the active invoice';
-  return `Parts are locked because Extra Invoice ${invoiceNo} is already generated. If unpaid, void the invoice to unlock parts. If paid, create an adjustment invoice.`;
+  return `Parts and billing are locked because invoice ${invoiceNo} is already generated. If unpaid, Admin can void the invoice to unlock editing. If paid or partially paid, use payment reversal or adjustment flow.`;
 }
 
 export function WorkOrderDetailsPage({ role = 'admin' }) {
@@ -453,6 +472,14 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const [activeTab, setActiveTab] = useState('parts');
   const [photoFiles, setPhotoFiles] = useState({ before_service: [], after_service: [] });
   const [photoUploadingType, setPhotoUploadingType] = useState('');
+  const [photoGalleryModal, setPhotoGalleryModal] = useState(null);
+  const [completionConfirm, setCompletionConfirm] = useState(null);
+  const [completionConfirming, setCompletionConfirming] = useState(false);
+  const [invoiceConfirmOpen, setInvoiceConfirmOpen] = useState(false);
+  const [invoiceReviewed, setInvoiceReviewed] = useState(false);
+  const [invoiceGenerating, setInvoiceGenerating] = useState(false);
+  const [voidUnlockReviewed, setVoidUnlockReviewed] = useState(false);
+  const [voidUnlocking, setVoidUnlocking] = useState(false);
   const [partAction, setPartAction] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [moveToUsedUnitPrice, setMoveToUsedUnitPrice] = useState('');
@@ -520,6 +547,20 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }, [request]);
 
   useEffect(() => {
+    if (!photoGalleryModal) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setPhotoGalleryModal(null);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [photoGalleryModal]);
+
+  useEffect(() => {
     if (!isTechnician && activeTab === 'overview') setActiveTab('parts');
     if (isTechnician && ['overview', 'workUpdate', 'timeline'].includes(activeTab)) setActiveTab('parts');
   }, [activeTab, isTechnician]);
@@ -537,21 +578,44 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     emitSidebarBadgesUpdated();
   }
 
+  async function executeStatusUpdate(nextStatus, successMessage = 'Status updated') {
+    if (!canUpdateWorkOrderStatus) {
+      push('You do not have permission to update job status', 'error');
+      return false;
+    }
+    try {
+      let updated = false;
+      await preserveScroll(async () => {
+        const result = await request(`/work-orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) });
+        if (result?.workOrder) setLiveOrder(result.workOrder);
+        push(successMessage);
+        await reloadSidebarAware();
+        updated = true;
+      });
+      return updated;
+    } catch (err) {
+      push(err.message, 'error');
+      return false;
+    }
+  }
+
   async function saveStatus(nextStatus) {
     if (!canUpdateWorkOrderStatus) {
       push('You do not have permission to update job status', 'error');
       return;
     }
-    try {
-      await preserveScroll(async () => {
-        const result = await request(`/work-orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) });
-        if (result?.workOrder) setLiveOrder(result.workOrder);
-        push('Status updated');
-        await reloadSidebarAware();
-      });
-    } catch (err) {
-      push(err.message, 'error');
+    if (nextStatus === 'Completed' && order.status !== 'Completed') {
+      setCompletionConfirm({ currentStatus: order.status });
+      return;
     }
+    await executeStatusUpdate(nextStatus);
+  }
+
+  async function confirmCompletedStatus() {
+    setCompletionConfirming(true);
+    const updated = await executeStatusUpdate('Completed', 'Job marked as completed.');
+    setCompletionConfirming(false);
+    if (updated) setCompletionConfirm(null);
   }
 
   async function copyPhone() {
@@ -912,21 +976,52 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     }
   }
 
-  async function generateInvoice(event) {
+  function closeInvoiceConfirm() {
+    setInvoiceConfirmOpen(false);
+    setInvoiceReviewed(false);
+  }
+
+  function openVoidUnlockConfirm() {
+    setVoidUnlockReviewed(false);
+    setVoidUnlockConfirm(true);
+  }
+
+  function closeVoidUnlockConfirm() {
+    setVoidUnlockConfirm(false);
+    setVoidUnlockReviewed(false);
+  }
+
+  function generateInvoice(event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
     if (!canCreateInvoice) {
       push('You do not have permission to generate invoices', 'error');
       return;
     }
+    setInvoiceReviewed(false);
+    setInvoiceConfirmOpen(true);
+  }
+
+  async function confirmGenerateInvoice(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    if (!canCreateInvoice) {
+      push('You do not have permission to generate invoices', 'error');
+      return;
+    }
+    if (!invoiceReviewed) return;
     try {
+      setInvoiceGenerating(true);
       await preserveScroll(async () => {
         await request('/invoices', { method: 'POST', body: JSON.stringify({ workOrderId: id, labourCharge: serviceCharge || labourCharge }) });
-        push(isAmcLinked ? 'Extra charges invoice generated' : 'Invoice generated');
+        closeInvoiceConfirm();
+        push('Invoice generated and locked.');
         await reloadSidebarAware();
       });
     } catch (err) {
       push(err.message, 'error');
+    } finally {
+      setInvoiceGenerating(false);
     }
   }
 
@@ -961,18 +1056,22 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     }
   }
 
-  async function voidExtraInvoiceAndUnlockParts() {
-    if (!canEditInvoice) {
+  async function voidInvoiceAndUnlockEditing(event, confirmed = false) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    if (isTechnician || !canEditInvoice) {
       push('You do not have permission to unlock billed parts', 'error');
       return;
     }
+    if (!confirmed && !voidUnlockReviewed) return;
     const targetInvoiceId = recordId(baseExtraInvoice || primaryExtraInvoice || order.invoiceId);
     if (!targetInvoiceId) {
-      push('Existing extra invoice not found', 'error');
-      setVoidUnlockConfirm(false);
+      push('Existing invoice not found', 'error');
+      closeVoidUnlockConfirm();
       return;
     }
     try {
+      setVoidUnlocking(true);
       await preserveScroll(async () => {
         await request('/invoices', {
           method: 'POST',
@@ -984,13 +1083,14 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         });
         const refreshed = await request(`/work-orders/${id}`);
         if (refreshed.workOrder) setLiveOrder(refreshed.workOrder);
-        setVoidUnlockConfirm(false);
-        push('Unpaid extra invoice voided. Parts unlocked.');
+        closeVoidUnlockConfirm();
+        push('Invoice unlocked. You can edit charges again.');
         emitSidebarBadgesUpdated();
       });
     } catch (err) {
-      setVoidUnlockConfirm(false);
       push(err.message, 'error');
+    } finally {
+      setVoidUnlocking(false);
     }
   }
 
@@ -1312,18 +1412,65 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     mergedPhotoMap.set(key, normalizedImage);
   });
   const photoItems = Array.from(mergedPhotoMap.values());
-  const customerProblemPhotos = photoItems.filter((image) => image.type === 'customer_problem');
-  const beforeServicePhotos = photoItems.filter((image) => image.type === 'before_service');
-  const afterServicePhotos = photoItems.filter((image) => image.type === 'after_service');
+  const customerProblemPhotos = sortPhotosNewestFirst(photoItems.filter((image) => image.type === 'customer_problem'));
+  const beforeServicePhotos = sortPhotosNewestFirst(photoItems.filter((image) => image.type === 'before_service'));
+  const afterServicePhotos = sortPhotosNewestFirst(photoItems.filter((image) => image.type === 'after_service'));
   const totalPhotoCount = customerProblemPhotos.length + beforeServicePhotos.length + afterServicePhotos.length;
-  const showTechnicianPhotoUploads = role === 'technician' && canUploadPhotos;
+  const showWorkOrderPhotoUploads = canUploadPhotos;
   const workOrderDisplayId = getWorkOrderDisplayId(order);
   const customerDisplayId = getCustomerDisplayId(order.customerId);
   const invoiceDisplayId = order.invoiceId ? getInvoiceDisplayId(order.invoiceId) : '';
   const partsLocked = Boolean(recordId(order?.invoiceId)) && !invoiceIsVoid(order.invoiceId);
   const partsLockMessage = partsLockedInvoiceMessage(primaryExtraInvoice || order.invoiceId);
-  const canVoidUnlockParts = isAmcLinked && partsLocked && activeExtraInvoicesAreUnpaid && Boolean(primaryExtraInvoice);
-  const paidExtraInvoiceLocksParts = isAmcLinked && partsLocked && activeExtraInvoicesHavePayment;
+  const activeInvoiceRecord = primaryExtraInvoice || (typeof order.invoiceId === 'object' ? order.invoiceId : null);
+  const activeInvoiceId = recordId(activeInvoiceRecord || order.invoiceId);
+  const activeInvoiceStatus = activeInvoiceRecord?.status || (partsLocked ? 'Pending' : 'Not generated');
+  const activeInvoicePaidAmount = activeExtraInvoices.length ? extraInvoicePaidTotal : invoicePaidAmount(activeInvoiceRecord);
+  const activeInvoiceBalanceAmount = activeExtraInvoices.length ? extraInvoiceBalance : invoiceBalanceAmount(activeInvoiceRecord);
+  const activeInvoiceTotalAmount = activeExtraInvoices.length ? extraInvoiceTotal : Number(activeInvoiceRecord?.total || 0);
+  const activeInvoicePaymentStatus = invoicePaymentLabel({
+    status: activeInvoiceStatus,
+    paidAmount: activeInvoicePaidAmount,
+    balanceAmount: activeInvoiceBalanceAmount,
+    locked: partsLocked
+  });
+  const activeInvoiceIsPending = activeInvoicePaymentStatus === 'Pending' && activeInvoicePaidAmount <= 0;
+  const activeInvoiceIsPartial = activeInvoicePaymentStatus === 'Partial';
+  const activeInvoiceIsPaid = activeInvoicePaymentStatus === 'Paid';
+  const activeInvoiceRecordIsUnpaid = activeExtraInvoices.length ? activeExtraInvoicesAreUnpaid : invoiceIsUnpaid(activeInvoiceRecord);
+  const unlockAllowed = partsLocked && Boolean(activeInvoiceId) && activeInvoiceIsPending && activeInvoiceRecordIsUnpaid;
+  const canVoidUnlockParts = !isTechnician && canEditInvoice && unlockAllowed;
+  const paidOrPartialInvoiceLocksParts = partsLocked && (
+    activeInvoiceIsPartial ||
+    activeInvoiceIsPaid ||
+    activeExtraInvoicesHavePayment ||
+    invoiceHasPayment(activeInvoiceRecord) ||
+    ['Paid', 'Partial'].includes(String(activeInvoiceStatus || ''))
+  );
+  const paidOrPartialBackendMessage = 'Paid or partially paid invoices cannot be unlocked. Reverse payment or create an adjustment invoice.';
+  const protectedInvoiceTitle = activeInvoiceIsPartial
+    ? 'Partially paid invoice cannot be unlocked directly.'
+    : activeInvoiceIsPaid
+      ? 'Paid invoice cannot be unlocked.'
+      : '';
+  const protectedInvoiceSubtext = activeInvoiceIsPartial
+    ? 'Reverse the received payment first or create an adjustment invoice.'
+    : activeInvoiceIsPaid
+      ? 'Create an adjustment invoice / credit note instead of editing the original invoice.'
+      : '';
+  const billingAllowedAction = partsLocked
+    ? isTechnician
+      ? 'Contact admin for billing changes.'
+      : canVoidUnlockParts
+        ? 'Admin can void invoice and unlock editing.'
+        : activeInvoiceIsPartial
+          ? 'Reverse payment or create adjustment invoice.'
+          : activeInvoiceIsPaid
+            ? 'Create adjustment invoice / credit note.'
+            : 'Admin review required.'
+    : activeInvoiceStatus === 'Not generated'
+      ? 'Generate invoice.'
+      : 'Editable.';
   const hasInventoryPartsUsed = (order.partsUsed || []).some((row) => row.inventoryPartId);
   const stockDeductionSummary = partsLocked
     ? (hasInventoryPartsUsed
@@ -1441,7 +1588,64 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     : null;
   const visibleTimeline = completionReversalEntry ? [completionReversalEntry, ...(order.timeline || [])] : (order.timeline || []);
 
-  function renderPhotoSection(title, items, helperText, emptyTitle, emptyMessage, className = '') {
+  function renderPhotoCard(image, index, title, className = '') {
+    return (
+      <a
+        key={`${title}-${image.url || image.filename || index}`}
+        className={`technician-photo-card work-order-photo-card ${className}`.trim()}
+        href={uploadedAssetUrl(image.url)}
+        target="_blank"
+        rel="noreferrer"
+      >
+        <span className="technician-photo-preview">
+          <img src={uploadedAssetUrl(image.url)} alt={image.originalName || image.filename || `${title} ${index + 1}`} loading="lazy" />
+        </span>
+        <span className="mt-3 block truncate text-sm font-black text-white" title={image.originalName || image.filename || `${title} ${index + 1}`}>
+          {image.originalName || image.filename || `${title} ${index + 1}`}
+        </span>
+        <span className="mt-2 inline-flex w-fit rounded-full border border-sky-400/20 bg-sky-500/10 px-2.5 py-1 text-[11px] font-bold text-sky-100">
+          {photoCategoryLabels[image.type] || title}
+        </span>
+        <span className="mt-2 block text-xs muted">Uploaded by {photoUploadedBy(image)}</span>
+        <span className="mt-1 block text-xs muted">{photoMetaDateTime(image.uploadedAt || image.createdAt)}</span>
+        <span className="work-order-photo-action mt-3 inline-flex min-h-[2.15rem] items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-slate-100 transition hover:border-sky-300/45 hover:text-white">
+          View Full Photo
+        </span>
+      </a>
+    );
+  }
+
+  function renderPhotoGalleryModal() {
+    if (!photoGalleryModal) return null;
+    return (
+      <div className="work-order-photo-modal-backdrop" role="presentation" onClick={() => setPhotoGalleryModal(null)}>
+        <div className="work-order-photo-modal surface" role="dialog" aria-modal="true" aria-labelledby="work-order-photo-modal-title" onClick={(event) => event.stopPropagation()}>
+          <div className="work-order-photo-modal-header">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-sky-200/80">Photo Gallery</p>
+              <h3 id="work-order-photo-modal-title" className="mt-1 text-xl font-black text-white">{photoGalleryModal.title}</h3>
+              <p className="mt-1 text-sm muted">{photoGalleryModal.helperText}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="work-order-photo-modal-count">{photoGalleryModal.items.length} photo{photoGalleryModal.items.length === 1 ? '' : 's'}</span>
+              <button type="button" className="icon-button work-order-photo-modal-close h-10 w-10" onClick={() => setPhotoGalleryModal(null)} aria-label="Close photo gallery">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="work-order-photo-modal-body">
+            <div className="work-order-photo-modal-grid">
+              {photoGalleryModal.items.map((image, index) => renderPhotoCard(image, index, photoGalleryModal.title, 'work-order-photo-card--modal'))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderPhotoSection(title, items, helperText, emptyTitle, emptyMessage, className = '', uploadControl = null) {
+    const previewItems = items.slice(0, 2);
+    const hasMorePhotos = items.length > previewItems.length;
     return (
       <section className={`${detailPanelClass} work-order-photo-section photo-section-card ${className}`.trim()}>
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1450,32 +1654,9 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <p className="mt-1 text-sm leading-5 muted">{helperText}</p>
           </div>
         </div>
-        {items.length ? (
-          <div className="work-order-photo-gallery mt-3">
-            {items.map((image, index) => (
-              <a
-                key={`${title}-${image.url || image.filename || index}`}
-                className="technician-photo-card work-order-photo-card"
-                href={uploadedAssetUrl(image.url)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <span className="technician-photo-preview">
-                  <img src={uploadedAssetUrl(image.url)} alt={image.originalName || image.filename || `${title} ${index + 1}`} loading="lazy" />
-                </span>
-                <span className="mt-3 block truncate text-sm font-black text-white" title={image.originalName || image.filename || `${title} ${index + 1}`}>
-                  {image.originalName || image.filename || `${title} ${index + 1}`}
-                </span>
-                <span className="mt-2 inline-flex w-fit rounded-full border border-sky-400/20 bg-sky-500/10 px-2.5 py-1 text-[11px] font-bold text-sky-100">
-                  {photoCategoryLabels[image.type] || title}
-                </span>
-                <span className="mt-2 block text-xs muted">Uploaded by {photoUploadedBy(image)}</span>
-                <span className="mt-1 block text-xs muted">{photoMetaDateTime(image.uploadedAt || image.createdAt)}</span>
-                <span className="work-order-photo-action mt-3 inline-flex min-h-[2.15rem] items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-slate-100 transition hover:border-sky-300/45 hover:text-white">
-                  View Full Photo
-                </span>
-              </a>
-            ))}
+        {previewItems.length ? (
+          <div className="work-order-photo-gallery work-order-photo-gallery--preview mt-3">
+            {previewItems.map((image, index) => renderPhotoCard(image, index, title))}
           </div>
         ) : (
           <div className="work-order-photo-empty mt-3">
@@ -1483,6 +1664,16 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <p className="mt-1 text-sm leading-5 muted">{emptyMessage}</p>
           </div>
         )}
+        {hasMorePhotos ? (
+          <button
+            type="button"
+            className="work-order-photo-view-all mt-3"
+            onClick={() => setPhotoGalleryModal({ title, helperText, items })}
+          >
+            View all photos ({items.length})
+          </button>
+        ) : null}
+        {uploadControl}
       </section>
     );
   }
@@ -1527,6 +1718,201 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     );
   }
 
+  function renderCompletionConfirmModal() {
+    if (!completionConfirm) return null;
+    const checklist = ['Service work finished', 'Photos checked', 'Parts/billing checked', 'Customer informed'];
+    return (
+      <div className="fixed inset-0 z-[95] grid place-items-center bg-black/55 p-4 backdrop-blur-sm">
+        <div className="surface max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto border border-emerald-300/15 p-5 shadow-[0_24px_70px_rgba(0,0,0,0.42)]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-200/80">Completion Check</p>
+              <h2 className="mt-1 text-xl font-black text-white">Mark job as completed?</h2>
+              <p className="mt-2 text-sm leading-6 muted">This will save the completed date and update the service record.</p>
+            </div>
+            <span className="inline-flex min-h-[2rem] items-center rounded-full border border-emerald-300/20 bg-emerald-500/10 px-3 text-xs font-black text-emerald-100">
+              Completed
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {[
+              ['Work Order ID', workOrderDisplayId],
+              ['Customer name', order.customerId?.name || 'Customer'],
+              ['Current status', completionConfirm.currentStatus || order.status || '-'],
+              ['New status', 'Completed']
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-white/10 bg-slate-950/28 p-3">
+                <p className={detailLabelClass}>{label}</p>
+                <p className="mt-1 text-sm font-black text-slate-100">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-emerald-300/15 bg-emerald-500/[0.08] p-3">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-100/85">Before confirming</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {checklist.map((item) => (
+                <div key={item} className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-300" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setCompletionConfirm(null)}
+              disabled={completionConfirming}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn border-emerald-300/30 bg-emerald-500/20 text-emerald-50 hover:border-emerald-200/50 hover:bg-emerald-400/25 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={confirmCompletedStatus}
+              disabled={completionConfirming}
+            >
+              {completionConfirming ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {completionConfirming ? 'Completing...' : 'Confirm Completed'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderInvoiceConfirmModal() {
+    if (!invoiceConfirmOpen) return null;
+    const invoiceRows = [
+      ['Work Order ID', workOrderDisplayId],
+      ['Customer Name', order.customerId?.name || 'Customer'],
+      ['Parts Total', currency(partsTotal)],
+      ['Service Charge', currency(currentServiceCharge)],
+      ['Final Total', currency(extraPayableTotal)],
+      ['Payment Status', activeInvoicePaymentStatus]
+    ];
+    return (
+      <div className="fixed inset-0 z-[95] grid place-items-center bg-black/55 p-4 backdrop-blur-sm">
+        <div className="surface max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto border border-emerald-300/15 p-5 shadow-[0_24px_70px_rgba(0,0,0,0.42)]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-sky-200/80">Invoice Review</p>
+              <h2 className="mt-1 text-xl font-black text-white">Generate final invoice?</h2>
+              <p className="mt-2 text-sm leading-6 muted">Review the billing values before locking this work order.</p>
+            </div>
+            <ReceiptText className="h-6 w-6 shrink-0 text-emerald-200" />
+          </div>
+
+          <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-500/[0.1] p-3 text-amber-100">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p className="text-sm font-semibold leading-6">This will lock parts, service charge, and billing values for this work order.</p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {invoiceRows.map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-white/10 bg-slate-950/28 p-3">
+                <p className={detailLabelClass}>{label}</p>
+                <p className="mt-1 text-sm font-black text-slate-100">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm font-semibold text-slate-100">
+            <input
+              className="mt-1 h-4 w-4 accent-emerald-400"
+              type="checkbox"
+              checked={invoiceReviewed}
+              onChange={(event) => setInvoiceReviewed(event.target.checked)}
+            />
+            <span>I reviewed the billing details and understand this invoice will lock editing.</span>
+          </label>
+
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button type="button" className="btn btn-secondary" onClick={closeInvoiceConfirm} disabled={invoiceGenerating}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn border-emerald-300/30 bg-emerald-500/20 text-emerald-50 hover:border-emerald-200/50 hover:bg-emerald-400/25 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={confirmGenerateInvoice}
+              disabled={!invoiceReviewed || invoiceGenerating}
+            >
+              {invoiceGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ReceiptText className="h-4 w-4" />}
+              {invoiceGenerating ? 'Generating...' : 'Generate & Lock Invoice'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderVoidUnlockModal() {
+    if (!voidUnlockConfirm) return null;
+    const invoiceRows = [
+      ['Work Order ID', workOrderDisplayId],
+      ['Invoice ID', getInvoiceDisplayId(activeInvoiceRecord || order.invoiceId) || activeInvoiceId || '-'],
+      ['Customer Name', order.customerId?.name || 'Customer'],
+      ['Total Amount', currency(activeInvoiceTotalAmount || extraPayableTotal)],
+      ['Paid Amount', currency(activeInvoicePaidAmount)],
+      ['Balance Amount', currency(activeInvoiceBalanceAmount)],
+      ['Payment Status', activeInvoicePaymentStatus]
+    ];
+    return (
+      <div className="fixed inset-0 z-[95] grid place-items-center bg-black/55 p-4 backdrop-blur-sm">
+        <form className="surface max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto border border-amber-300/20 p-5 shadow-[0_24px_70px_rgba(0,0,0,0.42)]" onSubmit={(event) => voidInvoiceAndUnlockEditing(event, true)}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-200/80">Invoice Unlock</p>
+              <h2 className="mt-1 text-xl font-black text-white">Void invoice and unlock editing?</h2>
+              <p className="mt-2 text-sm leading-6 muted">This will void the unpaid invoice and allow parts/service charge editing again.</p>
+            </div>
+            <AlertTriangle className="h-6 w-6 shrink-0 text-amber-200" />
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {invoiceRows.map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-white/10 bg-slate-950/28 p-3">
+                <p className={detailLabelClass}>{label}</p>
+                <p className="mt-1 text-sm font-black text-slate-100">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-300/15 bg-amber-500/[0.08] p-3 text-sm font-semibold text-amber-50">
+            <input
+              className="mt-1 h-4 w-4 accent-amber-400"
+              type="checkbox"
+              checked={voidUnlockReviewed}
+              onChange={(event) => setVoidUnlockReviewed(event.target.checked)}
+            />
+            <span>I understand this unpaid invoice will be voided and editing will be unlocked.</span>
+          </label>
+
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button type="button" className="btn btn-secondary" onClick={closeVoidUnlockConfirm} disabled={voidUnlocking}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn border-amber-300/30 bg-amber-500/20 text-amber-50 hover:border-amber-200/50 hover:bg-amber-400/25 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Confirm void invoice and unlock editing"
+              disabled={!voidUnlockReviewed || voidUnlocking}
+            >
+              {voidUnlocking ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+              {voidUnlocking ? 'Unlocking...' : 'Void Invoice & Unlock Editing'}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   function photoFilesChanged(category, files) {
     const normalizedCategory = normalizePhotoCategory(category);
     const nextFiles = Array.from(files || []);
@@ -1541,19 +1927,21 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     setPhotoFiles((current) => ({ ...current, [normalizedCategory]: nextFiles }));
   }
 
-  function renderTechnicianPhotoUpload(category, title, helperText, inputRef) {
+  function renderWorkOrderPhotoUpload(category, title, inputRef) {
     const normalizedCategory = normalizePhotoCategory(category);
     const selectedFiles = photoFiles[normalizedCategory] || [];
     const uploading = photoUploadingType === normalizedCategory;
     const inputId = `work-order-photo-upload-${normalizedCategory}`;
+    const selectedFileLabel = selectedFiles.length
+      ? selectedFiles.length === 1
+        ? selectedFiles[0].name
+        : `${selectedFiles[0].name} +${selectedFiles.length - 1} more`
+      : 'No file selected yet';
+    const selectedFileTitle = selectedFiles.length
+      ? selectedFiles.map((file) => file.name).join(', ')
+      : 'No file selected yet';
     return (
-      <form className={`${detailPanelClass} work-order-photo-upload-card`} onSubmit={(event) => uploadPhotos(event, normalizedCategory)}>
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-black uppercase tracking-wide text-sky-100">{title}</h3>
-            <p className="mt-1 text-sm leading-5 muted">{helperText}</p>
-          </div>
-        </div>
+      <form className="work-order-photo-upload-card photo-upload-card" onSubmit={(event) => uploadPhotos(event, normalizedCategory)}>
         <input
           id={inputId}
           ref={inputRef}
@@ -1563,16 +1951,14 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           multiple
           onChange={(event) => photoFilesChanged(normalizedCategory, event.target.files)}
         />
-        <div className="work-order-photo-upload-row mt-3 flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="work-order-photo-upload-row mt-3 rounded-2xl border border-white/10 bg-slate-950/30 p-3">
           <div className="work-order-photo-upload-copy min-w-0">
-            <p className="work-order-photo-upload-status text-sm font-semibold text-slate-100">
-              {selectedFiles.length
-                ? `${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'} selected`
-                : 'No file selected yet'}
+            <p className="work-order-photo-upload-status photo-file-status text-sm font-semibold text-slate-100" title={selectedFileTitle}>
+              {selectedFileLabel}
             </p>
             <p className="work-order-photo-upload-format mt-1 text-xs leading-5 muted">JPG, JPEG, PNG, WEBP up to 5 MB.</p>
           </div>
-          <div className="work-order-photo-upload-actions flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="work-order-photo-upload-actions photo-upload-actions">
             <label htmlFor={inputId} className="btn btn-secondary min-h-11 cursor-pointer justify-center whitespace-nowrap">
               <FileText className="h-4 w-4" />
               Choose Photos
@@ -1591,21 +1977,118 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     );
   }
 
+  function renderBillingLockStatusCard() {
+    if (activeTab !== 'billing') return null;
+    const locked = partsLocked;
+    const cardTone = locked
+      ? canVoidUnlockParts
+        ? 'border-amber-300/20 bg-amber-500/[0.08]'
+        : 'border-sky-300/15 bg-sky-500/[0.07]'
+      : 'border-emerald-300/15 bg-emerald-500/[0.08]';
+    return (
+      <div className={`rounded-2xl border p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${cardTone}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-sky-100/80">Billing Lock Status</p>
+            <h3 className="mt-1 text-base font-black text-white">{locked ? 'Invoice locked' : 'Billing editable'}</h3>
+          </div>
+          <ShieldCheck className={`h-5 w-5 ${locked ? 'text-amber-200' : 'text-emerald-200'}`} />
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+            <p className={detailLabelClass}>Invoice Status</p>
+            <p className="mt-1 text-sm font-black text-slate-100">{locked ? 'Locked' : 'Editable'}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+            <p className={detailLabelClass}>Payment Status</p>
+            <div className="mt-1"><StatusBadge status={activeInvoicePaymentStatus} /></div>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+            <p className={detailLabelClass}>Paid Amount</p>
+            <p className="mt-1 text-sm font-black text-slate-100">{currency(activeInvoicePaidAmount)}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+            <p className={detailLabelClass}>Balance Amount</p>
+            <p className="mt-1 text-sm font-black text-slate-100">{currency(activeInvoiceBalanceAmount)}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+            <p className={detailLabelClass}>Allowed Action</p>
+            <p className="mt-1 text-sm font-black leading-5 text-slate-100">{billingAllowedAction}</p>
+          </div>
+        </div>
+        {isTechnician && locked ? (
+          <div className="mt-3 rounded-xl border border-sky-300/15 bg-sky-500/[0.08] p-3">
+            <p className="text-xs font-semibold text-sky-100/85">Billing is locked by Admin. Contact admin for changes.</p>
+            <button type="button" className="btn btn-secondary mt-3 py-2 text-xs" onClick={() => push('Admin review request feature is not available yet.', 'error')}>
+              Request Admin Review
+            </button>
+          </div>
+        ) : null}
+        {paidOrPartialInvoiceLocksParts ? (
+          <p className="mt-3 text-xs font-semibold text-amber-100">{paidOrPartialBackendMessage}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderProtectedInvoiceWarning() {
+    if (!paidOrPartialInvoiceLocksParts || (!activeInvoiceIsPartial && !activeInvoiceIsPaid)) return null;
+    const adjustmentAvailable = canEditInvoice && canCreateAdjustmentInvoice;
+    return (
+      <div className="rounded-2xl border border-amber-400/25 bg-amber-500/[0.09] p-4 text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-200" />
+          <div className="min-w-0">
+            <p className="text-sm font-black text-amber-50">{protectedInvoiceTitle}</p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-amber-100/85">{protectedInvoiceSubtext}</p>
+          </div>
+        </div>
+        {!isTechnician ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {(canViewPayments || canRecordPayment) && paymentTargetExtraInvoice ? (
+              <button type="button" className="btn btn-secondary py-2" onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const targetInvoiceId = recordId(paymentTargetExtraInvoice);
+                if (!targetInvoiceId) {
+                  alert('Invoice not found. Please generate invoice first.');
+                  return;
+                }
+                navigate(`${paymentsBase}?invoiceId=${encodeURIComponent(targetInvoiceId)}`);
+              }}>
+                Go to Payments
+              </button>
+            ) : null}
+            {adjustmentAvailable ? (
+              <button type="button" className="btn btn-primary py-2" onClick={(event) => handleExtraInvoiceMismatch('adjustment', event)}>
+                Create Adjustment Invoice
+              </button>
+            ) : (
+              <span className="inline-flex min-h-10 items-center rounded-xl border border-white/10 bg-slate-950/25 px-3 text-xs font-semibold text-slate-300">
+                Adjustment invoice not available yet.
+              </span>
+            )}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   function renderPartsLockNotice(className = 'mt-2') {
     if (!partsLocked) return null;
     return (
       <div className={`${className} rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-amber-100`}>
         <p className="text-xs font-semibold leading-5">{partsLockMessage}</p>
-        {paidExtraInvoiceLocksParts ? (
-          <p className="mt-1 text-xs font-semibold text-amber-100/85">Payment already exists. Create an adjustment invoice instead.</p>
+        {paidOrPartialInvoiceLocksParts ? (
+          <p className="mt-1 text-xs font-semibold text-amber-100/85">{paidOrPartialBackendMessage}</p>
         ) : null}
-        {canEditInvoice && canVoidUnlockParts ? (
+        {canVoidUnlockParts ? (
           <button
             type="button"
             className="btn btn-secondary mt-3 py-2"
-            onClick={() => setVoidUnlockConfirm(true)}
+            onClick={openVoidUnlockConfirm}
           >
-            Void Extra Invoice & Unlock Parts
+            Void Invoice & Unlock Editing
           </button>
         ) : null}
       </div>
@@ -1658,15 +2141,6 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   function renderPartsDuplicateModals() {
     return (
       <>
-        {voidUnlockConfirm ? (
-          <ConfirmModal
-            title="Void extra invoice?"
-            message="This will void the unpaid extra invoice and unlock parts for editing. Continue?"
-            confirmLabel="Void & Unlock"
-            onCancel={() => setVoidUnlockConfirm(false)}
-            onConfirm={voidExtraInvoiceAndUnlockParts}
-          />
-        ) : null}
         {addPartDupKind === 'inventory' ? (
           <ConfirmModal
             title="Part already in Parts Used"
@@ -2002,8 +2476,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               {renderPhotoEvidenceStrip()}
               <div className="photo-gallery-grid mt-4 grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {renderPhotoSection('Customer Problem Photo', customerProblemPhotos, 'Customer uploaded issue/device photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
-                {renderPhotoSection('Before Service Photos', beforeServicePhotos, 'Technician before-service photos will appear here.', 'No photo uploaded yet.', 'Upload before-service photos before starting work.')}
-                {renderPhotoSection('After Completion Photos', afterServicePhotos, 'Technician after-completion photos will appear here.', 'No photo uploaded yet.', 'Upload completion photos after finishing the job.')}
+                {renderPhotoSection('Before Service Photos', beforeServicePhotos, 'Technician before-service photos will appear here.', 'No photo uploaded yet.', 'Upload before-service photos before starting work.', '', showWorkOrderPhotoUploads ? renderWorkOrderPhotoUpload('before_service', 'Before Service Photo', beforeServiceInputRef) : null)}
+                {renderPhotoSection('After Completion Photos', afterServicePhotos, 'Technician after-completion photos will appear here.', 'No photo uploaded yet.', 'Upload completion photos after finishing the job.', '', showWorkOrderPhotoUploads ? renderWorkOrderPhotoUpload('after_service', 'After Completion Photo', afterServiceInputRef) : null)}
               </div>
             </div>
           </div>
@@ -2047,6 +2521,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <button type="button" className="btn btn-primary px-2" onClick={() => saveStatus(order.status === 'Completed' ? 'Returned' : 'Completed')}><CheckCircle2 className="h-4 w-4" />Done</button>
           </div>
         </div>
+        {renderCompletionConfirmModal()}
+        {renderInvoiceConfirmModal()}
+        {renderVoidUnlockModal()}
+        {renderPhotoGalleryModal()}
         {renderPartsDuplicateModals()}
       </div>
     );
@@ -2490,6 +2968,9 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             </div>
           ) : null}
 
+          {activeTab === 'billing' ? renderBillingLockStatusCard() : null}
+          {activeTab === 'billing' ? renderProtectedInvoiceWarning() : null}
+
           {canEditServiceCharge ? <form className={activeTab === 'billing' ? detailBillingSectionClass : 'hidden'} onSubmit={saveServiceCharge}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -2499,10 +2980,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="relative w-full sm:w-[320px] sm:max-w-[360px]">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-cyan-200">₹</span>
-                <input className={`${detailNumberInputClass} h-11 w-full rounded-xl pl-8 pr-3 ${detailFocusRing}`} type="number" min="0" step="0.01" value={serviceCharge} onChange={(event) => setServiceCharge(event.target.value)} />
+                <input className={`${detailNumberInputClass} h-11 w-full rounded-xl pl-8 pr-3 disabled:cursor-not-allowed disabled:opacity-60 ${detailFocusRing}`} type="number" min="0" step="0.01" value={serviceCharge} disabled={partsLocked} onChange={(event) => setServiceCharge(event.target.value)} />
               </div>
-              <button type="submit" className="btn btn-primary h-11 w-full px-5 sm:w-auto"><Save className="h-4 w-4" />Save Charge</button>
+              <button type="submit" className="btn btn-primary h-11 w-full px-5 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto" disabled={partsLocked}><Save className="h-4 w-4" />Save Charge</button>
             </div>
+            {partsLocked ? <p className="mt-2 text-xs font-semibold text-amber-100">Service charge is locked because an active invoice exists.</p> : null}
             {savedServiceCharge !== currentServiceCharge ? <p className="mt-2 text-xs font-semibold text-amber-100">Unsaved service charge will update the saved total after saving.</p> : null}
           </form> : null}
 
@@ -2625,6 +3107,14 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                       }
                       navigate(`${paymentsBase}?invoiceId=${encodeURIComponent(targetInvoiceId)}`);
                     }}>Go to Payments</button> : null}
+                    {canVoidUnlockParts ? (
+                      <button type="button" className="btn btn-secondary py-2" onClick={openVoidUnlockConfirm}>
+                        Void Invoice & Unlock Editing
+                      </button>
+                    ) : null}
+                    {paidOrPartialInvoiceLocksParts ? (
+                      <p className="text-xs font-semibold text-amber-100/85">{paidOrPartialBackendMessage}</p>
+                    ) : null}
                   </div>
                 </div>
               ) : canCreateInvoice && (!isAmcLinked || extraPayableTotal > 0) ? (
@@ -2658,13 +3148,9 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             {renderPhotoEvidenceStrip()}
             <div className="photo-gallery-grid mt-4 grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
               {renderPhotoSection('Customer Problem Photo', customerProblemPhotos, 'Customer uploaded issue/device photos will appear here.', 'No photo uploaded yet.', 'Photos added by the customer or technician will appear here.')}
-              {renderPhotoSection('Before Service Photos', beforeServicePhotos, 'Take photos before repair work starts so Admin can review the device condition.', 'No photo uploaded yet.', 'Upload before-service photos before starting work.')}
-              {renderPhotoSection('After Completion Photos', afterServicePhotos, 'Upload completion photos after the work is finished so Admin can verify the result.', 'No photo uploaded yet.', 'Upload completion photos after finishing the job.')}
+              {renderPhotoSection('Before Service Photos', beforeServicePhotos, 'Take photos before repair work starts so Admin can review the device condition.', 'No photo uploaded yet.', 'Upload before-service photos before starting work.', '', showWorkOrderPhotoUploads ? renderWorkOrderPhotoUpload('before_service', 'Before Service Photo', beforeServiceInputRef) : null)}
+              {renderPhotoSection('After Completion Photos', afterServicePhotos, 'Upload completion photos after the work is finished so Admin can verify the result.', 'No photo uploaded yet.', 'Upload completion photos after finishing the job.', '', showWorkOrderPhotoUploads ? renderWorkOrderPhotoUpload('after_service', 'After Completion Photo', afterServiceInputRef) : null)}
             </div>
-            {showTechnicianPhotoUploads ? <div className="mt-4 grid gap-4 xl:grid-cols-2">
-              {renderTechnicianPhotoUpload('before_service', 'Before Service Photo', 'Capture the device condition before repair or service starts.', beforeServiceInputRef)}
-              {renderTechnicianPhotoUpload('after_service', 'After Completion Photo', 'Capture the finished repair or completed service result.', afterServiceInputRef)}
-            </div> : null}
           </div>
         </div>
         <div className={sideTabs.includes(activeTab) ? 'grid content-start gap-4' : 'hidden'}>
@@ -2957,6 +3443,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         </div>
       ) : null}
 
+      {renderCompletionConfirmModal()}
+      {renderInvoiceConfirmModal()}
+      {renderVoidUnlockModal()}
+      {renderPhotoGalleryModal()}
       {canManagePartsUsed ? renderPartsDuplicateModals() : null}
     </div>
   );

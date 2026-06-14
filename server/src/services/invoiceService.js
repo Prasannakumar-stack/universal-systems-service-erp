@@ -43,7 +43,7 @@ function appendInvoiceNote(notes, line) {
 
 function assertInvoiceBelongsToWorkOrder(invoice, workOrder) {
   if (!invoice?.workOrderId || String(invoice.workOrderId) !== String(workOrder._id)) {
-    throw appError('Extra invoice does not belong to this work order', 400);
+    throw appError('Invoice does not belong to this work order', 400);
   }
 }
 
@@ -232,33 +232,35 @@ async function voidAndRegenerateExtraInvoice(payload, workOrder, user, labour) {
 }
 
 async function voidExtraInvoiceAndUnlockParts(payload, workOrder, user) {
-  if (!workOrder.amcContractId) throw appError('Extra invoice unlock is available only for AMC-linked work orders', 400);
+  if (user?.role !== 'admin') throw appError('Only admin users can void invoices and unlock editing', 403);
   const existing = await resolveWorkOrderInvoice(payload, workOrder);
-  if (!existing) throw appError('Existing extra invoice not found', 404);
+  if (!existing) throw appError('Existing invoice not found', 404);
   assertInvoiceBelongsToWorkOrder(existing, workOrder);
-  if (existing.status === 'Void') throw appError('Extra invoice is already void', 400);
+  if (existing.status === 'Void') throw appError('Invoice is already void', 400);
 
-  const activeInvoices = await Invoice.find({
-    workOrderId: workOrder._id,
-    amcContractId: workOrderAmcContractId(workOrder),
-    status: { $ne: 'Void' }
-  });
+  const activeInvoices = workOrder.amcContractId
+    ? await Invoice.find({
+        workOrderId: workOrder._id,
+        amcContractId: workOrderAmcContractId(workOrder),
+        status: { $ne: 'Void' }
+      })
+    : [existing];
   const invoicesToVoid = activeInvoices.length ? activeInvoices : [existing];
   if (invoicesToVoid.some((invoice) => !invoiceIsUnpaid(invoice))) {
-    throw appError('Payment already exists. Create an adjustment invoice instead.', 400);
+    throw appError('Paid or partially paid invoices cannot be unlocked. Reverse payment or create an adjustment invoice.', 400);
   }
 
   for (const invoice of invoicesToVoid) {
     invoice.status = 'Void';
     invoice.balance = 0;
-    invoice.notes = appendInvoiceNote(invoice.notes, `Voided to unlock AMC parts editing on ${new Date().toISOString()}.`);
+    invoice.notes = appendInvoiceNote(invoice.notes, `Voided to unlock work order editing on ${new Date().toISOString()}.`);
     await invoice.save();
   }
 
   workOrder.invoiceId = null;
   workOrder.timeline.push({
     status: workOrder.status,
-    message: `Unpaid extra invoice ${existing.invoiceNumber} voided. Parts Used unlocked for editing.`,
+    message: `Unpaid invoice ${existing.invoiceNumber} voided. Parts and service charge unlocked for editing.`,
     userId: user?._id || user?.id || null
   });
   await workOrder.save();
@@ -266,7 +268,7 @@ async function voidExtraInvoiceAndUnlockParts(payload, workOrder, user) {
   try {
     await logAudit({
       userId: user?._id || user?.id || null,
-      action: 'extra_invoice_voided_unlock_parts',
+      action: 'invoice_voided_unlock_editing',
       module: 'invoice',
       recordId: existing._id,
       after: {

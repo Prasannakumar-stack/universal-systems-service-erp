@@ -48,7 +48,7 @@ const WORK_ORDER_IMAGE_TYPES = ['customer_problem', 'before_service', 'after_ser
 function assertPartsUnlocked(workOrder) {
   if (workOrder.invoiceId) {
     throw appError(
-      'Parts are locked because an invoice has already been generated. To change parts, cancel/void the invoice or create an adjustment.',
+      'Parts and service charge are locked because an invoice has already been generated. Unpaid invoices must be voided first; paid or partially paid invoices require payment reversal or an adjustment invoice.',
       403
     );
   }
@@ -376,6 +376,7 @@ export async function updateStatus(id, payload, user) {
 export async function updateServiceCharge(id, payload, user) {
   assertPermission(user, 'edit_service_charge');
   const workOrder = await getWorkOrder(id, user);
+  assertPartsUnlocked(workOrder);
   const serviceCharge = Math.max(0, numberValue(payload.serviceCharge, 0));
   const before = { serviceCharge: workOrder.serviceCharge };
   workOrder.serviceCharge = serviceCharge;

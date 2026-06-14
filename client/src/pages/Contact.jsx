@@ -20,7 +20,7 @@ import {
 import { serviceTypes } from '../utils/constants.js';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
 import { BrandLogoStrip } from '../components/PublicBrandSupport.jsx';
-import { createContactBooking, createContactRequest } from '../utils/publicApi.js';
+import { createContactBooking } from '../utils/publicApi.js';
 import { phoneHref, publicAssetUrl, publicPageHeroImage, publicPhoneList, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 import { useToast } from '../context/ToastContext.jsx';
 
@@ -195,12 +195,8 @@ export default function Contact() {
     setSubmitError('');
     setLoading(true);
     try {
-      if (booking.publicBookingEnabled) {
-        await createContactBooking({ ...form, phone: digits });
-      } else {
-        await createContactRequest({ ...form, phone: digits });
-      }
-      push('Request sent successfully. Our team will contact you soon.');
+      await createContactBooking({ ...form, phone: digits });
+      push('Request received. Our team will contact you shortly.');
       setForm(empty);
       setFieldErrors({});
     } catch (error) {
