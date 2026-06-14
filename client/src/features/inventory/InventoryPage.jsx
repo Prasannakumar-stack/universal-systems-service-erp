@@ -28,6 +28,7 @@ import {
   CreditCard,
   csvCell,
   currency,
+  wholeCurrency,
   customerCode,
   customerFromOrder,
   customerPhone,
@@ -142,6 +143,7 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { MoreHorizontal } from 'lucide-react';
 import { can } from '../../utils/roles.js';
 import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 import { AddStockChoiceModal, InventoryModuleTabs, PurchaseImportModal, PurchaseRegisterTab, SuppliersTab } from './PurchaseImportComponents.jsx';
@@ -168,6 +170,8 @@ export function InventoryPage({ role = 'admin' }) {
   const [stockChoicePart, setStockChoicePart] = useState(null);
   const [purchasePart, setPurchasePart] = useState(null);
   const [deletePart, setDeletePart] = useState(null);
+  const [actionMenuId, setActionMenuId] = useState('');
+  const actionMenuRef = useRef(null);
   const limit = 10;
   const isTechnician = role === 'technician';
   const requestedTab = useMemo(() => new URLSearchParams(location.search).get('tab') || '', [location.search]);
@@ -191,6 +195,23 @@ export function InventoryPage({ role = 'admin' }) {
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, category, stockStatus, sortBy]);
+
+  useEffect(() => {
+    if (!actionMenuId) return undefined;
+    function closeActionMenu(event) {
+      if (actionMenuRef.current?.contains(event.target)) return;
+      setActionMenuId('');
+    }
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') setActionMenuId('');
+    }
+    document.addEventListener('mousedown', closeActionMenu);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeActionMenu);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [actionMenuId]);
 
   const parts = data?.parts || data?.data || [];
   const categories = useMemo(() => (data?.categories?.length ? data.categories : Array.from(new Set(parts.map((part) => part.category || 'General'))).sort()), [data?.categories, parts]);
@@ -222,7 +243,7 @@ export function InventoryPage({ role = 'admin' }) {
     { label: 'Total Units', value: totals.totalUnits, helper: 'Current on-hand quantity', icon: Boxes, tone: 'blue' },
     { label: 'Low Stock Items', value: totals.lowStock, helper: 'Needs purchase planning', icon: AlertTriangle, tone: totals.lowStock > 0 ? 'amber' : 'green' },
     { label: 'Out of Stock Items', value: totals.outOfStock, helper: 'Requires immediate attention', icon: AlertTriangle, tone: totals.outOfStock > 0 ? 'red' : 'green' },
-    { label: 'Total Stock Value', value: currency(totals.stockValue), helper: 'On-hand stock valuation', icon: CreditCard, tone: 'blue' },
+    { label: 'Total Stock Value', value: wholeCurrency(totals.stockValue), helper: 'On-hand stock valuation', icon: CreditCard, tone: 'blue', nowrap: true },
     { label: 'Reserved Stock', value: totals.reserved, helper: 'Held for active service jobs', icon: ClipboardList, tone: 'blue' }
   ];
 
@@ -243,11 +264,15 @@ export function InventoryPage({ role = 'admin' }) {
           category: partForm.category,
           sku: partForm.sku,
           brand: partForm.brand,
+          deviceModel: partForm.deviceModel,
+          compatibleDeviceType: partForm.compatibleDeviceType,
+          supplier: partForm.supplier,
+          purchaseRef: partForm.purchaseRef,
+          description: partForm.description,
           unitType: partForm.unitType,
           costPrice: partForm.costPrice,
           sellingPrice: partForm.sellingPrice,
           onHand: partForm.onHand,
-          reserved: partForm.reserved,
           lowStockLimit: partForm.lowStockLimit
         };
         if (partForm.id) await request(`/inventory/${partForm.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
@@ -303,7 +328,7 @@ export function InventoryPage({ role = 'admin' }) {
             note: stockForm.note
           })
         });
-        push('Stock added');
+        push('Stock movement saved');
         setQuickStockPart(null);
         reload({ silent: true });
         emitSidebarBadgesUpdated();
@@ -393,48 +418,75 @@ export function InventoryPage({ role = 'admin' }) {
             <colgroup>
               <col className="inventory-col-part" />
               <col className="inventory-col-category" />
-              <col className="inventory-col-number" />
-              <col className="inventory-col-number" />
-              <col className="inventory-col-number" />
-              <col className="inventory-col-money" />
-              <col className="inventory-col-money" />
-              <col className="inventory-col-money" />
-              <col className="inventory-col-low" />
+              <col className="inventory-col-brand-model" />
+              <col className="inventory-col-stock" />
+              <col className="inventory-col-price" />
+              <col className="inventory-col-stock-value" />
               <col className="inventory-col-status" />
               <col className="inventory-col-actions" />
             </colgroup>
-            <thead><tr><th>Part / Product</th><th>Category</th><th>On Hand</th><th>Reserved</th><th>Available</th><th>Selling Price</th><th>Cost Price</th><th>Stock Value</th><th>Low Stock Limit</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Item</th><th>Category</th><th>Brand / Model</th><th>Stock</th><th>Price</th><th>Stock Value</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody className="divide-y divide-[var(--line)]">
               {filteredParts.map((part) => {
+                const partId = part.id || part._id;
                 const stockValue = Number(part.onHand || 0) * Number(part.costPrice || 0);
                 const reservedQuantity = Number(part.reserved || 0);
+                const brandLabel = part.brand || '—';
+                const deviceModelLabel = part.deviceModel || '—';
                 return (
-                  <tr key={part.id}>
-                    <td className="font-bold">
+                  <tr key={partId}>
+                    <td className="font-bold inventory-product-cell">
                       <span className="block truncate text-slate-50" title={part.partName}>{part.partName}</span>
-                      <span className="block text-xs font-normal muted">{part.brand || part.sku || 'Product / part'}</span>
+                      {part.sku ? <span className="block truncate text-xs font-normal muted" title={part.sku}>{part.sku}</span> : null}
                     </td>
-                    <td><span className="inline-flex rounded-full border border-white/10 bg-white/[0.045] px-2.5 py-1 text-xs font-bold text-slate-200">{part.category || 'General'}</span></td>
-                    <td className="text-center font-black">{part.onHand || 0}</td>
-                    <td className="text-center font-black">{part.reserved || 0}</td>
-                    <td className="text-center font-black text-sky-100">{part.available || 0}</td>
-                    <td className="font-bold">{currency(part.sellingPrice)}</td>
-                    <td className="font-bold">{currency(part.costPrice)}</td>
-                    <td className="font-black text-sky-100">{currency(stockValue)}</td>
-                    <td className="text-center font-bold">{part.lowStockLimit}</td>
+                    <td><span className="inventory-category-badge" title={part.category || 'General'}>{part.category || 'General'}</span></td>
                     <td>
-                      <div className="grid gap-1.5">
-                        <InventoryStatusBadge part={part} />
-                        {reservedQuantity > 0 ? <span className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.045] px-2.5 py-1 text-[11px] font-bold text-slate-300">Reserved {reservedQuantity}</span> : null}
+                      <div className="inventory-detail-stack">
+                        <span><b>Brand:</b> <em className={!part.brand ? 'inventory-not-specified' : ''}>{brandLabel}</em></span>
+                        <span><b>Model:</b> <em className={!part.deviceModel ? 'inventory-not-specified' : ''}>{deviceModelLabel}</em></span>
                       </div>
                     </td>
-                    <td className="text-right">
-                      <div className="inventory-actions">
-                        {canEditStock ? <button type="button" className="btn btn-primary inventory-action-button" onClick={() => setStockChoicePart(part)}><PackagePlus className="h-4 w-4" />Add Stock</button> : null}
-                        {canEditStock ? <button type="button" className="btn btn-secondary inventory-action-button" onClick={() => setEditor(part)}><Edit3 className="h-3.5 w-3.5" />Edit</button> : null}
-                        {canViewStockMovements ? <Link className="inventory-movement-link" to={`/admin/parts?tab=stock-movements&partId=${part.id}`}>View Movements</Link> : null}
-                        {canDeletePart ? <button type="button" className="icon-button inventory-delete-button text-rose-100" onClick={() => setDeletePart(part)} aria-label={`Delete ${part.partName}`}><Trash2 className="h-4 w-4" /></button> : null}
+                    <td>
+                      <div className="inventory-detail-stack inventory-stock-stack">
+                        <span><b>On Hand:</b> <strong>{part.onHand || 0}</strong></span>
+                        <span><b>Reserved:</b> <strong>{part.reserved || 0}</strong></span>
+                        <span><b>Available:</b> <strong className="inventory-available-value">{part.available || 0}</strong></span>
                       </div>
+                    </td>
+                    <td>
+                      <div className="inventory-detail-stack inventory-price-stack">
+                        <span><b>Sell:</b> <strong>{wholeCurrency(part.sellingPrice)}</strong></span>
+                        <span><b>Cost:</b> <strong>{wholeCurrency(part.costPrice)}</strong></span>
+                      </div>
+                    </td>
+                    <td className="inventory-stock-value-cell"><span>{wholeCurrency(stockValue)}</span></td>
+                    <td className="inventory-status-cell">
+                      <div className="grid justify-items-center gap-1.5">
+                        <InventoryStatusBadge part={part} />
+                        {reservedQuantity > 0 ? <span className="inline-flex rounded-full border border-white/10 bg-white/[0.045] px-2.5 py-1 text-[11px] font-bold text-slate-300">Reserved {reservedQuantity}</span> : null}
+                      </div>
+                    </td>
+                    <td className="inventory-action-cell">
+                      {canEditStock || canViewStockMovements || canDeletePart ? <div className="inventory-action-menu-wrap" ref={actionMenuId === partId ? actionMenuRef : null}>
+                        <button
+                          type="button"
+                          className="inventory-row-menu-trigger"
+                          onClick={() => setActionMenuId((current) => (current === partId ? '' : partId))}
+                          aria-haspopup="menu"
+                          aria-expanded={actionMenuId === partId}
+                          aria-label={`Open actions for ${part.partName}`}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                        {actionMenuId === partId ? (
+                          <div className="inventory-row-action-menu" role="menu">
+                            {canEditStock ? <button type="button" role="menuitem" onClick={() => { setStockChoicePart(part); setActionMenuId(''); }}><PackagePlus className="h-4 w-4" />Add Stock</button> : null}
+                            {canEditStock ? <button type="button" role="menuitem" onClick={() => { setEditor(part); setActionMenuId(''); }}><Edit3 className="h-4 w-4" />Edit Part</button> : null}
+                            {canViewStockMovements ? <Link role="menuitem" to={`/admin/parts?tab=stock-movements&partId=${partId}`} onClick={() => setActionMenuId('')}><ClipboardList className="h-4 w-4" />View Movements</Link> : null}
+                            {canDeletePart ? <button type="button" role="menuitem" className="inventory-row-menu-danger" onClick={() => { setDeletePart(part); setActionMenuId(''); }}><Trash2 className="h-4 w-4" />Delete</button> : null}
+                          </div>
+                        ) : null}
+                      </div> : <span className="inventory-not-specified">—</span>}
                     </td>
                   </tr>
                 );
@@ -447,7 +499,7 @@ export function InventoryPage({ role = 'admin' }) {
       )}
       </>
       )}
-      {(canCreatePart || canEditStock) && editor ? <InventoryPartModal part={editor} onClose={() => setEditor(null)} onSave={savePart} /> : null}
+      {(canCreatePart || canEditStock) && editor ? <InventoryPartModal part={editor} parts={parts} onClose={() => setEditor(null)} onSave={savePart} /> : null}
       {canEditStock && quickStockPart ? <QuickStockModal part={quickStockPart} onClose={() => setQuickStockPart(null)} onSave={addQuickStock} /> : null}
       {canEditStock && stockChoicePart ? (
         <AddStockChoiceModal
@@ -488,7 +540,7 @@ export function InventoryPage({ role = 'admin' }) {
   );
 }
 
-function InventoryPartModal({ part, onClose, onSave }) {
+function InventoryPartModalLegacy({ part, onClose, onSave }) {
   const [form, setForm] = useState({
     id: part.id || '',
     partName: part.partName || '',
@@ -551,37 +603,244 @@ function InventoryPartModal({ part, onClose, onSave }) {
   );
 }
 
+function InventoryPartModal({ part, parts = [], onClose, onSave }) {
+  const editingId = part.id || part._id || '';
+  const [form, setForm] = useState({
+    id: editingId,
+    partName: part.partName || '',
+    category: inventoryCategories.includes(part.category) ? part.category : 'Other',
+    sku: part.sku || '',
+    brand: part.brand || '',
+    deviceModel: part.deviceModel || '',
+    compatibleDeviceType: part.compatibleDeviceType || '',
+    supplier: part.supplier || '',
+    purchaseRef: part.purchaseRef || '',
+    description: part.description || '',
+    unitType: inventoryUnitTypes.includes(part.unitType) ? part.unitType : 'Piece',
+    costPrice: part.costPrice ?? 0,
+    sellingPrice: part.sellingPrice ?? 0,
+    onHand: part.onHand ?? 0,
+    reserved: part.reserved ?? 0,
+    lowStockLimit: part.lowStockLimit ?? 0
+  });
+
+  function update(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function requiredLabel(label) {
+    return <>{label} <span className="inventory-required-pill">Required</span></>;
+  }
+
+  function numberError(label, value) {
+    const text = String(value ?? '').trim();
+    if (!text) return `${label} is required.`;
+    const numericValue = Number(text);
+    if (!Number.isFinite(numericValue)) return `${label} must be a valid number.`;
+    if (numericValue < 0) return `${label} cannot be negative.`;
+    return '';
+  }
+
+  const errors = {
+    partName: form.partName.trim() ? '' : 'Part name is required.',
+    category: form.category ? '' : 'Category is required.',
+    unitType: form.unitType ? '' : 'Unit type is required.',
+    costPrice: numberError('Cost price', form.costPrice),
+    sellingPrice: numberError('Selling price', form.sellingPrice),
+    onHand: numberError('On hand', form.onHand),
+    lowStockLimit: numberError('Low stock limit', form.lowStockLimit)
+  };
+  const canSave = Object.values(errors).every((message) => !message);
+  const normalizedName = form.partName.trim().toLowerCase();
+  const normalizedSku = form.sku.trim().toLowerCase();
+  const duplicatePart = parts.find((item) => {
+    const itemId = item.id || item._id || '';
+    if (String(itemId) === String(editingId)) return false;
+    const sameName = normalizedName && String(item.partName || '').trim().toLowerCase() === normalizedName;
+    const sameSku = normalizedSku && String(item.sku || '').trim().toLowerCase() === normalizedSku;
+    return sameName || sameSku;
+  });
+  const priceWarning = Number(form.costPrice || 0) > Number(form.sellingPrice || 0);
+  const availablePreview = Math.max(0, Number(form.onHand || 0) - Number(form.reserved || 0));
+  const generatedCode = useMemo(() => {
+    const base = form.partName.trim()
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 18)
+      .toUpperCase() || 'PART';
+    return `${base}-${String(Date.now()).slice(-4)}`;
+  }, [form.partName]);
+
+  return (
+    <div className="inventory-part-modal-overlay">
+      <form className="surface inventory-part-modal" onSubmit={(event) => { event.preventDefault(); event.stopPropagation(); if (canSave) onSave(form); }}>
+        <div className="inventory-part-modal-header">
+          <div>
+            <p className="inventory-part-eyebrow">Products / Parts</p>
+            <h2>{form.id ? 'Edit Part' : 'Add Part'}</h2>
+            <p>Maintain part details, pricing, and opening stock without manually editing reservations.</p>
+          </div>
+          <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close part popup"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="inventory-part-modal-body">
+          <div className="inventory-part-section">
+            <div className="inventory-part-section-title">Basic Details</div>
+          </div>
+          <div className="inventory-part-form-grid">
+            <label className="inventory-part-field">
+              <span className="label">{requiredLabel('Part Name')}</span>
+              <input className="input" value={form.partName} onChange={(event) => update('partName', event.target.value)} required placeholder="Example: CCTV camera, laptop adapter" />
+              {errors.partName ? <small>{errors.partName}</small> : null}
+            </label>
+            <label className="inventory-part-field">
+              <span className="label">{requiredLabel('Category')}</span>
+              <select className="input" value={form.category} onChange={(event) => update('category', event.target.value)} required>
+                {inventoryCategories.map((item) => <option key={item}>{item}</option>)}
+              </select>
+              {errors.category ? <small>{errors.category}</small> : null}
+            </label>
+            <label className="inventory-part-field">
+              <span className="label">SKU / Product Code <span className="inventory-optional-pill">Optional</span></span>
+              <span className="inventory-sku-row">
+                <input className="input" value={form.sku} onChange={(event) => update('sku', event.target.value)} placeholder="Example: CCTV-CAM-001" />
+                <button type="button" className="btn btn-secondary inventory-generate-code" onClick={() => update('sku', generatedCode)}>Generate Code</button>
+              </span>
+            </label>
+          </div>
+          <div className="inventory-part-section">
+            <div className="inventory-part-section-title">Device Compatibility</div>
+          </div>
+          <div className="inventory-part-form-grid">
+            <label className="inventory-part-field">
+              <span className="label">Brand <span className="inventory-optional-pill">Optional</span></span>
+              <input className="input" value={form.brand} onChange={(event) => update('brand', event.target.value)} placeholder="Dell, HP, Hikvision..." />
+            </label>
+            <label className="inventory-part-field">
+              <span className="label">Device Model <span className="inventory-optional-pill">Recommended</span></span>
+              <input className="input" value={form.deviceModel} onChange={(event) => update('deviceModel', event.target.value)} placeholder="Example: Inspiron 3511, LaserJet 1020" maxLength={80} />
+            </label>
+            <label className="inventory-part-field">
+              <span className="label">Compatible Device Type <span className="inventory-optional-pill">Optional</span></span>
+              <input className="input" value={form.compatibleDeviceType} onChange={(event) => update('compatibleDeviceType', event.target.value)} placeholder="Laptop, Printer, CCTV, UPS..." />
+            </label>
+          </div>
+          <div className="inventory-part-section">
+            <div className="inventory-part-section-title">Supplier / Purchase Info</div>
+          </div>
+          <div className="inventory-part-form-grid">
+            <label className="inventory-part-field">
+              <span className="label">Supplier / Shop <span className="inventory-optional-pill">Optional</span></span>
+              <input className="input" value={form.supplier} onChange={(event) => update('supplier', event.target.value)} placeholder="Supplier or shop name" />
+            </label>
+            <label className="inventory-part-field">
+              <span className="label">Purchase Ref / Invoice No <span className="inventory-optional-pill">Optional</span></span>
+              <input className="input" value={form.purchaseRef} onChange={(event) => update('purchaseRef', event.target.value)} placeholder="Invoice or purchase reference" />
+            </label>
+          </div>
+          <div className="inventory-part-section">
+            <div className="inventory-part-section-title">Pricing & Stock</div>
+          </div>
+          <div className="inventory-part-form-grid">
+            <label className="inventory-part-field">
+              <span className="label">{requiredLabel('Unit Type')}</span>
+              <select className="input" value={form.unitType} onChange={(event) => update('unitType', event.target.value)} required>
+                {inventoryUnitTypes.map((item) => <option key={item}>{item}</option>)}
+              </select>
+              {errors.unitType ? <small>{errors.unitType}</small> : null}
+            </label>
+            <label className="inventory-part-field">
+              <span className="label">{requiredLabel('Cost Price')}</span>
+              <span className="inventory-currency-input"><span>₹</span><input className="input" type="number" min="0" step="1" value={form.costPrice} onChange={(event) => update('costPrice', event.target.value)} required /></span>
+              {errors.costPrice ? <small>{errors.costPrice}</small> : null}
+            </label>
+            <label className="inventory-part-field">
+              <span className="label">{requiredLabel('Selling Price')}</span>
+              <span className="inventory-currency-input"><span>₹</span><input className="input" type="number" min="0" step="1" value={form.sellingPrice} onChange={(event) => update('sellingPrice', event.target.value)} required /></span>
+              {errors.sellingPrice ? <small>{errors.sellingPrice}</small> : null}
+            </label>
+            <label className="inventory-part-field">
+              <span className="label">{requiredLabel('On Hand')}</span>
+              <input className="input" type="number" min="0" step="1" value={form.onHand} onChange={(event) => update('onHand', event.target.value)} required />
+              {errors.onHand ? <small>{errors.onHand}</small> : null}
+            </label>
+            <label className="inventory-part-field">
+              <span className="label">Reserved Auto</span>
+              <input className="input inventory-readonly-input" type="number" value={form.reserved || 0} readOnly aria-readonly="true" />
+              <small>Calculated from active work orders. Not editable here.</small>
+            </label>
+            <label className="inventory-part-field">
+              <span className="label">Available Auto</span>
+              <input className="input inventory-readonly-input" type="number" value={availablePreview} readOnly aria-readonly="true" />
+              <small>On hand minus reserved stock.</small>
+            </label>
+            <label className="inventory-part-field">
+              <span className="label">{requiredLabel('Low Stock Limit')}</span>
+              <input className="input" type="number" min="0" step="1" value={form.lowStockLimit} onChange={(event) => update('lowStockLimit', event.target.value)} required />
+              {errors.lowStockLimit ? <small>{errors.lowStockLimit}</small> : null}
+            </label>
+          </div>
+          <div className="inventory-part-section">
+            <div className="inventory-part-section-title">Notes / Description</div>
+          </div>
+          <div className="inventory-part-form-grid">
+            <label className="inventory-part-field inventory-part-field-wide">
+              <span className="label">Notes / Description <span className="inventory-optional-pill">Optional</span></span>
+              <textarea className="input inventory-part-textarea" value={form.description} onChange={(event) => update('description', event.target.value)} placeholder="Compatibility notes, supplier notes, warranty details..." />
+            </label>
+          </div>
+          {duplicatePart ? <p className="inventory-part-warning">Similar part already exists.</p> : null}
+          {priceWarning ? <p className="inventory-part-warning">Cost price is higher than selling price.</p> : null}
+          {!form.id && Number(form.onHand || 0) > 0 ? <p className="inventory-part-note">Opening stock will be recorded as opening stock added.</p> : null}
+        </div>
+        <div className="inventory-part-modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary inventory-save-part-button" disabled={!canSave}><Save className="h-4 w-4" />Save Part</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function QuickStockModal({ part, onClose, onSave }) {
   const [form, setForm] = useState({ partId: part.id, type: 'ADD', quantity: 1, source: 'Manual', note: '' });
   const quantity = Number(form.quantity || 0);
   const canSave = Boolean(form.partId && form.type && form.source && quantity && (form.type === 'ADJUST' || quantity > 0));
   const movementReasons = ['Damaged item', 'Physical count correction', 'Returned by customer', 'AMC replacement', 'Wrong previous entry'];
+  const currentOnHand = Number(part.onHand || 0);
+  const reserved = Number(part.reserved || 0);
+  const available = Number(part.available ?? Math.max(0, currentOnHand - reserved));
+  const newBalance = form.type === 'ADD'
+    ? currentOnHand + Math.max(0, quantity || 0)
+    : form.type === 'USED'
+      ? Math.max(0, currentOnHand - Math.max(0, quantity || 0))
+      : quantity || 0;
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
   return (
-    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
-      <form className="surface inventory-manual-form w-full max-w-lg p-5" onSubmit={(event) => { event.preventDefault(); event.stopPropagation(); if (canSave) onSave(form); }}>
-        <div className="flex items-start justify-between gap-3">
+    <div className="inventory-stock-modal-overlay">
+      <form className="surface inventory-manual-form inventory-stock-modal w-full max-w-lg" onSubmit={(event) => { event.preventDefault(); event.stopPropagation(); if (canSave) onSave(form); }}>
+        <div className="inventory-stock-modal-header flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Stock Movement</p>
             <h2 className="mt-1 text-xl font-black">Add / Adjust Stock</h2>
           </div>
           <button type="button" className="icon-button h-8 w-8" onClick={onClose} aria-label="Close stock movement form"><X className="h-4 w-4" /></button>
         </div>
-        <div className="mt-4 grid gap-4">
+        <div className="inventory-stock-modal-body grid gap-4">
           <label><span className="label">Part / Product</span><input className="input" value={part.partName} readOnly /></label>
-          <div className="grid gap-2 rounded-card border border-white/10 bg-white/[0.045] p-3 text-sm">
-            <div className="flex items-center justify-between gap-3"><span className="muted">Current On Hand</span><b>{part.onHand || 0}</b></div>
-            <div className="flex items-center justify-between gap-3"><span className="muted">Reserved</span><b>{part.reserved || 0}</b></div>
-            <div className="flex items-center justify-between gap-3"><span className="muted">Available</span><b className="text-sky-100">{part.available || 0}</b></div>
+          <div className="inventory-stock-preview">
+            <div><span>Current On Hand</span><b>{currentOnHand}</b></div>
+            <div><span>Reserved</span><b>{reserved}</b></div>
+            <div><span>Available</span><b>{available}</b></div>
+            <div className="inventory-stock-preview-result"><span>New Balance after movement</span><b>{Number.isFinite(newBalance) ? newBalance : currentOnHand}</b></div>
           </div>
           <label>
             <span className="label">Movement Type</span>
             <select className="input" value={form.type} onChange={(event) => update('type', event.target.value)}>
-              {['ADD', 'RETURN', 'ADJUST'].map((type) => <option key={type} value={type}>{type === 'ADJUST' ? 'ADJUSTMENT' : type}</option>)}
+              {[['ADD', 'ADD'], ['USED', 'REMOVE'], ['ADJUST', 'ADJUST']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
           <label><span className="label">Quantity</span><input className="input" type="number" min={form.type === 'ADJUST' ? undefined : '1'} value={form.quantity} onChange={(event) => update('quantity', event.target.value)} /></label>
@@ -592,9 +851,8 @@ function QuickStockModal({ part, onClose, onSave }) {
             </select>
           </label>
           <label><span className="label">Note</span><input className="input" value={form.note} onChange={(event) => update('note', event.target.value)} /></label>
-        </div>
-        {form.source === 'Manual' ? (
-          <div className="mt-3 flex flex-wrap gap-2">
+          {form.source === 'Manual' ? (
+          <div className="flex flex-wrap gap-2">
             {movementReasons.map((reason) => (
               <button key={reason} type="button" className="rounded-full border border-white/10 bg-white/[0.045] px-3 py-1.5 text-xs font-bold text-slate-200 transition hover:border-sky-300/30 hover:bg-sky-400/10" onClick={() => update('note', reason)}>
                 {reason}
@@ -602,23 +860,24 @@ function QuickStockModal({ part, onClose, onSave }) {
             ))}
           </div>
         ) : null}
-        {form.type === 'ADJUST' ? <p className="mt-4 rounded-card border border-amber-300/20 bg-amber-400/10 p-3 text-sm font-semibold text-amber-100">This directly changes physical inventory count.</p> : null}
-        <div className="mt-5 flex justify-end gap-2">
+          {form.type === 'ADJUST' ? <p className="rounded-card border border-amber-300/20 bg-amber-400/10 p-3 text-sm font-semibold text-amber-100">This directly changes physical inventory count.</p> : null}
+        </div>
+        <div className="inventory-stock-modal-footer flex justify-end gap-2">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={!canSave}><PackagePlus className="h-4 w-4" />Save Stock</button>
+          <button type="submit" className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={!canSave}><PackagePlus className="h-4 w-4" />Save Movement</button>
         </div>
       </form>
     </div>
   );
 }
 
-function InventoryMetricCard({ icon: Icon, label, value, helper, tone = 'blue' }) {
+function InventoryMetricCard({ icon: Icon, label, value, helper, tone = 'blue', nowrap = false }) {
   return (
     <div className={`inventory-kpi-card inventory-kpi-${tone}`}>
       <div className="inventory-kpi-icon"><Icon className="h-4 w-4" /></div>
       <div className="min-w-0">
         <p className="inventory-kpi-label">{label}</p>
-        <p className="inventory-kpi-value" title={String(value)}>{value}</p>
+        <p className={`inventory-kpi-value ${nowrap ? 'inventory-kpi-value-nowrap' : ''}`} title={String(value)}>{value}</p>
         <p className="inventory-kpi-helper">{helper}</p>
       </div>
     </div>

@@ -29,6 +29,7 @@ import {
   CreditCard,
   csvCell,
   currency,
+  wholeCurrency,
   customerCode,
   customerFromOrder,
   customerPhone,
@@ -169,8 +170,10 @@ import { RotateCcw } from 'lucide-react';
 
 const detailFocusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
-const detailNumberInputClass =
+  const detailNumberInputClass =
   'input [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
+const detailRupeeInputClass = 'work-order-rupee-input';
+const detailRupeePrefixClass = 'work-order-rupee-prefix';
 const detailInfoCardClass =
   'grid h-auto min-h-[92px] content-start gap-2 rounded-2xl border border-sky-400/10 bg-slate-900/35 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]';
 const detailLabelClass =
@@ -274,6 +277,10 @@ function WorkOrderInfoCard({ label, children, className = '' }) {
       <div className={detailValueClass}>{children}</div>
     </div>
   );
+}
+
+function workOrderDeviceDetail(value) {
+  return String(value || '').trim() || 'Not specified';
 }
 
 function WorkOrderBadgeGroup({ children, justify = 'justify-start' }) {
@@ -450,7 +457,7 @@ function adjustmentKind(invoice) {
 }
 
 function adjustmentLabel(invoice) {
-  return adjustmentKind(invoice) === 'credit_note' ? 'Credit Note / Refund / Discount' : 'Additional Charge / Adjustment Invoice';
+  return adjustmentKind(invoice) === 'credit_note' ? 'Credit Note' : 'Extra Invoice';
 }
 
 function adjustmentSignedAmount(invoice) {
@@ -1027,14 +1034,16 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     setVoidUnlockReviewed(false);
   }
 
-  function openAdjustmentModal(event) {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
+  function openAdjustmentModal(type = 'credit_note', event) {
+    const requestedType = type && typeof type === 'object' ? 'credit_note' : type;
+    const triggerEvent = type && typeof type === 'object' ? type : event;
+    triggerEvent?.preventDefault?.();
+    triggerEvent?.stopPropagation?.();
     if (isTechnician || !canEditInvoice) {
       push('Contact admin for billing adjustments.', 'error');
       return;
     }
-    const suggestedType = activeInvoiceIsPaid ? 'credit_note' : 'credit_note';
+    const suggestedType = requestedType === 'additional_charge' ? 'additional_charge' : 'credit_note';
     setAdjustmentForm({
       adjustmentType: suggestedType,
       amount: '',
@@ -1073,20 +1082,21 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       push('Original invoice not found', 'error');
       return;
     }
+    const isCreditNoteAdjustment = adjustmentForm.adjustmentType === 'credit_note';
     const amount = Number(adjustmentForm.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
-      push('Adjustment amount must be greater than zero', 'error');
+      push(`${isCreditNoteAdjustment ? 'Credit note' : 'Extra invoice'} amount must be greater than zero`, 'error');
       return;
     }
     if (!adjustmentForm.reason.trim()) {
-      push('Adjustment reason is required', 'error');
+      push(`${isCreditNoteAdjustment ? 'Credit note' : 'Extra invoice'} reason is required`, 'error');
       return;
     }
     if (!adjustmentForm.confirmed) {
       push('Please confirm the original invoice will remain unchanged', 'error');
       return;
     }
-    if (adjustmentForm.adjustmentType === 'credit_note' && amount > Number(activeInvoiceTotalAmount || 0)) {
+    if (isCreditNoteAdjustment && amount > Number(activeInvoiceTotalAmount || 0)) {
       push('Credit note amount cannot exceed the original invoice total', 'error');
       return;
     }
@@ -1106,7 +1116,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             confirmed: adjustmentForm.confirmed
           })
         });
-        push('Adjustment invoice created.');
+        push(`${isCreditNoteAdjustment ? 'Credit note' : 'Extra invoice'} created.`);
         closeAdjustmentModal();
         await reloadSidebarAware();
       });
@@ -1502,7 +1512,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const creditNoteTotal = adjustmentInvoices
     .filter((invoice) => adjustmentKind(invoice) === 'credit_note')
     .reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
-  const signedAdjustmentTotal = adjustmentInvoices.reduce((sum, invoice) => sum + adjustmentSignedAmount(invoice), 0);
+  const signedAdjustmentTotal = additionalAdjustmentTotal - creditNoteTotal;
   const netPayableTotal = Math.max(0, originalInvoiceTotal + signedAdjustmentTotal);
   const extraInvoiceTotal = activeExtraInvoices.reduce((sum, invoice) => {
     if (invoiceIsAdjustmentDocument(invoice)) return sum + adjustmentSignedAmount(invoice);
@@ -1510,7 +1520,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }, 0);
   const extraInvoicePaidTotal = activeExtraInvoices.reduce((sum, invoice) => sum + invoicePaidAmount(invoice), 0);
   const extraInvoiceBalance = Math.max(0, netPayableTotal - extraInvoicePaidTotal);
-  const refundDueAmount = Math.max(0, extraInvoicePaidTotal - netPayableTotal);
+  const billingBalanceDueAmount = netPayableTotal - extraInvoicePaidTotal;
   const extraInvoiceDifference = extraPayableTotal - extraInvoiceTotal;
   const extraInvoiceDifferenceAmount = Math.abs(extraInvoiceDifference);
   const extraInvoiceNeedsRefresh = isAmcLinked && activeExtraInvoices.length > 0 && Math.abs(extraInvoiceDifference) > 0.5;
@@ -1592,16 +1602,16 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   );
   const canCreateBillingAdjustmentInvoice = !isTechnician && canEditInvoice && paidOrPartialInvoiceLocksParts && Boolean(activeInvoiceId);
   const paidOrPartialBackendMessage = 'Paid or partially paid invoices cannot be unlocked. Reverse payment or create an adjustment invoice.';
-  const protectedInvoiceTitle = activeInvoiceIsPartial
-    ? 'Partially paid invoice cannot be unlocked directly.'
-    : activeInvoiceIsPaid
-      ? 'Paid invoice cannot be unlocked.'
-      : '';
-  const protectedInvoiceSubtext = activeInvoiceIsPartial
-    ? 'Reverse the received payment first or create an adjustment invoice.'
-    : activeInvoiceIsPaid
-      ? 'Create an adjustment invoice / credit note instead of editing the original invoice.'
-      : '';
+  const billingStatusCardClass = 'rounded-xl border border-white/10 bg-slate-950/25 p-3';
+  const billingLockNoticeMessage = partsLocked
+    ? canVoidUnlockParts
+      ? 'Invoice is locked. Admin can void the unpaid invoice to unlock editing.'
+      : activeInvoiceIsPartial
+        ? 'Partially paid invoice cannot be unlocked directly. Reverse the received payment first or create an adjustment invoice.'
+        : activeInvoiceIsPaid
+          ? 'Paid invoice cannot be unlocked. Create a credit note or adjustment invoice instead.'
+          : 'Invoice is locked. Admin can void the unpaid invoice to unlock editing.'
+    : '';
   const billingAllowedAction = partsLocked
     ? isTechnician
       ? 'Contact admin for billing adjustments.'
@@ -1934,9 +1944,9 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     const invoiceRows = [
       ['Work Order ID', workOrderDisplayId],
       ['Customer Name', order.customerId?.name || 'Customer'],
-      ['Parts Total', currency(partsTotal)],
-      ['Service Charge', currency(currentServiceCharge)],
-      ['Final Total', currency(extraPayableTotal)],
+      ['Parts Total', wholeCurrency(partsTotal)],
+      ['Service Charge', wholeCurrency(currentServiceCharge)],
+      ['Final Total', wholeCurrency(extraPayableTotal)],
       ['Payment Status', activeInvoicePaymentStatus]
     ];
     return (
@@ -2002,9 +2012,9 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       ['Work Order ID', workOrderDisplayId],
       ['Invoice ID', getInvoiceDisplayId(activeInvoiceRecord || order.invoiceId) || activeInvoiceId || '-'],
       ['Customer Name', order.customerId?.name || 'Customer'],
-      ['Total Amount', currency(activeInvoiceTotalAmount || extraPayableTotal)],
-      ['Paid Amount', currency(activeInvoicePaidAmount)],
-      ['Balance Amount', currency(activeInvoiceBalanceAmount)],
+      ['Total Amount', wholeCurrency(activeInvoiceTotalAmount || extraPayableTotal)],
+      ['Paid Amount', wholeCurrency(activeInvoicePaidAmount)],
+      ['Balance Amount', wholeCurrency(activeInvoiceBalanceAmount)],
       ['Payment Status', activeInvoicePaymentStatus]
     ];
     return (
@@ -2060,15 +2070,16 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   function renderAdjustmentInvoiceModal() {
     if (!adjustmentModalOpen) return null;
     const isCreditNote = adjustmentForm.adjustmentType === 'credit_note';
+    const documentLabel = isCreditNote ? 'Credit Note' : 'Extra Invoice';
     const amount = Number(adjustmentForm.amount || 0);
     const canSubmit = Boolean(amount > 0 && adjustmentForm.reason.trim() && adjustmentForm.confirmed && !adjustmentSaving);
     const invoiceRows = [
       ['Work Order ID', workOrderDisplayId],
       ['Original Invoice ID', getInvoiceDisplayId(activeInvoiceRecord || order.invoiceId) || activeInvoiceId || '-'],
       ['Customer Name', order.customerId?.name || '-'],
-      ['Original Invoice Total', currency(originalInvoiceTotal || activeInvoiceTotalAmount)],
-      ['Paid Amount', currency(activeInvoicePaidAmount)],
-      ['Balance Amount', currency(activeInvoiceBalanceAmount)],
+      ['Original Invoice Total', wholeCurrency(originalInvoiceTotal || activeInvoiceTotalAmount)],
+      ['Paid Amount', wholeCurrency(activeInvoicePaidAmount)],
+      ['Balance Amount', wholeCurrency(activeInvoiceBalanceAmount)],
       ['Payment Status', activeInvoicePaymentStatus]
     ];
     return (
@@ -2078,10 +2089,12 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <div className="flex items-start gap-3">
               <span className="billing-adjustment-icon"><ReceiptText className="h-5 w-5" /></span>
               <div className="min-w-0">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-200/80">Billing Adjustment</p>
-                <h2 className="mt-1 text-xl font-black text-white">Create adjustment invoice</h2>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-200/80">Linked Billing Document</p>
+                <h2 className="mt-1 text-xl font-black text-white">Create {documentLabel}</h2>
                 <p className="mt-2 text-sm font-semibold leading-6 text-slate-300">
-                  This will create a separate adjustment document linked to the original invoice. The original invoice will remain locked.
+                  {isCreditNote
+                    ? 'This will create a separate credit note that reduces payable amount or records refund/credit due. The original invoice will remain locked.'
+                    : 'This will create a separate extra invoice for additional amount the customer must pay. The original invoice will remain locked.'}
                 </p>
               </div>
             </div>
@@ -2098,31 +2111,31 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             </div>
 
             <div className={`mt-4 rounded-2xl border p-3 ${isCreditNote ? 'border-amber-300/20 bg-amber-500/[0.08] text-amber-100' : 'border-sky-300/20 bg-sky-500/[0.08] text-sky-100'}`}>
-              <p className="text-xs font-black uppercase tracking-[0.16em]">{isCreditNote ? 'Credit safety' : 'Additional charge safety'}</p>
+              <p className="text-xs font-black uppercase tracking-[0.16em]">{isCreditNote ? 'Credit note safety' : 'Extra invoice safety'}</p>
               <p className="mt-1 text-sm font-semibold leading-6">
                 {isCreditNote
                   ? 'Credit notes reduce the customer payable amount as a separate audit document.'
-                  : 'Additional charges create a separate payable adjustment invoice without editing the original invoice.'}
+                  : 'Extra invoices increase the customer payable amount as a separate audit document without editing the original invoice.'}
               </p>
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label>
-                <span className="label">Adjustment Type</span>
+                <span className="label">Document Type</span>
                 <select className={`input ${detailFocusRing}`} value={adjustmentForm.adjustmentType} onChange={(event) => updateAdjustmentForm('adjustmentType', event.target.value)}>
-                  <option value="credit_note">Credit Note / Refund / Discount</option>
-                  <option value="additional_charge">Additional Charge / Adjustment Invoice</option>
+                  <option value="additional_charge">Extra Invoice</option>
+                  <option value="credit_note">Credit Note</option>
                 </select>
               </label>
               <label>
                 <span className="label">Amount</span>
-                <input className={`input ${detailFocusRing}`} type="number" min="1" step="0.01" value={adjustmentForm.amount} onChange={(event) => updateAdjustmentForm('amount', event.target.value)} placeholder="Enter adjustment amount" required />
+                <input className={`input ${detailFocusRing}`} type="number" min="1" step="0.01" value={adjustmentForm.amount} onChange={(event) => updateAdjustmentForm('amount', event.target.value)} placeholder={isCreditNote ? 'Enter credit note amount' : 'Enter extra invoice amount'} required />
               </label>
             </div>
 
             <label className="mt-4 block">
               <span className="label">Reason</span>
-              <textarea className={`input min-h-[88px] ${detailFocusRing}`} value={adjustmentForm.reason} onChange={(event) => updateAdjustmentForm('reason', event.target.value)} placeholder="Example: Billing correction, discount approved, refund issued" required />
+              <textarea className={`input min-h-[88px] ${detailFocusRing}`} value={adjustmentForm.reason} onChange={(event) => updateAdjustmentForm('reason', event.target.value)} placeholder={isCreditNote ? 'Example: Discount approved, refund issued, credit adjustment' : 'Example: Additional parts used, extra service charge approved'} required />
             </label>
             <label className="mt-4 block">
               <span className="label">Internal Note <span className="font-semibold text-slate-500">(optional)</span></span>
@@ -2139,7 +2152,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <button type="button" className="btn btn-secondary billing-adjustment-cancel" onClick={closeAdjustmentModal} disabled={adjustmentSaving}>Cancel</button>
             <button type="submit" className="btn btn-primary billing-adjustment-submit" disabled={!canSubmit}>
               {adjustmentSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ReceiptText className="h-4 w-4" />}
-              {adjustmentSaving ? 'Creating...' : 'Create Adjustment'}
+              {adjustmentSaving ? 'Creating...' : `Create ${documentLabel}`}
             </button>
           </div>
         </form>
@@ -2229,34 +2242,31 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           <ShieldCheck className={`h-5 w-5 ${locked ? 'text-amber-200' : 'text-emerald-200'}`} />
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+          <div className={billingStatusCardClass}>
             <p className={detailLabelClass}>Invoice Status</p>
             <p className="mt-1 text-sm font-black text-slate-100">{locked ? 'Locked' : 'Editable'}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+          <div className={billingStatusCardClass}>
             <p className={detailLabelClass}>Payment Status</p>
             <div className="mt-1"><StatusBadge status={activeInvoicePaymentStatus} /></div>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+          <div className={billingStatusCardClass}>
             <p className={detailLabelClass}>Paid Amount</p>
-            <p className="mt-1 text-sm font-black text-slate-100">{currency(activeInvoicePaidAmount)}</p>
+            <p className="mt-1 whitespace-nowrap text-sm font-black text-slate-100">{wholeCurrency(activeInvoicePaidAmount)}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+          <div className={billingStatusCardClass}>
             <p className={detailLabelClass}>Balance Amount</p>
-            <p className="mt-1 text-sm font-black text-slate-100">{currency(activeInvoiceBalanceAmount)}</p>
+            <p className="mt-1 whitespace-nowrap text-sm font-black text-slate-100">{wholeCurrency(activeInvoiceBalanceAmount)}</p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+          <div className={billingStatusCardClass}>
             <p className={detailLabelClass}>Allowed Action</p>
             <p className="mt-1 text-sm font-black leading-5 text-slate-100">{billingAllowedAction}</p>
           </div>
         </div>
-        {isTechnician && locked ? (
-          <div className="mt-3 rounded-xl border border-sky-300/15 bg-sky-500/[0.08] p-3">
-            <p className="text-xs font-semibold text-sky-100/85">Billing is locked. Contact admin for adjustment invoices or credit notes.</p>
+        {locked && billingLockNoticeMessage ? (
+          <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <p className="text-xs font-semibold leading-5">{billingLockNoticeMessage}</p>
           </div>
-        ) : null}
-        {paidOrPartialInvoiceLocksParts ? (
-          <p className="mt-3 text-xs font-semibold text-amber-100">{paidOrPartialBackendMessage}</p>
         ) : null}
       </div>
     );
@@ -2269,8 +2279,12 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-200" />
           <div className="min-w-0">
-            <p className="text-sm font-black text-amber-50">{protectedInvoiceTitle}</p>
-            <p className="mt-1 text-xs font-semibold leading-5 text-amber-100/85">{protectedInvoiceSubtext}</p>
+            <p className="text-sm font-black text-amber-50">Billing adjustment actions</p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-amber-100/85">
+              {activeInvoiceIsPartial
+                ? 'Use Payments to reverse the received amount first, or create a linked billing document to correct the balance safely.'
+                : 'Keep the original paid invoice locked and use a linked billing document for any correction.'}
+            </p>
           </div>
         </div>
         {!isTechnician ? (
@@ -2290,13 +2304,18 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               </button>
             ) : null}
             {canCreateBillingAdjustmentInvoice ? (
-              <button type="button" className="btn btn-primary py-2" onClick={openAdjustmentModal}>
-                Create Adjustment Invoice / Credit Note
-              </button>
+              <>
+                <button type="button" className="btn btn-primary py-2" onClick={(event) => openAdjustmentModal('additional_charge', event)}>
+                  Create Extra Invoice
+                </button>
+                <button type="button" className="btn btn-secondary py-2" onClick={(event) => openAdjustmentModal('credit_note', event)}>
+                  Create Credit Note
+                </button>
+              </>
             ) : (
               <div className="flex flex-col gap-1">
                 <button type="button" className="btn btn-secondary py-2 disabled:cursor-not-allowed disabled:opacity-60" disabled>
-                  Create Adjustment Invoice / Credit Note
+                  Create Extra Invoice / Credit Note
                 </button>
                 <span className="text-xs font-semibold text-slate-300">Contact admin for billing adjustments.</span>
               </div>
@@ -2309,47 +2328,58 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
   function renderAdjustmentHistory() {
     if (activeTab !== 'billing' || !adjustmentInvoices.length) return null;
-    const netBalanceLabel = refundDueAmount > 0 ? 'Refund Due' : 'Balance / Refund Due';
-    const netBalanceAmount = refundDueAmount > 0 ? refundDueAmount : activeInvoiceBalanceAmount;
+    const settlementLabel = billingBalanceDueAmount > 0 ? 'Balance Due' : billingBalanceDueAmount < 0 ? 'Refund / Credit Due' : 'Settled';
+    const settlementAmount = Math.abs(billingBalanceDueAmount);
+    const settlementToneClass = billingBalanceDueAmount > 0
+      ? 'border-amber-300/20 bg-amber-500/[0.1] text-amber-100'
+      : billingBalanceDueAmount < 0
+        ? 'border-rose-300/20 bg-rose-500/[0.1] text-rose-100'
+        : 'border-emerald-300/20 bg-emerald-500/[0.1] text-emerald-100';
     return (
       <div className={detailBillingSectionClass}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Linked Billing Documents</p>
-            <h2 className="mt-1 text-xl font-black">Adjustments / Credit Notes</h2>
-            <p className="mt-1 text-sm muted">Original paid invoices stay locked. Corrections are listed as separate linked documents.</p>
+            <h2 className="mt-1 text-xl font-black">Linked Billing Documents</h2>
+            <p className="mt-1 text-sm muted">Extra invoices increase payable amount. Credit notes reduce payable amount. The original paid invoice stays locked.</p>
           </div>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
             <p className={detailLabelClass}>Original Invoice Total</p>
-            <p className="mt-1 text-lg font-black text-slate-100">{currency(originalInvoiceTotal)}</p>
+            <p className="mt-1 text-lg font-black text-slate-100">{wholeCurrency(originalInvoiceTotal)}</p>
           </div>
           <div className="rounded-xl border border-sky-300/15 bg-sky-500/[0.08] p-3">
-            <p className={detailLabelClass}>Adjustments / Credit Notes</p>
-            <p className="mt-1 text-lg font-black text-sky-100">{currency(signedAdjustmentTotal)}</p>
+            <p className={detailLabelClass}>Extra Invoices</p>
+            <p className="mt-1 text-lg font-black text-sky-100">+{wholeCurrency(additionalAdjustmentTotal)}</p>
+          </div>
+          <div className="rounded-xl border border-amber-300/20 bg-amber-500/[0.08] p-3">
+            <p className={detailLabelClass}>Credit Notes</p>
+            <p className="mt-1 text-lg font-black text-amber-100">-{wholeCurrency(creditNoteTotal)}</p>
           </div>
           <div className="rounded-xl border border-emerald-300/20 bg-emerald-500/[0.1] p-3">
             <p className={detailLabelClass}>Net Payable</p>
-            <p className="mt-1 text-lg font-black text-emerald-100">{currency(netPayableTotal)}</p>
+            <p className="mt-1 text-lg font-black text-emerald-100">{wholeCurrency(netPayableTotal)}</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
             <p className={detailLabelClass}>Paid Amount</p>
-            <p className="mt-1 text-lg font-black text-slate-100">{currency(activeInvoicePaidAmount)}</p>
+            <p className="mt-1 text-lg font-black text-slate-100">{wholeCurrency(activeInvoicePaidAmount)}</p>
           </div>
-          <div className={`rounded-xl border p-3 ${refundDueAmount > 0 ? 'border-rose-300/20 bg-rose-500/[0.1] text-rose-100' : activeInvoiceBalanceAmount > 0 ? 'border-amber-300/20 bg-amber-500/[0.1] text-amber-100' : 'border-emerald-300/20 bg-emerald-500/[0.1] text-emerald-100'}`}>
-            <p className={detailLabelClass}>{netBalanceLabel}</p>
-            <p className="mt-1 text-lg font-black">{currency(netBalanceAmount)}</p>
+          <div className={`rounded-xl border p-3 ${settlementToneClass}`}>
+            <p className={detailLabelClass}>{settlementLabel}</p>
+            <p className="mt-1 text-lg font-black">{settlementLabel === 'Settled' ? wholeCurrency(0) : wholeCurrency(settlementAmount)}</p>
           </div>
         </div>
         <div className="mt-4 grid gap-3">
-          {adjustmentInvoices.map((invoice) => (
+          {adjustmentInvoices.map((invoice) => {
+            const isCreditDocument = adjustmentKind(invoice) === 'credit_note';
+            return (
             <div key={recordId(invoice) || invoice.invoiceNumber} className="rounded-2xl border border-white/10 bg-slate-950/25 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-mono text-sm font-black text-slate-100">{invoice.adjustmentNumber || invoice.invoiceNumber}</p>
-                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${adjustmentKind(invoice) === 'credit_note' ? 'border-amber-300/25 bg-amber-500/10 text-amber-100' : 'border-sky-300/25 bg-sky-500/10 text-sky-100'}`}>
+                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${isCreditDocument ? 'border-amber-300/25 bg-amber-500/10 text-amber-100' : 'border-sky-300/25 bg-sky-500/10 text-sky-100'}`}>
                       {adjustmentLabel(invoice)}
                     </span>
                     <StatusBadge status={invoice.status || 'Pending'} />
@@ -2362,7 +2392,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 <div className="grid shrink-0 gap-2 sm:grid-cols-2 lg:min-w-[18rem]">
                   <div className="rounded-xl border border-white/10 bg-black/15 p-3">
                     <p className={detailLabelClass}>Amount</p>
-                    <p className="mt-1 font-black text-slate-100">{currency(invoice.total)}</p>
+                    <p className={`mt-1 font-black ${isCreditDocument ? 'text-amber-100' : 'text-sky-100'}`}>
+                      {isCreditDocument ? '-' : '+'}{wholeCurrency(invoice.total)}
+                    </p>
+                    <p className="mt-1 text-[11px] font-semibold text-slate-400">{isCreditDocument ? 'Reduces customer payable' : 'Increases customer payable'}</p>
                   </div>
                   <button type="button" className="btn btn-secondary min-h-10 cursor-not-allowed opacity-60" disabled>
                     PDF not available yet.
@@ -2370,14 +2403,15 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
   }
 
   function renderPartsLockNotice(className = 'mt-2') {
-    if (!partsLocked) return null;
+    if (!partsLocked || activeTab === 'billing') return null;
     return (
       <div className={`${className} rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-amber-100`}>
         <p className="text-xs font-semibold leading-5">{partsLockMessage}</p>
@@ -2618,9 +2652,9 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     ['AMC Contract ID', amcContract?.contractId || '-'],
                     ['AMC Contract Type', amcContract?.contractType || '-'],
                     ['AMC Coverage Type', amcCoverageType],
-                    ['AMC Contract Value', currency(amcContractValue)],
-                    ['AMC Paid Amount', currency(amcPaidAmount)],
-                    ['AMC Pending Amount', currency(amcPendingAmount)],
+                    ['AMC Contract Value', wholeCurrency(amcContractValue)],
+                    ['AMC Paid Amount', wholeCurrency(amcPaidAmount)],
+                    ['AMC Pending Amount', wholeCurrency(amcPendingAmount)],
                     ['AMC Contract Status', amcContractStatus],
                     ['AMC Payment Status', amcPaymentStatus],
                     ['Covered Devices / Assets', amcContract?.coveredDevices || amcContract?.coveredService || '-']
@@ -2681,7 +2715,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${item.inventoryPartId ? 'bg-sky-500/15 text-sky-100' : 'bg-slate-500/15 text-slate-100'}`}>{partUsedTypeLabel(item)}</span>
                       </div>
                     </div>
-                    <p className="mt-1 text-sm muted">Qty {item.quantity} · Unit: {currency(item.unitPrice)} · Total: {currency(item.total)}</p>
+                    <p className="mt-1 text-sm muted">Qty {item.quantity} · Unit: {wholeCurrency(item.unitPrice)} · Total: {wholeCurrency(item.total)}</p>
                   </div>
                 )) : <EmptyState title="No parts added yet." message="Add used parts that should appear on the final bill." />}
               </div>
@@ -2701,7 +2735,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 ) : null}
                 <div className="rounded-card bg-[var(--surface-2)] px-3 py-2">
                   <p className="text-xs muted">Line Total</p>
-                  <p className="text-sm font-black">{livePartIsCovered ? currency(0) : currency(livePartTotal)}</p>
+                  <p className="text-sm font-black">{livePartIsCovered ? wholeCurrency(0) : wholeCurrency(livePartTotal)}</p>
                 </div>
                 <button type="submit" className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={partsLocked || selectedPartOutOfStock || selectedPartInsufficientStock}><PackagePlus className="h-4 w-4" />Add Used Part</button>
               </form>
@@ -2709,7 +2743,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               {selectedPartOutOfStock ? <p className="mt-2 text-sm font-semibold text-rose-100">Not enough available stock</p> : null}
               {selectedPartInsufficientStock && !selectedPartOutOfStock ? <p className="mt-2 text-sm font-semibold text-amber-100">Not enough available stock ({selectedPartAvailable} available).</p> : null}
               <div className="mt-4 rounded-card bg-emerald-400/10 p-3 text-emerald-100">
-                <p className="text-sm font-bold">Parts total: {currency(partsTotal)}</p>
+                <p className="text-sm font-bold">Parts total: {wholeCurrency(partsTotal)}</p>
               </div>
             </div>
           </div>
@@ -2868,13 +2902,16 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             ['Address', order.customerId?.address || '-'],
             ['Service Type', order.serviceType || order.service || '-'],
             ['Device', order.device || '-'],
+            ['Brand', workOrderDeviceDetail(order.deviceBrand)],
+            ['Model', workOrderDeviceDetail(order.deviceModel)],
+            ...(order.serialNumber || order.deviceSerialNumber || order.serialNo ? [['Serial No', order.serialNumber || order.deviceSerialNumber || order.serialNo]] : []),
             ...(isAmcLinked ? [
               ['AMC Contract ID', amcContract?.contractId || '-'],
               ['AMC Contract Type', amcContract?.contractType || '-'],
               ['AMC Coverage Type', amcCoverageType],
-              ['AMC Contract Value', currency(amcContractValue)],
-              ['AMC Paid Amount', currency(amcPaidAmount)],
-              ['AMC Pending Amount', currency(amcPendingAmount)],
+              ['AMC Contract Value', wholeCurrency(amcContractValue)],
+              ['AMC Paid Amount', wholeCurrency(amcPaidAmount)],
+              ['AMC Pending Amount', wholeCurrency(amcPendingAmount)],
               ['AMC Contract Status', amcContractStatus],
               ['AMC Payment Status', amcPaymentStatus],
               ['Covered Devices / Assets', amcContract?.coveredDevices || amcContract?.coveredService || '-']
@@ -2943,14 +2980,17 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 ['Phone', phone || '-'],
                 ['Service Type', order.serviceType || order.service || '-'],
                 ['Device', order.device || '-'],
+                ['Brand', workOrderDeviceDetail(order.deviceBrand)],
+                ['Model', workOrderDeviceDetail(order.deviceModel)],
+                ...(order.serialNumber || order.deviceSerialNumber || order.serialNo ? [['Serial No', order.serialNumber || order.deviceSerialNumber || order.serialNo]] : []),
                 ['Problem / Issue', order.issue || '-'],
                 ...(isAmcLinked ? [
                   ['AMC Contract ID', amcContract?.contractId || '-'],
                   ['AMC Contract Type', amcContract?.contractType || '-'],
                   ['AMC Coverage Type', amcCoverageType],
-                  ['AMC Contract Value', currency(amcContractValue)],
-                  ['AMC Paid Amount', currency(amcPaidAmount)],
-                  ['AMC Pending Amount', currency(amcPendingAmount)],
+                  ['AMC Contract Value', wholeCurrency(amcContractValue)],
+                  ['AMC Paid Amount', wholeCurrency(amcPaidAmount)],
+                  ['AMC Pending Amount', wholeCurrency(amcPendingAmount)],
                   ['AMC Contract Status', amcContractStatus],
                   ['AMC Payment Status', amcPaymentStatus],
                   ['Covered Devices / Assets', amcContract?.coveredDevices || amcContract?.coveredService || '-']
@@ -3006,8 +3046,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     </div>
                     <div className="technician-detail-card-metrics">
                       <span><b>{item.quantity}</b><small>Qty</small></span>
-                      <span><b>{currency(item.unitPrice)}</b><small>Unit</small></span>
-                      <span><b>{currency(item.total)}</b><small>Total</small></span>
+                      <span><b>{wholeCurrency(item.unitPrice)}</b><small>Unit</small></span>
+                      <span><b>{wholeCurrency(item.total)}</b><small>Total</small></span>
                     </div>
                     {isAmcLinked ? (
                       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -3040,8 +3080,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                           </td>
                         ) : null}
                         <td>{item.quantity}</td>
-                        <td>{currency(item.unitPrice)}</td>
-                        <td className="font-black">{currency(item.total)}</td>
+                        <td>{wholeCurrency(item.unitPrice)}</td>
+                        <td className="font-black">{wholeCurrency(item.total)}</td>
                         {canManagePartsUsed ? (
                           <td>
                             <div className="flex items-center gap-1">
@@ -3088,7 +3128,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <div className="mt-3 flex justify-end border-t border-white/10 pt-3">
               <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-2.5 text-right shadow-[0_0_22px_rgba(16,185,129,0.08)]">
                 <p className="text-xs font-semibold uppercase tracking-wide muted">{isAmcLinked ? 'Chargeable Parts Total' : 'Total Amount'}</p>
-                <p className="mt-0.5 text-lg font-black text-emerald-100">{currency(partsTotal)}</p>
+                <p className="mt-0.5 text-lg font-black text-emerald-100">{wholeCurrency(partsTotal)}</p>
               </div>
             </div>
 
@@ -3135,7 +3175,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                   ) : null}
                   <div className="rounded-card border border-white/10 bg-[var(--surface)] px-3 py-2">
                     <p className="label">Line Total</p>
-                    <p className="mt-0.5 text-base font-black text-emerald-100">{livePartIsCovered ? currency(0) : currency(livePartTotal)}</p>
+                    <p className="mt-0.5 text-base font-black text-emerald-100">{livePartIsCovered ? wholeCurrency(0) : wholeCurrency(livePartTotal)}</p>
                     {livePartIsCovered ? <p className="mt-1 text-[11px] font-semibold text-emerald-100">Inventory deducts, no extra payable.</p> : null}
                   </div>
                   <div className="flex items-end">
@@ -3259,15 +3299,15 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 ) : null}
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                <div className="rounded-xl border border-sky-400/15 bg-sky-500/10 p-4"><p className={detailLabelClass}>Contract Value</p><p className="mt-2 text-xl font-black text-sky-100">{currency(amcContractValue)}</p></div>
+                <div className="rounded-xl border border-sky-400/15 bg-sky-500/10 p-4"><p className={detailLabelClass}>Contract Value</p><p className="mt-2 text-xl font-black text-sky-100">{wholeCurrency(amcContractValue)}</p></div>
                 <div className="rounded-xl border border-emerald-400/15 bg-emerald-500/10 p-4 text-emerald-100"><p className={detailLabelClass}>Coverage Type</p><p className="mt-2 text-base font-black">{amcCoverageType}</p></div>
-                <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-4 text-emerald-100"><p className={detailLabelClass}>Paid</p><p className="mt-2 text-xl font-black">{currency(amcPaidAmount)} / {currency(amcContractValue)}</p></div>
-                <div className={`rounded-xl border p-4 ${amcPendingAmount > 0 ? 'border-amber-400/20 bg-amber-500/10 text-amber-100' : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-100'}`}><p className={detailLabelClass}>Pending</p><p className="mt-2 text-xl font-black">{currency(amcPendingAmount)}</p></div>
+                <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-4 text-emerald-100"><p className={detailLabelClass}>Paid</p><p className="mt-2 text-xl font-black">{wholeCurrency(amcPaidAmount)} / {wholeCurrency(amcContractValue)}</p></div>
+                <div className={`rounded-xl border p-4 ${amcPendingAmount > 0 ? 'border-amber-400/20 bg-amber-500/10 text-amber-100' : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-100'}`}><p className={detailLabelClass}>Pending</p><p className="mt-2 text-xl font-black">{wholeCurrency(amcPendingAmount)}</p></div>
                 <div className="rounded-xl border border-white/10 bg-[var(--surface)] p-4"><p className={detailLabelClass}>Contract Status</p><div className="mt-2"><StatusBadge status={amcContractStatus} /></div></div>
                 <div className="rounded-xl border border-white/10 bg-[var(--surface)] p-4"><p className={detailLabelClass}>Payment Status</p><div className="mt-2"><StatusBadge status={amcPaymentStatus} /></div></div>
               </div>
               {amcInvoiceId ? <p className="mt-3 text-xs muted">AMC Invoice: {getInvoiceDisplayId(amcInvoice)}</p> : <p className="mt-3 text-xs font-semibold text-amber-100">AMC invoice is not created yet. Create it from the contract value before collecting AMC payment.</p>}
-              {extraInvoiceBalance > 0 ? <p className="mt-2 text-xs font-semibold text-amber-100">Extra Charges Pending: {currency(extraInvoiceBalance)} on the repair invoice.</p> : null}
+              {extraInvoiceBalance > 0 ? <p className="mt-2 text-xs font-semibold text-amber-100">Extra Charges Pending: {wholeCurrency(extraInvoiceBalance)} on the repair invoice.</p> : null}
             </div>
           ) : null}
 
@@ -3283,12 +3323,12 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             </div>
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="relative w-full sm:w-[320px] sm:max-w-[360px]">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-cyan-200">₹</span>
-                <input className={`${detailNumberInputClass} h-11 w-full rounded-xl pl-8 pr-3 disabled:cursor-not-allowed disabled:opacity-60 ${detailFocusRing}`} type="number" min="0" step="0.01" value={serviceCharge} disabled={partsLocked} onChange={(event) => setServiceCharge(event.target.value)} />
+                <span className={`pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm font-black text-cyan-200 ${detailRupeePrefixClass}`}>{'\u20B9'}</span>
+                <input className={`${detailNumberInputClass} ${detailRupeeInputClass} h-11 w-full rounded-xl pr-3 disabled:cursor-not-allowed disabled:opacity-60 ${detailFocusRing}`} type="number" min="0" step="0.01" value={serviceCharge} disabled={partsLocked} onChange={(event) => setServiceCharge(event.target.value)} />
               </div>
               <button type="submit" className="btn btn-primary h-11 w-full px-5 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto" disabled={partsLocked}><Save className="h-4 w-4" />Save Charge</button>
             </div>
-            {partsLocked ? <p className="mt-2 text-xs font-semibold text-amber-100">Service charge is locked because an active invoice exists.</p> : null}
+            {partsLocked ? <p className="mt-2 text-xs font-semibold text-amber-100">Service charge is locked while this invoice remains active.</p> : null}
             {savedServiceCharge !== currentServiceCharge ? <p className="mt-2 text-xs font-semibold text-amber-100">Unsaved service charge will update the saved total after saving.</p> : null}
           </form> : null}
 
@@ -3302,14 +3342,14 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">AMC Coverage Breakdown</p>
                     <h3 className="mt-1 font-black">Coverage Type: <span className="text-emerald-100">{amcCoverageType}</span></h3>
                   </div>
-                  <p className="text-2xl font-black text-emerald-300">{currency(extraPayableTotal)}</p>
+                  <p className="text-2xl font-black text-emerald-300">{wholeCurrency(extraPayableTotal)}</p>
                 </div>
                 <div className="mt-4 grid gap-3 lg:grid-cols-2">
                   <div className="rounded-xl border border-emerald-400/15 bg-emerald-500/10 p-4">
                     <p className={detailLabelClass}>Covered By AMC</p>
                     <div className="mt-3 grid gap-2 text-sm text-emerald-100">
                       {amcBilling.coveredItems.length ? amcBilling.coveredItems.map((item, index) => (
-                        <p key={`${item.label}-${index}`} className="font-semibold">✓ {item.label} {item.amount > 0 ? currency(item.amount) : ''}</p>
+                        <p key={`${item.label}-${index}`} className="font-semibold">✓ {item.label} {item.amount > 0 ? wholeCurrency(item.amount) : ''}</p>
                       )) : <p className="muted">No charge lines are covered by this AMC type.</p>}
                     </div>
                   </div>
@@ -3317,18 +3357,18 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     <p className={detailLabelClass}>Chargeable</p>
                     <div className="mt-3 grid gap-2 text-sm text-amber-100">
                       {amcBilling.chargeableItems.length ? amcBilling.chargeableItems.map((item, index) => (
-                        <p key={`${item.label}-${index}`} className="font-semibold">• {item.label} {currency(item.amount)}</p>
+                        <p key={`${item.label}-${index}`} className="font-semibold">• {item.label} {wholeCurrency(item.amount)}</p>
                       )) : <p className="muted">No extra chargeable items.</p>}
                     </div>
-                    <p className="mt-4 text-xs font-black uppercase tracking-wide text-amber-100">Extra Payable: {currency(extraPayableTotal)}</p>
+                    <p className="mt-4 text-xs font-black uppercase tracking-wide text-amber-100">Extra Payable: {wholeCurrency(extraPayableTotal)}</p>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <div className="rounded-xl border border-sky-400/15 bg-sky-500/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><p className={detailLabelClass}>Parts Total</p><p className="mt-2 text-xl font-black text-sky-100">{currency(partsTotal)}</p></div>
-                <div className="rounded-xl border border-cyan-400/15 bg-cyan-500/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><p className={detailLabelClass}>Service Charge</p><p className="mt-2 text-xl font-black text-cyan-100">{currency(currentServiceCharge)}</p></div>
-                <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/[0.12] p-4 text-emerald-50 shadow-[0_0_28px_rgba(16,185,129,0.12)]"><p className={detailLabelClass}>Total Amount</p><p className="mt-2 text-2xl font-black text-emerald-300">{currency(extraPayableTotal)}</p></div>
+                <div className="rounded-xl border border-sky-400/15 bg-sky-500/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><p className={detailLabelClass}>Parts Total</p><p className="mt-2 text-xl font-black text-sky-100">{wholeCurrency(partsTotal)}</p></div>
+                <div className="rounded-xl border border-cyan-400/15 bg-cyan-500/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><p className={detailLabelClass}>Service Charge</p><p className="mt-2 text-xl font-black text-cyan-100">{wholeCurrency(currentServiceCharge)}</p></div>
+                <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/[0.12] p-4 text-emerald-50 shadow-[0_0_28px_rgba(16,185,129,0.12)]"><p className={detailLabelClass}>Total Amount</p><p className="mt-2 text-2xl font-black text-emerald-300">{wholeCurrency(extraPayableTotal)}</p></div>
               </div>
             )}
             <div className={`${detailPanelClass} mt-4`}>
@@ -3351,11 +3391,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     </div>
                     <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-3 text-emerald-100">
                       <p className={detailLabelClass}>Paid Amount</p>
-                      <p className="mt-2 text-lg font-black">{currency(extraInvoicePaidTotal)}</p>
+                      <p className="mt-2 text-lg font-black">{wholeCurrency(extraInvoicePaidTotal)}</p>
                     </div>
                     <div className={`rounded-xl border p-3 ${extraInvoiceBalance > 0 ? 'border-amber-400/20 bg-amber-500/10 text-amber-100' : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-100'}`}>
                       <p className={detailLabelClass}>Balance Amount</p>
-                      <p className="mt-2 text-lg font-black">{currency(extraInvoiceBalance)}</p>
+                      <p className="mt-2 text-lg font-black">{wholeCurrency(extraInvoiceBalance)}</p>
                     </div>
                   </div>
                   {extraInvoiceNeedsRefresh ? (
@@ -3370,15 +3410,15 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                       <div className="mt-3 grid gap-2 sm:grid-cols-3">
                         <div className="rounded-lg border border-white/10 bg-slate-950/25 p-2">
                           <p className={detailLabelClass}>Existing Invoice Amount</p>
-                          <p className="mt-1 font-black">{currency(extraInvoiceTotal)}</p>
+                          <p className="mt-1 font-black">{wholeCurrency(extraInvoiceTotal)}</p>
                         </div>
                         <div className="rounded-lg border border-white/10 bg-slate-950/25 p-2">
                           <p className={detailLabelClass}>Correct Extra Payable</p>
-                          <p className="mt-1 font-black">{currency(extraPayableTotal)}</p>
+                          <p className="mt-1 font-black">{wholeCurrency(extraPayableTotal)}</p>
                         </div>
                         <div className="rounded-lg border border-white/10 bg-slate-950/25 p-2">
                           <p className={detailLabelClass}>Difference Amount</p>
-                          <p className="mt-1 font-black">{currency(extraInvoiceDifferenceAmount)}</p>
+                          <p className="mt-1 font-black">{wholeCurrency(extraInvoiceDifferenceAmount)}</p>
                         </div>
                       </div>
                       {canEditInvoice ? (
@@ -3390,7 +3430,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                           ) : null}
                           {canCreateAdjustmentInvoice ? (
                             <button type="button" className="btn btn-primary py-2" onClick={(event) => handleExtraInvoiceMismatch('adjustment', event)}>
-                              Create Adjustment Invoice
+                              Create Extra Invoice
                             </button>
                           ) : null}
                           {activeExtraInvoicesHavePayment && extraInvoiceDifference <= 0.5 ? (
@@ -3415,9 +3455,6 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                       <button type="button" className="btn btn-secondary py-2" onClick={openVoidUnlockConfirm}>
                         Void Invoice & Unlock Editing
                       </button>
-                    ) : null}
-                    {paidOrPartialInvoiceLocksParts ? (
-                      <p className="text-xs font-semibold text-amber-100/85">{paidOrPartialBackendMessage}</p>
                     ) : null}
                   </div>
                 </div>
@@ -3569,7 +3606,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 </p>
                 <p className="mt-2 text-sm">
                   Unit price (from inventory):{' '}
-                  <span className="font-bold">{currency(Number(inventoryParts.find((p) => String(p.id) === String(partAction.inventoryPartId))?.sellingPrice || 0))}</span>
+                  <span className="font-bold">{wholeCurrency(Number(inventoryParts.find((p) => String(p.id) === String(partAction.inventoryPartId))?.sellingPrice || 0))}</span>
                 </p>
                 {(() => {
                   const row = inventoryParts.find((p) => String(p.id) === String(partAction.inventoryPartId));

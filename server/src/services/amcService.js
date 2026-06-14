@@ -141,6 +141,10 @@ function emptyExtraChargeSummary() {
   };
 }
 
+function cleanDeviceDetail(value) {
+  return clean(value).slice(0, 80);
+}
+
 async function extraChargeSummaries(contractIds = []) {
   const ids = contractIds.filter(Boolean);
   if (!ids.length) return new Map();
@@ -264,6 +268,9 @@ export async function createAmcContract(payload, user) {
   });
 
   const coveredService = clean(payload.coveredService) || coveredServiceByType[contractType] || contractType;
+  const deviceBrand = cleanDeviceDetail(payload.deviceBrand || payload.brand || '');
+  const deviceModel = cleanDeviceDetail(payload.deviceModel || payload.model || '');
+  if (!deviceBrand) throw appError('Device brand is required.', 400);
   const coverageType = normalizeAmcCoverageType(payload.coverageType);
   const coverage = amcCoverageSummary({
     coverageType,
@@ -298,6 +305,8 @@ export async function createAmcContract(payload, user) {
     coverVisits: coverage.coverVisits,
     coveredService,
     coveredDevices: clean(payload.coveredDevices || payload.assets),
+    deviceBrand,
+    deviceModel,
     warrantyIncluded,
     warrantyStartDate: warrantyIncluded ? optionalDay(payload.warrantyStartDate) : null,
     warrantyEndDate: warrantyIncluded ? optionalDay(payload.warrantyEndDate) : null,
@@ -364,6 +373,8 @@ export async function createWorkOrderFromAmc(contractId, payload, user) {
     serviceType: visit?.serviceType || contract.coveredService,
     bookingSource: 'AMC',
     device: contract.coveredDevices || contract.contractType,
+    deviceBrand: contract.deviceBrand || '',
+    deviceModel: contract.deviceModel || '',
     issue: clean(payload.issue) || `AMC visit for ${contract.contractType}`,
     technicianId: payload.technicianId || visit?.technicianId || null,
     amcContractId: contract._id,

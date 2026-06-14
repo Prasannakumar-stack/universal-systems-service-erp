@@ -162,6 +162,8 @@ function defaultAmcForm() {
     coverService: true,
     coverVisits: true,
     coveredDevices: '',
+    deviceBrand: '',
+    deviceModel: '',
     serviceFrequency: 'Quarterly',
     technicianId: '',
     startDate: dateInputValue(start),
@@ -175,6 +177,10 @@ function defaultAmcForm() {
     warrantyTerms: '',
     notes: ''
   };
+}
+
+function amcDeviceBrandModel(contract = {}) {
+  return [contract.deviceBrand, contract.deviceModel].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
 }
 
 export function AMCContractsPage({ role = 'admin' }) {
@@ -227,7 +233,7 @@ export function AMCContractsPage({ role = 'admin' }) {
   const contracts = data?.contracts || [];
   const summary = data?.summary || {};
   const visibleContracts = contracts.filter((contract) => {
-    const text = `${contract.contractId} ${contract.customerName} ${contract.phone} ${contract.contractType} ${contract.coverageType} ${contract.coveredService} ${contract.coveredDevices}`.toLowerCase();
+    const text = `${contract.contractId} ${contract.customerName} ${contract.phone} ${contract.contractType} ${contract.coverageType} ${contract.coveredService} ${contract.coveredDevices} ${contract.deviceBrand || ''} ${contract.deviceModel || ''}`.toLowerCase();
     const searchText = debouncedSearch.trim().toLowerCase();
     return !searchText || text.includes(searchText);
   });
@@ -291,6 +297,8 @@ export function AMCContractsPage({ role = 'admin' }) {
       coverService: coverage.coverService,
       coverVisits: coverage.coverVisits,
       coveredDevices: contract?.coveredDevices || '',
+      deviceBrand: contract?.deviceBrand || '',
+      deviceModel: contract?.deviceModel || '',
       serviceFrequency: contract?.serviceFrequency || 'Quarterly',
       technicianId: recordId(contract?.visits?.find((visit) => recordId(visit.technicianId))?.technicianId) || '',
       contractValue: contract?.contractValue ?? '',
@@ -501,6 +509,14 @@ export function AMCContractsPage({ role = 'admin' }) {
                 <span className="label">Covered Devices / Assets</span>
                 <textarea className="input amc-compact-textarea" value={form.coveredDevices} onChange={(event) => setForm((current) => ({ ...current, coveredDevices: event.target.value }))} placeholder="Example: office laptops, printer, CCTV DVR, network rack" />
               </label>
+              <label>
+                <span className="label">Device Brand <span className="amc-required">Required</span></span>
+                <input className="input" value={form.deviceBrand} onChange={(event) => setForm((current) => ({ ...current, deviceBrand: event.target.value }))} maxLength={80} placeholder="Dell, HP, Lenovo, Epson, Hikvision..." required />
+              </label>
+              <label>
+                <span className="label">Device Model</span>
+                <input className="input" value={form.deviceModel} onChange={(event) => setForm((current) => ({ ...current, deviceModel: event.target.value }))} maxLength={80} placeholder="Inspiron 3511, LaserJet 1020, DS-2CE16D0..." />
+              </label>
             </AmcFormSection>
 
             <AmcFormSection title="Warranty Details" icon={ShieldCheck}>
@@ -595,6 +611,7 @@ export function AMCContractsPage({ role = 'admin' }) {
                 const visitWorkOrderId = recordId((contract.visits || []).find((visit) => recordId(visit.workOrderId))?.workOrderId);
                 const payment = amcPaymentSummary(contract);
                 const extra = extraChargeSummary(contract);
+                const brandModel = amcDeviceBrandModel(contract);
                 return (
                   <tr key={recordId(contract)}>
                     <td>
@@ -609,6 +626,7 @@ export function AMCContractsPage({ role = 'admin' }) {
                         <span className="amc-plan-title" title={contract.contractType || '-'}>{contract.contractType || '-'}</span>
                         <span className="amc-muted-badge" title={normalizeAmcCoverageType(contract.coverageType)}>{normalizeAmcCoverageType(contract.coverageType)}</span>
                         <span className="amc-plan-service" title={contract.coveredService || contract.coveredDevices || '-'}>{contract.coveredService || contract.coveredDevices || '-'}</span>
+                        <span className="amc-plan-service" title={brandModel || 'Not specified'}>Brand / Model: {brandModel || 'Not specified'}</span>
                         {contract.warrantyIncluded ? <span className="amc-warranty-line">{amcWarrantyLine(contract)}</span> : null}
                       </div>
                     </td>
@@ -676,6 +694,7 @@ function TechnicianAmcContractMobileCard({ contract, base }) {
   const visitWorkOrderId = recordId((contract.visits || []).find((visit) => recordId(visit.workOrderId))?.workOrderId);
   const payment = amcPaymentSummary(contract);
   const extra = extraChargeSummary(contract);
+  const brandModel = amcDeviceBrandModel(contract);
 
   return (
     <article className="technician-mobile-card">
@@ -695,6 +714,10 @@ function TechnicianAmcContractMobileCard({ contract, base }) {
         <div>
           <span>Covered Devices</span>
           <p>{contract.coveredService || contract.coveredDevices || '-'}</p>
+        </div>
+        <div>
+          <span>Brand / Model</span>
+          <p>{brandModel || 'Not specified'}</p>
         </div>
         <div>
           <span>Period</span>

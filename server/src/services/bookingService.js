@@ -47,9 +47,16 @@ function preferredDateValue(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function cleanDeviceDetail(value) {
+  return clean(value).slice(0, 80);
+}
+
 export async function createBooking(payload, user = null) {
   const serviceType = clean(payload.serviceType || payload.service || '');
   const bookingSource = cleanBookingSource(payload.bookingSource || payload.source || '');
+  const deviceBrand = cleanDeviceDetail(payload.deviceBrand || payload.brand || payload.deviceBrandModel || payload.brandModel || '');
+  const deviceModel = cleanDeviceDetail(payload.deviceModel || payload.model || '');
+  if (!isContactFormSource(bookingSource) && !deviceBrand) throw appError('Device brand is required.', 400);
   const problemImage = payload.problemImage
     ? {
         filename: clean(payload.problemImage.filename),
@@ -76,6 +83,8 @@ export async function createBooking(payload, user = null) {
     bookingSource,
     problemImage,
     device: clean(payload.device || serviceType || payload.product || 'General Service'),
+    deviceBrand,
+    deviceModel,
     issue: clean(payload.issue || payload.problemDescription || payload.problem || 'Service request'),
     preferredDate: preferredDateValue(payload.preferredDate),
     preferredTime: clean(payload.preferredTime),
@@ -115,6 +124,8 @@ export async function createBooking(payload, user = null) {
         enquiryPriority: booking.enquiryPriority,
         problemImage: booking.problemImage?.url || '',
         device: booking.device,
+        deviceBrand: booking.deviceBrand,
+        deviceModel: booking.deviceModel,
         preferredDate: booking.preferredDate,
         preferredTime: booking.preferredTime,
         timestamp: booking.createdAt

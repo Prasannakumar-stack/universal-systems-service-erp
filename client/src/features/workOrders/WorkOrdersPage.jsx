@@ -236,6 +236,10 @@ function WorkOrdersBadgeCell({ children, justify = 'justify-start' }) {
   );
 }
 
+function workOrderDeviceBrandModel(order = {}) {
+  return [order.deviceBrand, order.deviceModel].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+}
+
 export function WorkOrdersPage({ role = 'admin' }) {
   const { request, user } = useAuth();
   const { push } = useToast();
@@ -533,6 +537,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
                 const canShowAssignmentAction = canAssignTechnician && !isTechnician;
                 const canShowDeleteAction = canDeleteWorkOrder;
                 const hasMoreActions = canShowAutoAssign || canShowAssignmentAction || canShowDeleteAction;
+                const brandModel = workOrderDeviceBrandModel(order);
 
                 return (
                 <tr
@@ -556,8 +561,9 @@ export function WorkOrdersPage({ role = 'admin' }) {
                   </td>
                   <td className={`${workOrdersTdClass} work-orders-cell-service !whitespace-normal text-left`}>
                     <div className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-slate-100" title={order.serviceType || order.service || 'Service Job'}>{order.serviceType || order.service || 'Service Job'}</span>
-                      <span className="mt-0.5 block truncate text-xs text-slate-400" title={order.device || '-'}>{order.device || '-'}</span>
+                      <span className="block truncate text-sm font-semibold text-slate-100" title={brandModel || order.device || '-'}>{brandModel || order.device || '-'}</span>
+                      <span className="mt-0.5 block truncate text-xs text-slate-400" title={order.serviceType || order.service || 'Service Job'}>{order.serviceType || order.service || 'Service Job'}</span>
+                      {order.device && brandModel ? <span className="mt-0.5 block truncate text-xs text-slate-500" title={order.device}>{order.device}</span> : null}
                       {order.issue ? <span className="mt-0.5 block truncate text-xs text-slate-400" title={order.issue}>{order.issue}</span> : null}
                     </div>
                   </td>
@@ -640,6 +646,7 @@ function TechnicianWorkOrderMobileCard({ order, base, onCopyPhone }) {
   const customer = customerFromOrder(order);
   const phone = customerPhone(order);
   const priority = jobPriority(order);
+  const brandModel = workOrderDeviceBrandModel(order);
 
   return (
     <article className="technician-mobile-card">
@@ -654,7 +661,8 @@ function TechnicianWorkOrderMobileCard({ order, base, onCopyPhone }) {
       <div className="technician-mobile-card-body">
         <div>
           <span>Service / Device</span>
-          <b>{order.serviceType || order.service || 'Service Job'}{order.device ? ` / ${order.device}` : ''}</b>
+          <b>{brandModel || order.device || 'Device not specified'}</b>
+          <p>{order.serviceType || order.service || 'Service Job'}</p>
         </div>
         <div>
           <span>Problem</span>

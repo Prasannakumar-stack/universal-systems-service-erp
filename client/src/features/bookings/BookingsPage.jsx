@@ -441,6 +441,9 @@ export function BookingsPage({ role = 'admin' }) {
                   <span className="booking-line-clamp font-bold text-slate-100" title={booking.device || booking.serviceType || 'General Service'}>
                     {booking.device || booking.serviceType || 'General Service'}
                   </span>
+                  {bookingDeviceBrandModel(booking) ? (
+                    <span className="mt-1 block truncate text-xs font-semibold text-slate-300" title={bookingDeviceBrandModel(booking)}>{bookingDeviceBrandModel(booking)}</span>
+                  ) : null}
                   {booking.serviceType && booking.serviceType !== booking.device ? (
                     <span className="mt-1 block truncate text-xs font-medium text-slate-500" title={booking.serviceType}>{booking.serviceType}</span>
                   ) : null}
@@ -536,6 +539,10 @@ function DetailPill({ label, value }) {
   );
 }
 
+function bookingDeviceBrandModel(booking = {}) {
+  return [booking.deviceBrand, booking.deviceModel].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+}
+
 function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert, canAssignTechnician, saving, onClose, onSave, onConvert }) {
   const [form, setForm] = useState(() => ({
     status: displayBookingStatus(booking),
@@ -605,6 +612,9 @@ function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert
               <DetailPill label="Phone number" value={booking.phone || '-'} />
               <DetailPill label="Service interest" value={booking.serviceType || booking.device || 'General Service'} />
               <DetailPill label="Created" value={formatDate(booking.createdAt)} />
+              <DetailPill label="Device / Asset" value={booking.device || '-'} />
+              <DetailPill label="Device Brand" value={booking.deviceBrand || 'Not specified'} />
+              <DetailPill label="Device Model" value={booking.deviceModel || 'Not specified'} />
             </div>
 
             <section className="booking-message-card rounded-2xl border border-white/10 bg-white/[0.035] p-4">
@@ -854,10 +864,11 @@ export function BookingModal({ initialCustomer = null, onClose, onSaved }) {
     address: initialCustomer?.address || '',
     serviceType: serviceTypes[0] || 'PC / Laptop Service',
     device: 'Laptop',
+    deviceBrand: '',
+    deviceModel: '',
     bookingSource: 'Walk-in',
     issue: ''
   }));
-  const [deviceBrand, setDeviceBrand] = useState('');
   const [deviceImage, setDeviceImage] = useState(null);
   const [deviceImagePreview, setDeviceImagePreview] = useState('');
   const [saving, setSaving] = useState(false);
@@ -876,7 +887,7 @@ export function BookingModal({ initialCustomer = null, onClose, onSaved }) {
   }
 
   function resetBookingExtras() {
-    setDeviceBrand('');
+    setForm((current) => ({ ...current, deviceBrand: '', deviceModel: '' }));
     resetDeviceImage();
   }
 
@@ -914,6 +925,10 @@ export function BookingModal({ initialCustomer = null, onClose, onSaved }) {
 
   async function submit(event) {
     event.preventDefault();
+    if (!form.deviceBrand.trim()) {
+      push('Device brand is required.', 'error');
+      return;
+    }
     setSaving(true);
     try {
       await request('/bookings', { method: 'POST', body: JSON.stringify(form) });
@@ -962,8 +977,12 @@ export function BookingModal({ initialCustomer = null, onClose, onSaved }) {
             </select>
           </label>
           <label className="booking-modal-field">
-            <span className="booking-modal-label">Device Brand</span>
-            <input className="input booking-modal-control" value={deviceBrand} onChange={(event) => setDeviceBrand(event.target.value)} placeholder="Example: Dell, HP, Lenovo" />
+            <span className="booking-modal-label">Device Brand <span className="amc-required">Required</span></span>
+            <input className="input booking-modal-control" value={form.deviceBrand} onChange={(event) => update('deviceBrand', event.target.value)} maxLength={80} placeholder="Dell, HP, Lenovo, Epson, Hikvision..." required />
+          </label>
+          <label className="booking-modal-field">
+            <span className="booking-modal-label">Device Model</span>
+            <input className="input booking-modal-control" value={form.deviceModel} onChange={(event) => update('deviceModel', event.target.value)} maxLength={80} placeholder="Inspiron 3511, LaserJet 1020, DS-2CE16D0..." />
           </label>
           <label className="booking-modal-field">
             <span className="booking-modal-label">Booking Source</span>

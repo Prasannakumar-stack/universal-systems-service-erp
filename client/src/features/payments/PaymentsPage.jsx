@@ -151,6 +151,28 @@ import {
 } from '../../shared/phase1Shared.jsx';
 import { can, normalizeRole } from '../../utils/roles.js';
 
+function invoiceDocumentKind(invoice) {
+  const invoiceType = String(invoice?.invoiceType || '').toLowerCase();
+  const adjustmentType = String(invoice?.adjustmentType || '').toLowerCase();
+  if (invoiceType === 'credit_note' || adjustmentType === 'credit_note') return 'credit_note';
+  if (
+    invoiceType === 'adjustment' ||
+    adjustmentType === 'additional_charge' ||
+    recordId(invoice?.parentInvoiceId) ||
+    recordId(invoice?.adjustmentForInvoiceId)
+  ) {
+    return 'extra_invoice';
+  }
+  return 'invoice';
+}
+
+function invoiceDocumentLabel(invoice) {
+  const kind = invoiceDocumentKind(invoice);
+  if (kind === 'credit_note') return 'Credit Note';
+  if (kind === 'extra_invoice') return 'Extra Invoice';
+  return 'Invoice';
+}
+
 export function PaymentsPage({ role = 'admin' }) {
   const { request, user } = useAuth();
   const { push } = useToast();
@@ -214,10 +236,11 @@ export function PaymentsPage({ role = 'admin' }) {
     if (invoiceIdParamHandled.current === invoiceIdParam) return;
     const invoice = findInvoice(data.invoices, invoiceIdParam);
     const dueAmount = invoiceDueAmount(invoice);
+    const isCreditNote = invoiceDocumentKind(invoice) === 'credit_note';
     setForm((current) => ({
       ...current,
       invoiceId: invoiceIdParam,
-      paidAmount: dueAmount > 0 ? String(dueAmount) : ''
+      paidAmount: !isCreditNote && dueAmount > 0 ? String(dueAmount) : ''
     }));
     invoiceIdParamHandled.current = invoiceIdParam;
   }, [invoiceIdParam, data?.invoices]);
@@ -225,10 +248,11 @@ export function PaymentsPage({ role = 'admin' }) {
   function selectInvoice(invoiceId) {
     const invoice = findInvoice(data?.invoices || [], invoiceId);
     const dueAmount = invoiceDueAmount(invoice);
+    const isCreditNote = invoiceDocumentKind(invoice) === 'credit_note';
     setForm((current) => ({
       ...current,
       invoiceId,
-      paidAmount: dueAmount > 0 ? String(dueAmount) : ''
+      paidAmount: !isCreditNote && dueAmount > 0 ? String(dueAmount) : ''
     }));
   }
 
@@ -246,12 +270,16 @@ export function PaymentsPage({ role = 'admin' }) {
       push('Please select an invoice', 'error');
       return;
     }
-    if (!form.paidAmount || !Number.isFinite(paidAmount) || paidAmount <= 0) {
-      push('Please enter a paid amount greater than zero', 'error');
-      return;
-    }
     if (!invoice) {
       push('Selected invoice was not found', 'error');
+      return;
+    }
+    if (invoiceDocumentKind(invoice) === 'credit_note') {
+      push('Credit notes reduce payable amount or create refund/credit due. Normal payment collection is not available for credit notes.', 'error');
+      return;
+    }
+    if (!form.paidAmount || !Number.isFinite(paidAmount) || paidAmount <= 0) {
+      push('Please enter a paid amount greater than zero', 'error');
       return;
     }
     if (invoice && paidAmount > dueAmount) {
@@ -284,7 +312,14 @@ export function PaymentsPage({ role = 'admin' }) {
 
   const selectedInvoice = findInvoice(data.invoices, form.invoiceId);
   const selectedBalanceDue = invoiceDueAmount(selectedInvoice);
-  const canRecordPayment = canRecordPayments && Boolean(form.invoiceId && Number(form.paidAmount) > 0);
+  const selectedDocumentKind = invoiceDocumentKind(selectedInvoice);
+  const selectedDocumentLabel = invoiceDocumentLabel(selectedInvoice);
+  const selectedIsCreditNote = selectedDocumentKind === 'credit_note';
+  const selectedParentInvoiceId = recordId(selectedInvoice?.parentInvoiceId || selectedInvoice?.adjustmentForInvoiceId);
+  const selectedParentInvoiceLabel = selectedParentInvoiceId
+    ? getInvoiceDisplayId(selectedInvoice?.parentInvoiceId || selectedInvoice?.adjustmentForInvoiceId) || selectedParentInvoiceId
+    : invoiceSourceLabel(selectedInvoice);
+  const canRecordPayment = canRecordPayments && !selectedIsCreditNote && Boolean(form.invoiceId && Number(form.paidAmount) > 0);
   const hasActiveFilters = Boolean(search.trim() || paymentStatus || methodFilter || dateFrom || dateTo);
   const paymentSummaryByInvoice = (data.payments || []).reduce((map, payment) => {
     const id = payment.invoiceId?.id || payment.invoiceId?._id || payment.invoiceId;
@@ -473,14 +508,18 @@ export function PaymentsPage({ role = 'admin' }) {
                 <option value="">Select invoice</option>
                 {data.invoices.filter((invoice) => invoiceDueAmount(invoice) > 0 || invoice.id === form.invoiceId || invoice._id === form.invoiceId).map((invoice) => {
                   const invoiceId = invoice.id || invoice._id;
-                  return <option key={invoiceId} value={invoiceId}>{invoice.invoiceNumber} - {wholeCurrency(invoiceDueAmount(invoice))} due</option>;
+                  const documentLabel = invoiceDocumentLabel(invoice);
+                  const amountLabel = invoiceDocumentKind(invoice) === 'credit_note'
+                    ? `${wholeCurrency(Number(invoice.total || 0))} credit`
+                    : `${wholeCurrency(invoiceDueAmount(invoice))} due`;
+                  return <option key={invoiceId} value={invoiceId}>{invoice.invoiceNumber} - {documentLabel} - {amountLabel}</option>;
                 })}
               </select>
             </label>
             <label>
               <span className="label">Payment Amount</span>
-              <input className="input payment-amount-input" type="number" min="1" placeholder="Enter amount received" value={form.paidAmount} onChange={(event) => setForm((current) => ({ ...current, paidAmount: event.target.value }))} required />
-              {selectedInvoice ? <span className="mt-1 block text-xs font-semibold text-amber-100">Balance due: {wholeCurrency(selectedBalanceDue)}</span> : null}
+              <input className="input payment-amount-input" type="number" min="1" placeholder={selectedIsCreditNote ? 'Payment disabled for credit notes' : 'Enter amount received'} value={form.paidAmount} onChange={(event) => setForm((current) => ({ ...current, paidAmount: event.target.value }))} required disabled={selectedIsCreditNote} />
+              {selectedInvoice ? <span className="mt-1 block text-xs font-semibold text-amber-100">{selectedIsCreditNote ? 'Credit notes are not collected as normal payments.' : `Balance due: ${wholeCurrency(selectedBalanceDue)}`}</span> : null}
             </label>
             <label>
               <span className="label">Payment Method</span>
@@ -494,14 +533,18 @@ export function PaymentsPage({ role = 'admin' }) {
           </div>
           <div className="selected-invoice-card">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="font-black">Selected Invoice</h2>
+              <h2 className="font-black">Selected Billing Document</h2>
               {selectedInvoice ? <BillingStatusPill status={selectedInvoice.status} /> : null}
             </div>
             {selectedInvoice ? (
               <div className="mt-4 grid gap-3">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <BillingInfo label="Invoice ID" value={getInvoiceDisplayId(selectedInvoice)} />
+                  <BillingInfo label="Document ID" value={getInvoiceDisplayId(selectedInvoice)} />
+                  <BillingInfo label="Document Type" value={selectedDocumentLabel} tone={selectedIsCreditNote ? 'amber' : selectedDocumentKind === 'extra_invoice' ? 'green' : ''} />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
                   <BillingInfo label="Linked Source" value={invoiceSourceLabel(selectedInvoice)} />
+                  <BillingInfo label="Parent Invoice / Work Order" value={selectedParentInvoiceLabel} />
                 </div>
                 <div className="billing-info-block">
                   <p className="text-xs font-black uppercase text-slate-400">Customer</p>
@@ -510,10 +553,19 @@ export function PaymentsPage({ role = 'admin' }) {
                   <p className="text-xs muted">Customer ID: {getCustomerDisplayId(selectedInvoice.customerId)}</p>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  <BillingInfo label="Invoice Total" value={wholeCurrency(selectedInvoice.total)} strong />
+                  <BillingInfo label={selectedIsCreditNote ? 'Credit Note Amount' : 'Invoice Total'} value={wholeCurrency(selectedInvoice.total)} strong />
                   <BillingInfo label="Paid Amount" value={wholeCurrency(selectedInvoice.paidAmount)} tone="green" />
                   <BillingInfo label="Balance Due" value={wholeCurrency(selectedBalanceDue)} tone={selectedBalanceDue > 0 ? 'amber' : 'green'} />
                 </div>
+                {selectedIsCreditNote ? (
+                  <div className="billing-document-helper billing-document-helper-credit">
+                    Credit notes reduce payable amount or create refund/credit due.
+                  </div>
+                ) : selectedDocumentKind === 'extra_invoice' ? (
+                  <div className="billing-document-helper billing-document-helper-extra">
+                    Extra invoice linked to the parent work order. Record payment only against the remaining balance due.
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="billing-inline-empty">
@@ -573,7 +625,7 @@ export function PaymentsPage({ role = 'admin' }) {
                     <td className={`billing-money-cell text-right ${balanceAfter > 0 ? 'text-amber-100' : 'text-emerald-100'}`}>
                       {wholeCurrency(payment.balance)}
                       <span className="mt-1 block"><BillingStatusPill status={payment.status} /></span>
-                      {reversed && payment.reversalReason ? <span className="payment-reversed-helper" title={payment.reversalReason}>{payment.reversalReason}</span> : null}
+                      {reversed && payment.reversalReason ? <span className="payment-reversed-helper" title={payment.reversalReason}>Reason: {payment.reversalReason}</span> : null}
                     </td>
                     {!isTechnician ? (
                       <td className="text-center">
@@ -684,9 +736,10 @@ function PaymentReversalModal({ payment, reason, checked, saving, onReasonChange
 
 function TechnicianPaymentMobileCard({ payment, base, paymentMethodDisplay }) {
   const balanceAfter = Number(payment.balance || 0);
+  const reversed = payment.status === 'Reversed' || payment.reversedAt;
 
   return (
-    <article className="technician-mobile-card">
+    <article className={`technician-mobile-card ${reversed ? 'payment-mobile-card-reversed' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="technician-mobile-card-eyebrow">{getPaymentDisplayId(payment)}</p>
@@ -696,10 +749,16 @@ function TechnicianPaymentMobileCard({ payment, base, paymentMethodDisplay }) {
         <BillingStatusPill status={payment.status} />
       </div>
       <div className="technician-detail-card-metrics">
-        <span><b>{wholeCurrency(payment.paidAmount)}</b><small>Paid</small></span>
+        <span><b>{wholeCurrency(payment.paidAmount)}</b><small>{reversed ? 'Reversed amount' : 'Paid'}</small></span>
         <span><b>{wholeCurrency(payment.balance)}</b><small>Balance</small></span>
         <span><b>{paymentMethodDisplay(payment)}</b><small>Method</small></span>
       </div>
+      {reversed ? (
+        <div className="payment-mobile-reversed-note">
+          <p>Reversed payment kept for audit history.</p>
+          {payment.reversalReason ? <span title={payment.reversalReason}>Reason: {payment.reversalReason}</span> : null}
+        </div>
+      ) : null}
       <div className="technician-mobile-card-body">
         <div>
           <span>Linked Invoice</span>

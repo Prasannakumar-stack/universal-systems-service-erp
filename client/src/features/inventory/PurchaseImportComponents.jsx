@@ -158,6 +158,8 @@ function emptyPurchaseItem(part = null) {
     inventoryPartId: rowId(part),
     partName: part?.partName || '',
     category: part?.category || 'General',
+    brand: part?.brand || '',
+    deviceModel: part?.deviceModel || '',
     quantityOrdered: 1,
     quantityReceived: 1,
     unitCost: part?.costPrice || 0
@@ -187,6 +189,8 @@ export function PurchaseImportModal({ purchase = null, initialPart = null, parts
       inventoryPartId: rowId(item.inventoryPartId) || item.inventoryPartId || rowId(initialPart),
       partName: item.partName || initialPart?.partName || '',
       category: item.category || initialPart?.category || 'General',
+      brand: item.brand || initialPart?.brand || '',
+      deviceModel: item.deviceModel || initialPart?.deviceModel || '',
       quantityOrdered: item.quantityOrdered ?? 1,
       quantityReceived: item.quantityReceived ?? 1,
       unitCost: item.unitCost ?? initialPart?.costPrice ?? 0
@@ -211,6 +215,8 @@ export function PurchaseImportModal({ purchase = null, initialPart = null, parts
           const part = partById.get(value);
           next.partName = part?.partName || '';
           next.category = part?.category || 'General';
+          next.brand = part?.brand || '';
+          next.deviceModel = part?.deviceModel || '';
           next.unitCost = part?.costPrice || next.unitCost || 0;
         }
         return next;
@@ -231,6 +237,8 @@ export function PurchaseImportModal({ purchase = null, initialPart = null, parts
           inventoryPartId: item.inventoryPartId,
           partName: item.partName,
           category: item.category,
+          brand: item.brand,
+          deviceModel: item.deviceModel,
           quantityOrdered: Number(item.quantityOrdered || 0),
           quantityReceived: Number(item.quantityReceived || 0),
           unitCost: Number(item.unitCost || 0)
@@ -333,7 +341,7 @@ export function PurchaseImportModal({ purchase = null, initialPart = null, parts
             <div className="purchase-items-table-wrap mt-4">
               <table className="data-table purchase-items-table">
                 <thead>
-                  <tr><th>Part</th><th>Category</th><th>Qty Ordered</th><th>Qty Received</th><th>Unit Cost</th><th>Total</th><th></th></tr>
+                  <tr><th>Part</th><th>Category</th><th>Brand</th><th>Device Model</th><th>Qty Ordered</th><th>Qty Received</th><th>Unit Cost</th><th>Total</th><th></th></tr>
                 </thead>
                 <tbody>
                   {form.items.map((item) => (
@@ -349,6 +357,8 @@ export function PurchaseImportModal({ purchase = null, initialPart = null, parts
                           {inventoryCategories.map((category) => <option key={category}>{category}</option>)}
                         </select>
                       </td>
+                      <td><input className="input" value={item.brand} onChange={(event) => updateItem(item.localId, 'brand', event.target.value)} placeholder="Brand" /></td>
+                      <td><input className="input" value={item.deviceModel} onChange={(event) => updateItem(item.localId, 'deviceModel', event.target.value)} placeholder="Device model" /></td>
                       <td><input className="input" type="number" min="0" value={item.quantityOrdered} onChange={(event) => updateItem(item.localId, 'quantityOrdered', event.target.value)} /></td>
                       <td><input className="input" type="number" min="0" value={item.quantityReceived} onChange={(event) => updateItem(item.localId, 'quantityReceived', event.target.value)} /></td>
                       <td><input className="input" type="number" min="0" step="0.01" value={item.unitCost} onChange={(event) => updateItem(item.localId, 'unitCost', event.target.value)} /></td>

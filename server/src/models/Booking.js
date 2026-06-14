@@ -18,6 +18,16 @@ const bookingSchema = new mongoose.Schema(
       size: { type: Number, min: 0, default: 0 }
     },
     device: { type: String, required: true, trim: true },
+    deviceBrand: {
+      type: String,
+      trim: true,
+      maxlength: 80,
+      default: '',
+      required() {
+        return String(this.bookingSource || '').trim().toLowerCase() !== 'contact form';
+      }
+    },
+    deviceModel: { type: String, trim: true, maxlength: 80, default: '' },
     issue: { type: String, required: true, trim: true },
     preferredDate: { type: Date, default: null },
     preferredTime: { type: String, trim: true, default: '' },

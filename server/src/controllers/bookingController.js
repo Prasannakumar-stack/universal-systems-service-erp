@@ -29,7 +29,7 @@ async function duplicateInfoForBooking(booking) {
   const [customer, bookings, workOrders] = await Promise.all([
     customerId ? Customer.findById(customerId).select('name phone createdAt').lean() : null,
     Booking.find({ _id: { $ne: booking._id }, phone }).select('bookingCode customerName bookingSource status createdAt workOrderId').sort({ createdAt: -1 }).limit(3).lean(),
-    customerId ? WorkOrder.find({ customerId }).select('device status createdAt bookingId').sort({ createdAt: -1 }).limit(3).lean() : []
+    customerId ? WorkOrder.find({ customerId }).select('device deviceBrand deviceModel status createdAt bookingId').sort({ createdAt: -1 }).limit(3).lean() : []
   ]);
 
   const matches = [];
@@ -128,6 +128,8 @@ export async function list(req, res) {
         { customerName: regex },
         { phone: regex },
         { device: regex },
+        { deviceBrand: regex },
+        { deviceModel: regex },
         { serviceType: regex },
         { issue: regex },
         { bookingSource: regex },

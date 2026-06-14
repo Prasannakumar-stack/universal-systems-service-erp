@@ -8,7 +8,16 @@ export async function list(req, res) {
     const filter = {};
     const { page, limit, skip } = parsePagination(req.query);
     const regex = searchRegex(req.query.search);
-    if (regex) filter.$or = [{ partName: regex }, { category: regex }, { sku: regex }, { supplier: regex }, { brand: regex }];
+    if (regex) filter.$or = [
+      { partName: regex },
+      { category: regex },
+      { sku: regex },
+      { supplier: regex },
+      { purchaseRef: regex },
+      { brand: regex },
+      { deviceModel: regex },
+      { compatibleDeviceType: regex }
+    ];
     if (clean(req.query.category)) filter.category = clean(req.query.category);
     if (clean(req.query.stockStatus)) {
       if (req.query.stockStatus === 'out' || req.query.stockStatus === 'outOfStock') filter.available = { $lte: 0 };
@@ -63,23 +72,31 @@ export async function list(req, res) {
 }
 
 export async function create(req, res) {
-  required(req.body, ['partName']);
+  required(req.body, ['partName', 'category', 'unitType', 'costPrice', 'sellingPrice', 'onHand', 'lowStockLimit']);
   const onHand = numberValue(req.body.onHand ?? req.body.stock ?? req.body.availableStock, 0);
-  const reserved = numberValue(req.body.reserved, 0);
-  if (onHand < 0 || reserved < 0 || reserved > onHand) throw appError('Invalid stock values');
+  const costPrice = numberValue(req.body.costPrice, 0);
+  const sellingPrice = numberValue(req.body.sellingPrice, 0);
+  const lowStockLimit = numberValue(req.body.lowStockLimit, 0);
+  const brand = clean(req.body.brand);
+  if (onHand < 0 || costPrice < 0 || sellingPrice < 0 || lowStockLimit < 0) throw appError('Stock and price values cannot be negative');
   let part = await InventoryPart.create({
     partName: clean(req.body.partName),
     category: clean(req.body.category) || 'General',
     sku: clean(req.body.sku),
-    brand: clean(req.body.brand),
+    brand,
+    deviceModel: clean(req.body.deviceModel),
+    compatibleDeviceType: clean(req.body.compatibleDeviceType),
+    supplier: clean(req.body.supplier || req.body.supplierName),
+    purchaseRef: clean(req.body.purchaseRef || req.body.invoiceRef),
+    description: clean(req.body.description || req.body.notes),
     unitType: clean(req.body.unitType) || 'Piece',
-    costPrice: numberValue(req.body.costPrice, 0),
-    sellingPrice: numberValue(req.body.sellingPrice, 0),
+    costPrice,
+    sellingPrice,
     stock: 0,
     onHand: 0,
     reserved: 0,
     available: 0,
-    lowStockLimit: numberValue(req.body.lowStockLimit, 0)
+    lowStockLimit
   });
   if (onHand > 0) {
     const result = await applyStockMovement({
@@ -87,15 +104,10 @@ export async function create(req, res) {
       type: 'ADD',
       quantity: onHand,
       source: 'Opening Stock',
-      note: 'Initial stock entry',
+      note: 'Opening stock added.',
       userId: req.user._id
     });
     part = result.part;
-  }
-  if (reserved > 0) {
-    part.reserved = reserved;
-    syncPartAvailability(part);
-    await part.save();
   }
   res.status(201).json({ part, message: 'Inventory part saved' });
 }
@@ -107,16 +119,32 @@ export async function update(req, res) {
   if (req.body.category !== undefined) part.category = clean(req.body.category) || 'General';
   if (req.body.sku !== undefined) part.sku = clean(req.body.sku);
   if (req.body.brand !== undefined) part.brand = clean(req.body.brand);
+  if (req.body.deviceModel !== undefined) part.deviceModel = clean(req.body.deviceModel);
+  if (req.body.compatibleDeviceType !== undefined) part.compatibleDeviceType = clean(req.body.compatibleDeviceType);
+  if (req.body.supplier !== undefined || req.body.supplierName !== undefined) part.supplier = clean(req.body.supplier || req.body.supplierName);
+  if (req.body.purchaseRef !== undefined || req.body.invoiceRef !== undefined) part.purchaseRef = clean(req.body.purchaseRef || req.body.invoiceRef);
+  if (req.body.description !== undefined || req.body.notes !== undefined) part.description = clean(req.body.description || req.body.notes);
   if (req.body.unitType !== undefined) part.unitType = clean(req.body.unitType) || 'Piece';
-  if (req.body.costPrice !== undefined) part.costPrice = numberValue(req.body.costPrice, 0);
-  if (req.body.sellingPrice !== undefined) part.sellingPrice = numberValue(req.body.sellingPrice, 0);
+  if (req.body.costPrice !== undefined) {
+    const costPrice = numberValue(req.body.costPrice, 0);
+    if (costPrice < 0) throw appError('Cost price cannot be negative');
+    part.costPrice = costPrice;
+  }
+  if (req.body.sellingPrice !== undefined) {
+    const sellingPrice = numberValue(req.body.sellingPrice, 0);
+    if (sellingPrice < 0) throw appError('Selling price cannot be negative');
+    part.sellingPrice = sellingPrice;
+  }
   if (req.body.onHand !== undefined || req.body.stock !== undefined || req.body.availableStock !== undefined) {
     const onHand = numberValue(req.body.onHand ?? req.body.stock ?? req.body.availableStock, 0);
     if (onHand < 0) throw appError('Stock cannot be negative');
     part.onHand = onHand;
   }
-  if (req.body.reserved !== undefined) part.reserved = numberValue(req.body.reserved, 0);
-  if (req.body.lowStockLimit !== undefined) part.lowStockLimit = numberValue(req.body.lowStockLimit, 0);
+  if (req.body.lowStockLimit !== undefined) {
+    const lowStockLimit = numberValue(req.body.lowStockLimit, 0);
+    if (lowStockLimit < 0) throw appError('Low stock limit cannot be negative');
+    part.lowStockLimit = lowStockLimit;
+  }
   syncPartAvailability(part);
   await part.save();
   res.json({ part, message: 'Inventory updated' });

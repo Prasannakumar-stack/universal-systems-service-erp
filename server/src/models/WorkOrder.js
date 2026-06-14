@@ -20,6 +20,8 @@ const workOrderSchema = new mongoose.Schema(
     serviceType: { type: String, trim: true, default: '' },
     bookingSource: { type: String, trim: true, default: '' },
     device: { type: String, required: true, trim: true },
+    deviceBrand: { type: String, trim: true, maxlength: 80, default: '' },
+    deviceModel: { type: String, trim: true, maxlength: 80, default: '' },
     issue: { type: String, required: true, trim: true },
     technicianId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     status: { type: String, enum: ['Pending', 'In Progress', 'Awaiting Parts', 'Completed', 'Delivered', 'Returned'], default: 'Pending' },

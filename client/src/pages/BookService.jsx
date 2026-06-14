@@ -31,7 +31,8 @@ const initial = {
   address: '',
   serviceType: '',
   device: '',
-  deviceBrandModel: '',
+  deviceBrand: '',
+  deviceModel: '',
   bookingSource: 'Website Booking',
   problemDescription: '',
   preferredDate: '',
@@ -153,7 +154,9 @@ export default function BookService() {
     if (targetStep === 2) {
       if (booking.showServiceSelection && !form.serviceType.trim()) errors.serviceType = 'Select a service type.';
       if (!form.device.trim()) errors.device = 'Device is required.';
-      if (form.deviceBrandModel.trim() && form.deviceBrandModel.trim().length < 2) errors.deviceBrandModel = 'Brand / model should be at least 2 characters.';
+      if (!form.deviceBrand.trim()) errors.deviceBrand = 'Device brand is required.';
+      if (form.deviceBrand.trim().length > 80) errors.deviceBrand = 'Device brand should be 80 characters or less.';
+      if (form.deviceModel.trim().length > 80) errors.deviceModel = 'Device model should be 80 characters or less.';
       if (!form.problemDescription.trim()) errors.problemDescription = 'Issue / problem description is required.';
       if (!form.bookingSource.trim()) errors.bookingSource = 'Booking source is required.';
     }
@@ -266,7 +269,8 @@ export default function BookService() {
     ['Address', form.address],
     ['Service', form.serviceType],
     ['Device', form.device],
-    ['Device Brand / Model', form.deviceBrandModel || 'Not provided'],
+    ['Device Brand', form.deviceBrand || 'Not provided'],
+    ['Device Model', form.deviceModel || 'Not provided'],
     ['Problem', form.problemDescription],
     ...(booking.showPreferredDateTime ? [
       ['Preferred Date', form.preferredDate || 'Not selected'],
@@ -449,19 +453,36 @@ export default function BookService() {
                 </div>
                 <div className="booking-field">
                   <div className="booking-label-row">
-                    <label className="label" htmlFor="booking-device-brand-model">Device Brand / Model</label>
+                    <label className="label" htmlFor="booking-device-brand">Device Brand</label>
+                  </div>
+                  <input
+                    id="booking-device-brand"
+                    className="input"
+                    maxLength={80}
+                    aria-invalid={fieldErrors.deviceBrand ? 'true' : 'false'}
+                    aria-describedby={fieldErrors.deviceBrand ? 'booking-device-brand-error' : undefined}
+                    value={form.deviceBrand}
+                    onChange={(event) => update('deviceBrand', event.target.value)}
+                    placeholder="Dell, HP, Lenovo, Epson, Hikvision..."
+                  />
+                  <FieldError id="booking-device-brand-error" message={fieldErrors.deviceBrand} />
+                </div>
+                <div className="booking-field">
+                  <div className="booking-label-row">
+                    <label className="label" htmlFor="booking-device-model">Device Model</label>
                     <span className="booking-optional">Optional</span>
                   </div>
                   <input
-                    id="booking-device-brand-model"
+                    id="booking-device-model"
                     className="input"
-                    aria-invalid={fieldErrors.deviceBrandModel ? 'true' : 'false'}
-                    aria-describedby={fieldErrors.deviceBrandModel ? 'booking-device-brand-model-error' : undefined}
-                    value={form.deviceBrandModel}
-                    onChange={(event) => update('deviceBrandModel', event.target.value)}
-                    placeholder="Dell laptop, HP printer, Hikvision camera..."
+                    maxLength={80}
+                    aria-invalid={fieldErrors.deviceModel ? 'true' : 'false'}
+                    aria-describedby={fieldErrors.deviceModel ? 'booking-device-model-error' : undefined}
+                    value={form.deviceModel}
+                    onChange={(event) => update('deviceModel', event.target.value)}
+                    placeholder="Inspiron 3511, LaserJet 1020, DS-2CE16D0..."
                   />
-                  <FieldError id="booking-device-brand-model-error" message={fieldErrors.deviceBrandModel} />
+                  <FieldError id="booking-device-model-error" message={fieldErrors.deviceModel} />
                 </div>
                 <div className="booking-field">
                   <label className="label" htmlFor="booking-problem">Issue / problem description</label>

@@ -1269,6 +1269,10 @@ export function workOrderTemplateContext(workOrder = {}, company = COMPANY) {
     : contract.contractValue != null
       ? Number(contract.contractValue || 0)
       : fallbackTotal;
+  const brandModel = [workOrder.deviceBrand, workOrder.deviceModel].map((value) => String(value || '').trim()).filter(Boolean).join(' ')
+    || workOrder.brandModel
+    || workOrder.deviceModel
+    || workOrder.model;
   return buildTemplateContext({
     customerName: customer.name,
     customerPhone: customer.phone,
@@ -1280,7 +1284,7 @@ export function workOrderTemplateContext(workOrder = {}, company = COMPANY) {
     serviceName: workOrder.serviceType || workOrder.device || contract.contractType,
     serviceType: workOrder.serviceType || contract.contractType,
     device: workOrder.device,
-    brandModel: workOrder.brandModel || workOrder.model,
+    brandModel,
     problemComplaint: workOrder.problemDescription || workOrder.problemComplaint || workOrder.customerComplaint,
     technicianName: workOrder.technicianId?.name || workOrder.technicianId?.username || 'Admin',
     totalAmount: total,
@@ -1297,6 +1301,10 @@ export function documentTemplateContext(document = {}, company = COMPANY) {
   const customer = document.customerId || {};
   const workOrder = document.workOrderId || {};
   const invoice = document.invoiceId || {};
+  const brandModel = [workOrder.deviceBrand, workOrder.deviceModel].map((value) => String(value || '').trim()).filter(Boolean).join(' ')
+    || workOrder.brandModel
+    || workOrder.deviceModel
+    || workOrder.model;
   return buildTemplateContext({
     customerName: customer.name,
     customerPhone: customer.phone,
@@ -1308,7 +1316,7 @@ export function documentTemplateContext(document = {}, company = COMPANY) {
     serviceName: workOrder.serviceType || workOrder.device,
     serviceType: workOrder.serviceType,
     device: workOrder.device,
-    brandModel: workOrder.brandModel || workOrder.model,
+    brandModel,
     problemComplaint: workOrder.problemDescription || workOrder.problemComplaint || workOrder.customerComplaint,
     technicianName: workOrder.technicianId?.name || workOrder.technicianId?.username || 'Admin',
     totalAmount: document.totalAmount || invoice.total || 0,

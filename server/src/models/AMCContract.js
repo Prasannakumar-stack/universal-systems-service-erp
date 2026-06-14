@@ -34,6 +34,8 @@ const amcContractSchema = new mongoose.Schema(
     coverVisits: { type: Boolean, default: true },
     coveredService: { type: String, trim: true, default: '' },
     coveredDevices: { type: String, trim: true, default: '' },
+    deviceBrand: { type: String, trim: true, maxlength: 80, default: '' },
+    deviceModel: { type: String, trim: true, maxlength: 80, default: '' },
     warrantyIncluded: { type: Boolean, default: false },
     warrantyStartDate: { type: Date, default: null },
     warrantyEndDate: { type: Date, default: null },

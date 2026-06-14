@@ -77,7 +77,7 @@ async function getPdfWorkOrder(workOrderId, user) {
   const workOrder = await WorkOrder.findById(workOrderId)
     .populate('customerId', 'name phone address devices')
     .populate('technicianId', 'name username role')
-    .populate('bookingId', 'bookingCode serviceType device')
+    .populate('bookingId', 'bookingCode serviceType device deviceBrand deviceModel')
     .populate({
       path: 'amcContractId',
       select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices serviceFrequency contractValue startDate endDate status includedVisits invoiceId notes visits createdAt',
@@ -122,6 +122,11 @@ function workOrderReference(workOrder) {
 
 function serviceType(workOrder) {
   return workOrder.device || 'Service';
+}
+
+function deviceBrandModel(workOrder = {}) {
+  const combined = [workOrder.deviceBrand, workOrder.deviceModel].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+  return combined || workOrder.brandModel || workOrder.deviceModel || workOrder.model || workOrder.device || '-';
 }
 
 function partChargeType(part) {
@@ -358,7 +363,7 @@ function buildQuotation(doc, workOrder, template, context, company, businessSett
       customerAddress: customer.address || '-',
       serviceType: workOrder.serviceType || workOrder.bookingId?.serviceType || serviceType(workOrder),
       device: workOrder.device || '-',
-      brandModel: workOrder.brandModel || workOrder.deviceModel || workOrder.model || workOrder.device || '-',
+      brandModel: deviceBrandModel(workOrder),
       problemComplaint: workOrder.issue || '-',
       technician: workOrder.technicianId?.name || workOrder.technicianId?.username || '',
       serialNumber: workOrder.serialNumber || workOrder.deviceSerialNumber || workOrder.serialNo || '',
@@ -406,7 +411,7 @@ function coveredItemsForAmc(workOrder = {}) {
   const rows = devices.length ? devices : [workOrder.device || 'Computer System'];
   return rows.slice(0, 4).map((device, index) => ({
     device,
-    brandModel: index === 0 ? (workOrder.brandModel || workOrder.deviceModel || workOrder.model || '-') : '-',
+    brandModel: index === 0 ? deviceBrandModel(workOrder) : '-',
     quantity: 1,
     coverageNotes: index === 0 ? 'General AMC support' : 'Service support',
     serialNumber: workOrder.serialNumber || workOrder.deviceSerialNumber || workOrder.serialNo || '-'
@@ -454,7 +459,7 @@ function buildInvoice(doc, workOrder, template, context, company) {
       customerAddress: customer.address || '-',
       serviceType: workOrder.serviceType || workOrder.bookingId?.serviceType || serviceType(workOrder),
       device: workOrder.device || '-',
-      brandModel: workOrder.brandModel || workOrder.deviceModel || workOrder.model || workOrder.device || '-',
+      brandModel: deviceBrandModel(workOrder),
       problemComplaint: workOrder.issue || '-',
       technician: workOrder.technicianId?.name || workOrder.technicianId?.username || '',
       items: rows.map((row) => ({

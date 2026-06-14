@@ -5,6 +5,8 @@ const purchaseItemSchema = new mongoose.Schema(
     inventoryPartId: { type: mongoose.Schema.Types.ObjectId, ref: 'InventoryPart', required: true },
     partName: { type: String, required: true, trim: true },
     category: { type: String, trim: true, default: 'General' },
+    brand: { type: String, trim: true, default: '' },
+    deviceModel: { type: String, trim: true, default: '' },
     quantityOrdered: { type: Number, min: 0, default: 0 },
     quantityReceived: { type: Number, min: 0, default: 0 },
     unitCost: { type: Number, min: 0, default: 0 },

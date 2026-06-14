@@ -58,6 +58,8 @@ async function normalizedItems(rawItems = [], existingItems = []) {
       inventoryPartId,
       partName: clean(item.partName) || part.partName,
       category: clean(item.category) || part.category || 'General',
+      brand: clean(item.brand) || part.brand || '',
+      deviceModel: clean(item.deviceModel) || part.deviceModel || '',
       quantityOrdered,
       quantityReceived,
       unitCost,
@@ -168,7 +170,9 @@ function purchaseSearchFilter(regex) {
       { purchaseSource: regex },
       { notes: regex },
       { 'items.partName': regex },
-      { 'items.category': regex }
+      { 'items.category': regex },
+      { 'items.brand': regex },
+      { 'items.deviceModel': regex }
     ]
   };
 }

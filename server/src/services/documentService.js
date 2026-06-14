@@ -26,7 +26,7 @@ import { renderServiceCompletedPdf } from './serviceCompletedPdfTemplate.js';
 
 const populateDocument = [
   { path: 'customerId', select: 'name phone address devices' },
-  { path: 'workOrderId', select: 'device issue status serviceType serviceCharge partsUsed technicianId createdAt brandModel deviceModel model serialNumber deviceSerialNumber serialNo', populate: { path: 'technicianId', select: 'name username' } },
+  { path: 'workOrderId', select: 'device deviceBrand deviceModel issue status serviceType serviceCharge partsUsed technicianId createdAt brandModel model serialNumber deviceSerialNumber serialNo', populate: { path: 'technicianId', select: 'name username' } },
   { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status createdAt' }
 ];
 
@@ -48,6 +48,11 @@ function documentDate(value = new Date()) {
     String(safe.getMonth() + 1).padStart(2, '0'),
     safe.getFullYear()
   ].join('-');
+}
+
+function deviceBrandModel(workOrder = {}) {
+  const combined = [workOrder.deviceBrand, workOrder.deviceModel].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+  return combined || workOrder.brandModel || workOrder.deviceModel || workOrder.model || workOrder.device || '-';
 }
 
 function workOrderReference(workOrder = {}) {
@@ -213,7 +218,7 @@ export async function generateDocumentPdf(id, user = null) {
         customerAddress: customer.address || '-',
         serviceType: workOrder.serviceType || workOrder.device || '-',
         device: workOrder.device || '-',
-        brandModel: workOrder.brandModel || workOrder.deviceModel || workOrder.model || workOrder.device || '-',
+        brandModel: deviceBrandModel(workOrder),
         problemComplaint: workOrder.issue || '-',
         technician: workOrder.technicianId?.name || workOrder.technicianId?.username || '',
         serialNumber: workOrder.serialNumber || workOrder.deviceSerialNumber || workOrder.serialNo || '',
@@ -259,7 +264,7 @@ export async function generateDocumentPdf(id, user = null) {
         customerAddress: customer.address || '-',
         serviceType: workOrder.serviceType || workOrder.device || '-',
         device: workOrder.device || '-',
-        brandModel: workOrder.brandModel || workOrder.deviceModel || workOrder.model || workOrder.device || '-',
+        brandModel: deviceBrandModel(workOrder),
         problemComplaint: workOrder.issue || '-',
         technician: workOrder.technicianId?.name || workOrder.technicianId?.username || '',
         items,

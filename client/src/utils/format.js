@@ -5,11 +5,14 @@ export function currency(value) {
 const wholeCurrencyFormatter = new Intl.NumberFormat('en-IN', {
   style: 'currency',
   currency: 'INR',
+  minimumFractionDigits: 0,
   maximumFractionDigits: 0
 });
 
 export function wholeCurrency(value) {
-  return wholeCurrencyFormatter.format(Number(value || 0));
+  const numericValue = Number(value);
+  const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+  return wholeCurrencyFormatter.format(safeValue);
 }
 
 export function formatDate(value) {

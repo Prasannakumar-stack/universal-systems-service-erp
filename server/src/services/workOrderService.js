@@ -23,10 +23,10 @@ const populateWorkOrder = [
   { path: 'partRequests.approvedBy', select: 'name username role' },
   { path: 'partRequests.rejectedBy', select: 'name username role' },
   { path: 'images.uploadedBy', select: 'name username role' },
-  { path: 'bookingId', select: 'bookingCode serviceType bookingSource problemImage createdAt' },
+  { path: 'bookingId', select: 'bookingCode serviceType bookingSource problemImage createdAt device deviceBrand deviceModel' },
   {
     path: 'amcContractId',
-    select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices contractValue startDate endDate status includedVisits invoiceId',
+    select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices deviceBrand deviceModel contractValue startDate endDate status includedVisits invoiceId',
     populate: { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status title notes' }
   },
   { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status title notes invoiceType parentInvoiceId adjustmentForInvoiceId adjustmentNumber adjustmentType adjustmentReason internalNote createdBy createdAt' }
@@ -135,6 +135,10 @@ function uploadedByRoleForUser(user) {
   return 'system';
 }
 
+function cleanDeviceDetail(value) {
+  return clean(value).slice(0, 80);
+}
+
 async function releasePartReservation(inventoryPartId, quantity) {
   if (!inventoryPartId) return;
   const part = await InventoryPart.findById(inventoryPartId);
@@ -227,6 +231,8 @@ export async function createWorkOrder(payload, user) {
   let serviceType = clean(payload.serviceType);
   let bookingSource = clean(payload.bookingSource || payload.source);
   let device = clean(payload.device);
+  let deviceBrand = cleanDeviceDetail(payload.deviceBrand || payload.brand || payload.deviceBrandModel || payload.brandModel || '');
+  let deviceModel = cleanDeviceDetail(payload.deviceModel || payload.model || '');
   let issue = clean(payload.issue);
   let technicianId = payload.technicianId || null;
 
@@ -238,6 +244,8 @@ export async function createWorkOrder(payload, user) {
     serviceType = sourceBooking.serviceType || serviceType;
     bookingSource = sourceBooking.bookingSource || bookingSource;
     device = sourceBooking.device;
+    deviceBrand = sourceBooking.deviceBrand || deviceBrand;
+    deviceModel = sourceBooking.deviceModel || deviceModel;
     issue = sourceBooking.issue;
     technicianId = payload.technicianId || sourceBooking.technicianId;
   }
@@ -271,6 +279,8 @@ export async function createWorkOrder(payload, user) {
     serviceType,
     bookingSource,
     device,
+    deviceBrand,
+    deviceModel,
     issue,
     technicianId,
     status,
@@ -326,6 +336,8 @@ export async function listWorkOrders(query, user) {
     ]);
     const searchFields = [
       { device: regex },
+      { deviceBrand: regex },
+      { deviceModel: regex },
       { issue: regex },
       { serviceType: regex },
       { status: regex },
