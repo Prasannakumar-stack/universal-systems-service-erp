@@ -29,14 +29,18 @@ const populateWorkOrder = [
     select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices contractValue startDate endDate status includedVisits invoiceId',
     populate: { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status title notes' }
   },
-  { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status title notes adjustmentForInvoiceId' }
+  { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status title notes invoiceType parentInvoiceId adjustmentForInvoiceId adjustmentNumber adjustmentType adjustmentReason internalNote createdBy createdAt' }
 ];
 
 const detailPopulateWorkOrder = [
   ...populateWorkOrder,
   {
     path: 'extraInvoices',
-    select: 'invoiceNumber total paidAmount balance status title notes adjustmentForInvoiceId workOrderId amcContractId createdAt',
+    select: 'invoiceNumber total paidAmount balance status title notes invoiceType parentInvoiceId adjustmentForInvoiceId adjustmentNumber adjustmentType adjustmentReason internalNote createdBy workOrderId amcContractId createdAt',
+    populate: [
+      { path: 'parentInvoiceId', select: 'invoiceNumber total paidAmount balance status invoiceType' },
+      { path: 'createdBy', select: 'name username role' }
+    ],
     options: { sort: { createdAt: -1 } }
   }
 ];

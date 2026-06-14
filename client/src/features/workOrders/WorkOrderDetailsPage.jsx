@@ -439,6 +439,25 @@ function invoiceHasPayment(invoice) {
   return ['Paid', 'Partial'].includes(String(invoice?.status || '')) || invoicePaidAmount(invoice) > 0;
 }
 
+function invoiceIsAdjustmentDocument(invoice) {
+  const type = String(invoice?.invoiceType || '').toLowerCase();
+  return Boolean(recordId(invoice?.parentInvoiceId) || recordId(invoice?.adjustmentForInvoiceId) || type === 'adjustment' || type === 'credit_note');
+}
+
+function adjustmentKind(invoice) {
+  const raw = String(invoice?.adjustmentType || invoice?.invoiceType || '').toLowerCase();
+  return raw === 'credit_note' || raw.includes('credit') ? 'credit_note' : 'additional_charge';
+}
+
+function adjustmentLabel(invoice) {
+  return adjustmentKind(invoice) === 'credit_note' ? 'Credit Note / Refund / Discount' : 'Additional Charge / Adjustment Invoice';
+}
+
+function adjustmentSignedAmount(invoice) {
+  const amount = Number(invoice?.total || 0);
+  return adjustmentKind(invoice) === 'credit_note' ? -amount : amount;
+}
+
 function invoiceIsUnpaid(invoice) {
   return String(invoice?.status || '') === 'Pending' && invoicePaidAmount(invoice) <= 0;
 }
@@ -480,6 +499,15 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const [invoiceGenerating, setInvoiceGenerating] = useState(false);
   const [voidUnlockReviewed, setVoidUnlockReviewed] = useState(false);
   const [voidUnlocking, setVoidUnlocking] = useState(false);
+  const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false);
+  const [adjustmentForm, setAdjustmentForm] = useState({
+    adjustmentType: 'credit_note',
+    amount: '',
+    reason: '',
+    internalNote: '',
+    confirmed: false
+  });
+  const [adjustmentSaving, setAdjustmentSaving] = useState(false);
   const [partAction, setPartAction] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [moveToUsedUnitPrice, setMoveToUsedUnitPrice] = useState('');
@@ -545,6 +573,14 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   useEffect(() => {
     request('/inventory?limit=100').then((result) => setInventoryParts(result.parts || [])).catch(() => {});
   }, [request]);
+
+  useEffect(() => {
+    const handleBillingUpdated = () => {
+      reload({ silent: true });
+    };
+    window.addEventListener('us:billing-updated', handleBillingUpdated);
+    return () => window.removeEventListener('us:billing-updated', handleBillingUpdated);
+  }, [reload]);
 
   useEffect(() => {
     if (!photoGalleryModal) return undefined;
@@ -991,6 +1027,96 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     setVoidUnlockReviewed(false);
   }
 
+  function openAdjustmentModal(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    if (isTechnician || !canEditInvoice) {
+      push('Contact admin for billing adjustments.', 'error');
+      return;
+    }
+    const suggestedType = activeInvoiceIsPaid ? 'credit_note' : 'credit_note';
+    setAdjustmentForm({
+      adjustmentType: suggestedType,
+      amount: '',
+      reason: '',
+      internalNote: '',
+      confirmed: false
+    });
+    setAdjustmentModalOpen(true);
+  }
+
+  function closeAdjustmentModal() {
+    if (adjustmentSaving) return;
+    setAdjustmentModalOpen(false);
+    setAdjustmentForm({
+      adjustmentType: 'credit_note',
+      amount: '',
+      reason: '',
+      internalNote: '',
+      confirmed: false
+    });
+  }
+
+  function updateAdjustmentForm(field, value) {
+    setAdjustmentForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function createBillingAdjustment(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    if (isTechnician || !canEditInvoice) {
+      push('Contact admin for billing adjustments.', 'error');
+      return;
+    }
+    const targetInvoiceId = recordId(baseExtraInvoice || primaryExtraInvoice || order.invoiceId);
+    if (!targetInvoiceId) {
+      push('Original invoice not found', 'error');
+      return;
+    }
+    const amount = Number(adjustmentForm.amount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      push('Adjustment amount must be greater than zero', 'error');
+      return;
+    }
+    if (!adjustmentForm.reason.trim()) {
+      push('Adjustment reason is required', 'error');
+      return;
+    }
+    if (!adjustmentForm.confirmed) {
+      push('Please confirm the original invoice will remain unchanged', 'error');
+      return;
+    }
+    if (adjustmentForm.adjustmentType === 'credit_note' && amount > Number(activeInvoiceTotalAmount || 0)) {
+      push('Credit note amount cannot exceed the original invoice total', 'error');
+      return;
+    }
+    try {
+      setAdjustmentSaving(true);
+      await preserveScroll(async () => {
+        await request('/invoices', {
+          method: 'POST',
+          body: JSON.stringify({
+            workOrderId: id,
+            invoiceId: targetInvoiceId,
+            amcExtraAction: 'billing-adjustment',
+            adjustmentType: adjustmentForm.adjustmentType,
+            amount,
+            reason: adjustmentForm.reason.trim(),
+            internalNote: adjustmentForm.internalNote.trim(),
+            confirmed: adjustmentForm.confirmed
+          })
+        });
+        push('Adjustment invoice created.');
+        closeAdjustmentModal();
+        await reloadSidebarAware();
+      });
+    } catch (err) {
+      push(err.message, 'error');
+    } finally {
+      setAdjustmentSaving(false);
+    }
+  }
+
   function generateInvoice(event) {
     event?.preventDefault?.();
     event?.stopPropagation?.();
@@ -1354,20 +1480,37 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     ...(Array.isArray(order.extraInvoices) ? order.extraInvoices : [])
   ].filter(Boolean));
   const activeExtraInvoices = allExtraInvoices.filter((invoice) => !invoiceIsVoid(invoice));
+  const adjustmentInvoices = activeExtraInvoices.filter(invoiceIsAdjustmentDocument);
+  const baseActiveInvoices = activeExtraInvoices.filter((invoice) => !invoiceIsAdjustmentDocument(invoice));
   const primaryExtraInvoice =
     (currentExtraInvoice && !invoiceIsVoid(currentExtraInvoice) ? currentExtraInvoice : null) ||
-    activeExtraInvoices.find((invoice) => !recordId(invoice.adjustmentForInvoiceId)) ||
-    activeExtraInvoices[0] ||
+    baseActiveInvoices[0] ||
     null;
   const baseExtraInvoice =
-    activeExtraInvoices.find((invoice) => !recordId(invoice.adjustmentForInvoiceId)) ||
+    baseActiveInvoices[0] ||
     primaryExtraInvoice;
   const paymentTargetExtraInvoice =
+    baseActiveInvoices.find((invoice) => invoiceBalanceAmount(invoice) > 0) ||
     activeExtraInvoices.find((invoice) => invoiceBalanceAmount(invoice) > 0) ||
     primaryExtraInvoice;
-  const extraInvoiceTotal = activeExtraInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+  const originalInvoiceTotal = baseActiveInvoices.length
+    ? baseActiveInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0)
+    : Number(primaryExtraInvoice?.total || currentExtraInvoice?.total || 0);
+  const additionalAdjustmentTotal = adjustmentInvoices
+    .filter((invoice) => adjustmentKind(invoice) === 'additional_charge')
+    .reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+  const creditNoteTotal = adjustmentInvoices
+    .filter((invoice) => adjustmentKind(invoice) === 'credit_note')
+    .reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+  const signedAdjustmentTotal = adjustmentInvoices.reduce((sum, invoice) => sum + adjustmentSignedAmount(invoice), 0);
+  const netPayableTotal = Math.max(0, originalInvoiceTotal + signedAdjustmentTotal);
+  const extraInvoiceTotal = activeExtraInvoices.reduce((sum, invoice) => {
+    if (invoiceIsAdjustmentDocument(invoice)) return sum + adjustmentSignedAmount(invoice);
+    return sum + Number(invoice.total || 0);
+  }, 0);
   const extraInvoicePaidTotal = activeExtraInvoices.reduce((sum, invoice) => sum + invoicePaidAmount(invoice), 0);
-  const extraInvoiceBalance = activeExtraInvoices.reduce((sum, invoice) => sum + invoiceBalanceAmount(invoice), 0);
+  const extraInvoiceBalance = Math.max(0, netPayableTotal - extraInvoicePaidTotal);
+  const refundDueAmount = Math.max(0, extraInvoicePaidTotal - netPayableTotal);
   const extraInvoiceDifference = extraPayableTotal - extraInvoiceTotal;
   const extraInvoiceDifferenceAmount = Math.abs(extraInvoiceDifference);
   const extraInvoiceNeedsRefresh = isAmcLinked && activeExtraInvoices.length > 0 && Math.abs(extraInvoiceDifference) > 0.5;
@@ -1447,6 +1590,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     invoiceHasPayment(activeInvoiceRecord) ||
     ['Paid', 'Partial'].includes(String(activeInvoiceStatus || ''))
   );
+  const canCreateBillingAdjustmentInvoice = !isTechnician && canEditInvoice && paidOrPartialInvoiceLocksParts && Boolean(activeInvoiceId);
   const paidOrPartialBackendMessage = 'Paid or partially paid invoices cannot be unlocked. Reverse payment or create an adjustment invoice.';
   const protectedInvoiceTitle = activeInvoiceIsPartial
     ? 'Partially paid invoice cannot be unlocked directly.'
@@ -1460,7 +1604,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       : '';
   const billingAllowedAction = partsLocked
     ? isTechnician
-      ? 'Contact admin for billing changes.'
+      ? 'Contact admin for billing adjustments.'
       : canVoidUnlockParts
         ? 'Admin can void invoice and unlock editing.'
         : activeInvoiceIsPartial
@@ -1913,6 +2057,96 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     );
   }
 
+  function renderAdjustmentInvoiceModal() {
+    if (!adjustmentModalOpen) return null;
+    const isCreditNote = adjustmentForm.adjustmentType === 'credit_note';
+    const amount = Number(adjustmentForm.amount || 0);
+    const canSubmit = Boolean(amount > 0 && adjustmentForm.reason.trim() && adjustmentForm.confirmed && !adjustmentSaving);
+    const invoiceRows = [
+      ['Work Order ID', workOrderDisplayId],
+      ['Original Invoice ID', getInvoiceDisplayId(activeInvoiceRecord || order.invoiceId) || activeInvoiceId || '-'],
+      ['Customer Name', order.customerId?.name || '-'],
+      ['Original Invoice Total', currency(originalInvoiceTotal || activeInvoiceTotalAmount)],
+      ['Paid Amount', currency(activeInvoicePaidAmount)],
+      ['Balance Amount', currency(activeInvoiceBalanceAmount)],
+      ['Payment Status', activeInvoicePaymentStatus]
+    ];
+    return (
+      <div className="fixed inset-0 z-[95] grid place-items-center bg-black/60 p-3 backdrop-blur-sm sm:p-4" role="presentation" onClick={closeAdjustmentModal}>
+        <form className="billing-adjustment-modal surface flex w-full max-w-3xl flex-col overflow-hidden border border-sky-300/20 shadow-[0_28px_90px_rgba(0,0,0,0.55)]" onSubmit={createBillingAdjustment} onClick={(event) => event.stopPropagation()}>
+          <div className="billing-adjustment-modal-header">
+            <div className="flex items-start gap-3">
+              <span className="billing-adjustment-icon"><ReceiptText className="h-5 w-5" /></span>
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-200/80">Billing Adjustment</p>
+                <h2 className="mt-1 text-xl font-black text-white">Create adjustment invoice</h2>
+                <p className="mt-2 text-sm font-semibold leading-6 text-slate-300">
+                  This will create a separate adjustment document linked to the original invoice. The original invoice will remain locked.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="billing-adjustment-modal-body">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {invoiceRows.map(([label, value]) => (
+                <div key={label} className="billing-info-block">
+                  <p className="text-xs font-black uppercase text-slate-400">{label}</p>
+                  <p className="mt-1 truncate font-bold text-slate-100" title={String(value)}>{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className={`mt-4 rounded-2xl border p-3 ${isCreditNote ? 'border-amber-300/20 bg-amber-500/[0.08] text-amber-100' : 'border-sky-300/20 bg-sky-500/[0.08] text-sky-100'}`}>
+              <p className="text-xs font-black uppercase tracking-[0.16em]">{isCreditNote ? 'Credit safety' : 'Additional charge safety'}</p>
+              <p className="mt-1 text-sm font-semibold leading-6">
+                {isCreditNote
+                  ? 'Credit notes reduce the customer payable amount as a separate audit document.'
+                  : 'Additional charges create a separate payable adjustment invoice without editing the original invoice.'}
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label>
+                <span className="label">Adjustment Type</span>
+                <select className={`input ${detailFocusRing}`} value={adjustmentForm.adjustmentType} onChange={(event) => updateAdjustmentForm('adjustmentType', event.target.value)}>
+                  <option value="credit_note">Credit Note / Refund / Discount</option>
+                  <option value="additional_charge">Additional Charge / Adjustment Invoice</option>
+                </select>
+              </label>
+              <label>
+                <span className="label">Amount</span>
+                <input className={`input ${detailFocusRing}`} type="number" min="1" step="0.01" value={adjustmentForm.amount} onChange={(event) => updateAdjustmentForm('amount', event.target.value)} placeholder="Enter adjustment amount" required />
+              </label>
+            </div>
+
+            <label className="mt-4 block">
+              <span className="label">Reason</span>
+              <textarea className={`input min-h-[88px] ${detailFocusRing}`} value={adjustmentForm.reason} onChange={(event) => updateAdjustmentForm('reason', event.target.value)} placeholder="Example: Billing correction, discount approved, refund issued" required />
+            </label>
+            <label className="mt-4 block">
+              <span className="label">Internal Note <span className="font-semibold text-slate-500">(optional)</span></span>
+              <textarea className={`input min-h-[72px] ${detailFocusRing}`} value={adjustmentForm.internalNote} onChange={(event) => updateAdjustmentForm('internalNote', event.target.value)} placeholder="Internal note for admin audit history" />
+            </label>
+
+            <label className="billing-adjustment-check mt-4">
+              <input type="checkbox" checked={adjustmentForm.confirmed} onChange={(event) => updateAdjustmentForm('confirmed', event.target.checked)} />
+              <span>I understand this will not edit the original invoice.</span>
+            </label>
+          </div>
+
+          <div className="billing-adjustment-modal-footer">
+            <button type="button" className="btn btn-secondary billing-adjustment-cancel" onClick={closeAdjustmentModal} disabled={adjustmentSaving}>Cancel</button>
+            <button type="submit" className="btn btn-primary billing-adjustment-submit" disabled={!canSubmit}>
+              {adjustmentSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ReceiptText className="h-4 w-4" />}
+              {adjustmentSaving ? 'Creating...' : 'Create Adjustment'}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   function photoFilesChanged(category, files) {
     const normalizedCategory = normalizePhotoCategory(category);
     const nextFiles = Array.from(files || []);
@@ -2018,10 +2252,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         </div>
         {isTechnician && locked ? (
           <div className="mt-3 rounded-xl border border-sky-300/15 bg-sky-500/[0.08] p-3">
-            <p className="text-xs font-semibold text-sky-100/85">Billing is locked by Admin. Contact admin for changes.</p>
-            <button type="button" className="btn btn-secondary mt-3 py-2 text-xs" onClick={() => push('Admin review request feature is not available yet.', 'error')}>
-              Request Admin Review
-            </button>
+            <p className="text-xs font-semibold text-sky-100/85">Billing is locked. Contact admin for adjustment invoices or credit notes.</p>
           </div>
         ) : null}
         {paidOrPartialInvoiceLocksParts ? (
@@ -2033,7 +2264,6 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
   function renderProtectedInvoiceWarning() {
     if (!paidOrPartialInvoiceLocksParts || (!activeInvoiceIsPartial && !activeInvoiceIsPaid)) return null;
-    const adjustmentAvailable = canEditInvoice && canCreateAdjustmentInvoice;
     return (
       <div className="rounded-2xl border border-amber-400/25 bg-amber-500/[0.09] p-4 text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
         <div className="flex items-start gap-3">
@@ -2059,17 +2289,89 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 Go to Payments
               </button>
             ) : null}
-            {adjustmentAvailable ? (
-              <button type="button" className="btn btn-primary py-2" onClick={(event) => handleExtraInvoiceMismatch('adjustment', event)}>
-                Create Adjustment Invoice
+            {canCreateBillingAdjustmentInvoice ? (
+              <button type="button" className="btn btn-primary py-2" onClick={openAdjustmentModal}>
+                Create Adjustment Invoice / Credit Note
               </button>
             ) : (
-              <span className="inline-flex min-h-10 items-center rounded-xl border border-white/10 bg-slate-950/25 px-3 text-xs font-semibold text-slate-300">
-                Adjustment invoice not available yet.
-              </span>
+              <div className="flex flex-col gap-1">
+                <button type="button" className="btn btn-secondary py-2 disabled:cursor-not-allowed disabled:opacity-60" disabled>
+                  Create Adjustment Invoice / Credit Note
+                </button>
+                <span className="text-xs font-semibold text-slate-300">Contact admin for billing adjustments.</span>
+              </div>
             )}
           </div>
         ) : null}
+      </div>
+    );
+  }
+
+  function renderAdjustmentHistory() {
+    if (activeTab !== 'billing' || !adjustmentInvoices.length) return null;
+    const netBalanceLabel = refundDueAmount > 0 ? 'Refund Due' : 'Balance / Refund Due';
+    const netBalanceAmount = refundDueAmount > 0 ? refundDueAmount : activeInvoiceBalanceAmount;
+    return (
+      <div className={detailBillingSectionClass}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Linked Billing Documents</p>
+            <h2 className="mt-1 text-xl font-black">Adjustments / Credit Notes</h2>
+            <p className="mt-1 text-sm muted">Original paid invoices stay locked. Corrections are listed as separate linked documents.</p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+            <p className={detailLabelClass}>Original Invoice Total</p>
+            <p className="mt-1 text-lg font-black text-slate-100">{currency(originalInvoiceTotal)}</p>
+          </div>
+          <div className="rounded-xl border border-sky-300/15 bg-sky-500/[0.08] p-3">
+            <p className={detailLabelClass}>Adjustments / Credit Notes</p>
+            <p className="mt-1 text-lg font-black text-sky-100">{currency(signedAdjustmentTotal)}</p>
+          </div>
+          <div className="rounded-xl border border-emerald-300/20 bg-emerald-500/[0.1] p-3">
+            <p className={detailLabelClass}>Net Payable</p>
+            <p className="mt-1 text-lg font-black text-emerald-100">{currency(netPayableTotal)}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-slate-950/25 p-3">
+            <p className={detailLabelClass}>Paid Amount</p>
+            <p className="mt-1 text-lg font-black text-slate-100">{currency(activeInvoicePaidAmount)}</p>
+          </div>
+          <div className={`rounded-xl border p-3 ${refundDueAmount > 0 ? 'border-rose-300/20 bg-rose-500/[0.1] text-rose-100' : activeInvoiceBalanceAmount > 0 ? 'border-amber-300/20 bg-amber-500/[0.1] text-amber-100' : 'border-emerald-300/20 bg-emerald-500/[0.1] text-emerald-100'}`}>
+            <p className={detailLabelClass}>{netBalanceLabel}</p>
+            <p className="mt-1 text-lg font-black">{currency(netBalanceAmount)}</p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3">
+          {adjustmentInvoices.map((invoice) => (
+            <div key={recordId(invoice) || invoice.invoiceNumber} className="rounded-2xl border border-white/10 bg-slate-950/25 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-sm font-black text-slate-100">{invoice.adjustmentNumber || invoice.invoiceNumber}</p>
+                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${adjustmentKind(invoice) === 'credit_note' ? 'border-amber-300/25 bg-amber-500/10 text-amber-100' : 'border-sky-300/25 bg-sky-500/10 text-sky-100'}`}>
+                      {adjustmentLabel(invoice)}
+                    </span>
+                    <StatusBadge status={invoice.status || 'Pending'} />
+                  </div>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-200">{invoice.adjustmentReason || invoice.notes || 'No reason captured.'}</p>
+                  <p className="mt-1 text-xs muted">
+                    Created {formatDate(invoice.createdAt)} by {invoice.createdBy?.name || invoice.createdBy?.username || 'Admin'}
+                  </p>
+                </div>
+                <div className="grid shrink-0 gap-2 sm:grid-cols-2 lg:min-w-[18rem]">
+                  <div className="rounded-xl border border-white/10 bg-black/15 p-3">
+                    <p className={detailLabelClass}>Amount</p>
+                    <p className="mt-1 font-black text-slate-100">{currency(invoice.total)}</p>
+                  </div>
+                  <button type="button" className="btn btn-secondary min-h-10 cursor-not-allowed opacity-60" disabled>
+                    PDF not available yet.
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -2524,6 +2826,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         {renderCompletionConfirmModal()}
         {renderInvoiceConfirmModal()}
         {renderVoidUnlockModal()}
+        {renderAdjustmentInvoiceModal()}
         {renderPhotoGalleryModal()}
         {renderPartsDuplicateModals()}
       </div>
@@ -2970,6 +3273,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
           {activeTab === 'billing' ? renderBillingLockStatusCard() : null}
           {activeTab === 'billing' ? renderProtectedInvoiceWarning() : null}
+          {activeTab === 'billing' ? renderAdjustmentHistory() : null}
 
           {canEditServiceCharge ? <form className={activeTab === 'billing' ? detailBillingSectionClass : 'hidden'} onSubmit={saveServiceCharge}>
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3446,6 +3750,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       {renderCompletionConfirmModal()}
       {renderInvoiceConfirmModal()}
       {renderVoidUnlockModal()}
+      {renderAdjustmentInvoiceModal()}
       {renderPhotoGalleryModal()}
       {canManagePartsUsed ? renderPartsDuplicateModals() : null}
     </div>

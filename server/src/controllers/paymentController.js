@@ -2,7 +2,7 @@ import Customer from '../models/Customer.js';
 import AMCContract from '../models/AMCContract.js';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
-import { recordPayment } from '../services/paymentService.js';
+import { recordPayment, reversePayment } from '../services/paymentService.js';
 import { getTechnicianScope } from '../services/technicianScopeService.js';
 import { clean, required } from '../utils/http.js';
 import { addDateRange, paginatedPayload, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
@@ -11,6 +11,11 @@ export async function create(req, res) {
   required(req.body, ['invoiceId', 'method']);
   const payment = await recordPayment({ ...req.body, userId: req.user._id }, req.user);
   res.status(201).json({ payment, message: 'Payment recorded' });
+}
+
+export async function reverse(req, res) {
+  const result = await reversePayment(req.params.id, req.body, req.user);
+  res.json({ ...result, message: 'Payment reversed successfully.' });
 }
 
 export async function list(req, res) {
@@ -57,19 +62,26 @@ export async function list(req, res) {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const invoiceSummaryFilter = technicianScope ? { _id: { $in: technicianScope.invoiceObjectIds } } : {};
+    const paymentSummaryFilter = { ...filter };
+    if (paymentSummaryFilter.status === 'Reversed') {
+      paymentSummaryFilter.status = '__no_active_payment_status__';
+    } else if (!paymentSummaryFilter.status) {
+      paymentSummaryFilter.status = { $ne: 'Reversed' };
+    }
 
     const [total, rows, paymentSummaryRows, invoiceSummaryRows, methods] = await Promise.all([
       Payment.countDocuments(filter),
       Payment.find(filter)
-        .select('invoiceId customerId amount paidAmount balance status method transactionId createdAt updatedAt')
+        .select('invoiceId customerId amount paidAmount balance status method transactionId reversalReason reversedAt reversedBy createdAt updatedAt')
         .populate({ path: 'invoiceId', populate: [{ path: 'workOrderId' }, { path: 'amcContractId' }] })
         .populate('customerId')
+        .populate('reversedBy', 'name username role')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
       Payment.aggregate([
-        { $match: filter },
+        { $match: paymentSummaryFilter },
         {
           $group: {
             _id: null,
@@ -98,7 +110,7 @@ export async function list(req, res) {
           }
         }
       ]),
-      Payment.distinct('method', technicianScope ? { invoiceId: { $in: technicianScope.invoiceObjectIds } } : {})
+      Payment.distinct('method', { ...(technicianScope ? { invoiceId: { $in: technicianScope.invoiceObjectIds } } : {}), status: { $ne: 'Reversed' } })
     ]);
     const payments = rows.map((payment) => withNestedIds(payment, ['invoiceId', 'customerId']));
     const summary = {

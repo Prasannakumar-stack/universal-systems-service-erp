@@ -220,7 +220,7 @@ function BookingSourceBadge({ source }) {
   };
 
   return (
-    <span className={`booking-source-badge inline-flex max-w-full items-center justify-center truncate rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${tones[label] || tones['Walk-in']}`} title={label}>
+    <span className={`booking-source-badge inline-flex max-w-full items-center justify-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${tones[label] || tones['Walk-in']}`} title={label}>
       {label}
     </span>
   );
@@ -402,13 +402,13 @@ export function BookingsPage({ role = 'admin' }) {
         <div className={`bookings-table-shell table-wrap bookings-table-wrap ${isTechnician ? 'technician-desktop-table' : ''}`}>
           <table className={`data-table bookings-table ${isTechnician ? 'bookings-table--technician' : 'bookings-table--admin'}`}>
             <colgroup>
-              <col className="booking-col-booking" style={{ width: '11%' }} />
-              <col className="booking-col-customer" style={{ width: '15%' }} />
-              <col className="booking-col-source booking-source-column" style={{ width: '9%' }} />
-              <col className="booking-col-device" style={{ width: '13%' }} />
-              <col className="booking-col-issue" style={{ width: '24%' }} />
+              <col className="booking-col-booking" style={{ width: '9%' }} />
+              <col className="booking-col-customer" style={{ width: '14%' }} />
+              <col className="booking-col-source booking-source-column" style={{ width: '12%' }} />
+              <col className="booking-col-device" style={{ width: '12%' }} />
+              <col className="booking-col-issue" style={{ width: '20%' }} />
               <col className="booking-col-status" style={{ width: '13%' }} />
-              <col className="booking-col-action" style={{ width: isTechnician ? '120px' : '15%', minWidth: isTechnician ? '120px' : '14rem' }} />
+              <col className="booking-col-action" style={{ width: isTechnician ? '120px' : '20%' }} />
             </colgroup>
           <thead>
             <tr>
@@ -418,7 +418,7 @@ export function BookingsPage({ role = 'admin' }) {
               <th>Device / Service</th>
               <th>Issue</th>
               <th>Status / Priority</th>
-              <th className="bookings-action-header">{isTechnician || !canConvertBooking ? 'Actions' : 'Convert / Open'}</th>
+              <th className="bookings-action-header">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -458,15 +458,15 @@ export function BookingsPage({ role = 'admin' }) {
                 <td className="bookings-cell-status">
                   <div className="flex flex-col gap-2">
                     <EnquiryStatusBadge status={displayBookingStatus(booking)} />
-                    {isContactFormBooking(booking) ? <EnquiryPriorityBadge priority={enquiryPriority(booking)} /> : null}
+                    {isContactFormBooking(booking) && enquiryPriority(booking) === 'Urgent' ? <EnquiryPriorityBadge priority="Urgent" /> : null}
                   </div>
                 </td>
-                <td className={`bookings-cell-action ${isTechnician ? 'min-w-[120px]' : 'min-w-[15rem]'}`}>
+                <td className={`bookings-cell-action ${isTechnician ? 'min-w-[120px]' : ''}`}>
                   {isTechnician ? (
                     <TechnicianBookingActions booking={booking} workOrdersBase={workOrdersBase} />
                   ) : (
                     <div className="booking-action-cell booking-action-cell--stacked">
-                      <button type="button" className={`btn btn-secondary booking-action-button ${bookingsFocusRing}`} onClick={() => setDetailsBooking(booking)}>
+                      <button type="button" className={`btn btn-secondary booking-action-button booking-view-details-btn ${bookingsFocusRing}`} onClick={() => setDetailsBooking(booking)}>
                         View Details
                       </button>
                       <ConvertBooking booking={booking} technicians={technicians} onConvert={convert} workOrdersBase={workOrdersBase} canConvert={canConvertBooking} canAssignTechnician={canAssignTechnician} />
@@ -546,7 +546,11 @@ function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert
   const [technicianId, setTechnicianId] = useState(booking.technicianId?.id || '');
   const isContact = isContactFormBooking(booking);
   const workOrderId = recordId(booking.workOrderId);
+  const currentStatus = displayBookingStatus(booking);
+  const isConverted = currentStatus === 'Converted' || Boolean(workOrderId);
   const priority = enquiryPriority(booking);
+  const detailTypeLabel = isContact ? 'Enquiry Details' : 'Booking Details';
+  const showUrgentPriority = priority === 'Urgent';
 
   useEffect(() => {
     setForm({
@@ -573,20 +577,20 @@ function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert
   return (
     <div className="fixed inset-0 z-[90] flex justify-end bg-black/55 p-3 backdrop-blur-sm sm:p-5" role="presentation" onClick={onClose}>
       <aside
-        className="surface flex h-full w-full max-w-2xl flex-col overflow-hidden border border-white/10 bg-[#081426]/95 shadow-[0_28px_90px_rgba(0,0,0,0.5)]"
+        className="booking-enquiry-drawer surface flex h-full w-full max-w-3xl flex-col overflow-hidden border border-white/10 bg-[#081426]/95 shadow-[0_28px_90px_rgba(0,0,0,0.5)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="booking-enquiry-details-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
+        <div className="booking-enquiry-drawer-header flex items-start justify-between gap-4 border-b border-white/10 p-5">
           <div className="min-w-0">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-sky-300/90">Enquiry Details</p>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-sky-300/90">{detailTypeLabel}</p>
             <h2 id="booking-enquiry-details-title" className="mt-1 truncate text-2xl font-black text-white">{booking.customerName || 'Customer'}</h2>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <BookingSourceBadge source={booking} />
-              <EnquiryStatusBadge status={displayBookingStatus(booking)} />
-              {isContact ? <EnquiryPriorityBadge priority={priority} /> : null}
+              <EnquiryStatusBadge status={currentStatus} />
+              {showUrgentPriority ? <EnquiryPriorityBadge priority="Urgent" /> : null}
             </div>
           </div>
           <button type="button" className="icon-button h-10 w-10 shrink-0" onClick={onClose} aria-label="Close enquiry details">
@@ -595,7 +599,7 @@ function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert
         </div>
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+          <div className="booking-enquiry-drawer-body min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
             <div className="grid gap-3 sm:grid-cols-2">
               <DetailPill label="Booking / Enquiry ID" value={booking.bookingCode || booking.id} />
               <DetailPill label="Phone number" value={booking.phone || '-'} />
@@ -603,13 +607,18 @@ function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert
               <DetailPill label="Created" value={formatDate(booking.createdAt)} />
             </div>
 
+            <section className="booking-message-card rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+              <p className="booking-modal-label">Full message</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-100">{booking.issue || 'No message captured.'}</p>
+            </section>
+
             {booking.duplicateInfo?.hasDuplicate ? (
-              <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 p-4 text-amber-100">
+              <div className="booking-duplicate-card rounded-2xl border border-amber-400/25 bg-amber-500/10 p-4 text-amber-100">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-                  <div>
-                    <p className="font-black">{booking.duplicateInfo.message || 'Existing customer/enquiry found.'}</p>
-                    <div className="mt-2 grid gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black">Existing customer/enquiry found.</p>
+                    <div className="mt-2 grid gap-1.5">
                       {(booking.duplicateInfo.matches || []).map((match, index) => (
                         <p key={`${match.type}-${match.label}-${index}`} className="rounded-xl border border-amber-300/15 bg-black/10 px-3 py-2 text-xs font-semibold text-amber-50/90">
                           {match.type}: {match.label}{match.reference ? ` - ${match.reference}` : ''}
@@ -621,18 +630,13 @@ function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert
               </div>
             ) : null}
 
-            <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-200/80">Full message</p>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-100">{booking.issue || 'No message captured.'}</p>
-            </section>
-
-            {isContact ? (
+            {isContact && !isConverted ? (
               <>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="booking-modal-field">
                     <span className="booking-modal-label">Enquiry status</span>
-                    <select className={`input booking-modal-control ${bookingsFocusRing}`} value={form.status} onChange={(event) => update('status', event.target.value)} disabled={displayBookingStatus(booking) === 'Converted'}>
-                      {displayBookingStatus(booking) === 'Converted' ? <option>Converted</option> : enquiryWorkflowStatuses.map((item) => <option key={item}>{item}</option>)}
+                    <select className={`input booking-modal-control ${bookingsFocusRing}`} value={form.status} onChange={(event) => update('status', event.target.value)}>
+                      {enquiryWorkflowStatuses.map((item) => <option key={item}>{item}</option>)}
                     </select>
                   </label>
                   <label className="booking-modal-field">
@@ -642,23 +646,39 @@ function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert
                 </div>
                 <label className="booking-modal-field">
                   <span className="booking-modal-label">Follow-up reminder</span>
-                  <input className={`input booking-modal-control ${bookingsFocusRing}`} value={form.followUpReminder} onChange={(event) => update('followUpReminder', event.target.value)} placeholder="Remind to follow up tomorrow." />
+                  <input className={`input booking-modal-control ${bookingsFocusRing}`} value={form.followUpReminder} onChange={(event) => update('followUpReminder', event.target.value)} placeholder="Follow up with customer tomorrow." />
                 </label>
                 <label className="booking-modal-field">
                   <span className="booking-modal-label">Admin notes</span>
-                  <textarea className={`input booking-modal-control booking-modal-textarea ${bookingsFocusRing}`} value={form.adminNote} onChange={(event) => update('adminNote', event.target.value)} placeholder="Customer asked price, call again tomorrow." />
+                  <textarea className={`input booking-modal-control booking-modal-textarea ${bookingsFocusRing}`} value={form.adminNote} onChange={(event) => update('adminNote', event.target.value)} placeholder="Customer asked for pricing. Follow up with customer tomorrow." />
                 </label>
               </>
+            ) : isContact && isConverted ? (
+              <section className="rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="booking-modal-label">Converted enquiry</p>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-emerald-100/90">This Contact Form enquiry is linked to a service job. Conversion controls are locked to protect the service record.</p>
+                  </div>
+                  <EnquiryStatusBadge status="Converted" />
+                </div>
+                {booking.adminNote || booking.followUpReminder || booking.followUpAt ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <DetailPill label="Follow-up" value={booking.followUpReminder || formatDate(booking.followUpAt)} />
+                    <DetailPill label="Admin notes" value={booking.adminNote || '-'} />
+                  </div>
+                ) : null}
+              </section>
             ) : (
               <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-300/80">Booking status</p>
-                <div className="mt-2"><EnquiryStatusBadge status={displayBookingStatus(booking)} /></div>
+                <p className="booking-modal-label">Booking status</p>
+                <div className="mt-2"><EnquiryStatusBadge status={currentStatus} /></div>
               </section>
             )}
           </div>
 
-          <div className="border-t border-white/10 p-5">
-            {!workOrderId && canAssignTechnician && canConvert ? (
+          <div className="booking-enquiry-drawer-footer border-t border-white/10 p-5">
+            {!isConverted && canAssignTechnician && canConvert ? (
               <label className="booking-modal-field mb-3">
                 <span className="booking-modal-label">Assign technician on convert</span>
                 <select className={`input booking-modal-control ${bookingsFocusRing}`} value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}>
@@ -667,31 +687,36 @@ function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert
                 </select>
               </label>
             ) : null}
-            {isContact ? (
-              <>
-                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <button type="submit" className="btn btn-secondary min-h-11 flex-1" disabled={saving}>
+            <div className="booking-modal-footer-actions">
+              {isConverted ? (
+                <>
+                  {workOrderId ? <Link className="btn btn-primary booking-modal-action" to={`${workOrdersBase}/${workOrderId}`}>Open Service Job</Link> : null}
+                  <button type="button" className="btn btn-secondary booking-modal-action" onClick={onClose}>Close</button>
+                </>
+              ) : isContact ? (
+                <>
+                  <button type="submit" className="btn btn-secondary booking-modal-action" disabled={saving}>
                     <Save className="h-4 w-4" />
                     {saving ? 'Saving...' : 'Save Enquiry'}
                   </button>
-                  {workOrderId ? (
-                    <Link className="btn btn-primary min-h-11 flex-1" to={`${workOrdersBase}/${workOrderId}`}>
-                      Open Service Job
-                    </Link>
-                  ) : canConvert ? (
-                    <button type="button" className="btn btn-primary min-h-11 flex-1" onClick={convertFromDrawer}>
+                  {canConvert ? (
+                    <button type="button" className="btn btn-primary booking-modal-action" onClick={convertFromDrawer}>
                       Convert
                     </button>
                   ) : null}
-                </div>
-                <button type="button" className="btn btn-secondary w-full" onClick={onClose}>Close</button>
-              </>
-            ) : (
-              <div className="flex flex-col gap-2 sm:flex-row">
-                {workOrderId ? <Link className="btn btn-primary flex-1" to={`${workOrdersBase}/${workOrderId}`}>Open Service Job</Link> : null}
-                <button type="button" className="btn btn-secondary flex-1" onClick={onClose}>Close</button>
-              </div>
-            )}
+                  <button type="button" className="btn btn-secondary booking-modal-action" onClick={onClose}>Close</button>
+                </>
+              ) : (
+                <>
+                  {canConvert ? (
+                    <button type="button" className="btn btn-primary booking-modal-action" onClick={convertFromDrawer}>
+                      Convert
+                    </button>
+                  ) : null}
+                  <button type="button" className="btn btn-secondary booking-modal-action" onClick={onClose}>Close</button>
+                </>
+              )}
+            </div>
           </div>
         </form>
       </aside>
@@ -801,7 +826,6 @@ function ConvertBooking({ booking, technicians, onConvert, workOrdersBase = '/ad
       {canAssignTechnician ? (
         <select
           className={`input booking-technician-select bookings-filter-control ${focusRing}`}
-          style={{ minWidth: '8.75rem', maxWidth: '9.75rem' }}
           value={technicianId}
           onChange={(event) => setTechnicianId(event.target.value)}
         >

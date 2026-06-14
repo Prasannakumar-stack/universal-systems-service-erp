@@ -20,7 +20,14 @@ const invoiceSchema = new mongoose.Schema(
     paidAmount: { type: Number, min: 0, default: 0 },
     balance: { type: Number, min: 0, required: true },
     status: { type: String, enum: ['Paid', 'Partial', 'Pending', 'Void'], default: 'Pending' },
-    adjustmentForInvoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null }
+    invoiceType: { type: String, enum: ['original', 'adjustment', 'credit_note'], default: 'original' },
+    parentInvoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
+    adjustmentForInvoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
+    adjustmentNumber: { type: String, trim: true, default: '' },
+    adjustmentType: { type: String, enum: ['', 'credit_note', 'additional_charge'], default: '' },
+    adjustmentReason: { type: String, trim: true, default: '' },
+    internalNote: { type: String, trim: true, default: '' },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );

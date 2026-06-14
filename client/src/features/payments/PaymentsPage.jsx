@@ -156,13 +156,20 @@ export function PaymentsPage({ role = 'admin' }) {
   const { push } = useToast();
   const location = useLocation();
   const effectiveRole = user?.role || role;
-  const isTechnician = normalizeRole(effectiveRole) === 'technician';
+  const normalizedRole = normalizeRole(effectiveRole);
+  const isTechnician = normalizedRole === 'technician';
   const permissionSubject = user || effectiveRole;
   const canRecordPayments = can(permissionSubject, 'record_payment');
+  const canReversePayments = normalizedRole === 'admin' && can(permissionSubject, 'edit_payment');
   const base = isTechnician ? '/tech' : '/admin';
   const invoiceIdParam = useMemo(() => new URLSearchParams(location.search).get('invoiceId') || '', [location.search]);
   const invoiceIdParamHandled = useRef('');
   const [form, setForm] = useState({ invoiceId: invoiceIdParam, paidAmount: '', method: 'Cash', transactionId: '' });
+  const [reversalTarget, setReversalTarget] = useState(null);
+  const [reversalReason, setReversalReason] = useState('');
+  const [reversalChecked, setReversalChecked] = useState(false);
+  const [reversalSaving, setReversalSaving] = useState(false);
+  const [reversalNotice, setReversalNotice] = useState(null);
   const [search, setSearch] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
   const [methodFilter, setMethodFilter] = useState('');
@@ -288,18 +295,75 @@ export function PaymentsPage({ role = 'admin' }) {
   function paymentMethodDisplay(payment) {
     const invoice = payment?.invoiceId;
     const invoiceId = invoice?.id || invoice?._id || invoice;
-    const payments = paymentSummaryByInvoice.get(invoiceId) || (payment ? [payment] : []);
+    const payments = (paymentSummaryByInvoice.get(invoiceId) || (payment ? [payment] : [])).filter((item) => item.status !== 'Reversed' && !item.reversedAt);
+    if (payment?.status === 'Reversed' || payment?.reversedAt) return payment?.method || '-';
     if (!payments.length) return '-';
     const methods = Array.from(new Set(payments.map((item) => item.method || 'Other').filter(Boolean)));
     if (methods.length <= 1) return payment?.method || methods[0] || '-';
     return methods.join(' + ');
   }
+
+  function openReversal(payment) {
+    setReversalTarget(payment);
+    setReversalReason('');
+    setReversalChecked(false);
+  }
+
+  async function confirmReversal(event) {
+    event.preventDefault();
+    if (!reversalTarget) return;
+    if (!canReversePayments) {
+      push('Only Admin can reverse payments', 'error');
+      return;
+    }
+    if (!reversalReason.trim()) {
+      push('Please enter a reversal reason', 'error');
+      return;
+    }
+    if (!reversalChecked) {
+      push('Please confirm that the payment will remain in history', 'error');
+      return;
+    }
+    setReversalSaving(true);
+    try {
+      await preserveScroll(async () => {
+        const result = await request(`/payments/${recordId(reversalTarget)}/reverse`, {
+          method: 'PATCH',
+          body: JSON.stringify({ reason: reversalReason.trim() })
+        });
+        const updatedInvoice = result?.invoice || {};
+        const linkedWorkOrderId = recordId(updatedInvoice.workOrderId) || recordId(reversalTarget?.invoiceId?.workOrderId);
+        const paidAmount = Number(updatedInvoice.paidAmount || 0);
+        const invoiceStatus = String(updatedInvoice.status || '').toLowerCase();
+        push('Payment reversed successfully.');
+        if (paidAmount <= 0 && (!invoiceStatus || invoiceStatus === 'pending' || invoiceStatus === 'unpaid')) {
+          setReversalNotice({
+            invoiceId: recordId(updatedInvoice) || recordId(reversalTarget?.invoiceId),
+            invoiceLabel: getInvoiceDisplayId(updatedInvoice.id || updatedInvoice._id ? updatedInvoice : reversalTarget?.invoiceId),
+            workOrderId: linkedWorkOrderId,
+            workOrderLabel: linkedWorkOrderId ? getWorkOrderDisplayId(updatedInvoice.workOrderId || reversalTarget?.invoiceId?.workOrderId) : ''
+          });
+        } else {
+          setReversalNotice(null);
+        }
+        setReversalTarget(null);
+        setReversalReason('');
+        setReversalChecked(false);
+        reload({ silent: true });
+        window.dispatchEvent(new Event('us:billing-updated'));
+      });
+    } catch (err) {
+      push(err.message, 'error');
+    } finally {
+      setReversalSaving(false);
+    }
+  }
   const paymentTotals = data.summary || {
-    totalCollected: (data.payments || []).reduce((sum, payment) => sum + Number(payment.paidAmount || 0), 0),
+    totalCollected: (data.payments || []).filter((payment) => payment.status !== 'Reversed' && !payment.reversedAt).reduce((sum, payment) => sum + Number(payment.paidAmount || 0), 0),
     pendingBalance: (data.invoices || []).reduce((sum, invoice) => sum + invoiceDueAmount(invoice), 0),
     paidInvoices: (data.invoices || []).filter((invoice) => invoice.status === 'Paid').length,
     partialInvoices: (data.invoices || []).filter((invoice) => invoice.status === 'Partial').length,
-    todayCollection: (data.payments || []).filter((payment) => isToday(payment.createdAt)).reduce((sum, payment) => sum + Number(payment.paidAmount || 0), 0)
+    todayCollection: (data.payments || []).filter((payment) => payment.status !== 'Reversed' && !payment.reversedAt && isToday(payment.createdAt)).reduce((sum, payment) => sum + Number(payment.paidAmount || 0), 0)
   };
   const paymentKpis = [
     { icon: CreditCard, label: 'Total Collected', value: wholeCurrency(paymentTotals.totalCollected), helper: 'Received amount', tone: 'green' },
@@ -338,6 +402,10 @@ export function PaymentsPage({ role = 'admin' }) {
     return <span className="muted">-</span>;
   }
 
+  function canReversePaymentRow(payment) {
+    return canReversePayments && recordId(payment?.invoiceId) && payment?.status !== 'Reversed' && !payment?.reversedAt && Number(payment?.paidAmount || 0) > 0;
+  }
+
   return (
     <div className="billing-page payments-page">
       <section className="billing-hero mb-5">
@@ -350,6 +418,26 @@ export function PaymentsPage({ role = 'admin' }) {
         </div>
       </section>
 
+      {reversalNotice ? (
+        <div className="payment-reversal-success surface mb-5 flex flex-col gap-3 border border-emerald-300/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-200/80">Payment reversed</p>
+            <p className="mt-1 text-sm font-bold text-slate-100">Invoice is now unpaid. You can unlock editing from Work Order Billing.</p>
+            <p className="mt-1 text-xs font-semibold text-slate-400">
+              {reversalNotice.invoiceLabel || 'Invoice'} remains in history with the reversed payment for audit.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            {reversalNotice.workOrderId ? (
+              <Link className="btn btn-primary min-h-10 whitespace-nowrap" to={`${base}/work-orders/${reversalNotice.workOrderId}`}>
+                Go to Work Order Billing
+              </Link>
+            ) : null}
+            <button type="button" className="btn btn-secondary min-h-10" onClick={() => setReversalNotice(null)}>Dismiss</button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="billing-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {paymentKpis.map((item) => <BillingMetricCard key={item.label} {...item} />)}
       </div>
@@ -360,7 +448,7 @@ export function PaymentsPage({ role = 'admin' }) {
         </div>
         <select className="input" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
           <option value="">All statuses</option>
-          {['Paid', 'Partial', 'Pending'].map((item) => <option key={item}>{item}</option>)}
+          {['Paid', 'Partial', 'Pending', 'Reversed'].map((item) => <option key={item}>{item}</option>)}
         </select>
         <select className="input" value={methodFilter} onChange={(event) => setMethodFilter(event.target.value)}>
           <option value="">All methods</option>
@@ -462,26 +550,42 @@ export function PaymentsPage({ role = 'admin' }) {
         ) : null}
         <div className={`table-wrap billing-table-wrap bg-[var(--surface)] ${isTechnician ? 'technician-desktop-table' : ''}`}>
           <table className="data-table payments-table">
-            <thead><tr><th>Date</th><th>Payment ID</th><th>Linked Invoice</th><th>Linked Source</th><th>Customer</th><th className="text-right">Amount Paid</th><th>Method</th><th className="text-right">Balance After</th></tr></thead>
+            <thead><tr><th>Date</th><th>Payment ID</th><th>Linked Invoice</th><th>Linked Source</th><th>Customer</th><th className="text-right">Amount Paid</th><th>Method</th><th className="text-right">Balance After</th>{!isTechnician ? <th className="text-center">Actions</th> : null}</tr></thead>
             <tbody className="divide-y divide-[var(--line)]">
               {visiblePayments.map((payment) => {
                 const balanceAfter = Number(payment.balance || 0);
+                const reversed = payment.status === 'Reversed' || payment.reversedAt;
                 return (
-                  <tr key={payment.id}>
+                  <tr key={payment.id} className={reversed ? 'payment-row-reversed' : ''}>
                     <td className="whitespace-nowrap">{formatDate(payment.createdAt)}</td>
-                    <td className="font-bold"><span className="billing-id-text">{getPaymentDisplayId(payment)}</span></td>
+                    <td className="font-bold">
+                      <span className="billing-id-text">{getPaymentDisplayId(payment)}</span>
+                      {reversed ? <span className="payment-reversed-helper">Kept for audit history</span> : null}
+                    </td>
                     <td className="font-bold"><Link className="billing-link" to={`${base}/invoices`}>{getInvoiceDisplayId(payment.invoiceId)}</Link></td>
                     <td>{invoiceSourceCell(payment.invoiceId)}</td>
                     <td>
                       <span className="block truncate font-semibold text-slate-100" title={payment.customerId?.name || '-'}>{payment.customerId?.name || '-'}</span>
                       <span className="block text-xs muted">{payment.customerId?.phone || '-'}</span>
                     </td>
-                    <td className="billing-money-cell text-right text-emerald-100">{wholeCurrency(payment.paidAmount)}</td>
+                    <td className={`billing-money-cell text-right ${reversed ? 'text-rose-100' : 'text-emerald-100'}`}>{wholeCurrency(payment.paidAmount)}</td>
                     <td><span className="billing-method-pill">{paymentMethodDisplay(payment)}</span></td>
                     <td className={`billing-money-cell text-right ${balanceAfter > 0 ? 'text-amber-100' : 'text-emerald-100'}`}>
                       {wholeCurrency(payment.balance)}
                       <span className="mt-1 block"><BillingStatusPill status={payment.status} /></span>
+                      {reversed && payment.reversalReason ? <span className="payment-reversed-helper" title={payment.reversalReason}>{payment.reversalReason}</span> : null}
                     </td>
+                    {!isTechnician ? (
+                      <td className="text-center">
+                        {canReversePaymentRow(payment) ? (
+                          <button type="button" className="btn btn-secondary payment-reverse-btn" onClick={() => openReversal(payment)}>
+                            Reverse Payment
+                          </button>
+                        ) : (
+                          <span className="payment-action-muted">{reversed ? 'Reversed' : 'No action'}</span>
+                        )}
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })}
@@ -491,6 +595,89 @@ export function PaymentsPage({ role = 'admin' }) {
         <PaginationControls pagination={paginationFrom(data, data.payments?.length || 0, limit)} onPageChange={setPage} />
         </>
       )}
+      {reversalTarget ? (
+        <PaymentReversalModal
+          payment={reversalTarget}
+          reason={reversalReason}
+          checked={reversalChecked}
+          saving={reversalSaving}
+          onReasonChange={setReversalReason}
+          onCheckedChange={setReversalChecked}
+          onCancel={() => {
+            setReversalTarget(null);
+            setReversalReason('');
+            setReversalChecked(false);
+          }}
+          onConfirm={confirmReversal}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function PaymentReversalModal({ payment, reason, checked, saving, onReasonChange, onCheckedChange, onCancel, onConfirm }) {
+  const invoice = payment?.invoiceId;
+  const workOrderId = recordId(invoice?.workOrderId);
+  const canSubmit = Boolean(reason.trim() && checked && !saving);
+  const rows = [
+    ['Payment ID', getPaymentDisplayId(payment)],
+    ['Invoice ID', getInvoiceDisplayId(invoice)],
+    ['Work Order ID', workOrderId ? getWorkOrderDisplayId(invoice.workOrderId) : '-'],
+    ['Customer Name', payment?.customerId?.name || '-'],
+    ['Paid Amount', wholeCurrency(payment?.paidAmount || 0)],
+    ['Payment Method', payment?.method || '-'],
+    ['Payment Date', formatDate(payment?.createdAt)]
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[95] grid place-items-center bg-black/60 p-3 backdrop-blur-sm sm:p-4" role="presentation" onClick={saving ? undefined : onCancel}>
+      <form className="payment-reversal-modal surface flex w-full max-w-2xl flex-col overflow-hidden border border-amber-300/20 shadow-[0_28px_90px_rgba(0,0,0,0.55)]" onSubmit={onConfirm} onClick={(event) => event.stopPropagation()}>
+        <div className="payment-reversal-modal-header flex items-start gap-3">
+          <span className="payment-reversal-icon"><AlertTriangle className="h-5 w-5" /></span>
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200/80">Payment Safety</p>
+            <h2 className="mt-1 text-xl font-black text-white">Reverse payment?</h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-300">
+              This will reverse the selected payment and update the invoice balance. The payment record will be kept for audit history.
+            </p>
+            <p className="mt-2 text-xs font-bold text-amber-100">Reverse payment first. Then unpaid invoice can be voided/unlocked.</p>
+          </div>
+        </div>
+
+        <div className="payment-reversal-modal-body">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {rows.map(([label, value]) => (
+              <div key={label} className="billing-info-block">
+                <p className="text-xs font-black uppercase text-slate-400">{label}</p>
+                <p className="mt-1 truncate font-bold text-slate-100" title={String(value)}>{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <label className="mt-5 block">
+            <span className="label">Reversal reason</span>
+            <textarea
+              className="input payment-reversal-reason"
+              value={reason}
+              onChange={(event) => onReasonChange(event.target.value)}
+              placeholder="Example: Wrong entry, refund issued, customer cancelled"
+              required
+            />
+          </label>
+
+          <label className="payment-reversal-check mt-4">
+            <input type="checkbox" checked={checked} onChange={(event) => onCheckedChange(event.target.checked)} />
+            <span>I understand this payment will be reversed and cannot be deleted from history.</span>
+          </label>
+        </div>
+
+        <div className="payment-reversal-modal-footer">
+          <button type="button" className="btn btn-secondary payment-reversal-cancel" onClick={onCancel} disabled={saving}>Cancel</button>
+          <button type="submit" className="btn payment-reversal-confirm" disabled={!canSubmit}>
+            {saving ? 'Reversing...' : 'Reverse Payment'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -558,7 +745,8 @@ function BillingStatusPill({ status }) {
   const tone = {
     Paid: 'billing-status-paid',
     Pending: 'billing-status-pending',
-    Partial: 'billing-status-partial'
+    Partial: 'billing-status-partial',
+    Reversed: 'billing-status-reversed'
   }[status] || 'billing-status-neutral';
   return <span className={`billing-status-pill ${tone}`}>{status || '-'}</span>;
 }

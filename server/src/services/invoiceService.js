@@ -13,6 +13,11 @@ function invoiceNumber() {
   return `INV-${new Date().getFullYear()}-${randomUUID().slice(0, 7).toUpperCase()}`;
 }
 
+function adjustmentNumber(type = 'adjustment') {
+  const prefix = type === 'credit_note' ? 'CN' : 'ADJ';
+  return `${prefix}-${new Date().getFullYear()}-${randomUUID().slice(0, 7).toUpperCase()}`;
+}
+
 function invoiceStatus(total, paidAmount) {
   if (paidAmount >= total && total > 0) return 'Paid';
   if (paidAmount > 0) return 'Partial';
@@ -35,6 +40,10 @@ function invoiceIsUnpaid(invoice) {
 
 function invoiceHasPayment(invoice) {
   return Boolean(invoice && (['Paid', 'Partial'].includes(invoice.status) || numberValue(invoice.paidAmount, 0) > 0));
+}
+
+function invoiceIsAdjustment(invoice) {
+  return Boolean(invoice?.parentInvoiceId || invoice?.adjustmentForInvoiceId || ['adjustment', 'credit_note'].includes(clean(invoice?.invoiceType)));
 }
 
 function appendInvoiceNote(notes, line) {
@@ -341,6 +350,101 @@ async function createAdjustmentExtraInvoice(payload, workOrder, user, labour) {
   });
 }
 
+async function createBillingAdjustmentInvoice(payload, workOrder, user) {
+  if (user?.role !== 'admin') throw appError('Only admin users can create adjustment invoices', 403);
+
+  const baseInvoice = await resolveBaseInvoiceForAdjustment(payload, workOrder);
+  if (!baseInvoice) throw appError('Original invoice not found', 404);
+  assertInvoiceBelongsToWorkOrder(baseInvoice, workOrder);
+  if (baseInvoice.status === 'Void') throw appError('Cannot create adjustment for a void invoice', 400);
+  if (invoiceIsAdjustment(baseInvoice)) throw appError('Create adjustments from the original invoice only', 400);
+  if (!invoiceHasPayment(baseInvoice)) throw appError('Use void invoice and unlock editing for unpaid invoices', 400);
+
+  const adjustmentType = clean(payload.adjustmentType);
+  const normalizedType =
+    ['credit_note', 'credit', 'refund', 'discount'].includes(adjustmentType)
+      ? 'credit_note'
+      : ['additional_charge', 'adjustment', 'additional'].includes(adjustmentType)
+        ? 'additional_charge'
+        : '';
+  if (!normalizedType) throw appError('Adjustment type is required', 400);
+
+  const amount = numberValue(payload.amount, 0);
+  if (amount <= 0) throw appError('Adjustment amount must be greater than zero', 400);
+
+  const reason = clean(payload.reason);
+  if (!reason) throw appError('Adjustment reason is required', 400);
+  if (!payload.confirmed) throw appError('Please confirm the original invoice will remain unchanged', 400);
+
+  if (normalizedType === 'credit_note') {
+    const safeLimit = Math.max(numberValue(baseInvoice.total, 0), numberValue(baseInvoice.paidAmount, 0));
+    if (amount > safeLimit) throw appError('Credit note amount cannot exceed the original invoice total', 400);
+  }
+
+  const note = clean(payload.internalNote);
+  const adjNo = adjustmentNumber(normalizedType);
+  const isCreditNote = normalizedType === 'credit_note';
+  const title = isCreditNote ? 'Credit Note / Refund / Discount' : 'Additional Charge / Adjustment Invoice';
+  const invoice = await Invoice.create({
+    invoiceNumber: adjNo,
+    workOrderId: workOrder._id,
+    amcContractId: workOrderAmcContractId(workOrder),
+    customerId: workOrder.customerId,
+    title,
+    notes: [reason, note].filter(Boolean).join('\n'),
+    items: [{
+      description: `${title} for ${baseInvoice.invoiceNumber}`,
+      quantity: 1,
+      rate: amount,
+      amount
+    }],
+    total: amount,
+    paidAmount: 0,
+    balance: isCreditNote ? 0 : amount,
+    status: isCreditNote ? 'Paid' : 'Pending',
+    invoiceType: isCreditNote ? 'credit_note' : 'adjustment',
+    parentInvoiceId: baseInvoice._id,
+    adjustmentForInvoiceId: baseInvoice._id,
+    adjustmentNumber: adjNo,
+    adjustmentType: normalizedType,
+    adjustmentReason: reason,
+    internalNote: note,
+    createdBy: user?._id || user?.id || null
+  });
+
+  workOrder.timeline.push({
+    type: 'billing',
+    status: workOrder.status,
+    message: `${isCreditNote ? 'Credit note' : 'Adjustment invoice'} ${invoice.invoiceNumber} created for original invoice ${baseInvoice.invoiceNumber}. Original invoice remains locked.`,
+    userId: user?._id || user?.id || null
+  });
+  await workOrder.save();
+
+  try {
+    await logAudit({
+      userId: user?._id || user?.id || null,
+      action: isCreditNote ? 'credit_note_created' : 'adjustment_invoice_created',
+      module: 'invoice',
+      recordId: invoice._id,
+      after: {
+        invoiceId: invoice._id,
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceType: invoice.invoiceType,
+        adjustmentType: normalizedType,
+        parentInvoiceId: baseInvoice._id,
+        workOrderId: workOrder._id,
+        customerId: workOrder.customerId,
+        amount,
+        reason
+      }
+    });
+  } catch (error) {
+    console.warn('Audit log failed for adjustment invoice:', error.message);
+  }
+
+  return invoice;
+}
+
 export async function createInvoice(payload, user = null) {
   const action = clean(payload.amcExtraAction || payload.extraInvoiceAction);
   assertPermission(user, payload.invoiceId || action ? 'edit_invoice' : 'create_invoice');
@@ -361,6 +465,9 @@ export async function createInvoice(payload, user = null) {
   }
   if (amcExtraAction === 'adjustment') {
     return createAdjustmentExtraInvoice(payload, workOrder, user, labour);
+  }
+  if (amcExtraAction === 'billing-adjustment' || amcExtraAction === 'credit-note') {
+    return createBillingAdjustmentInvoice(payload, workOrder, user);
   }
 
   if (workOrder.invoiceId) {

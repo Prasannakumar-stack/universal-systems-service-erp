@@ -71,8 +71,10 @@ export async function list(req, res) {
     const [total, rows, summaryRows, paymentMethods] = await Promise.all([
       Invoice.countDocuments(filter),
       Invoice.find(filter)
-        .select('invoiceNumber workOrderId amcContractId customerId title notes total paidAmount balance status adjustmentForInvoiceId createdAt updatedAt')
+        .select('invoiceNumber workOrderId amcContractId customerId title notes total paidAmount balance status invoiceType parentInvoiceId adjustmentForInvoiceId adjustmentNumber adjustmentType adjustmentReason internalNote createdBy createdAt updatedAt')
         .populate('workOrderId amcContractId customerId')
+        .populate('parentInvoiceId', 'invoiceNumber total paidAmount balance status invoiceType')
+        .populate('createdBy', 'name username role')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
