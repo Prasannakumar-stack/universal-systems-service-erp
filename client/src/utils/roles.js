@@ -418,6 +418,13 @@ export function isAdminWorkspaceRole(role = '') {
   return adminWorkspaceRoles.includes(normalizeRole(role));
 }
 
+export function staffWorkspacePath(role = '') {
+  const normalized = normalizeRole(role);
+  if (normalized === 'technician') return '/app/tech/dashboard';
+  if (isAdminWorkspaceRole(normalized)) return '/app/admin/dashboard';
+  return '/app';
+}
+
 export function canAccessRoles(role = '', allowedRoles = []) {
   const normalized = normalizeRole(role);
   return allowedRoles.map(normalizeRole).includes(normalized);

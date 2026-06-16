@@ -24,11 +24,14 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 import {
   clearFallbackNotifications,
+  clearReadNotificationIds,
   fallbackNotificationRows,
+  filterClearedNotifications,
   markAllFallbackNotificationsRead,
   markFallbackNotificationRead,
   normalizeNotification,
   notificationCategories,
+  resetClearedNotificationIds,
   timeAgo,
   unreadNotificationCount
 } from './notificationCenterData.js';
@@ -174,9 +177,9 @@ export function NotificationsPage({ role = 'admin' }) {
     try {
       const remoteRows = await fetchAllNotificationRows();
       const rows = remoteRows.length ? remoteRows : fallbackNotificationRows();
-      setNotifications(rows.map((item) => normalizeNotification(item, role)));
+      setNotifications(filterClearedNotifications(rows.map((item) => normalizeNotification(item, role))));
     } catch {
-      setNotifications(fallbackNotificationRows().map((item) => normalizeNotification(item, role)));
+      setNotifications(filterClearedNotifications(fallbackNotificationRows().map((item) => normalizeNotification(item, role))));
     } finally {
       if (!silent) setLoading(false);
     }
@@ -210,6 +213,7 @@ export function NotificationsPage({ role = 'admin' }) {
   const visibleNotifications = filteredNotifications.slice((page - 1) * pageSize, page * pageSize);
   const hasNotifications = notifications.length > 0;
   const hasUnread = counts.unread > 0;
+  const hasRead = counts.read > 0;
 
   function notifyNotificationChange() {
     window.dispatchEvent(new Event('us:notifications-updated'));
@@ -251,6 +255,8 @@ export function NotificationsPage({ role = 'admin' }) {
 
   async function clearAll() {
     if (!hasNotifications) return;
+    const confirmed = window.confirm('Clear all notifications? This will remove every alert and cannot be undone.');
+    if (!confirmed) return;
     setActionBusy('clear-all');
     try {
       const hasRemoteRows = notifications.some((item) => !item.isFallback);
@@ -258,11 +264,32 @@ export function NotificationsPage({ role = 'admin' }) {
         await request('/notifications', { method: 'DELETE' });
       }
       clearFallbackNotifications();
+      resetClearedNotificationIds();
       setNotifications([]);
       notifyNotificationChange();
       push('Notifications cleared');
     } catch (error) {
       push(error.message || 'Unable to clear notifications', 'error');
+    } finally {
+      setActionBusy('');
+    }
+  }
+
+  async function clearRead() {
+    if (!hasRead) return;
+    const readItems = notifications.filter((item) => item.read);
+    const confirmed = window.confirm(
+      `Clear ${readItems.length} read notification${readItems.length === 1 ? '' : 's'}? Unread notifications will be kept.`
+    );
+    if (!confirmed) return;
+    setActionBusy('clear-read');
+    try {
+      clearReadNotificationIds(readItems.map((item) => item.id));
+      setNotifications((current) => current.filter((item) => !item.read));
+      notifyNotificationChange();
+      push('Read notifications cleared');
+    } catch (error) {
+      push(error.message || 'Unable to clear read notifications', 'error');
     } finally {
       setActionBusy('');
     }
@@ -278,7 +305,7 @@ export function NotificationsPage({ role = 'admin' }) {
   }
 
   return (
-    <div className="notifications-page">
+    <div className={`notifications-page ${hasUnread ? 'notifications-page-has-unread' : 'notifications-page-no-unread'}`}>
       <section className="notifications-hero">
         <div className="min-w-0">
           <div className="notifications-hero-kicker">
@@ -289,11 +316,16 @@ export function NotificationsPage({ role = 'admin' }) {
           <p>View all alerts and important updates</p>
         </div>
         <div className="notifications-hero-actions">
-          <button type="button" className="btn btn-primary notifications-mark-all-button" onClick={markAllRead} disabled={!hasUnread || actionBusy === 'mark-all'}>
+          <button
+            type="button"
+            className={`btn btn-primary notifications-mark-all-button ${hasUnread ? '' : 'notifications-mark-all-button-disabled'}`}
+            onClick={markAllRead}
+            disabled={!hasUnread || actionBusy === 'mark-all'}
+          >
             {actionBusy === 'mark-all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailCheck className="h-4 w-4" />}
             Mark all as read
           </button>
-          <Link className="btn btn-secondary notifications-settings-button" to="/admin/settings">
+          <Link className="btn btn-secondary notifications-settings-button" to="/app/admin/settings">
             <Settings className="h-4 w-4" />
             Settings
           </Link>
@@ -312,12 +344,30 @@ export function NotificationsPage({ role = 'admin' }) {
               ))}
             </select>
           </label>
-          <button type="button" className="btn btn-secondary notifications-clear-button" onClick={clearAll} disabled={!hasNotifications || actionBusy === 'clear-all'}>
-            {actionBusy === 'clear-all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            Clear All
-          </button>
+          <div className="notifications-toolbar-clear-group">
+            <button
+              type="button"
+              className="btn notifications-clear-read-button"
+              onClick={clearRead}
+              disabled={!hasRead || actionBusy === 'clear-read'}
+            >
+              {actionBusy === 'clear-read' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
+              Clear Read
+            </button>
+            <button type="button" className="btn notifications-clear-button" onClick={clearAll} disabled={!hasNotifications || actionBusy === 'clear-all'}>
+              {actionBusy === 'clear-all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Clear All
+            </button>
+          </div>
         </div>
       </section>
+
+      {!loading && !hasUnread ? (
+        <div className="notifications-caught-up-hint" role="status">
+          <span className="notifications-caught-up-hint-dot" aria-hidden="true" />
+          <span className="notifications-caught-up-hint-text">All caught up — no unread notifications.</span>
+        </div>
+      ) : null}
 
       <section className="notifications-list-card" aria-live="polite">
         {loading ? (
@@ -349,3 +399,4 @@ export function NotificationsPage({ role = 'admin' }) {
     </div>
   );
 }
+

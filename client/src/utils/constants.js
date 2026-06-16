@@ -28,7 +28,22 @@ export const pdfTypes = [
   { value: 'thank-you', label: 'Service Completed / Thank You PDF' }
 ];
 
-const configuredApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050';
-const normalizedApiUrl = configuredApiUrl.replace(/\/$/, '');
+function resolveApiUrl() {
+  const configuredApiUrl = String(import.meta.env.VITE_API_URL || '').trim();
+  if (configuredApiUrl) return configuredApiUrl;
+
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname, origin, port } = window.location;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      if (port === '5050') return origin;
+      return `${protocol}//${hostname}:5050`;
+    }
+    return origin;
+  }
+
+  return 'http://localhost:5050';
+}
+
+const normalizedApiUrl = resolveApiUrl().replace(/\/$/, '');
 
 export const apiBase = normalizedApiUrl.endsWith('/api') ? normalizedApiUrl : `${normalizedApiUrl}/api`;

@@ -22,12 +22,12 @@ const dashboardPeriods = [
   { id: 'month', label: 'This Month' }
 ];
 const quickActionItems = [
-  { label: 'New Booking', to: '/admin/bookings', icon: CalendarClock, color: '#38bdf8', rgb: '56, 189, 248' },
-  { label: 'New Work Order', to: '/admin/work-orders', icon: Wrench, color: '#22d3ee', rgb: '34, 211, 238' },
-  { label: 'Add Customer', to: '/admin/customers', icon: UserRound, color: '#34d399', rgb: '52, 211, 153' },
-  { label: 'Add Product', to: '/admin/parts', icon: Boxes, color: '#a78bfa', rgb: '167, 139, 250' },
-  { label: 'Create Invoice', to: '/admin/invoices', icon: ReceiptText, color: '#fb923c', rgb: '251, 146, 60' },
-  { label: 'Reports', to: '/admin/reports', icon: FileText, color: '#60a5fa', rgb: '96, 165, 250' }
+  { label: 'New Booking', to: '/app/admin/bookings', icon: CalendarClock, color: '#38bdf8', rgb: '56, 189, 248' },
+  { label: 'New Work Order', to: '/app/admin/work-orders', icon: Wrench, color: '#22d3ee', rgb: '34, 211, 238' },
+  { label: 'Add Customer', to: '/app/admin/customers', icon: UserRound, color: '#34d399', rgb: '52, 211, 153' },
+  { label: 'Add Product', to: '/app/admin/parts', icon: Boxes, color: '#a78bfa', rgb: '167, 139, 250' },
+  { label: 'Create Invoice', to: '/app/admin/invoices', icon: ReceiptText, color: '#fb923c', rgb: '251, 146, 60' },
+  { label: 'Reports', to: '/app/admin/reports', icon: FileText, color: '#60a5fa', rgb: '96, 165, 250' }
 ];
 
 function dashboardCurrency(value) {
@@ -369,7 +369,7 @@ function MetaRow({ items = [] }) {
     <p className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
       {visibleItems.map((item, index) => (
         <span key={`${item.value}-${index}`} className="inline-flex min-w-0 items-center gap-1.5">
-          {index > 0 && <span className="shrink-0 text-slate-600">·</span>}
+          {index > 0 && <span className="shrink-0 text-slate-600">Ã‚Â·</span>}
           <span className={`truncate ${item.className || 'max-w-[120px]'}`}>{item.value}</span>
         </span>
       ))}
@@ -381,7 +381,7 @@ function TechnicianWorkloadBars({ technicians = [] }) {
   const maxJobs = Math.max(1, ...technicians.map((tech) => Number(tech.activeJobs || 0)));
 
   return (
-    <DashboardPanel title="Technician Workload" icon={UserRound} action={<Link className={panelActionClass} to="/admin/reports/technicians">Report</Link>}>
+    <DashboardPanel title="Technician Workload" icon={UserRound} action={<Link className={panelActionClass} to="/app/admin/reports/technicians">Report</Link>}>
       <div className="grid gap-6">
         {technicians.length ? technicians.map((tech) => {
           const percent = Math.min(100, Math.round((Number(tech.activeJobs || 0) / maxJobs) * 100));
@@ -505,7 +505,7 @@ function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0, dashboardPeri
             </div>
             <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-slate-400">Collected revenue trend from recorded payments in the selected dashboard period.</p>
           </div>
-          <Link className={`dashboard-revenue-report-link ${focusRing}`} to="/admin/reports/finance">
+          <Link className={`dashboard-revenue-report-link ${focusRing}`} to="/app/admin/reports/finance">
             Report
             <ArrowUpRight className="h-4 w-4" />
           </Link>
@@ -595,7 +595,7 @@ function ActivityFeedPanel({ notifications = [], reminders = [], className = '' 
   const items = uniqueItems.slice(0, 5);
 
   return (
-    <DashboardPanel title="Activity Feed" icon={Bell} action={<Link className={panelActionClass} to="/admin/audit-logs">View All</Link>} className={className}>
+    <DashboardPanel title="Activity Feed" icon={Bell} action={<Link className={panelActionClass} to="/app/admin/audit-logs">View All</Link>} className={className}>
       <div className="relative max-h-[330px] space-y-5 overflow-y-auto pl-8 pr-4 [scrollbar-color:rgba(148,163,184,0.28)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-600/30 [&::-webkit-scrollbar-track]:bg-transparent">
         <span className="pointer-events-none absolute bottom-0 left-[7px] top-0 w-px bg-white/10" />
         {items.length ? items.map((item, idx) => (
@@ -739,10 +739,10 @@ export function AdminDashboard() {
     if (!dashboardData) return [];
     // High overdue/pending numbers can come from local demo data; keep that note internal.
     return [
-      { level: 'critical', title: 'Out of stock items', count: Number(dashboardData.alerts?.outOfStockItems || 0), message: 'Stock is at zero and needs immediate refill.', to: '/admin/parts', action: 'View Stock' },
-      { level: 'critical', title: 'Overdue jobs', count: Number(dashboardData.alerts?.overdueJobs || 0), message: 'Jobs have not moved in more than 24 hours.', to: '/admin/work-orders', action: 'View Jobs' },
-      { level: 'warning', title: 'Low stock', count: Number(dashboardData.alerts?.lowStockItems || 0), message: 'Parts are close to their low stock limit.', to: '/admin/parts', action: 'View Stock' },
-      { level: 'warning', title: 'Pending payments', count: Number(dashboardData.alerts?.pendingPayments || 0), message: 'Invoices still have balance due.', to: '/admin/payments', action: 'View Payments' }
+      { level: 'critical', title: 'Out of stock items', count: Number(dashboardData.alerts?.outOfStockItems || 0), message: 'Stock is at zero and needs immediate refill.', to: '/app/admin/parts', action: 'View Stock' },
+      { level: 'critical', title: 'Overdue jobs', count: Number(dashboardData.alerts?.overdueJobs || 0), message: 'Jobs have not moved in more than 24 hours.', to: '/app/admin/work-orders', action: 'View Jobs' },
+      { level: 'warning', title: 'Low stock', count: Number(dashboardData.alerts?.lowStockItems || 0), message: 'Parts are close to their low stock limit.', to: '/app/admin/parts', action: 'View Stock' },
+      { level: 'warning', title: 'Pending payments', count: Number(dashboardData.alerts?.pendingPayments || 0), message: 'Invoices still have balance due.', to: '/app/admin/payments', action: 'View Payments' }
     ];
   }, [dashboardData]);
 
@@ -783,13 +783,13 @@ export function AdminDashboard() {
           <div className="dashboard-header-controls flex flex-col items-start gap-3 sm:items-end">
             <DashboardPeriodFilter value={dashboardPeriod} onChange={setDashboardPeriod} />
             <div className="flex flex-wrap items-center gap-3">
-              {canCreateBooking ? <Link className={`inline-flex items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 py-3 text-sm font-bold text-white shadow-[0_0_20px_rgba(14,165,233,0.3)] transition-all hover:-translate-y-0.5 hover:bg-sky-400 hover:shadow-[0_0_25px_rgba(14,165,233,0.45)] ${focusRing}`} to="/admin/bookings">
+              {canCreateBooking ? <Link className={`inline-flex items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 py-3 text-sm font-bold text-white shadow-[0_0_20px_rgba(14,165,233,0.3)] transition-all hover:-translate-y-0.5 hover:bg-sky-400 hover:shadow-[0_0_25px_rgba(14,165,233,0.45)] ${focusRing}`} to="/app/admin/bookings">
                 <Plus className="h-4 w-4" /> New Booking
               </Link> : null}
-              {canCreateWorkOrder ? <Link className={heroSecondaryActionClass} to="/admin/work-orders">
+              {canCreateWorkOrder ? <Link className={heroSecondaryActionClass} to="/app/admin/work-orders">
                 <Wrench className="h-4 w-4" /> New Work Order
               </Link> : null}
-              {canRecordPayment ? <Link className={heroSecondaryActionClass} to="/admin/payments">
+              {canRecordPayment ? <Link className={heroSecondaryActionClass} to="/app/admin/payments">
                 <CreditCard className="h-4 w-4" /> Record Payment
               </Link> : null}
             </div>
@@ -808,15 +808,15 @@ export function AdminDashboard() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-        <SmartMetricCard icon={CalendarClock} label="Today's Bookings" value={dashboardData.stats.todayBookings} helper="New intake today" tone="blue" to="/admin/bookings" />
-        <SmartMetricCard icon={ClipboardList} label="Pending Service Jobs" value={dashboardData.stats.pendingJobs} helper={`${dashboardData.stats.unassignedJobs || 0} total unassigned`} tone="yellow" to="/admin/work-orders" />
-        <SmartMetricCard icon={AlertTriangle} label="Urgent Jobs" value={dashboardData.stats.urgentActiveJobs || dashboardData.alerts?.urgentActiveJobs || 0} helper="Active jobs marked Urgent" tone="red" glow to="/admin/work-orders?priority=Urgent" />
-        <SmartMetricCard icon={Wrench} label="Jobs In Progress" value={dashboardData.stats.inProgressJobs} helper={`${dashboardData.stats.awaitingPartsJobs || 0} awaiting parts`} tone="blue" to="/admin/work-orders" />
-        <SmartMetricCard icon={CheckCircle2} label="Completed Today" value={completedToday} helper={`${dashboardData.stats.completedJobs || 0} completed total`} tone="green" to="/admin/work-orders" />
-        <SmartMetricCard icon={CreditCard} label="Pending Payments" value={dashboardData.stats.pendingPayments || dashboardData.metrics.pendingPayments || 0} helper={`${dashboardData.stats.paymentsOverdue || 0} overdue`} tone="yellow" glow to="/admin/payments" />
-        <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={dashboardData.metrics.lowStockItems || 0} helper={`${dashboardData.alerts.outOfStockItems || 0} out of stock`} tone="red" glow to="/admin/parts" />
-        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={dashboardData.stats.activeAmcContracts || 0} helper={`${amcRenewalsDue} renewals due`} tone="green" to="/admin/amc-contracts" />
-        <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={dashboardCurrency(monthlyRevenue)} helper="Collected this month" tone="green" to="/admin/reports/finance" />
+        <SmartMetricCard icon={CalendarClock} label="Today's Bookings" value={dashboardData.stats.todayBookings} helper="New intake today" tone="blue" to="/app/admin/bookings" />
+        <SmartMetricCard icon={ClipboardList} label="Pending Service Jobs" value={dashboardData.stats.pendingJobs} helper={`${dashboardData.stats.unassignedJobs || 0} total unassigned`} tone="yellow" to="/app/admin/work-orders" />
+        <SmartMetricCard icon={AlertTriangle} label="Urgent Jobs" value={dashboardData.stats.urgentActiveJobs || dashboardData.alerts?.urgentActiveJobs || 0} helper="Active jobs marked Urgent" tone="red" glow to="/app/admin/work-orders?priority=Urgent" />
+        <SmartMetricCard icon={Wrench} label="Jobs In Progress" value={dashboardData.stats.inProgressJobs} helper={`${dashboardData.stats.awaitingPartsJobs || 0} awaiting parts`} tone="blue" to="/app/admin/work-orders" />
+        <SmartMetricCard icon={CheckCircle2} label="Completed Today" value={completedToday} helper={`${dashboardData.stats.completedJobs || 0} completed total`} tone="green" to="/app/admin/work-orders" />
+        <SmartMetricCard icon={CreditCard} label="Pending Payments" value={dashboardData.stats.pendingPayments || dashboardData.metrics.pendingPayments || 0} helper={`${dashboardData.stats.paymentsOverdue || 0} overdue`} tone="yellow" glow to="/app/admin/payments" />
+        <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={dashboardData.metrics.lowStockItems || 0} helper={`${dashboardData.alerts.outOfStockItems || 0} out of stock`} tone="red" glow to="/app/admin/parts" />
+        <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={dashboardData.stats.activeAmcContracts || 0} helper={`${amcRenewalsDue} renewals due`} tone="green" to="/app/admin/amc-contracts" />
+        <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={dashboardCurrency(monthlyRevenue)} helper="Collected this month" tone="green" to="/app/admin/reports/finance" />
       </div>
 
       {/* Priority Alerts */}
@@ -824,7 +824,7 @@ export function AdminDashboard() {
 
       {/* Main Grid: Lists & Charts */}
       <div className="grid gap-x-6 gap-y-5 lg:gap-x-8 lg:gap-y-6 xl:grid-cols-3">
-        <DashboardPanel title="Recent Bookings" icon={CalendarClock} action={<Link className={panelActionClass} to="/admin/bookings">View All</Link>}>
+        <DashboardPanel title="Recent Bookings" icon={CalendarClock} action={<Link className={panelActionClass} to="/app/admin/bookings">View All</Link>}>
           <div className="grid gap-3">
             {recentBookings.length ? recentBookings.slice(0, 6).map((booking) => {
               const source = booking.source || booking.bookingSource || booking.channel || 'Walk-in';
@@ -832,9 +832,9 @@ export function AdminDashboard() {
                 <div key={booking.id} className="group flex min-w-0 items-start justify-between gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-300 hover:bg-white/10 hover:shadow-lg">
                   <div className="min-w-0 flex-1">
                     {booking.customerId ? (
-                      <Link className={`block truncate text-sm font-bold text-sky-400 transition-colors hover:text-sky-300 ${focusRing}`} to={`/admin/customers/${recordId(booking.customerId)}`} title={booking.customerName}>{booking.customerName}</Link>
+                      <Link className={`block truncate text-sm font-bold text-sky-400 transition-colors hover:text-sky-300 ${focusRing}`} to={`/app/admin/customers/${recordId(booking.customerId)}`} title={booking.customerName}>{booking.customerName}</Link>
                     ) : <p className="block truncate text-sm font-bold text-white" title={booking.customerName}>{booking.customerName}</p>}
-                    <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-300">{booking.serviceType || 'Service'}{booking.device ? ` · ${booking.device}` : ''}</p>
+                    <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-300">{booking.serviceType || 'Service'}{booking.device ? ` Ã‚Â· ${booking.device}` : ''}</p>
                     <MetaRow items={[
                       { value: booking.bookingCode || booking.id, className: 'max-w-[92px]' },
                       { value: formatDate(booking.createdAt || booking.updatedAt), className: 'max-w-[120px]' }
@@ -850,13 +850,13 @@ export function AdminDashboard() {
           </div>
         </DashboardPanel>
 
-        <DashboardPanel title="Service Queue" icon={Wrench} action={<Link className={panelActionClass} to="/admin/work-orders">View All</Link>}>
+        <DashboardPanel title="Service Queue" icon={Wrench} action={<Link className={panelActionClass} to="/app/admin/work-orders">View All</Link>}>
           <div className="grid gap-3">
             {activeWorkOrders.length ? activeWorkOrders.slice(0, 6).map((order) => (
-              <Link key={order.id} to={`/admin/work-orders/${order.id}`} className={`group flex min-w-0 items-start justify-between gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-300 hover:border-sky-500/30 hover:bg-white/10 hover:shadow-lg ${focusRing}`}>
+              <Link key={order.id} to={`/app/admin/work-orders/${order.id}`} className={`group flex min-w-0 items-start justify-between gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-300 hover:border-sky-500/30 hover:bg-white/10 hover:shadow-lg ${focusRing}`}>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold text-white transition-colors group-hover:text-sky-400" title={order.customerId?.name || order.customerName || 'Customer'}>{order.customerId?.name || order.customerName || 'Customer'}</p>
-                  <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-300">{order.serviceType || 'Service'}{order.device ? ` · ${order.device}` : ''}</p>
+                  <p className="mt-1 line-clamp-2 text-xs font-medium text-slate-300">{order.serviceType || 'Service'}{order.device ? ` Ã‚Â· ${order.device}` : ''}</p>
                   <MetaRow items={[
                     { value: order.id, className: 'max-w-[92px]' },
                     { value: `Tech: ${technicianNameOrAdmin(order)}`, className: 'max-w-[120px]' },
@@ -872,10 +872,10 @@ export function AdminDashboard() {
           </div>
         </DashboardPanel>
 
-        <DashboardPanel title="Pending Payments" icon={CreditCard} action={<Link className={panelActionClass} to="/admin/payments">View All</Link>}>
+        <DashboardPanel title="Pending Payments" icon={CreditCard} action={<Link className={panelActionClass} to="/app/admin/payments">View All</Link>}>
           <div className="grid gap-3">
             {pendingPaymentInvoices.length ? pendingPaymentInvoices.slice(0, 6).map((invoice) => (
-              <Link key={invoice.id || invoice._id} to={`/admin/payments?invoiceId=${invoice.id || invoice._id}`} className={`group flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-300 hover:border-amber-500/30 hover:bg-white/10 hover:shadow-lg ${focusRing}`}>
+              <Link key={invoice.id || invoice._id} to={`/app/admin/payments?invoiceId=${invoice.id || invoice._id}`} className={`group flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-300 hover:border-amber-500/30 hover:bg-white/10 hover:shadow-lg ${focusRing}`}>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold text-white transition-colors group-hover:text-amber-400" title={invoice.invoiceNumber}>{invoice.invoiceNumber}</p>
                   <p className="mt-1.5 truncate text-xs font-medium text-slate-400" title={invoice.customerId?.name || invoice.customerName || 'Customer'}>{invoice.customerId?.name || invoice.customerName || 'Customer'}</p>

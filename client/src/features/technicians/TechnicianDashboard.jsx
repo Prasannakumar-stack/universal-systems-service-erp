@@ -185,7 +185,7 @@ export function TechnicianDashboard() {
       value: todayJobs.length,
       title: 'Today Jobs',
       subtitle: 'Jobs scheduled for today',
-      to: '/tech/work-orders?filter=today',
+      to: '/app/tech/work-orders?filter=today',
       tone: 'blue'
     },
     {
@@ -193,7 +193,7 @@ export function TechnicianDashboard() {
       value: pendingJobs.length,
       title: 'Pending',
       subtitle: 'Jobs waiting to start',
-      to: '/tech/work-orders?status=pending',
+      to: '/app/tech/work-orders?status=pending',
       tone: 'yellow'
     },
     {
@@ -201,7 +201,7 @@ export function TechnicianDashboard() {
       value: inProgressJobs.length,
       title: 'In Progress',
       subtitle: 'Jobs currently in progress',
-      to: '/tech/work-orders?status=in-progress',
+      to: '/app/tech/work-orders?status=in-progress',
       tone: 'green'
     },
     {
@@ -209,7 +209,7 @@ export function TechnicianDashboard() {
       value: awaitingPartsJobs.length,
       title: 'Awaiting Parts',
       subtitle: 'Jobs waiting for parts',
-      to: '/tech/work-orders?status=awaiting-parts',
+      to: '/app/tech/work-orders?status=awaiting-parts',
       tone: 'yellow'
     },
     {
@@ -217,7 +217,7 @@ export function TechnicianDashboard() {
       value: completedJobs.length,
       title: 'Completed',
       subtitle: 'Jobs completed or closed',
-      to: '/tech/work-orders?status=completed',
+      to: '/app/tech/work-orders?status=completed',
       tone: 'green'
     }
   ];
@@ -245,7 +245,7 @@ export function TechnicianDashboard() {
             <h2 className="text-xl font-black text-white">Ready to continue your work?</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 muted">Open your assigned jobs, contact customers, add notes, request parts, and upload job photos.</p>
           </div>
-          <Link className="btn btn-primary h-10 shrink-0 px-4" to="/tech/work-orders">
+          <Link className="btn btn-primary h-10 shrink-0 px-4" to="/app/tech/work-orders">
             Open Work Orders
             <ArrowRight className="h-4 w-4" />
           </Link>

@@ -285,7 +285,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
     return params.toString() ? `?${params}` : '';
   }, [canAssignTechnician, dateFrom, dateTo, debouncedSearch, limit, page, priorityFilter, serviceType, source, status, technicianId]);
   const { data, loading, error, reload } = useResource(() => request(`/work-orders${query}`), [request, query]);
-  const base = isTechnician ? '/tech/work-orders' : '/admin/work-orders';
+  const base = isTechnician ? '/app/tech/work-orders' : '/app/admin/work-orders';
 
   useEffect(() => {
     setStatus(statusParam);
@@ -547,7 +547,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
                   <td className={`${workOrdersTdClass} work-orders-cell-customer !whitespace-normal text-left`}>
                     <div className="min-w-0">
                       {!isTechnician && canViewCustomer360 && order.customerId ? (
-                        <Link className={`block truncate font-bold text-slate-100 hover:text-sky-300 ${workOrdersFocusRing}`} title={order.customerId?.name} to={`/admin/customers/${recordId(order.customerId)}`}>{order.customerId?.name || 'Customer'}</Link>
+                        <Link className={`block truncate font-bold text-slate-100 hover:text-sky-300 ${workOrdersFocusRing}`} title={order.customerId?.name} to={`/app/admin/customers/${recordId(order.customerId)}`}>{order.customerId?.name || 'Customer'}</Link>
                       ) : (
                         <span className="block truncate font-bold text-slate-100" title={order.customerId?.name}>{order.customerId?.name || 'Customer'}</span>
                       )}

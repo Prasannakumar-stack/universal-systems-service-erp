@@ -122,7 +122,7 @@ export function InventoryModuleTabs({ activeTab, canViewStockMovements = true })
       <div className="tabs-list inventory-tabs border-b-0">
         {purchaseTabs.map((tab) => {
           if (tab.id === 'stock-movements' && !canViewStockMovements) return null;
-          const href = tab.id === 'parts' ? '/admin/parts' : `/admin/parts?tab=${tab.id}`;
+          const href = tab.id === 'parts' ? '/app/admin/parts' : `/app/admin/parts?tab=${tab.id}`;
           return (
             <Link key={tab.id} className={`tab-button ${activeTab === tab.id ? 'tab-button-active' : ''}`} to={href}>
               {tab.label}
@@ -665,7 +665,7 @@ function PurchaseDetailsPanel({ purchase, loading }) {
               return (
                 <div key={rowId(usage)} className="purchase-usage-row">
                   <div className="purchase-usage-main">
-                    <Link className="stock-source-link purchase-workorder-badge" to={`/admin/work-orders/${workOrderId}`}>{workOrderLabel(workOrderId)}</Link>
+                    <Link className="stock-source-link purchase-workorder-badge" to={`/app/admin/work-orders/${workOrderId}`}>{workOrderLabel(workOrderId)}</Link>
                     <span className="purchase-usage-customer">{workOrder.customerId?.name || 'Customer'}</span>
                     <span className="purchase-usage-date">{formatDate(usage.createdAt)}</span>
                   </div>

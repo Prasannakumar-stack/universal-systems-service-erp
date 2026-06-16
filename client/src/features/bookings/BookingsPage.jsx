@@ -236,7 +236,7 @@ export function BookingsPage({ role = 'admin' }) {
   const canCreateBooking = can(permissionSubject, 'create_booking');
   const canConvertBooking = can(permissionSubject, 'create_work_order');
   const canAssignTechnician = can(permissionSubject, 'assign_technician');
-  const workOrdersBase = isTechnician ? '/tech/work-orders' : '/admin/work-orders';
+  const workOrdersBase = isTechnician ? '/app/tech/work-orders' : '/app/admin/work-orders';
   const [formOpen, setFormOpen] = useState(false);
   const [detailsBooking, setDetailsBooking] = useState(null);
   const [detailsSaving, setDetailsSaving] = useState(false);
@@ -805,7 +805,7 @@ function TechnicianBookingMobileCard({ booking, workOrdersBase, onCopyPhone }) {
   );
 }
 
-function ConvertBooking({ booking, technicians, onConvert, workOrdersBase = '/admin/work-orders', canConvert = false, canAssignTechnician = false }) {
+function ConvertBooking({ booking, technicians, onConvert, workOrdersBase = '/app/admin/work-orders', canConvert = false, canAssignTechnician = false }) {
   const [technicianId, setTechnicianId] = useState(booking.technicianId?.id || '');
   const focusRing =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';

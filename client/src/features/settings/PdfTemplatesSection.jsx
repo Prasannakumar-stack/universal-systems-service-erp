@@ -5,31 +5,41 @@ import {
   ArrowDown,
   ArrowUp,
   Box,
+  CalendarDays,
+  Check,
   ChevronDown,
   ChevronUp,
+  ClipboardCheck,
   Columns2,
   Copy,
+  CreditCard,
   Download,
   Edit3,
   Eye,
   EyeOff,
   FilePlus2,
   FileText,
+  Globe,
   GripVertical,
   Grid2X2,
+  Handshake,
   History,
   Image as ImageIcon,
   Layers,
   LayoutGrid,
   Loader2,
   Lock,
+  Mail,
+  MapPin,
   Maximize2,
   Minus,
   Move,
   Palette,
+  Phone,
   Plus,
   QrCode,
   Redo2,
+  ReceiptText,
   RotateCcw,
   Save,
   Search,
@@ -44,6 +54,7 @@ import {
   Unlock,
   X
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import {
   apiBase,
   ConfirmModal,
@@ -249,6 +260,10 @@ const defaultElementStyles = {
   fontWeight: 700,
   alignment: 'left',
   rowHeight: 18,
+  paddingX: 4,
+  paddingY: 5,
+  rowBackgroundColor: '#ffffff',
+  alternateRowBackgroundColor: '#f8fafc',
   dividerThickness: 2,
   dividerStyle: 'solid'
 };
@@ -399,6 +414,44 @@ function cleanLayerTitle(title = 'Section') {
     .replace(/^Total Summary$/i, 'Amount Summary')
     .replace(/^Work Completion Notice$/i, 'Notice / Terms')
     .trim() || 'Section';
+}
+
+function pdfLayerSelectorValue(value = '') {
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function cleanPdfElementLayerTitle(element = {}) {
+  const id = String(element.id || '');
+  const raw = String(element.name || element.title || element.content?.label || element.type || 'Layer').trim();
+  const overrides = {
+    'invoice.watermark': 'Watermark',
+    'invoice.logo': 'Company Logo',
+    'invoice.companyTagline': 'Company Tagline',
+    'invoice.title': 'Invoice Title',
+    'invoice.detailsCard': 'Invoice Details Card',
+    'invoice.serviceCard': 'Service Details Card',
+    'invoice.itemsTable': 'Item Table',
+    'invoice.amountWordsCard': 'Amount in Words',
+    'invoice.amountSummaryCard': 'Amount Summary',
+    'invoice.workNoticeCard': 'Work Completion Notice',
+    'invoice.termsCard': 'Terms & Conditions',
+    'invoice.bottomStrip': 'Thank You Strip',
+    'invoice.bottomMessage': 'Thank You Message'
+  };
+  if (overrides[id]) return overrides[id];
+  if (id.startsWith('invoice.header.phone')) return 'Company Phone';
+  if (id.startsWith('invoice.header.email')) return 'Company Email';
+  if (id.startsWith('invoice.header.website')) return 'Company Website';
+  if (id.startsWith('invoice.header.address')) return 'Company Address';
+  if (id.startsWith('invoice.footer.')) {
+    return raw
+      .replace(/\s+Footer\s+(Icon|Label|Value)$/i, ' $1')
+      .replace(/\s+Footer$/i, '')
+      .trim();
+  }
+  if (id.startsWith('invoice.terms.')) return raw.replace(/^Terms And Conditions/i, 'Terms').trim();
+  if (id.startsWith('invoice.workNotice.')) return raw.replace(/^Work Completion Notice/i, 'Work Notice').trim();
+  return cleanLayerTitle(raw);
 }
 
 function designLayerRole(title = '') {
@@ -1131,6 +1184,46 @@ function contentDefaultsForElement(type = 'text') {
   if (type === 'spacer') return { label: 'Spacer' };
   if (type === 'image') return { label: 'Company Logo', imageMode: 'logo' };
   return { text: 'New text block' };
+}
+
+function isBackgroundElement(element = {}) {
+  const content = element.content || {};
+  return content.backgroundElement === true
+    || element.backgroundElement === true
+    || element.groupId === 'watermark'
+    || element.id === 'invoice.watermark'
+    || content.imageMode === 'watermark';
+}
+
+function imagePreviewSource(content = {}) {
+  const assetPath = String(content.assetPath || content.imageUrl || content.src || '').trim();
+  if (assetPath) return assetPath;
+  if (content.imageMode === 'watermark') return '/logo-icon.png';
+  if ((content.imageMode || 'logo') === 'logo') return '/logo-full.png';
+  return '';
+}
+
+function CanvasIconPreview({ variant = '' }) {
+  const normalized = String(variant || '').toLowerCase();
+  if (normalized === 'dot') return <span className="pdf-canvas-dot" />;
+  if (normalized === 'check') return <span className="pdf-canvas-check"><Check className="h-3 w-3" /></span>;
+  if (normalized === 'rupee') return <span className="pdf-canvas-rupee">Rs</span>;
+
+  const iconMap = {
+    address: MapPin,
+    phone: Phone,
+    email: Mail,
+    website: Globe,
+    invoice: ReceiptText,
+    work: ClipboardCheck,
+    date: CalendarDays,
+    status: CreditCard,
+    document: FileText,
+    completion: Check,
+    handshake: Handshake
+  };
+  const Icon = iconMap[normalized] || Box;
+  return <Icon className="h-4 w-4 pdf-canvas-icon-svg" />;
 }
 
 function formatTableColumns(columns = []) {
@@ -1945,6 +2038,9 @@ function DesignModeWorkspace({
   const [rightInspectorOpen, setRightInspectorOpen] = useState(false);
   const [fullScreenEditor, setFullScreenEditor] = useState(true);
   const [showReferenceLayer, setShowReferenceLayer] = useState(false);
+  const [selectBackgroundElements, setSelectBackgroundElements] = useState(false);
+  const [toolbarMoreOpen, setToolbarMoreOpen] = useState(false);
+  const [floatingToolbarPosition, setFloatingToolbarPosition] = useState({ ready: false, left: 12, top: 12, placement: 'above' });
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [interaction, setInteraction] = useState(null);
@@ -1972,6 +2068,9 @@ function DesignModeWorkspace({
     setActiveRail('');
     setRightInspectorOpen(false);
     setShowReferenceLayer(false);
+    setSelectBackgroundElements(false);
+    setToolbarMoreOpen(false);
+    setFloatingToolbarPosition({ ready: false, left: 12, top: 12, placement: 'above' });
     setManifestState({ loading: false, error: '', data: null });
   }, [template.key]);
 
@@ -2029,24 +2128,29 @@ function DesignModeWorkspace({
       sectionIndex: sectionDesign.sourceIndex ?? index
     };
   });
-  const elementLayers = elements.map((element, index) => ({
-    id: element.id || `element-${index}`,
-    name: element.name || element.title || 'Free Element',
-    title: element.name || element.title || 'Free Element',
-    kind: 'element',
-    type: element.type,
-    badge: elementNameForType(element.type),
-    pageId: element.pageId || 'page-1',
-    locked: false,
-    editable: true,
-    supportsVisibility: true,
-    supportsTitle: true,
-    supportsIcon: false,
-    visible: element.visible !== false && element.enabled !== false,
-    role: 'custom',
-    element,
-    elementIndex: index
-  }));
+  const elementLayers = elements.map((element, index) => {
+    const backgroundElement = isBackgroundElement(element);
+    const title = cleanPdfElementLayerTitle(element);
+    return {
+      id: element.id || `element-${index}`,
+      name: title,
+      title,
+      kind: 'element',
+      type: element.type,
+      badge: backgroundElement ? 'Background' : elementNameForType(element.type),
+      pageId: element.pageId || 'page-1',
+      locked: element.locked === true,
+      editable: true,
+      supportsVisibility: true,
+      supportsTitle: true,
+      supportsIcon: false,
+      visible: element.visible !== false && element.enabled !== false,
+      role: 'custom',
+      backgroundElement,
+      element,
+      elementIndex: index
+    };
+  });
   const layers = [...sectionLayers, ...elementLayers];
   const layerSignature = layers.map((layer) => layer.id).join('|');
   const selectedLayer = layers.find((layer) => layer.id === selectedLayerId) || null;
@@ -2078,6 +2182,42 @@ function DesignModeWorkspace({
     .filter((element) => (element.pageId || 'page-1') === currentPage.id && element.visible !== false && element.enabled !== false)
     .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
+  function refreshFloatingToolbarPosition() {
+    if (!selectedLayerId || !selectedFrame || typeof window === 'undefined') {
+      setFloatingToolbarPosition((current) => current.ready ? { ready: false, left: 12, top: 12, placement: 'above' } : current);
+      return;
+    }
+    const paper = paperRef.current;
+    const anchor = paper?.querySelector(`[data-pdf-layer-id="${pdfLayerSelectorValue(selectedLayerId)}"]`);
+    if (!anchor) {
+      setFloatingToolbarPosition({ ready: false, left: 12, top: 12, placement: 'above' });
+      return;
+    }
+    const anchorRect = anchor.getBoundingClientRect();
+    const scrollRect = paper?.closest('.pdf-canvas-scroll')?.getBoundingClientRect();
+    const toolbarRect = document.querySelector(`[data-pdf-floating-toolbar-id="${pdfLayerSelectorValue(selectedLayerId)}"]`)?.getBoundingClientRect();
+    const margin = 12;
+    const gap = 10;
+    const toolbarWidth = Math.min(toolbarRect?.width || (selectedElement?.type === 'table' ? 620 : 520), window.innerWidth - margin * 2);
+    const toolbarHeight = toolbarRect?.height || 42;
+    const visibleTop = Math.max(margin, scrollRect?.top ?? margin);
+    const visibleBottom = Math.min(window.innerHeight - margin, scrollRect?.bottom ?? window.innerHeight - margin);
+    const visibleLeft = Math.max(margin, scrollRect?.left ?? margin);
+    const visibleRight = Math.min(window.innerWidth - margin, scrollRect?.right ?? window.innerWidth - margin);
+    let top = anchorRect.top - toolbarHeight - gap;
+    let placement = 'above';
+    if (top < visibleTop) {
+      top = anchorRect.bottom + gap;
+      placement = 'below';
+    }
+    if (top + toolbarHeight > visibleBottom) {
+      top = Math.max(visibleTop, visibleBottom - toolbarHeight);
+    }
+    const centeredLeft = anchorRect.left + anchorRect.width / 2 - toolbarWidth / 2;
+    const left = clampBuilderNumber(centeredLeft, visibleLeft, visibleLeft, Math.max(visibleLeft, visibleRight - toolbarWidth));
+    setFloatingToolbarPosition({ ready: true, left: Math.round(left), top: Math.round(top), placement });
+  }
+
   useEffect(() => {
     if (selectedLayerId && !layers.some((layer) => layer.id === selectedLayerId)) setSelectedLayerId('');
   }, [selectedLayerId, layerSignature]);
@@ -2085,6 +2225,69 @@ function DesignModeWorkspace({
   useEffect(() => {
     if (selectedLayerId) setInspectorCollapsed(false);
   }, [selectedLayerId]);
+
+  useEffect(() => {
+    if (!selectedLayerId || !selectedFrame || typeof window === 'undefined') {
+      setFloatingToolbarPosition({ ready: false, left: 12, top: 12, placement: 'above' });
+      return undefined;
+    }
+    let frameId = 0;
+    let secondFrameId = 0;
+    const schedule = () => {
+      window.cancelAnimationFrame(frameId);
+      window.cancelAnimationFrame(secondFrameId);
+      frameId = window.requestAnimationFrame(() => {
+        refreshFloatingToolbarPosition();
+        secondFrameId = window.requestAnimationFrame(refreshFloatingToolbarPosition);
+      });
+    };
+    schedule();
+    const scrollContainer = paperRef.current?.closest('.pdf-canvas-scroll');
+    scrollContainer?.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('scroll', schedule, true);
+    window.addEventListener('resize', schedule);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.cancelAnimationFrame(secondFrameId);
+      scrollContainer?.removeEventListener('scroll', schedule);
+      window.removeEventListener('scroll', schedule, true);
+      window.removeEventListener('resize', schedule);
+    };
+  }, [
+    selectedLayerId,
+    selectedFrame?.x,
+    selectedFrame?.y,
+    selectedFrame?.width,
+    selectedFrame?.height,
+    selectedFrame?.zIndex,
+    selectedElement?.type,
+    zoomScale,
+    activeRail,
+    rightInspectorOpen,
+    inspectorCollapsed,
+    fullScreenEditor,
+    selectBackgroundElements,
+    currentPageId,
+    interaction?.id,
+    interaction?.mode
+  ]);
+
+  useEffect(() => {
+    if (!toolbarMoreOpen || typeof window === 'undefined') return undefined;
+    const closeOnPointerDown = (event) => {
+      if (event.target?.closest?.('.pdf-builder-more-menu-wrap')) return;
+      setToolbarMoreOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setToolbarMoreOpen(false);
+    };
+    window.addEventListener('pointerdown', closeOnPointerDown);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('pointerdown', closeOnPointerDown);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [toolbarMoreOpen]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0 });
@@ -2652,6 +2855,16 @@ function DesignModeWorkspace({
     commitDesign((current) => setPath(current, path, value));
   }
 
+  function toggleBackgroundElementSelection() {
+    setSelectBackgroundElements((current) => {
+      const nextValue = !current;
+      if (!nextValue && selectedElement && isBackgroundElement(selectedElement)) {
+        setSelectedLayerId('');
+      }
+      return nextValue;
+    });
+  }
+
   function toggleFreeLayoutMode() {
     const nextValue = !freeLayoutMode;
     if (nextValue && !freeLayoutWarningShownRef.current) {
@@ -3001,6 +3214,7 @@ function DesignModeWorkspace({
                 selected={selectedLayerId === layer.id}
                 disabled={disabled}
                 onSelect={() => {
+                  if (layer.kind === 'element' && layer.backgroundElement && !selectBackgroundElements) return;
                   setSelectedLayerId(layer.id);
                   if (layer.pageId) setCurrentPageId(layer.pageId);
                 }}
@@ -3277,10 +3491,10 @@ function DesignModeWorkspace({
             ) : null}
             {selectedElement ? (
               <>
-                <button type="button" className="icon-button" disabled={disabled} onClick={() => duplicateElement(selectedElement)} title="Duplicate">
+                <button type="button" className="icon-button" disabled={disabled || selectedLayerLocked} onClick={() => duplicateElement(selectedElement)} title="Duplicate">
                   <Copy className="h-4 w-4" />
                 </button>
-                <button type="button" className="icon-button pdf-danger-icon" disabled={disabled} onClick={() => deleteElement(selectedElement.id)} title="Delete">
+                <button type="button" className="icon-button pdf-danger-icon" disabled={disabled || selectedLayerLocked} onClick={() => deleteElement(selectedElement.id)} title="Delete">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </>
@@ -3358,39 +3572,15 @@ function DesignModeWorkspace({
             {manifestState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LayoutGrid className="h-4 w-4" />}
             Start from Current Template
           </button>
-          <button type="button" className={`btn admin-compact-button ${activeRail === 'templates' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => toggleRailDrawer('templates')}>
-            <LayoutGrid className="h-4 w-4" />
-            Templates
-          </button>
-          <button type="button" className={`btn admin-compact-button ${activeRail === 'layers' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => toggleRailDrawer('layers')}>
-            <Layers className="h-4 w-4" />
-            Layers
-          </button>
-          <button type="button" className={`btn admin-compact-button ${activeRail === 'elements' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => toggleRailDrawer('elements')}>
-            <Plus className="h-4 w-4" />
-            Elements
-          </button>
-          <button type="button" className={`btn admin-compact-button ${fullScreenEditor ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setFullScreenEditor((value) => !value)}>
-            <Maximize2 className="h-4 w-4" />
-            {fullScreenEditor ? 'Exit Full Screen' : 'Full Screen Editor'}
-          </button>
           <button type="button" className={`btn admin-compact-button ${rightInspectorOpen ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setRightInspectorOpen((value) => !value)}>
             <Settings2 className="h-4 w-4" />
             Advanced Inspector
-          </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={onBack}>
-            <LayoutGrid className="h-4 w-4" />
-            Back to Structured Mode
           </button>
           <button type="button" className="icon-button" disabled={!undoStack.length || disabled} onClick={undoDesign} title="Undo">
             <Undo2 className="h-4 w-4" />
           </button>
           <button type="button" className="icon-button" disabled={!redoStack.length || disabled} onClick={redoDesign} title="Redo">
             <Redo2 className="h-4 w-4" />
-          </button>
-          <button type="button" className={`btn admin-compact-button ${activeRail === 'variables' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => toggleRailDrawer('variables')}>
-            <ShieldCheck className="h-4 w-4" />
-            Variables
           </button>
           <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onPreview(template, defaultPreviewConfig)}>
             {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
@@ -3399,17 +3589,6 @@ function DesignModeWorkspace({
           <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onPreview(template, previewConfig)}>
             {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
             Preview Draft PDF
-          </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onDownload(template, previewConfig)}>
-            {busyKey === `download-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Download Draft PDF
-          </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || saving || Boolean(busyKey)} onClick={() => {
-            setPublishConfirmOpen(false);
-            setRevertConfirmOpen(true);
-          }}>
-            <RotateCcw className="h-4 w-4" />
-            Revert Draft
           </button>
           <button type="submit" className="btn btn-primary admin-compact-button pdf-builder-save-button" disabled={!canEdit || saving || Boolean(busyKey)}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -3422,6 +3601,82 @@ function DesignModeWorkspace({
             <ShieldCheck className="h-4 w-4" />
             Publish Design
           </button>
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={onBack}>
+            <LayoutGrid className="h-4 w-4" />
+            Back to Structured Mode
+          </button>
+          <div className="pdf-builder-more-menu-wrap">
+            <button type="button" className={`btn admin-compact-button ${toolbarMoreOpen ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setToolbarMoreOpen((value) => !value)} aria-expanded={toolbarMoreOpen}>
+              <SlidersHorizontal className="h-4 w-4" />
+              More
+            </button>
+            {toolbarMoreOpen ? (
+              <div className="pdf-builder-more-menu" onPointerDown={(event) => event.stopPropagation()}>
+                <button type="button" className={activeRail === 'templates' ? 'is-active' : ''} onClick={() => { toggleRailDrawer('templates'); setToolbarMoreOpen(false); }}>
+                  <LayoutGrid className="h-4 w-4" />
+                  Templates
+                </button>
+                <button type="button" className={activeRail === 'layers' ? 'is-active' : ''} onClick={() => { toggleRailDrawer('layers'); setToolbarMoreOpen(false); }}>
+                  <Layers className="h-4 w-4" />
+                  Layers
+                </button>
+                <button type="button" className={activeRail === 'elements' ? 'is-active' : ''} onClick={() => { toggleRailDrawer('elements'); setToolbarMoreOpen(false); }}>
+                  <Plus className="h-4 w-4" />
+                  Elements
+                </button>
+                <button type="button" className={activeRail === 'variables' ? 'is-active' : ''} onClick={() => { toggleRailDrawer('variables'); setToolbarMoreOpen(false); }}>
+                  <ShieldCheck className="h-4 w-4" />
+                  Variables
+                </button>
+                <button type="button" className={activeRail === 'history' ? 'is-active' : ''} onClick={() => { toggleRailDrawer('history'); setToolbarMoreOpen(false); }}>
+                  <History className="h-4 w-4" />
+                  History
+                </button>
+                <span className="pdf-more-menu-divider" />
+                <button type="button" onClick={() => { setFullScreenEditor((value) => !value); setToolbarMoreOpen(false); }}>
+                  <Maximize2 className="h-4 w-4" />
+                  {fullScreenEditor ? 'Exit Full Screen' : 'Full Screen Editor'}
+                </button>
+                <button type="button" className={gridEnabled ? 'is-active' : ''} onClick={() => updateCanvasOption('gridEnabled', !gridEnabled)}>
+                  <Grid2X2 className="h-4 w-4" />
+                  Grid
+                </button>
+                <button type="button" className={snapEnabled ? 'is-active' : ''} onClick={() => updateCanvasOption('canvas.snap', !snapEnabled)}>
+                  <Move className="h-4 w-4" />
+                  Snap
+                </button>
+                <button type="button" className={layoutGuidesEnabled ? 'is-active' : ''} onClick={() => updateCanvasOption('layoutGuides', !layoutGuidesEnabled)}>
+                  {layoutGuidesEnabled ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  Layout Guides
+                </button>
+                <button type="button" className={showReferenceLayer ? 'is-active' : ''} disabled={!referencePdfUrl} onClick={() => setShowReferenceLayer((value) => !value)}>
+                  {showReferenceLayer ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  PDF Reference Layer
+                </button>
+                <button type="button" className={selectBackgroundElements ? 'is-active' : ''} onClick={toggleBackgroundElementSelection}>
+                  {selectBackgroundElements ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                  Select Background Elements
+                </button>
+                <button type="button" className={freeLayoutMode ? 'is-active' : ''} disabled={disabled} onClick={toggleFreeLayoutMode}>
+                  {freeLayoutMode ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                  Free Layout Mode
+                </button>
+                <span className="pdf-more-menu-divider" />
+                <button type="button" disabled={saving || Boolean(busyKey)} onClick={() => { onDownload(template, previewConfig); setToolbarMoreOpen(false); }}>
+                  {busyKey === `download-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  Download Draft PDF
+                </button>
+                <button type="button" disabled={!canEdit || saving || Boolean(busyKey)} onClick={() => {
+                  setToolbarMoreOpen(false);
+                  setPublishConfirmOpen(false);
+                  setRevertConfirmOpen(true);
+                }}>
+                  <RotateCcw className="h-4 w-4" />
+                  Revert Draft
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -3485,26 +3740,6 @@ function DesignModeWorkspace({
                   {option === 'fit' ? 'Fit' : option === 'fit-width' ? 'Fit Width' : `${option}%`}
                 </button>
               ))}
-              <button type="button" className={`pdf-canvas-pill ${gridEnabled ? 'is-active' : ''}`} onClick={() => updateCanvasOption('gridEnabled', !gridEnabled)}>
-                <Grid2X2 className="h-3.5 w-3.5" />
-                Grid
-              </button>
-              <button type="button" className={`pdf-canvas-pill ${layoutGuidesEnabled ? 'is-active' : ''}`} onClick={() => updateCanvasOption('layoutGuides', !layoutGuidesEnabled)}>
-                {layoutGuidesEnabled ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                Show Layout Guides
-              </button>
-              <button type="button" className={`pdf-canvas-pill ${showReferenceLayer ? 'is-active' : ''}`} disabled={!referencePdfUrl} onClick={() => setShowReferenceLayer((value) => !value)}>
-                {showReferenceLayer ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                Show PDF Reference Layer
-              </button>
-              <button type="button" className={`pdf-canvas-pill ${snapEnabled ? 'is-active' : ''}`} onClick={() => updateCanvasOption('canvas.snap', !snapEnabled)}>
-                <Move className="h-3.5 w-3.5" />
-                Snap
-              </button>
-              <button type="button" className={`pdf-canvas-pill ${freeLayoutMode ? 'is-active' : ''}`} disabled={disabled} onClick={toggleFreeLayoutMode}>
-                {freeLayoutMode ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                Free Layout Mode
-              </button>
             </div>
           </div>
           <div className="pdf-canvas-scroll">
@@ -3550,40 +3785,51 @@ function DesignModeWorkspace({
                     />
                   );
                 })}
-                {visiblePageElements.map((element) => (
-                  <BuilderCanvasElement
-                    key={element.id}
-                    element={element}
-                    selected={selectedLayerId === element.id}
-                    disabled={disabled}
-                    editing={editingElementId === element.id}
-                    onSelect={() => setSelectedLayerId(element.id)}
-                    onEditStart={() => {
-                      setSelectedLayerId(element.id);
-                      if (['text', 'card', 'icon'].includes(element.type)) {
-                        setEditingElementId(element.id);
-                      } else {
-                        setEditingElementId('');
-                        setRightInspectorOpen(true);
-                        setInspectorCollapsed(false);
-                        setActiveInspectorTab(element.type === 'table' ? 'content' : 'style');
-                      }
-                    }}
-                    onInlineCommit={(value) => commitInlineElementText(element.id, value)}
-                    onInlineCancel={() => setEditingElementId('')}
-                    onInlineCursor={(target, value, event) => rememberVariableCursor('element', element.id, target, value, event)}
-                    onDragStart={(event) => beginElementInteraction(event, element, 'move')}
-                    onResizeStart={(event, handle) => beginElementInteraction(event, element, 'resize', handle)}
-                  />
-                ))}
+                {visiblePageElements.map((element) => {
+                  const backgroundElement = isBackgroundElement(element);
+                  const backgroundSelectable = !backgroundElement || selectBackgroundElements;
+                  return (
+                    <BuilderCanvasElement
+                      key={element.id}
+                      element={element}
+                      selected={selectedLayerId === element.id}
+                      disabled={disabled}
+                      editing={editingElementId === element.id}
+                      backgroundElement={backgroundElement}
+                      backgroundSelectable={backgroundSelectable}
+                      onSelect={() => {
+                        if (!backgroundSelectable) return;
+                        setSelectedLayerId(element.id);
+                      }}
+                      onEditStart={() => {
+                        if (!backgroundSelectable) return;
+                        setSelectedLayerId(element.id);
+                        if (['text', 'card', 'icon'].includes(element.type)) {
+                          setEditingElementId(element.id);
+                        } else {
+                          setEditingElementId('');
+                          setRightInspectorOpen(true);
+                          setInspectorCollapsed(false);
+                          setActiveInspectorTab(element.type === 'table' ? 'content' : 'style');
+                        }
+                      }}
+                      onInlineCommit={(value) => commitInlineElementText(element.id, value)}
+                      onInlineCancel={() => setEditingElementId('')}
+                      onInlineCursor={(target, value, event) => rememberVariableCursor('element', element.id, target, value, event)}
+                      onDragStart={(event) => beginElementInteraction(event, element, 'move')}
+                      onResizeStart={(event, handle) => beginElementInteraction(event, element, 'resize', handle)}
+                    />
+                  );
+                })}
                 {selectedLayer && selectedFrame ? (
                   <FloatingLayerToolbar
                     frame={selectedFrame}
                     layer={selectedLayer}
                     element={selectedElement}
+                    position={floatingToolbarPosition}
                     locked={selectedLayerLocked}
                     canEditFrame={selectedCanEditFrame}
-                    canDelete={Boolean(selectedElement) || selectedSection?.system === false}
+                    canDelete={!selectedLayerLocked && (Boolean(selectedElement) || selectedSection?.system === false)}
                     canToggleLock={Boolean(selectedElement) || (Boolean(selectedSection) && freeLayoutMode)}
                     onEdit={editSelectedLayer}
                     onDuplicate={duplicateSelectedLayer}
@@ -3687,6 +3933,8 @@ function BuilderCanvasSection({ section, layer, selected, disabled, freeLayoutMo
   return (
     <div
       className={`pdf-builder-section is-${content.kind || section.role || 'details'} ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}`}
+      data-pdf-layer-id={section.id}
+      data-pdf-layer-kind="section"
       style={style}
       onPointerDown={(event) => {
         event.stopPropagation();
@@ -3750,16 +3998,44 @@ function BuilderCanvasSection({ section, layer, selected, disabled, freeLayoutMo
   );
 }
 
-function BuilderCanvasElement({ element, selected, disabled, editing = false, onSelect, onEditStart, onInlineCommit, onInlineCancel, onInlineCursor, onDragStart, onResizeStart }) {
+function BuilderCanvasElement({
+  element,
+  selected,
+  disabled,
+  editing = false,
+  backgroundElement = false,
+  backgroundSelectable = true,
+  onSelect,
+  onEditStart,
+  onInlineCommit,
+  onInlineCancel,
+  onInlineCursor,
+  onDragStart,
+  onResizeStart
+}) {
   const Icon = elementIconForType(element.type);
   const style = styleForBuilderElement(element, selected);
   const content = element.content || {};
-  const locked = element.locked || disabled;
+  const locked = element.locked || disabled || !backgroundSelectable;
   const inlineInputRef = useRef(null);
   const [inlineValue, setInlineValue] = useState(elementPrimaryText(element));
   const inlineEditable = ['text', 'card', 'icon'].includes(element.type);
   const doubleClickEditable = inlineEditable || element.type === 'table' || element.type === 'divider' || element.type === 'image';
   const inlineTarget = element.type === 'card' ? 'body' : element.type === 'icon' ? 'label' : 'text';
+  const iconVariant = content.variant || content.iconName || 'generic';
+  const iconLabel = content.label || (content.variant ? '' : content.iconName) || '';
+  const imagePreviewSrc = element.type === 'image' ? imagePreviewSource(content) : '';
+  const imageMode = content.imageMode || (imagePreviewSrc.includes('logo-icon') ? 'watermark' : 'logo');
+  const tablePaddingX = clampBuilderNumber(element.style?.paddingX, 4, 0, 24);
+  const tablePaddingY = clampBuilderNumber(element.style?.paddingY, 5, 0, 24);
+  const tableCellStyle = {
+    padding: `${tablePaddingY}px ${tablePaddingX}px`,
+    textAlign: element.style?.alignment || element.alignment || 'left'
+  };
+  const tableBorderWidth = clampBuilderNumber(element.style?.borderWidth, 0.7, 0, 4);
+  const tableBorderColor = element.style?.borderColor || '#d8e5f7';
+  const tableRowBackground = element.style?.rowBackgroundColor || '#ffffff';
+  const tableAltRowBackground = element.style?.alternateRowBackgroundColor || '#f8fafc';
   const tableColumns = content.columns?.length ? content.columns : contentDefaultsForElement('table').columns;
   const tableColumnTemplate = Array.isArray(content.columnWidths) && content.columnWidths.length
     ? tableColumns.map((_column, index) => `${Math.max(0.2, Number(content.columnWidths[index]) || 1)}fr`).join(' ')
@@ -3786,16 +4062,19 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
 
   return (
     <div
-      className={`pdf-builder-element is-${element.type} ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}`}
+      className={`pdf-builder-element is-${element.type} ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''} ${backgroundElement ? 'is-background-element' : ''} ${backgroundElement && !backgroundSelectable ? 'is-background-passthrough' : ''}`}
+      data-pdf-layer-id={element.id}
+      data-pdf-layer-kind={backgroundElement ? 'background' : 'element'}
       style={style}
       onPointerDown={(event) => {
+        if (!backgroundSelectable) return;
         event.stopPropagation();
         onSelect();
         if (editing) return;
         if (!locked) onDragStart(event);
       }}
       onDoubleClick={(event) => {
-        if (!doubleClickEditable || locked) return;
+        if (!backgroundSelectable || !doubleClickEditable || locked) return;
         event.preventDefault();
         event.stopPropagation();
         onEditStart?.();
@@ -3827,21 +4106,21 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
       ) : element.type === 'table' ? (
         <div className="pdf-canvas-table">
           {content.title ? <p>{content.title}</p> : null}
-          <div className="pdf-canvas-table-grid">
+          <div className="pdf-canvas-table-grid" style={{ borderColor: tableBorderColor, borderWidth: tableBorderWidth }}>
             <div className="pdf-canvas-table-head" style={{ gridTemplateColumns: tableColumnTemplate, minHeight: element.style?.rowHeight || 18, background: element.style?.headerBackgroundColor || element.style?.accentColor || '#0f2a52', color: element.style?.headerTextColor || '#ffffff' }}>
-              {tableColumns.slice(0, 6).map((column, columnIndex) => <span key={`${column}-${columnIndex}`}>{column}</span>)}
+              {tableColumns.slice(0, 6).map((column, columnIndex) => <span key={`${column}-${columnIndex}`} style={tableCellStyle}>{column}</span>)}
             </div>
             {(content.rows?.length ? content.rows : contentDefaultsForElement('table').rows).slice(0, tablePreviewCount).map((row, rowIndex) => (
-              <div key={`table-row-${rowIndex}`} className="pdf-canvas-table-row" style={{ gridTemplateColumns: tableColumnTemplate, minHeight: element.style?.rowHeight || 18 }}>
-                {(Array.isArray(row) ? row : [row]).slice(0, Math.max(1, tableColumns.length || 4)).map((cell, cellIndex) => <span key={`${cell}-${cellIndex}`}>{cell}</span>)}
+              <div key={`table-row-${rowIndex}`} className="pdf-canvas-table-row" style={{ gridTemplateColumns: tableColumnTemplate, minHeight: element.style?.rowHeight || 18, background: rowIndex % 2 ? tableAltRowBackground : tableRowBackground }}>
+                {(Array.isArray(row) ? row : [row]).slice(0, Math.max(1, tableColumns.length || 4)).map((cell, cellIndex) => <span key={`${cell}-${cellIndex}`} style={tableCellStyle}>{cell}</span>)}
               </div>
             ))}
           </div>
         </div>
       ) : element.type === 'icon' ? (
-        <div className={`pdf-canvas-icon is-${content.variant || content.iconName || 'generic'}`}>
-          {content.variant === 'dot' ? <span className="pdf-canvas-dot" /> : content.variant === 'check' ? <span className="pdf-canvas-check">✓</span> : <Box className="h-4 w-4" />}
-          <span>{content.label || (content.variant ? '' : content.iconName) || ''}</span>
+        <div className={`pdf-canvas-icon is-${iconVariant} ${iconLabel ? 'has-label' : 'is-symbol-only'}`}>
+          <CanvasIconPreview variant={iconVariant} />
+          {iconLabel ? <span>{iconLabel}</span> : null}
         </div>
       ) : element.type === 'qr' ? (
         <div className="pdf-canvas-qr">
@@ -3862,7 +4141,16 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
       ) : element.type === 'spacer' ? (
         <div className="pdf-canvas-spacer">{content.label || 'Spacer'}</div>
       ) : element.type === 'image' ? (
-        <div className="pdf-canvas-image"><ImageIcon className="h-5 w-5" /><span>{content.label || 'Image / Logo'}</span></div>
+        <div className={`pdf-canvas-image ${imagePreviewSrc ? 'has-image' : ''} is-${imageMode}`}>
+          {imagePreviewSrc ? (
+            <img src={imagePreviewSrc} alt={content.label || element.name || 'PDF image'} draggable="false" />
+          ) : (
+            <>
+              <ImageIcon className="h-5 w-5" />
+              <span>{content.label || 'Image / Logo'}</span>
+            </>
+          )}
+        </div>
       ) : element.type === 'card' ? (
         content.boxOnly ? <div className="pdf-canvas-card-box" /> : (
           <div className={`pdf-canvas-card ${element.twoColumn ? 'is-two-column' : ''}`}>
@@ -3873,7 +4161,7 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
       ) : (
         <div className="pdf-canvas-text">{elementPrimaryText(element) || 'New text block'}</div>
       )}
-      {selected && element.locked ? <span className="pdf-element-lock"><Lock className="h-3 w-3" /></span> : null}
+      {(selected && element.locked) || (backgroundElement && element.locked) ? <span className="pdf-element-lock"><Lock className="h-3 w-3" /><span>Locked</span></span> : null}
       {selected && !locked ? ['nw', 'ne', 'sw', 'se'].map((handle) => (
         <button
           key={handle}
@@ -3888,9 +4176,9 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
 }
 
 function FloatingLayerToolbar({
-  frame,
   layer,
   element,
+  position,
   locked,
   canEditFrame,
   canDelete,
@@ -3905,14 +4193,16 @@ function FloatingLayerToolbar({
   onPatch,
   onOpenInspector
 }) {
-  const width = element ? 520 : 338;
-  const top = Number(frame.y || 0) > 42
-    ? Number(frame.y || 0) - 46
-    : Number(frame.y || 0) + Number(frame.height || 0) + 8;
-  const left = clampBuilderNumber(Number(frame.x || 0), 8, 8, Math.max(8, builderCanvas.width - width - 8));
+  const portalTarget = typeof document === 'undefined' ? null : document.body;
+  if (!portalTarget) return null;
   const style = element?.style || {};
   const content = element?.content || {};
+  const isTable = element?.type === 'table';
+  const isImage = element?.type === 'image';
+  const isBackground = layer?.backgroundElement || isBackgroundElement(element);
+  const toolbarLabel = isTable ? 'Edit Table' : isImage ? 'Replace' : isBackground ? 'Edit Watermark' : 'Edit';
   const patchStyle = (patch) => onPatch?.({ style: patch });
+  const patchContent = (patch) => onPatch?.({ content: patch });
   const cycleAlignment = () => {
     const order = ['left', 'center', 'right'];
     const current = style.alignment || element?.alignment || 'left';
@@ -3920,17 +4210,36 @@ function FloatingLayerToolbar({
     onPatch?.({ alignment: next, style: { alignment: next } });
   };
   const alignmentIcon = style.alignment === 'right' ? <AlignRight className="h-3.5 w-3.5" /> : style.alignment === 'center' ? <AlignCenter className="h-3.5 w-3.5" /> : <AlignLeft className="h-3.5 w-3.5" />;
-  return (
+  return createPortal(
     <div
-      className="pdf-floating-toolbar"
-      style={{ left, top }}
+      className={`pdf-floating-toolbar is-${position?.placement || 'above'} ${position?.ready ? 'is-ready' : 'is-measuring'} ${isTable ? 'is-table-toolbar' : ''}`}
+      data-pdf-floating-toolbar-id={layer?.id || ''}
+      style={{ left: position?.left ?? 12, top: position?.top ?? 12 }}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <button type="button" className="pdf-floating-tool is-primary" onClick={onEdit} title="Edit content">
+      <button type="button" className="pdf-floating-tool is-primary" disabled={locked && !isBackground} onClick={onEdit} title={toolbarLabel}>
         <Edit3 className="h-3.5 w-3.5" />
-        <span>Edit</span>
+        <span>{toolbarLabel}</span>
       </button>
-      <button type="button" className="pdf-floating-tool" onClick={onDuplicate} title="Duplicate">
+      {isTable ? (
+        <>
+          <button type="button" className="pdf-floating-tool" disabled={locked} onClick={() => onOpenInspector?.('content')} title="Columns">
+            <Columns2 className="h-3.5 w-3.5" />
+            <span>Columns</span>
+          </button>
+          <button type="button" className="pdf-floating-tool" disabled={locked} onClick={() => onOpenInspector?.('style')} title="Table style">
+            <Palette className="h-3.5 w-3.5" />
+            <span>Style</span>
+          </button>
+        </>
+      ) : null}
+      {isImage ? (
+        <button type="button" className="pdf-floating-tool" disabled={locked} onClick={() => patchContent({ fitToFrame: content.fitToFrame === false })} title={content.fitToFrame === false ? 'Fit image to frame' : 'Use natural padding'}>
+          <ImageIcon className="h-3.5 w-3.5" />
+          <span>Fit</span>
+        </button>
+      ) : null}
+      <button type="button" className="pdf-floating-tool" disabled={locked} onClick={onDuplicate} title="Duplicate">
         <Copy className="h-3.5 w-3.5" />
       </button>
       <button type="button" className="pdf-floating-tool pdf-floating-danger" disabled={!canDelete} onClick={onDelete} title={canDelete ? 'Delete' : 'Only custom sections can be deleted'}>
@@ -3984,17 +4293,29 @@ function FloatingLayerToolbar({
       ) : null}
       {element?.type === 'table' ? (
         <>
-          <button type="button" className="pdf-floating-tool is-primary" disabled={locked} onClick={() => onOpenInspector?.('content')} title="Edit table">
-            <Edit3 className="h-3.5 w-3.5" />
-            <span>Edit Table</span>
-          </button>
-          <button type="button" className="pdf-floating-tool" disabled={locked} onClick={() => onOpenInspector?.('content')} title="Columns">
-            <Columns2 className="h-3.5 w-3.5" />
-            <span>Columns</span>
-          </button>
           <label className="pdf-floating-color" title="Header background">
             <Palette className="h-3.5 w-3.5" />
             <input type="color" value={style.headerBackgroundColor || style.accentColor || '#0f2a52'} disabled={locked} onChange={(event) => patchStyle({ headerBackgroundColor: event.target.value, accentColor: event.target.value })} />
+          </label>
+          <label className="pdf-floating-mini-field" title="Row height">
+            <span>Row</span>
+            <input type="number" min="12" max="34" value={style.rowHeight ?? 18} disabled={locked} onChange={(event) => patchStyle({ rowHeight: Number(event.target.value) })} />
+          </label>
+          <label className="pdf-floating-mini-field" title="Padding X">
+            <span>Pad X</span>
+            <input type="number" min="0" max="24" value={style.paddingX ?? 4} disabled={locked} onChange={(event) => patchStyle({ paddingX: Number(event.target.value) })} />
+          </label>
+          <label className="pdf-floating-mini-field" title="Padding Y">
+            <span>Pad Y</span>
+            <input type="number" min="0" max="24" value={style.paddingY ?? 5} disabled={locked} onChange={(event) => patchStyle({ paddingY: Number(event.target.value) })} />
+          </label>
+          <label className="pdf-floating-color" title="Border color">
+            <Minus className="h-3.5 w-3.5" />
+            <input type="color" value={style.borderColor || '#d8e5f7'} disabled={locked} onChange={(event) => patchStyle({ borderColor: event.target.value })} />
+          </label>
+          <label className="pdf-floating-mini-field" title="Border width">
+            <span>Border</span>
+            <input type="number" min="0" max="4" step="0.1" value={style.borderWidth ?? 0.7} disabled={locked} onChange={(event) => patchStyle({ borderWidth: Number(event.target.value) })} />
           </label>
         </>
       ) : null}
@@ -4018,7 +4339,8 @@ function FloatingLayerToolbar({
         <SlidersHorizontal className="h-3.5 w-3.5" />
         <span>More</span>
       </button>
-    </div>
+    </div>,
+    portalTarget
   );
 }
 
@@ -4026,16 +4348,18 @@ function BuilderLayerRow({ layer, selected, disabled, onSelect, onToggleVisibili
   const Icon = layer.kind === 'section' ? (layer.section?.icon || FileText) : elementIconForType(layer.type);
   const elementLayer = layer.kind === 'element';
   const canDelete = elementLayer || layer.sectionDesign?.system === false;
+  const lockedAction = layer.locked === true;
   return (
     <div className={`pdf-layer-row ${selected ? 'is-active' : ''}`}>
-      <button type="button" className="pdf-layer-main" onClick={onSelect}>
+      <button type="button" className="pdf-layer-main" onClick={onSelect} title={layer.title}>
         <GripVertical className="h-3.5 w-3.5 text-slate-400" />
         <Icon className="h-4 w-4 text-sky-100" />
         <span className="pdf-layer-text">
-          <span className="pdf-layer-name">{layer.title}</span>
+          <span className="pdf-layer-name" title={layer.title}>{layer.title}</span>
           <span className="pdf-layer-badges">
             <span className={`pdf-layer-badge ${layer.locked ? 'is-locked' : 'is-free'}`}>{layer.locked ? 'Locked' : 'Free'}</span>
-            <span className="pdf-layer-badge">{layer.kind === 'section' ? 'Section' : layer.badge}</span>
+            {!layer.visible ? <span className="pdf-layer-badge is-hidden">Hidden</span> : null}
+            <span className={`pdf-layer-badge ${layer.backgroundElement ? 'is-background' : ''}`}>{layer.kind === 'section' ? 'Section' : layer.badge}</span>
           </span>
         </span>
       </button>
@@ -4048,19 +4372,19 @@ function BuilderLayerRow({ layer, selected, disabled, onSelect, onToggleVisibili
         </button>
         {elementLayer ? (
           <>
-            <button type="button" className="icon-button" disabled={disabled} onClick={onMoveUp} title="Move up">
+            <button type="button" className="icon-button" disabled={disabled || lockedAction} onClick={onMoveUp} title="Move up">
               <ArrowUp className="h-3.5 w-3.5" />
             </button>
-            <button type="button" className="icon-button" disabled={disabled} onClick={onMoveDown} title="Move down">
+            <button type="button" className="icon-button" disabled={disabled || lockedAction} onClick={onMoveDown} title="Move down">
               <ArrowDown className="h-3.5 w-3.5" />
             </button>
           </>
         ) : null}
-        <button type="button" className="icon-button" disabled={disabled} onClick={onDuplicate} title={elementLayer ? 'Duplicate' : 'Duplicate as custom section'}>
+        <button type="button" className="icon-button" disabled={disabled || lockedAction} onClick={onDuplicate} title={elementLayer ? 'Duplicate' : 'Duplicate as custom section'}>
           <Copy className="h-3.5 w-3.5" />
         </button>
         {canDelete ? (
-          <button type="button" className="icon-button pdf-danger-icon" disabled={disabled} onClick={onDelete} title="Delete">
+          <button type="button" className="icon-button pdf-danger-icon" disabled={disabled || lockedAction} onClick={onDelete} title="Delete">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         ) : null}
@@ -4128,11 +4452,11 @@ function BuilderTextarea({ label, value, disabled, rows = 4, onChange, onCursor 
   );
 }
 
-function BuilderNumberInput({ label, value, min = 0, max = 999, disabled, onChange }) {
+function BuilderNumberInput({ label, value, min = 0, max = 999, step = 1, disabled, onChange }) {
   return (
     <label className="pdf-control-field">
       <span className="label">{label}</span>
-      <input className="input" type="number" min={min} max={max} value={value ?? ''} disabled={disabled} onChange={(event) => onChange(Number(event.target.value))} />
+      <input className="input" type="number" min={min} max={max} step={step} value={value ?? ''} disabled={disabled} onChange={(event) => onChange(Number(event.target.value))} />
     </label>
   );
 }
@@ -4266,7 +4590,7 @@ function ElementStyleControls({ element, disabled, onPatch }) {
       <ColorControl label="Text color" value={style.textColor} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { textColor: value } })} />
       <ColorControl label="Border color" value={style.borderColor} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { borderColor: value } })} />
       <BuilderNumberInput label="Border radius" value={style.borderRadius ?? 10} max={32} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { borderRadius: value } })} />
-      <BuilderNumberInput label="Border" value={style.borderWidth ?? 1} max={8} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { borderWidth: value } })} />
+      <BuilderNumberInput label="Border" value={style.borderWidth ?? 1} max={8} step={element.type === 'table' ? 0.1 : 1} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { borderWidth: value } })} />
       <BuilderToggle label="Shadow" checked={style.shadow === true} disabled={disabled || element.type === 'divider'} onChange={(checked) => onPatch({ style: { shadow: checked } })} />
       <BuilderNumberInput label="Font size" value={style.fontSize ?? 13} min={8} max={32} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontSize: value } })} />
       <BuilderSelect label="Font weight" value={String(style.fontWeight || 700)} options={[['400', 'Regular'], ['600', 'Semi bold'], ['700', 'Bold'], ['800', 'Extra bold']]} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontWeight: Number(value) } })} />
@@ -4274,7 +4598,12 @@ function ElementStyleControls({ element, disabled, onPatch }) {
         <>
           <ColorControl label="Header background" value={style.headerBackgroundColor || style.accentColor || '#0f2a52'} disabled={disabled} onChange={(value) => onPatch({ style: { headerBackgroundColor: value, accentColor: value } })} />
           <ColorControl label="Header text color" value={style.headerTextColor || '#ffffff'} disabled={disabled} onChange={(value) => onPatch({ style: { headerTextColor: value } })} />
+          <ColorControl label="Row background" value={style.rowBackgroundColor || '#ffffff'} disabled={disabled} onChange={(value) => onPatch({ style: { rowBackgroundColor: value } })} />
+          <ColorControl label="Alternate row background" value={style.alternateRowBackgroundColor || '#f8fafc'} disabled={disabled} onChange={(value) => onPatch({ style: { alternateRowBackgroundColor: value } })} />
           <BuilderNumberInput label="Table row height" value={style.rowHeight ?? 18} min={12} max={34} disabled={disabled} onChange={(value) => onPatch({ style: { rowHeight: value } })} />
+          <BuilderNumberInput label="Cell padding X" value={style.paddingX ?? 4} min={0} max={24} disabled={disabled} onChange={(value) => onPatch({ style: { paddingX: value } })} />
+          <BuilderNumberInput label="Cell padding Y" value={style.paddingY ?? 5} min={0} max={24} disabled={disabled} onChange={(value) => onPatch({ style: { paddingY: value } })} />
+          <BuilderSelect label="Table text alignment" value={style.alignment || element.alignment || 'left'} options={[['left', 'Left'], ['center', 'Center'], ['right', 'Right']]} disabled={disabled} onChange={(value) => onPatch({ alignment: value, style: { alignment: value } })} />
         </>
       ) : null}
       {element.type === 'divider' ? (

@@ -146,14 +146,14 @@ import { calculateAmcCoverageBreakdown } from '../../shared/amcCoverage.js';
 const REPORT_PAGE_LIMIT = 50;
 const MAX_REPORT_PAGES = 20;
 const REPORT_NAV_SECTIONS = [
-  { id: 'main', label: 'Overview', to: '/admin/reports' },
-  { id: 'insights', label: 'Insights', to: '/admin/reports?section=insights' },
-  { id: 'finance', label: 'Finance', to: '/admin/reports/finance' },
-  { id: 'operations', label: 'Operations', to: '/admin/reports?section=operations' },
-  { id: 'technicians', label: 'Technicians', to: '/admin/reports/technicians' },
-  { id: 'inventory', label: 'Inventory', to: '/admin/reports/inventory' },
-  { id: 'payments', label: 'Payments', to: '/admin/reports/payments' },
-  { id: 'amc', label: 'AMC', to: '/admin/reports?section=amc' }
+  { id: 'main', label: 'Overview', to: '/app/admin/reports' },
+  { id: 'insights', label: 'Insights', to: '/app/admin/reports?section=insights' },
+  { id: 'finance', label: 'Finance', to: '/app/admin/reports/finance' },
+  { id: 'operations', label: 'Operations', to: '/app/admin/reports?section=operations' },
+  { id: 'technicians', label: 'Technicians', to: '/app/admin/reports/technicians' },
+  { id: 'inventory', label: 'Inventory', to: '/app/admin/reports/inventory' },
+  { id: 'payments', label: 'Payments', to: '/app/admin/reports/payments' },
+  { id: 'amc', label: 'AMC', to: '/app/admin/reports?section=amc' }
 ];
 const REPORT_SECTION_IDS = REPORT_NAV_SECTIONS.map((item) => item.id);
 const WORK_ORDER_REPORT_STATUSES = ['Pending', 'In Progress', 'Awaiting Parts', 'Completed', 'Delivered', 'Returned'];
@@ -777,14 +777,14 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       {activeSection === 'main' ? (
         <div className="reports-section-stack">
           <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ReportMetricCard icon={CreditCard} label="Total Collected" value={formatReportCurrency(report.summary.totalRevenue)} helper="Real payments in period" tone="green" to="/admin/reports/finance" badge={report.summary.trends.revenue} />
-            <ReportMetricCard icon={AlertTriangle} label="Pending Payments" value={formatReportCurrency(report.summary.pendingPayments)} helper="Invoice balance due" tone="amber" to="/admin/reports/payments" badge={report.summary.trends.pendingBalance} />
-            <ReportMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.summary.completedJobs} helper="Closed in selected period" tone="green" to="/admin/work-orders?status=Completed" badge={report.summary.trends.completedJobs} />
-            <ReportMetricCard icon={Wrench} label="Active Repair Jobs" value={report.summary.activeRepairJobs} helper="Currently open jobs" tone="blue" to="/admin/work-orders" />
-            <ReportMetricCard icon={AlertTriangle} label="Low Stock Items" value={report.summary.lowStockItems} helper="Needs purchase planning" tone="red" to="/admin/reports/inventory" badge={report.summary.trends.lowStock} />
-            <ReportMetricCard icon={FileText} label="Active AMC Contracts" value={report.summary.activeAmcContracts} helper="Live contracts" tone="blue" to="/admin/amc-contracts" />
-            <ReportMetricCard icon={Users} label="Total Customers" value={report.summary.totalCustomers} helper="Customer base" tone="cyan" to="/admin/customers" />
-            <ReportMetricCard icon={Bell} label="AMC Renewals Due" value={report.summary.amcRenewalsDue} helper="Renewal opportunity" tone="amber" to="/admin/reports?section=amc" />
+            <ReportMetricCard icon={CreditCard} label="Total Collected" value={formatReportCurrency(report.summary.totalRevenue)} helper="Real payments in period" tone="green" to="/app/admin/reports/finance" badge={report.summary.trends.revenue} />
+            <ReportMetricCard icon={AlertTriangle} label="Pending Payments" value={formatReportCurrency(report.summary.pendingPayments)} helper="Invoice balance due" tone="amber" to="/app/admin/reports/payments" badge={report.summary.trends.pendingBalance} />
+            <ReportMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.summary.completedJobs} helper="Closed in selected period" tone="green" to="/app/admin/work-orders?status=Completed" badge={report.summary.trends.completedJobs} />
+            <ReportMetricCard icon={Wrench} label="Active Repair Jobs" value={report.summary.activeRepairJobs} helper="Currently open jobs" tone="blue" to="/app/admin/work-orders" />
+            <ReportMetricCard icon={AlertTriangle} label="Low Stock Items" value={report.summary.lowStockItems} helper="Needs purchase planning" tone="red" to="/app/admin/reports/inventory" badge={report.summary.trends.lowStock} />
+            <ReportMetricCard icon={FileText} label="Active AMC Contracts" value={report.summary.activeAmcContracts} helper="Live contracts" tone="blue" to="/app/admin/amc-contracts" />
+            <ReportMetricCard icon={Users} label="Total Customers" value={report.summary.totalCustomers} helper="Customer base" tone="cyan" to="/app/admin/customers" />
+            <ReportMetricCard icon={Bell} label="AMC Renewals Due" value={report.summary.amcRenewalsDue} helper="Renewal opportunity" tone="amber" to="/app/admin/reports?section=amc" />
           </div>
 
           <div className="reports-bi-grid reports-bi-grid-main">
@@ -818,7 +818,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
           </div>
 
           <div className="reports-bi-grid reports-bi-grid-main">
-            <ReportPanel title="Technician Performance" subtitle={bestTechnician ? `Best performer: ${bestTechnician.technician.name} at ${bestTechnician.completionRate}` : 'Completion rate from assigned jobs'} action={<Link className="btn btn-secondary reports-compact-button" to="/admin/reports/technicians">Technicians</Link>}>
+            <ReportPanel title="Technician Performance" subtitle={bestTechnician ? `Best performer: ${bestTechnician.technician.name} at ${bestTechnician.completionRate}` : 'Completion rate from assigned jobs'} action={<Link className="btn btn-secondary reports-compact-button" to="/app/admin/reports/technicians">Technicians</Link>}>
               <div className="grid gap-3">
                 {report.technicians.filter((row) => row.assigned > 0).sort((a, b) => Number(b.completionRate.replace('%', '')) - Number(a.completionRate.replace('%', '')) || b.completed - a.completed).slice(0, 5).map((row) => (
                   <TechnicianSummaryRow key={recordId(row.technician)} row={row} />
@@ -826,7 +826,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
                 {!report.technicians.some((row) => row.assigned > 0) ? <EmptyState icon={Users} title="No assigned technician jobs" message="Technician performance appears once jobs are assigned." /> : null}
               </div>
             </ReportPanel>
-            <ReportPanel title="Low Stock / Top Used Parts" subtitle="Inventory attention from parts and stock movements" action={<Link className="btn btn-secondary reports-compact-button" to="/admin/reports/inventory">Inventory</Link>}>
+            <ReportPanel title="Low Stock / Top Used Parts" subtitle="Inventory attention from parts and stock movements" action={<Link className="btn btn-secondary reports-compact-button" to="/app/admin/reports/inventory">Inventory</Link>}>
               <div className="grid gap-3">
                 {(report.inventory.stockAttentionRows.length ? report.inventory.stockAttentionRows : report.inventory.topUsedParts).slice(0, 6).map((part) => (
                   <InventorySummaryRow key={recordId(part)} part={part} />
@@ -856,10 +856,10 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       {activeSection === 'insights' ? (
         <div className="reports-section-stack">
           <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ReportMetricCard icon={CreditCard} label="Revenue Growth" value={formatReportCurrency(report.summary.totalRevenue)} helper="Collected vs previous period" tone="green" to="/admin/reports/finance" badge={report.summary.trends.revenue} />
-            <ReportMetricCard icon={AlertTriangle} label="Pending Balance" value={formatReportCurrency(report.summary.pendingPayments)} helper="Lower is better" tone="amber" to="/admin/payments" badge={report.summary.trends.pendingBalance} />
-            <ReportMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.summary.completedJobs} helper="Closed vs previous period" tone="green" to="/admin/work-orders?status=Completed" badge={report.summary.trends.completedJobs} />
-            <ReportMetricCard icon={Boxes} label="Low Stock Count" value={report.summary.lowStockItems} helper="Current inventory snapshot" tone="red" to="/admin/parts" badge={report.summary.trends.lowStock} />
+            <ReportMetricCard icon={CreditCard} label="Revenue Growth" value={formatReportCurrency(report.summary.totalRevenue)} helper="Collected vs previous period" tone="green" to="/app/admin/reports/finance" badge={report.summary.trends.revenue} />
+            <ReportMetricCard icon={AlertTriangle} label="Pending Balance" value={formatReportCurrency(report.summary.pendingPayments)} helper="Lower is better" tone="amber" to="/app/admin/payments" badge={report.summary.trends.pendingBalance} />
+            <ReportMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.summary.completedJobs} helper="Closed vs previous period" tone="green" to="/app/admin/work-orders?status=Completed" badge={report.summary.trends.completedJobs} />
+            <ReportMetricCard icon={Boxes} label="Low Stock Count" value={report.summary.lowStockItems} helper="Current inventory snapshot" tone="red" to="/app/admin/parts" badge={report.summary.trends.lowStock} />
           </div>
 
           {!hasAnyBusinessData ? (
@@ -878,10 +878,10 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
             </ReportPanel>
             <ReportPanel title="Priority Drill-downs" subtitle="Open the source workspace behind each insight">
               <div className="reports-drilldown-grid">
-                <Link className="btn btn-secondary reports-compact-button" to="/admin/payments">View Payments</Link>
-                <Link className="btn btn-secondary reports-compact-button" to="/admin/parts">View Inventory</Link>
-                <Link className="btn btn-secondary reports-compact-button" to="/admin/reports/technicians">View Technicians</Link>
-                <Link className="btn btn-secondary reports-compact-button" to="/admin/amc-contracts">View AMC</Link>
+                <Link className="btn btn-secondary reports-compact-button" to="/app/admin/payments">View Payments</Link>
+                <Link className="btn btn-secondary reports-compact-button" to="/app/admin/parts">View Inventory</Link>
+                <Link className="btn btn-secondary reports-compact-button" to="/app/admin/reports/technicians">View Technicians</Link>
+                <Link className="btn btn-secondary reports-compact-button" to="/app/admin/amc-contracts">View AMC</Link>
               </div>
             </ReportPanel>
           </div>
@@ -925,7 +925,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
             </ReportPanel>
           </div>
 
-          <ReportPanel title="Pending Balance by Customer" subtitle="Top customers with invoice balance due" action={<Link className="btn btn-secondary reports-compact-button" to="/admin/payments">Payments</Link>}>
+          <ReportPanel title="Pending Balance by Customer" subtitle="Top customers with invoice balance due" action={<Link className="btn btn-secondary reports-compact-button" to="/app/admin/payments">Payments</Link>}>
             <div className="reports-pending-grid">
               {report.finance.pendingByCustomer.length ? report.finance.pendingByCustomer.map((row, index) => (
                 <PendingCustomerCard key={`${row.customer}-${row.phone}`} row={row} index={index} />
@@ -989,7 +989,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
                             <td className="reports-number-cell">{row.awaitingParts}</td>
                             <td><CompletionRateBadge rate={row.completionRate} average={row.averageCompletion} /></td>
                             <td>{row.lastActivity ? formatDate(row.lastActivity) : <span className="muted">No activity</span>}</td>
-                            <td className="text-center"><Link className="btn btn-secondary reports-table-button" to={`/admin/work-orders?technicianId=${recordId(row.technician)}`}>View Jobs</Link></td>
+                            <td className="text-center"><Link className="btn btn-secondary reports-table-button" to={`/app/admin/work-orders?technicianId=${recordId(row.technician)}`}>View Jobs</Link></td>
                           </tr>
                         );
                       })}
@@ -1004,7 +1004,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
 
       {activeSection === 'inventory' ? (
         <div className="reports-section-stack">
-          <ReportPanel title="Inventory Overview" subtitle="Stock value, availability, and items needing attention" action={<Link className="btn btn-secondary reports-compact-button" to="/admin/parts">Open Inventory</Link>}>
+          <ReportPanel title="Inventory Overview" subtitle="Stock value, availability, and items needing attention" action={<Link className="btn btn-secondary reports-compact-button" to="/app/admin/parts">Open Inventory</Link>}>
             <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <ReportMetricCard icon={Boxes} label="Total Parts / Products" value={report.inventory.totalParts} helper="Current tracked items" tone="blue" compact />
               <ReportMetricCard icon={CreditCard} label="Total Stock Value" value={formatReportCurrency(report.inventory.stockValue)} helper="On-hand valuation" tone="green" compact />
@@ -1071,7 +1071,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
             </ReportPanel>
           </div>
 
-          <ReportPanel title="Pending Payments" subtitle="Invoice balances with customer follow-up actions" action={<Link className="btn btn-secondary reports-compact-button" to="/admin/payments">Open Payments</Link>}>
+          <ReportPanel title="Pending Payments" subtitle="Invoice balances with customer follow-up actions" action={<Link className="btn btn-secondary reports-compact-button" to="/app/admin/payments">Open Payments</Link>}>
             <div className="reports-pending-grid reports-pending-grid-wide">
               {report.finance.pendingPaymentRows.length ? report.finance.pendingPaymentRows.slice(0, 18).map((row) => <PendingPaymentCard key={row.invoiceId || row.invoiceNumber} row={row} />) : <EmptyState icon={CheckCircle2} title="No pending payments" message="No invoice balance is pending for this period." />}
             </div>
@@ -1430,8 +1430,8 @@ function PendingCustomerCard({ row, index }) {
         <MiniMetric label="Balance" value={formatReportCurrency(row.balance)} tone="amber" />
       </div>
       <div className="reports-pending-actions">
-        {row.customerId ? <Link className="btn btn-secondary reports-table-button" to={`/admin/customers/${row.customerId}`}>Open Customer</Link> : null}
-        <Link className="btn btn-secondary reports-table-button" to="/admin/payments">Payments</Link>
+        {row.customerId ? <Link className="btn btn-secondary reports-table-button" to={`/app/admin/customers/${row.customerId}`}>Open Customer</Link> : null}
+        <Link className="btn btn-secondary reports-table-button" to="/app/admin/payments">Payments</Link>
       </div>
     </div>
   );
@@ -1455,8 +1455,8 @@ function PendingPaymentCard({ row }) {
         <MiniMetric label="Balance" value={formatReportCurrency(row.balance)} tone="amber" />
       </div>
       <div className="reports-pending-actions">
-        {row.customerId ? <Link className="btn btn-secondary reports-table-button" to={`/admin/customers/${row.customerId}`}>Open Customer</Link> : null}
-        <Link className="btn btn-secondary reports-table-button" to="/admin/payments">Payments</Link>
+        {row.customerId ? <Link className="btn btn-secondary reports-table-button" to={`/app/admin/customers/${row.customerId}`}>Open Customer</Link> : null}
+        <Link className="btn btn-secondary reports-table-button" to="/app/admin/payments">Payments</Link>
       </div>
     </article>
   );
@@ -1481,7 +1481,7 @@ function TechnicianReportCard({ row }) {
       </div>
       <div className="reports-mobile-card-footer">
         <span className="text-xs font-semibold muted">{row.lastActivity ? `Last activity ${formatDate(row.lastActivity)}` : 'No activity'}</span>
-        <Link className="btn btn-secondary reports-table-button" to={`/admin/work-orders?technicianId=${recordId(row.technician)}`}>View Jobs</Link>
+        <Link className="btn btn-secondary reports-table-button" to={`/app/admin/work-orders?technicianId=${recordId(row.technician)}`}>View Jobs</Link>
       </div>
     </article>
   );
@@ -1601,22 +1601,22 @@ function buildAdvancedInsights(report, bestTechnician, topService) {
   const attentionStock = Number(report.inventory.lowStock || 0) + Number(report.inventory.outOfStock || 0);
   return [
     report.summary.pendingPayments > 0
-      ? { icon: AlertTriangle, tone: 'amber', title: 'Pending payments need follow-up', value: formatReportCurrency(report.summary.pendingPayments), message: 'Prioritize high-balance invoices and follow up with customers this week.', to: '/admin/payments', actionLabel: 'View Payments' }
-      : { icon: CheckCircle2, tone: 'green', title: 'Pending payments need follow-up', value: formatReportCurrency(0), message: 'No pending payment exposure in this report period. Keep closing invoices promptly.', to: '/admin/payments', actionLabel: 'View Payments' },
+      ? { icon: AlertTriangle, tone: 'amber', title: 'Pending payments need follow-up', value: formatReportCurrency(report.summary.pendingPayments), message: 'Prioritize high-balance invoices and follow up with customers this week.', to: '/app/admin/payments', actionLabel: 'View Payments' }
+      : { icon: CheckCircle2, tone: 'green', title: 'Pending payments need follow-up', value: formatReportCurrency(0), message: 'No pending payment exposure in this report period. Keep closing invoices promptly.', to: '/app/admin/payments', actionLabel: 'View Payments' },
     attentionStock > 0
-      ? { icon: AlertTriangle, tone: 'red', title: 'Low stock needs purchase planning', value: `${attentionStock} item${attentionStock === 1 ? '' : 's'}`, message: 'Create a purchase plan before active jobs are delayed by missing parts.', to: '/admin/parts', actionLabel: 'View Inventory' }
-      : { icon: CheckCircle2, tone: 'green', title: 'Low stock needs purchase planning', value: 'Healthy', message: 'Inventory availability looks stable from current stock records.', to: '/admin/parts', actionLabel: 'View Inventory' },
+      ? { icon: AlertTriangle, tone: 'red', title: 'Low stock needs purchase planning', value: `${attentionStock} item${attentionStock === 1 ? '' : 's'}`, message: 'Create a purchase plan before active jobs are delayed by missing parts.', to: '/app/admin/parts', actionLabel: 'View Inventory' }
+      : { icon: CheckCircle2, tone: 'green', title: 'Low stock needs purchase planning', value: 'Healthy', message: 'Inventory availability looks stable from current stock records.', to: '/app/admin/parts', actionLabel: 'View Inventory' },
     bestTechnician
-      ? { icon: UserRound, tone: 'green', title: 'Best technician', value: bestTechnician.technician?.name || 'Technician', message: `${bestTechnician.completed}/${bestTechnician.assigned} jobs completed at ${bestTechnician.completionRate}. Use this as the team benchmark.`, to: '/admin/reports/technicians', actionLabel: 'View Technicians' }
-      : { icon: Users, tone: 'blue', title: 'Best technician', value: 'Pending data', message: 'Assign and close technician jobs to surface completion performance.', to: '/admin/reports/technicians', actionLabel: 'View Technicians' },
+      ? { icon: UserRound, tone: 'green', title: 'Best technician', value: bestTechnician.technician?.name || 'Technician', message: `${bestTechnician.completed}/${bestTechnician.assigned} jobs completed at ${bestTechnician.completionRate}. Use this as the team benchmark.`, to: '/app/admin/reports/technicians', actionLabel: 'View Technicians' }
+      : { icon: Users, tone: 'blue', title: 'Best technician', value: 'Pending data', message: 'Assign and close technician jobs to surface completion performance.', to: '/app/admin/reports/technicians', actionLabel: 'View Technicians' },
     topService
-      ? { icon: ClipboardList, tone: 'cyan', title: 'Top service category', value: topService.name, message: `${topService.count} job${topService.count === 1 ? '' : 's'} in this category. Keep technician capacity and parts aligned.`, to: '/admin/reports?section=operations', actionLabel: 'View Operations' }
-      : { icon: ClipboardList, tone: 'blue', title: 'Top service category', value: 'Pending data', message: 'Service mix will sharpen as more work orders are recorded.', to: '/admin/reports?section=operations', actionLabel: 'View Operations' },
+      ? { icon: ClipboardList, tone: 'cyan', title: 'Top service category', value: topService.name, message: `${topService.count} job${topService.count === 1 ? '' : 's'} in this category. Keep technician capacity and parts aligned.`, to: '/app/admin/reports?section=operations', actionLabel: 'View Operations' }
+      : { icon: ClipboardList, tone: 'blue', title: 'Top service category', value: 'Pending data', message: 'Service mix will sharpen as more work orders are recorded.', to: '/app/admin/reports?section=operations', actionLabel: 'View Operations' },
     report.summary.amcRenewalsDue > 0
-      ? { icon: Bell, tone: 'amber', title: 'AMC renewal status', value: `${report.summary.amcRenewalsDue} due`, message: 'Follow up on renewal-due contracts while service history is fresh.', to: '/admin/amc-contracts', actionLabel: 'View AMC' }
-      : { icon: ShieldCheck, tone: 'blue', title: 'AMC renewal status', value: 'Calm', message: 'No AMC renewal pressure is showing right now.', to: '/admin/amc-contracts', actionLabel: 'View AMC' },
+      ? { icon: Bell, tone: 'amber', title: 'AMC renewal status', value: `${report.summary.amcRenewalsDue} due`, message: 'Follow up on renewal-due contracts while service history is fresh.', to: '/app/admin/amc-contracts', actionLabel: 'View AMC' }
+      : { icon: ShieldCheck, tone: 'blue', title: 'AMC renewal status', value: 'Calm', message: 'No AMC renewal pressure is showing right now.', to: '/app/admin/amc-contracts', actionLabel: 'View AMC' },
     report.summary.activeRepairJobs > 0
-      ? { icon: Wrench, tone: 'amber', title: 'Active jobs warning', value: report.summary.activeRepairJobs, message: 'Review active jobs daily and unblock awaiting-parts work first.', to: '/admin/work-orders', actionLabel: 'View Jobs' }
-      : { icon: CheckCircle2, tone: 'green', title: 'Active jobs warning', value: 'Clear', message: 'Active repair workload is clear.', to: '/admin/work-orders', actionLabel: 'View Jobs' }
+      ? { icon: Wrench, tone: 'amber', title: 'Active jobs warning', value: report.summary.activeRepairJobs, message: 'Review active jobs daily and unblock awaiting-parts work first.', to: '/app/admin/work-orders', actionLabel: 'View Jobs' }
+      : { icon: CheckCircle2, tone: 'green', title: 'Active jobs warning', value: 'Clear', message: 'Active repair workload is clear.', to: '/app/admin/work-orders', actionLabel: 'View Jobs' }
   ];
 }

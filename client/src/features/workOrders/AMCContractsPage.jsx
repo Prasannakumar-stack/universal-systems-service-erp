@@ -196,7 +196,7 @@ export function AMCContractsPage({ role = 'admin' }) {
   const canCreateAmcJob = can(permissionSubject, 'create_amc_job');
   const canCreateInvoice = can(permissionSubject, 'create_invoice');
   const canManageAmc = canCreateAmc || canRenewAmc || canCreateAmcJob || canCreateInvoice;
-  const base = isTechnician ? '/tech' : '/admin';
+  const base = isTechnician ? '/app/tech' : '/app/admin';
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(defaultAmcForm);
   const [customers, setCustomers] = useState([]);
@@ -800,7 +800,7 @@ function AmcMetricCard({ icon: Icon, label, value, helper, tone = 'blue' }) {
 export function WarrantiesPage({ role = 'admin' }) {
   const { request, user } = useAuth();
   const isTechnician = normalizeRole(user?.role || role) === 'technician';
-  const base = isTechnician ? '/tech' : '/admin';
+  const base = isTechnician ? '/app/tech' : '/app/admin';
   const { data, loading, error } = useResource(() => request('/amc/contracts'), [request]);
   const warrantyContracts = (data?.contracts || []).filter((contract) => Boolean(contract.warrantyIncluded));
 

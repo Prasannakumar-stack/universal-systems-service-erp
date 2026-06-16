@@ -245,7 +245,7 @@ export function DocumentsPage() {
 
   return (
     <>
-      <PageHeader title="Documents & PDFs" eyebrow="Billing & PDF" action={canCreateDocument ? <Link className="btn btn-primary" to="/admin/documents/new"><Plus className="h-4 w-4" />Create Document</Link> : null}>
+      <PageHeader title="Documents & PDFs" eyebrow="Billing & PDF" action={canCreateDocument ? <Link className="btn btn-primary" to="/app/admin/documents/new"><Plus className="h-4 w-4" />Create Document</Link> : null}>
         Generate quotations, invoices, AMC agreements, and service completion PDFs from work order data.
       </PageHeader>
       <div className="surface mb-5 grid gap-3 p-4 xl:grid-cols-[180px_180px_1fr_160px_160px]">
@@ -268,7 +268,7 @@ export function DocumentsPage() {
           <DateFilterInput value={dateFrom} onChange={setDateFrom} placeholder="From date" ariaLabel="Document from date" />
           <DateFilterInput value={dateTo} onChange={setDateTo} placeholder="To date" ariaLabel="Document to date" />
       </div>
-      {!documents.length ? <EmptyState title="No documents generated yet" message="Create quotation or invoice from a work order." action={canCreateDocument ? <Link className="btn btn-primary" to="/admin/documents/new">Create Document</Link> : null} /> : (
+      {!documents.length ? <EmptyState title="No documents generated yet" message="Create quotation or invoice from a work order." action={canCreateDocument ? <Link className="btn btn-primary" to="/app/admin/documents/new">Create Document</Link> : null} /> : (
         <>
         <Table>
           <thead><tr><th>Date</th><th>Type</th><th>Customer</th><th>Service Job</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
@@ -283,7 +283,7 @@ export function DocumentsPage() {
                 <td><StatusBadge status={documentStatusLabel(document.status)} /></td>
                 <td>
                   <div className="flex flex-wrap gap-2">
-                    <Link className="btn btn-secondary py-2" to={`/admin/documents/${document.id}`}>Preview</Link>
+                    <Link className="btn btn-secondary py-2" to={`/app/admin/documents/${document.id}`}>Preview</Link>
                     <button type="button" className="btn btn-secondary py-2" onClick={() => downloadDocumentPdf(document)}><Download className="h-4 w-4" />Download</button>
                     <button type="button" className="btn btn-secondary py-2" onClick={() => downloadDocumentPdf(document, true)}><RotateCcw className="h-4 w-4" />Regenerate PDF</button>
                     {canSendPdfWhatsapp ? <button type="button" className="btn btn-primary py-2" onClick={() => sendWhatsApp(document)}><Send className="h-4 w-4" />WhatsApp</button> : null}
@@ -318,7 +318,7 @@ export function CreateDocumentPage() {
     try {
       const result = await request('/documents', { method: 'POST', body: JSON.stringify(form) });
       push('Document created');
-      navigate(`/admin/documents/${result.document.id}`);
+      navigate(`/app/admin/documents/${result.document.id}`);
     } catch (err) {
       push(err.message, 'error');
     }
@@ -356,7 +356,7 @@ export function CreateDocumentPage() {
           </label>
         </div>
         <div className="mt-5 flex justify-end gap-2">
-          <Link className="btn btn-secondary" to="/admin/documents">Cancel</Link>
+          <Link className="btn btn-secondary" to="/app/admin/documents">Cancel</Link>
           <button type="submit" className="btn btn-primary"><ReceiptText className="h-4 w-4" />Create</button>
         </div>
       </form>
@@ -519,7 +519,7 @@ export function DocumentPreviewPage() {
                 <p className="text-sm muted">Balance: {currency(document.invoiceId.balance)}</p>
                 <StatusBadge status={document.invoiceId.status} />
               </div>
-              {canViewPayments || canRecordPayment ? <Link className="btn btn-secondary mt-4 w-full" to={`/admin/payments?invoiceId=${recordId(document.invoiceId)}`}>Go to Payments</Link> : null}
+              {canViewPayments || canRecordPayment ? <Link className="btn btn-secondary mt-4 w-full" to={`/app/admin/payments?invoiceId=${recordId(document.invoiceId)}`}>Go to Payments</Link> : null}
               {canRecordPayment && document.invoiceId.balance > 0 ? (
                 <form className="mt-4 grid gap-3" onSubmit={recordPayment}>
                   <input className="input" type="number" min="1" max={document.invoiceId.balance} placeholder="Paid amount" value={payment.paidAmount} onChange={(event) => setPayment((current) => ({ ...current, paidAmount: event.target.value }))} required />

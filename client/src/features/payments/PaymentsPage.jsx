@@ -185,7 +185,7 @@ export function PaymentsPage({ role = 'admin' }) {
   const canRecordPayments = can(permissionSubject, 'record_payment');
   const canReversePayments = normalizedRole === 'admin' && can(permissionSubject, 'edit_payment');
   const canViewWorkOrders = can(permissionSubject, 'view_work_orders');
-  const base = isTechnician ? '/tech' : '/admin';
+  const base = isTechnician ? '/app/tech' : '/app/admin';
   const invoiceIdParam = useMemo(() => new URLSearchParams(location.search).get('invoiceId') || '', [location.search]);
   const invoiceIdParamHandled = useRef('');
   const [form, setForm] = useState({ invoiceId: invoiceIdParam, paidAmount: '', method: 'Cash', transactionId: '' });

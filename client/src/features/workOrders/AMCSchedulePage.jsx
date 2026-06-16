@@ -152,7 +152,7 @@ export function AMCSchedulePage({ role = 'admin' }) {
   const permissionSubject = user || effectiveRole;
   const canCreateAmc = can(permissionSubject, 'create_amc');
   const canCreateAmcJob = can(permissionSubject, 'create_amc_job');
-  const base = isTechnician ? '/tech' : '/admin';
+  const base = isTechnician ? '/app/tech' : '/app/admin';
   const [status, setStatus] = useState('');
   const { data, loading, error, reload } = useResource(() => request('/amc/schedule'), [request]);
   const schedule = data?.schedule || [];

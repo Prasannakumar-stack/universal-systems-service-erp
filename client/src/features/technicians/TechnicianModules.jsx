@@ -120,7 +120,7 @@ function customerPhone(job) {
 }
 
 function workOrderLink(job) {
-  return `/tech/work-orders/${recordId(job)}`;
+  return `/app/tech/work-orders/${recordId(job)}`;
 }
 
 function linkedInvoiceEntries(jobs) {

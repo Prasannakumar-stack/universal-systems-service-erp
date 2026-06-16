@@ -534,7 +534,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const order = liveOrder || data?.workOrder;
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
-  const base = isTechnician ? '/tech' : '/admin';
+  const base = isTechnician ? '/app/tech' : '/app/admin';
   const paymentsBase = `${base}/payments`;
   const workOrdersBase = `${base}/work-orders`;
   const permissionSubject = user || effectiveRole;
@@ -972,7 +972,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             if (price === 0) {
               const z = String(moveToUsedZeroReason || '').trim();
               if (!z) {
-                push('Reason is required for ₹0 parts: confirm free, warranty, or customer-provided item', 'error');
+                push('Reason is required for Ã¢â€šÂ¹0 parts: confirm free, warranty, or customer-provided item', 'error');
                 return;
               }
             }
@@ -2458,7 +2458,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         return <span className="text-xs muted">Awaiting parts update</span>;
       }
       if (partsLocked) {
-        return <span className="text-xs muted">Move locked — invoice exists.</span>;
+        return <span className="text-xs muted">Move locked Ã¢â‚¬â€ invoice exists.</span>;
       }
       const inventoryPartId = item.inventoryPartId ? recordId(item.inventoryPartId) : '';
       return (
@@ -2672,7 +2672,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               <div className="mt-4 grid gap-3">
                 <a className={`btn btn-secondary btn-lg ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call Customer</a>
                 <a className={`btn btn-primary btn-lg ${phone ? '' : 'pointer-events-none opacity-50'}`} href={technicianWhatsAppHref(order)} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />Open WhatsApp</a>
-                <Link className="btn btn-secondary btn-lg" to="/tech/work-orders">Back to My Jobs</Link>
+                <Link className="btn btn-secondary btn-lg" to="/app/tech/work-orders">Back to My Jobs</Link>
               </div>
             </div>
           </div>
@@ -2715,7 +2715,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${item.inventoryPartId ? 'bg-sky-500/15 text-sky-100' : 'bg-slate-500/15 text-slate-100'}`}>{partUsedTypeLabel(item)}</span>
                       </div>
                     </div>
-                    <p className="mt-1 text-sm muted">Qty {item.quantity} · Unit: {wholeCurrency(item.unitPrice)} · Total: {wholeCurrency(item.total)}</p>
+                    <p className="mt-1 text-sm muted">Qty {item.quantity} Ã‚Â· Unit: {wholeCurrency(item.unitPrice)} Ã‚Â· Total: {wholeCurrency(item.total)}</p>
                   </div>
                 )) : <EmptyState title="No parts added yet." message="Add used parts that should appear on the final bill." />}
               </div>
@@ -3348,7 +3348,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     <p className={detailLabelClass}>Covered By AMC</p>
                     <div className="mt-3 grid gap-2 text-sm text-emerald-100">
                       {amcBilling.coveredItems.length ? amcBilling.coveredItems.map((item, index) => (
-                        <p key={`${item.label}-${index}`} className="font-semibold">✓ {item.label} {item.amount > 0 ? wholeCurrency(item.amount) : ''}</p>
+                        <p key={`${item.label}-${index}`} className="font-semibold">Ã¢Å“â€œ {item.label} {item.amount > 0 ? wholeCurrency(item.amount) : ''}</p>
                       )) : <p className="muted">No charge lines are covered by this AMC type.</p>}
                     </div>
                   </div>
@@ -3356,7 +3356,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     <p className={detailLabelClass}>Chargeable</p>
                     <div className="mt-3 grid gap-2 text-sm text-amber-100">
                       {amcBilling.chargeableItems.length ? amcBilling.chargeableItems.map((item, index) => (
-                        <p key={`${item.label}-${index}`} className="font-semibold">• {item.label} {wholeCurrency(item.amount)}</p>
+                        <p key={`${item.label}-${index}`} className="font-semibold">Ã¢â‚¬Â¢ {item.label} {wholeCurrency(item.amount)}</p>
                       )) : <p className="muted">No extra chargeable items.</p>}
                     </div>
                     <p className="mt-4 text-xs font-black uppercase tracking-wide text-amber-100">Extra Payable: {wholeCurrency(extraPayableTotal)}</p>
@@ -3601,7 +3601,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               <>
                 <p className="mt-3 text-sm leading-6">
                   <span className="font-bold">{partAction.name}</span>
-                  <span className="muted"> × {partAction.quantity}</span>
+                  <span className="muted"> Ãƒâ€” {partAction.quantity}</span>
                 </p>
                 <p className="mt-2 text-sm">
                   Unit price (from inventory):{' '}
@@ -3631,10 +3631,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               <>
                 <p className="mt-3 text-sm leading-6">
                   <span className="font-bold">{partAction.name}</span>
-                  <span className="muted"> × {partAction.quantity}</span>
+                  <span className="muted"> Ãƒâ€” {partAction.quantity}</span>
                 </p>
                 <label className="mt-4 block">
-                  <span className="mb-1 block text-[10px] font-black uppercase tracking-wide muted">Unit price (₹)</span>
+                  <span className="mb-1 block text-[10px] font-black uppercase tracking-wide muted">Unit price (Ã¢â€šÂ¹)</span>
                   <input
                     className={detailNumberInputClass}
                     type="number"
@@ -3659,14 +3659,14 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                   const showZero = trimmed !== '' && Number(trimmed) === 0;
                   return showZero ? (
                   <div className="mt-3 rounded-card border border-amber-500/40 bg-amber-500/10 p-3">
-                    <p className="text-sm font-semibold text-amber-100">This part has ₹0 price. Is this a free, warranty, or customer-provided item?</p>
+                    <p className="text-sm font-semibold text-amber-100">This part has Ã¢â€šÂ¹0 price. Is this a free, warranty, or customer-provided item?</p>
                     <label className="mt-2 block">
                       <span className="mb-1 block text-xs font-bold muted">Confirmation / reason (required)</span>
                       <textarea
                         className="input min-h-20"
                         value={moveToUsedZeroReason}
                         onChange={(event) => setMoveToUsedZeroReason(event.target.value)}
-                        placeholder="e.g. Warranty replacement — no charge"
+                        placeholder="e.g. Warranty replacement Ã¢â‚¬â€ no charge"
                       />
                     </label>
                   </div>

@@ -153,6 +153,8 @@ export function TechnicianPanelPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [resetUser, setResetUser] = useState(null);
+  const [confirmResetUser, setConfirmResetUser] = useState(null);
+  const [confirmDisableUser, setConfirmDisableUser] = useState(null);
   const [actionMenuId, setActionMenuId] = useState('');
   const actionMenuRef = useRef(null);
   const { data, loading, error, reload } = useResource(async () => {
@@ -199,7 +201,7 @@ export function TechnicianPanelPage() {
   const technicianKpis = [
     { icon: Users, label: 'Total Technicians', value: technicians.length, helper: 'All technician accounts', tone: 'blue' },
     { icon: CheckCircle2, label: 'Active Technicians', value: activeTechnicians, helper: 'Available for login', tone: 'green' },
-    { icon: ShieldCheck, label: 'Available / Low Workload', value: lowWorkloadTechnicians, helper: '0-1 assigned jobs', tone: 'cyan' },
+    { icon: ShieldCheck, label: 'Available / Low Workload', value: lowWorkloadTechnicians, helper: lowWorkloadTechnicians === 0 ? 'No low-workload technicians right now.' : '0-1 assigned jobs', tone: 'cyan' },
     { icon: Wrench, label: 'Assigned Jobs', value: totalAssignedJobs, helper: 'Linked to technicians', tone: 'blue' }
   ];
 
@@ -240,6 +242,12 @@ export function TechnicianPanelPage() {
     } catch (err) {
       push(err.message, 'error');
     }
+  }
+
+  async function confirmDisableTechnician() {
+    if (!confirmDisableUser) return;
+    await toggleStatus(confirmDisableUser);
+    setConfirmDisableUser(null);
   }
 
   async function createTechnician(form) {
@@ -364,7 +372,14 @@ export function TechnicianPanelPage() {
             <option value="">All Roles</option>
             {roleOptions.map((role) => <option key={role} value={role}>{role}</option>)}
           </select>
-          <button type="button" className="btn btn-secondary admin-compact-button technician-clear-filter-button" disabled={!hasActiveFilters} onClick={clearFilters}>Clear Filters</button>
+          <button
+            type="button"
+            className={`btn btn-secondary admin-compact-button technician-clear-filter-button ${hasActiveFilters ? 'is-active' : 'is-idle'}`}
+            disabled={!hasActiveFilters}
+            onClick={clearFilters}
+          >
+            Clear Filters
+          </button>
         </div>
 
         {loading ? (
@@ -393,7 +408,7 @@ export function TechnicianPanelPage() {
                   <th>WORKLOAD</th>
                   <th className="text-center">ASSIGNED JOBS</th>
                   <th>LAST ACTIVE</th>
-                  <th className="text-center">ACTION</th>
+                  <th className="text-center">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--line)]">
@@ -401,7 +416,7 @@ export function TechnicianPanelPage() {
                   const techId = recordId(tech);
                   const assignedJobs = assignedJobCounts[techId] || 0;
                   const workload = technicianWorkload(assignedJobs);
-                  const jobsPath = `/admin/work-orders?technicianId=${techId}`;
+                  const jobsPath = `/app/admin/work-orders?technicianId=${techId}`;
                   return (
                     <tr key={techId}>
                       <td>
@@ -461,12 +476,20 @@ export function TechnicianPanelPage() {
                                 <Wrench className="h-4 w-4" />
                                 View Jobs
                               </Link>
-                              <button type="button" className="technician-action-menu-item" onClick={() => { setActionMenuId(''); setResetUser(tech); }}>
+                              <button type="button" className="technician-action-menu-item" onClick={() => { setActionMenuId(''); setConfirmResetUser(tech); }}>
                                 <KeyRound className="h-4 w-4" />
                                 Reset Password
                               </button>
                               {techId !== recordId(user) ? (
-                                <button type="button" className="technician-action-menu-item" onClick={() => { setActionMenuId(''); toggleStatus(tech); }}>
+                                <button
+                                  type="button"
+                                  className="technician-action-menu-item"
+                                  onClick={() => {
+                                    setActionMenuId('');
+                                    if (tech.active) setConfirmDisableUser(tech);
+                                    else toggleStatus(tech);
+                                  }}
+                                >
                                   <ShieldCheck className="h-4 w-4" />
                                   {tech.active ? 'Disable' : 'Enable'}
                                 </button>
@@ -492,6 +515,27 @@ export function TechnicianPanelPage() {
           <EmptyState icon={Users} title="No technicians found." message={hasActiveFilters ? 'Try changing filters or add a new technician.' : 'Technician accounts will appear here after they are created.'} action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={clearFilters}>Clear Filters</button> : null} />
         )}
       </section>
+      {confirmResetUser ? (
+        <ConfirmModal
+          title={`Reset password for ${confirmResetUser.name || 'this technician'}?`}
+          message="A reset password action will let you set a new temporary password for this technician in the next step."
+          confirmLabel="Continue"
+          onCancel={() => setConfirmResetUser(null)}
+          onConfirm={() => {
+            setResetUser(confirmResetUser);
+            setConfirmResetUser(null);
+          }}
+        />
+      ) : null}
+      {confirmDisableUser ? (
+        <ConfirmModal
+          title={`Disable ${confirmDisableUser.name || 'this technician'}?`}
+          message="This technician will no longer be able to sign in until the account is enabled again."
+          confirmLabel="Disable Account"
+          onCancel={() => setConfirmDisableUser(null)}
+          onConfirm={confirmDisableTechnician}
+        />
+      ) : null}
       {addOpen ? <TechnicianAccountModal title="Add Technician" submitLabel="Create Technician" onClose={() => setAddOpen(false)} onSubmit={createTechnician} /> : null}
       {editUser ? <TechnicianAccountModal title="Edit Technician" submitLabel="Save Changes" technician={editUser} editMode onClose={() => setEditUser(null)} onSubmit={updateTechnician} /> : null}
       {resetUser ? <ResetPasswordModal technician={resetUser} onClose={() => setResetUser(null)} onSubmit={resetPassword} /> : null}

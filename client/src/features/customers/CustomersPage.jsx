@@ -152,7 +152,7 @@ export function CustomersPage({ role = 'admin' }) {
   const { request, user } = useAuth();
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
-  const base = isTechnician ? '/tech' : '/admin';
+  const base = isTechnician ? '/app/tech' : '/app/admin';
   const permissionSubject = user || effectiveRole;
   const canCreateBooking = can(permissionSubject, 'create_booking');
   const [search, setSearch] = useState('');

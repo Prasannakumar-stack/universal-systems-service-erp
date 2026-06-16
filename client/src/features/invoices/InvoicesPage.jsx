@@ -154,7 +154,7 @@ export function InvoicesPage({ role = 'admin' }) {
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
   const permissionSubject = user || effectiveRole;
   const canSendPdfWhatsapp = can(permissionSubject, 'send_pdf_whatsapp');
-  const base = isTechnician ? '/tech' : '/admin';
+  const base = isTechnician ? '/app/tech' : '/app/admin';
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');

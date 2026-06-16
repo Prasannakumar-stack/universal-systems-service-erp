@@ -281,8 +281,8 @@ export function StockMovementsPage({ embedded = false }) {
       </section> : null}
       {!embedded ? <div className="surface mb-5 p-3">
         <div className="tabs-list inventory-tabs border-b-0">
-          <Link className="tab-button" to="/admin/parts">Products / Parts</Link>
-          <Link className="tab-button tab-button-active" to="/admin/stock-movements">Stock Movements</Link>
+          <Link className="tab-button" to="/app/admin/parts">Products / Parts</Link>
+          <Link className="tab-button tab-button-active" to="/app/admin/stock-movements">Stock Movements</Link>
         </div>
       </div> : null}
       <div className="inventory-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -390,7 +390,7 @@ export function StockMovementsPage({ embedded = false }) {
             >
               Reset Filters
             </button>
-          ) : <Link className="btn btn-secondary" to="/admin/parts">Open Products / Parts</Link>}
+          ) : <Link className="btn btn-secondary" to="/app/admin/parts">Open Products / Parts</Link>}
         />
       ) : (
         <>
@@ -411,7 +411,7 @@ export function StockMovementsPage({ embedded = false }) {
               const sourceId = recordId(movement.sourceId) || movement.sourceId;
               const sourceLabel = sourceId ? `WO-${String(sourceId).slice(-6).toUpperCase()}` : '-';
               const isPurchaseMovement = movement.sourceType === 'PurchaseImport';
-              const sourceHref = isPurchaseMovement ? `/admin/parts?tab=purchases&purchaseId=${sourceId}` : `/admin/work-orders/${sourceId}`;
+              const sourceHref = isPurchaseMovement ? `/app/admin/parts?tab=purchases&purchaseId=${sourceId}` : `/app/admin/work-orders/${sourceId}`;
               const movementLabel = isPurchaseMovement && movement.type === 'ADD' ? 'PURCHASED' : movement.type;
               return (
                 <tr key={movement.id}>
@@ -429,7 +429,7 @@ export function StockMovementsPage({ embedded = false }) {
                   <td>
                     <div className="stock-movement-stack">
                       {sourceId ? <Link className="stock-source-link" to={sourceHref}>{movement.source || sourceLabel}</Link> : <span className="font-semibold text-slate-100">{movement.source || '-'}</span>}
-                      {sourceId ? <Link className="stock-source-link" to={sourceHref}>{isPurchaseMovement ? 'Purchase Import' : sourceLabel}</Link> : <span className="muted">—</span>}
+                      {sourceId ? <Link className="stock-source-link" to={sourceHref}>{isPurchaseMovement ? 'Purchase Import' : sourceLabel}</Link> : <span className="muted">Ã¢â‚¬â€</span>}
                     </div>
                   </td>
                   <td><span className="stock-movement-note" title={movement.note || '-'}>{movement.note || '-'}</span></td>

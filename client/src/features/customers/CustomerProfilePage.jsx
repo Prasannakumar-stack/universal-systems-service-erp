@@ -177,7 +177,7 @@ export function CustomerProfilePage({ role = 'admin' }) {
   const { push } = useToast();
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
-  const base = isTechnician ? '/tech' : '/admin';
+  const base = isTechnician ? '/app/tech' : '/app/admin';
   const permissionSubject = user || effectiveRole;
   const canManageCustomer = can(permissionSubject, 'edit_customer');
   const canCreateBooking = can(permissionSubject, 'create_booking');

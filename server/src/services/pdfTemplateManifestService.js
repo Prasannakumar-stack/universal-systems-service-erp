@@ -245,15 +245,21 @@ function invoiceManifest(config = {}, company = COMPANY) {
   add(element('invoice.watermark', 'image', 'Watermark', { x: 54, y: 236, width: 487, height: 487 }, {
     groupId: 'watermark',
     zIndex: 5,
-    locked: false,
-    content: { label: 'Watermark', imageMode: 'logo', fitToFrame: true },
+    locked: true,
+    content: {
+      label: 'Watermark',
+      imageMode: 'watermark',
+      assetPath: '/logo-icon.png',
+      fitToFrame: true,
+      backgroundElement: true
+    },
     style: { opacity: 0.06, backgroundColor: 'transparent', borderWidth: 0, padding: 0 }
   }));
 
   add(element('invoice.logo', 'image', 'Header Logo', { x: 28, y: 10, width: 270, height: 88 }, {
     groupId: 'header',
     zIndex: 10,
-    content: { label: 'Company Logo', imageMode: 'logo', fitToFrame: true },
+    content: { label: 'Company Logo', imageMode: 'logo', assetPath: '/logo-full.png', fitToFrame: true },
     borderWidth: 0,
     style: { padding: 0, backgroundColor: 'transparent', borderWidth: 0 }
   }));
@@ -429,7 +435,21 @@ function invoiceManifest(config = {}, company = COMPANY) {
         ['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}']
       ]
     },
-    style: { padding: 0, rowHeight: 24, fontSize: 10, accentColor: NAVY, headerBackgroundColor: NAVY, headerTextColor: '#ffffff', borderColor: BORDER }
+    style: {
+      padding: 0,
+      paddingX: 4,
+      paddingY: 5,
+      rowHeight: 24,
+      fontSize: 10,
+      accentColor: NAVY,
+      headerBackgroundColor: NAVY,
+      headerTextColor: '#ffffff',
+      rowBackgroundColor: '#ffffff',
+      alternateRowBackgroundColor: '#f8fafc',
+      borderColor: BORDER,
+      borderWidth: 0.7,
+      alignment: 'left'
+    }
   }));
 
   add(canvasBox('invoice.amountWordsCard', 'Amount In Words Card', { x: 28, y: 498, width: 248, height: 104 }, {
@@ -576,6 +596,7 @@ function invoiceManifest(config = {}, company = COMPANY) {
     zIndex: 180,
     visible: termsVisible,
     enabled: termsVisible,
+    backgroundColor: '#ffffff',
     borderRadius: 7,
     borderWidth: 0.7,
     borderColor: '#103a8a'
@@ -585,6 +606,8 @@ function invoiceManifest(config = {}, company = COMPANY) {
     zIndex: 181,
     visible: termsVisible,
     enabled: termsVisible,
+    accentColor: NAVY,
+    textColor: NAVY,
     fontSize: 20
   }));
   add(canvasLine('invoice.termsDivider', 'Terms Vertical Divider', { x: 104.5, y: 700, width: 1, height: 49 }, {
@@ -593,6 +616,7 @@ function invoiceManifest(config = {}, company = COMPANY) {
     visible: termsVisible,
     enabled: termsVisible,
     thickness: 0.8,
+    accentColor: '#9bb4df',
     style: { orientation: 'vertical' }
   }));
   add(canvasText('invoice.termsTitle', 'Terms And Conditions Title', { x: 128, y: 700, width: 210, height: 14 }, config.sections?.terms?.title || 'TERMS & CONDITIONS', {
@@ -610,6 +634,8 @@ function invoiceManifest(config = {}, company = COMPANY) {
       zIndex: 184 + index,
       visible: termsVisible,
       enabled: termsVisible,
+      accentColor: NAVY,
+      textColor: NAVY,
       fontSize: 8
     }));
   });
@@ -638,6 +664,7 @@ function invoiceManifest(config = {}, company = COMPANY) {
       visible,
       enabled: visible,
       thickness: 0.65,
+      accentColor: '#9bb4df',
       style: { orientation: 'vertical' }
     }));
     add(canvasIcon(`invoice.footer.${variant}Icon`, `${label} Footer Icon`, { x: x + 10, y: 775, width: 18, height: 18 }, variant, {
@@ -645,6 +672,8 @@ function invoiceManifest(config = {}, company = COMPANY) {
       zIndex: 204 + index * 3,
       visible,
       enabled: visible,
+      accentColor: NAVY,
+      textColor: NAVY,
       fontSize: 10
     }));
     add(canvasText(`invoice.footer.${variant}Label`, `${label} Footer Label`, { x: x + 40, y: 772, width: footerColumnWidth - 44, height: 11 }, label, {

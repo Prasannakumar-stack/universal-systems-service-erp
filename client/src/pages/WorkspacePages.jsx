@@ -188,17 +188,17 @@ export function AdminQuickActionsPage() {
   function openTab(tab) {
     switch (tab) {
       case 'Bookings':
-        navigate('/admin/bookings');
+        navigate('/app/admin/bookings');
         break;
       case 'Manage Parts':
-        navigate('/admin/parts');
+        navigate('/app/admin/parts');
         break;
       case 'Call Requests':
-        navigate('/admin/call-requests');
+        navigate('/app/admin/call-requests');
         break;
       case 'Quick Actions':
       default:
-        navigate('/admin/billing');
+        navigate('/app/admin/billing');
         break;
     }
   }
@@ -232,7 +232,7 @@ export function TechnicianDashboard() {
       <div className="mt-6 surface p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-xl font-black">Recent Assigned Bookings</h2>
-          <Link className="btn btn-secondary" to="/technician/bookings">
+          <Link className="btn btn-secondary" to="/app/tech/bookings">
             View All
           </Link>
         </div>
@@ -315,7 +315,7 @@ export function BookingsPage({ role = 'admin', mode = 'bookings' }) {
 
 function BookingTable({ bookings, role, technicians = [], onAssign }) {
   if (!bookings.length) return <EmptyState title="No bookings found" message="Bookings will appear here after customers submit service requests." />;
-  const base = role === 'admin' ? '/admin/bookings' : '/technician/bookings';
+  const base = role === 'admin' ? '/app/admin/bookings' : '/app/tech/bookings';
   return (
     <div className="table-wrap bg-[var(--surface)]">
       <table className="data-table">
@@ -615,7 +615,7 @@ export function BookingDetailPage({ role = 'admin' }) {
   if (error) return <ErrorBlock message={error} />;
   if (!booking) return <EmptyState title="Booking not found" />;
 
-  const detailBase = role === 'admin' ? '/admin/bookings' : '/technician/bookings';
+  const detailBase = role === 'admin' ? '/app/admin/bookings' : '/app/tech/bookings';
 
   return (
     <>
@@ -628,7 +628,7 @@ export function BookingDetailPage({ role = 'admin' }) {
           </button>
         }
       >
-        {booking.customer_name} · {booking.service_type} · Handled dashboard user: {user?.name}
+        {booking.customer_name} Â· {booking.service_type} Â· Handled dashboard user: {user?.name}
       </PageHeader>
 
       <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
@@ -755,7 +755,7 @@ export function BookingDetailPage({ role = 'admin' }) {
                   <div key={part.id} className="flex items-center justify-between gap-3 rounded-card bg-[var(--surface-2)] p-3 text-sm">
                     <div>
                       <p className="font-bold">{part.part_name}</p>
-                      <p className="muted">{part.quantity} × {currency(part.unit_price)} · {part.added_by_name}</p>
+                      <p className="muted">{part.quantity} Ã— {currency(part.unit_price)} Â· {part.added_by_name}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <p className="font-black">{currency(part.total)}</p>
@@ -817,7 +817,7 @@ export function BookingDetailPage({ role = 'admin' }) {
                   <button key={pdf.id} className="flex items-center justify-between gap-3 rounded-card bg-[var(--surface-2)] p-3 text-left text-sm" onClick={() => downloadPdf(pdf)}>
                     <span>
                       <span className="font-bold">{pdf.type}</span>
-                      <span className="block muted">{formatDate(pdf.created_at)} · {pdf.generated_by_name}</span>
+                      <span className="block muted">{formatDate(pdf.created_at)} Â· {pdf.generated_by_name}</span>
                     </span>
                     <Download className="h-4 w-4 shrink-0" />
                   </button>

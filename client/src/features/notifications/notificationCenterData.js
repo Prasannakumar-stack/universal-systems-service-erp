@@ -12,6 +12,7 @@ export const notificationCategories = [
 
 const FALLBACK_READ_KEY = 'us_notification_center_fallback_read_ids';
 const FALLBACK_CLEARED_KEY = 'us_notification_center_fallback_cleared';
+const CLEARED_NOTIFICATION_IDS_KEY = 'us_notification_center_cleared_ids';
 
 const fallbackSeeds = [
   {
@@ -21,7 +22,7 @@ const fallbackSeeds = [
     category: 'Bookings',
     type: 'BOOKING',
     actionLabel: 'View Booking',
-    target: '/admin/bookings',
+    target: '/app/admin/bookings',
     minutesAgo: 2
   },
   {
@@ -31,7 +32,7 @@ const fallbackSeeds = [
     category: 'Work Orders',
     type: 'WORK_ORDER',
     actionLabel: 'View Work Order',
-    target: '/admin/work-orders',
+    target: '/app/admin/work-orders',
     minutesAgo: 15
   },
   {
@@ -41,7 +42,7 @@ const fallbackSeeds = [
     category: 'Work Orders',
     type: 'WORK_ORDER',
     actionLabel: 'View Work Order',
-    target: '/admin/work-orders',
+    target: '/app/admin/work-orders',
     minutesAgo: 32
   },
   {
@@ -51,7 +52,7 @@ const fallbackSeeds = [
     category: 'Invoices',
     type: 'INVOICE',
     actionLabel: 'View Invoice',
-    target: '/admin/invoices',
+    target: '/app/admin/invoices',
     minutesAgo: 60
   },
   {
@@ -61,7 +62,7 @@ const fallbackSeeds = [
     category: 'Payments',
     type: 'PAYMENT',
     actionLabel: 'View Invoice',
-    target: '/admin/invoices',
+    target: '/app/admin/invoices',
     minutesAgo: 120
   },
   {
@@ -71,7 +72,7 @@ const fallbackSeeds = [
     category: 'AMC',
     type: 'AMC',
     actionLabel: 'View AMC',
-    target: '/admin/amc-contracts',
+    target: '/app/admin/amc-contracts',
     minutesAgo: 180
   },
   {
@@ -81,7 +82,7 @@ const fallbackSeeds = [
     category: 'Inventory',
     type: 'LOW_STOCK',
     actionLabel: 'View Inventory',
-    target: '/admin/parts',
+    target: '/app/admin/parts',
     minutesAgo: 240
   },
   {
@@ -91,7 +92,7 @@ const fallbackSeeds = [
     category: 'Quotations',
     type: 'QUOTATION',
     actionLabel: 'View Quotation',
-    target: '/admin/documents?type=quotation',
+    target: '/app/admin/documents?type=quotation',
     minutesAgo: 300
   },
   {
@@ -101,7 +102,7 @@ const fallbackSeeds = [
     category: 'Bookings',
     type: 'BOOKING',
     actionLabel: 'View Booking',
-    target: '/admin/bookings',
+    target: '/app/admin/bookings',
     minutesAgo: 390
   },
   {
@@ -111,7 +112,7 @@ const fallbackSeeds = [
     category: 'Invoices',
     type: 'PAYMENT',
     actionLabel: 'View Invoice',
-    target: '/admin/invoices',
+    target: '/app/admin/invoices',
     minutesAgo: 520
   },
   {
@@ -121,7 +122,7 @@ const fallbackSeeds = [
     category: 'System',
     type: 'SYSTEM',
     actionLabel: 'View Settings',
-    target: '/admin/settings',
+    target: '/app/admin/settings',
     minutesAgo: 720
   },
   {
@@ -131,7 +132,7 @@ const fallbackSeeds = [
     category: 'AMC',
     type: 'AMC',
     actionLabel: 'View AMC',
-    target: '/admin/amc-schedule',
+    target: '/app/admin/amc-schedule',
     minutesAgo: 900
   }
 ];
@@ -187,6 +188,39 @@ export function clearFallbackNotifications() {
   if (!storageAvailable()) return;
   window.localStorage.setItem(FALLBACK_CLEARED_KEY, 'true');
   window.localStorage.removeItem(FALLBACK_READ_KEY);
+  resetClearedNotificationIds();
+}
+
+function readClearedNotificationIds() {
+  if (!storageAvailable()) return new Set();
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(CLEARED_NOTIFICATION_IDS_KEY) || '[]');
+    return new Set(Array.isArray(parsed) ? parsed.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeClearedNotificationIds(ids) {
+  if (!storageAvailable()) return;
+  window.localStorage.setItem(CLEARED_NOTIFICATION_IDS_KEY, JSON.stringify(Array.from(ids)));
+}
+
+export function resetClearedNotificationIds() {
+  if (!storageAvailable()) return;
+  window.localStorage.removeItem(CLEARED_NOTIFICATION_IDS_KEY);
+}
+
+export function filterClearedNotifications(rows = []) {
+  const clearedIds = readClearedNotificationIds();
+  if (!clearedIds.size) return rows;
+  return rows.filter((item) => !clearedIds.has(String(item.id || item._id || '')));
+}
+
+export function clearReadNotificationIds(ids = []) {
+  const clearedIds = readClearedNotificationIds();
+  ids.forEach((id) => clearedIds.add(String(id)));
+  writeClearedNotificationIds(clearedIds);
 }
 
 export function unreadNotificationCount(rows = []) {
@@ -224,7 +258,7 @@ export function notificationActionLabel(item = {}) {
 
 export function notificationTarget(item = {}, role = 'admin') {
   if (item.target) return item.target;
-  const base = role === 'technician' ? '/tech' : '/admin';
+  const base = role === 'technician' ? '/app/tech' : '/app/admin';
   const id = item.sourceId || '';
   const category = notificationCategory(item);
   if (category === 'Bookings') return `${base}/bookings`;

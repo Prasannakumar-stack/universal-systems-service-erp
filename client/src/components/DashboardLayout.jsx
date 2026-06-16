@@ -34,6 +34,7 @@ import { adminWorkspaceRoles, can, canAny, canAccessRoles, normalizeRole, roleLa
 import { useThemePreference } from '../utils/theme.js';
 import {
   fallbackNotificationRows,
+  filterClearedNotifications,
   markAllFallbackNotificationsRead,
   markFallbackNotificationRead,
   normalizeNotification,
@@ -50,53 +51,53 @@ const assetBase = apiBase.replace(/\/api\/?$/, '');
 const adminGroups = [
   {
     title: '',
-    links: [{ to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'view_business_dashboard' }]
+    links: [{ to: '/app/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'view_business_dashboard' }]
   },
   {
     title: 'Operations',
     links: [
-      { to: '/admin/bookings', label: 'Bookings', icon: BookOpenCheck, permission: 'view_bookings', badgeKey: 'bookings' },
-      { to: '/admin/work-orders', label: 'Work Orders', icon: Wrench, permission: 'view_work_orders', badgeKey: 'workOrders' }
+      { to: '/app/admin/bookings', label: 'Bookings', icon: BookOpenCheck, permission: 'view_bookings', badgeKey: 'bookings' },
+      { to: '/app/admin/work-orders', label: 'Work Orders', icon: Wrench, permission: 'view_work_orders', badgeKey: 'workOrders' }
     ]
   },
   {
     title: 'Customers',
     links: [
-      { to: '/admin/customers', label: 'Customers', icon: Users, permission: 'view_customers' }
+      { to: '/app/admin/customers', label: 'Customers', icon: Users, permission: 'view_customers' }
     ]
   },
   {
     title: 'Inventory',
     links: [
-      { to: '/admin/parts', label: 'Products / Parts', icon: Boxes, permission: 'view_inventory', badgeKey: 'lowStock' }
+      { to: '/app/admin/parts', label: 'Products / Parts', icon: Boxes, permission: 'view_inventory', badgeKey: 'lowStock' }
     ]
   },
   {
     title: 'Sales & Billing',
     links: [
-      { to: '/admin/invoices', label: 'Invoices', icon: ReceiptText, permission: 'view_invoices' },
-      { to: '/admin/payments', label: 'Payments', icon: CreditCard, permission: 'view_payments', badgeKey: 'pendingPayments' }
+      { to: '/app/admin/invoices', label: 'Invoices', icon: ReceiptText, permission: 'view_invoices' },
+      { to: '/app/admin/payments', label: 'Payments', icon: CreditCard, permission: 'view_payments', badgeKey: 'pendingPayments' }
     ]
   },
   {
     title: 'AMC & Warranty',
     links: [
-      { to: '/admin/amc-contracts', label: 'AMC Contracts', icon: FileCheck2, permission: 'view_amc', badgeKey: 'amcRenewals' }
+      { to: '/app/admin/amc-contracts', label: 'AMC Contracts', icon: FileCheck2, permission: 'view_amc', badgeKey: 'amcRenewals' }
     ]
   },
   {
     title: 'Reports',
     links: [
-      { to: '/admin/reports', label: 'Reports', icon: Activity, permission: 'view_reports' }
+      { to: '/app/admin/reports', label: 'Reports', icon: Activity, permission: 'view_reports' }
     ]
   },
   {
     title: 'System',
     links: [
-      { to: '/admin/notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
-      { to: '/admin/technician-panel', label: 'Staff / Technicians', icon: UserRound, permission: 'manage_users' },
-      { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity, permission: 'view_audit_logs' },
-      { to: '/admin/settings', label: 'Settings', icon: Settings, permission: 'view_settings' }
+      { to: '/app/admin/notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
+      { to: '/app/admin/technician-panel', label: 'Staff / Technicians', icon: UserRound, permission: 'manage_users' },
+      { to: '/app/admin/audit-logs', label: 'Audit Logs', icon: Activity, permission: 'view_audit_logs' },
+      { to: '/app/admin/settings', label: 'Settings', icon: Settings, permission: 'view_settings' }
     ]
   }
 ];
@@ -104,86 +105,86 @@ const adminGroups = [
 const technicianGroups = [
   {
     title: '',
-    links: [{ to: '/technician/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'view_dashboard' }]
+    links: [{ to: '/app/tech/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'view_dashboard' }]
   },
   {
     title: 'Operations',
     links: [
-      { to: '/tech/bookings', label: 'Bookings', icon: BookOpenCheck, permission: 'view_bookings', badgeKey: 'bookings' },
-      { to: '/tech/work-orders', label: 'Work Orders', icon: Wrench, permission: 'view_work_orders', badgeKey: 'workOrders' }
+      { to: '/app/tech/bookings', label: 'Bookings', icon: BookOpenCheck, permission: 'view_bookings', badgeKey: 'bookings' },
+      { to: '/app/tech/work-orders', label: 'Work Orders', icon: Wrench, permission: 'view_work_orders', badgeKey: 'workOrders' }
     ]
   },
   {
     title: 'Customers',
-    links: [{ to: '/tech/customers', label: 'Customers', icon: Users, permission: 'view_customers', badgeKey: 'customers' }]
+    links: [{ to: '/app/tech/customers', label: 'Customers', icon: Users, permission: 'view_customers', badgeKey: 'customers' }]
   },
   {
     title: 'Sales & Billing',
     links: [
-      { to: '/tech/invoices', label: 'Invoices', icon: ReceiptText, permission: 'view_invoices', badgeKey: 'pendingInvoices' },
-      { to: '/tech/payments', label: 'Payments', icon: CreditCard, permission: 'view_payments', badgeKey: 'pendingPayments' }
+      { to: '/app/tech/invoices', label: 'Invoices', icon: ReceiptText, permission: 'view_invoices', badgeKey: 'pendingInvoices' },
+      { to: '/app/tech/payments', label: 'Payments', icon: CreditCard, permission: 'view_payments', badgeKey: 'pendingPayments' }
     ]
   },
   {
     title: 'Inventory',
-    links: [{ to: '/tech/parts', label: 'Products / Parts', icon: Boxes, permission: 'view_inventory', badgeKey: 'lowStock' }]
+    links: [{ to: '/app/tech/parts', label: 'Products / Parts', icon: Boxes, permission: 'view_inventory', badgeKey: 'lowStock' }]
   },
   {
     title: 'AMC & Warranty',
-    links: [{ to: '/tech/amc-contracts', label: 'AMC Contracts', icon: FileCheck2, permission: 'view_amc', badgeKey: 'amcContracts' }]
+    links: [{ to: '/app/tech/amc-contracts', label: 'AMC Contracts', icon: FileCheck2, permission: 'view_amc', badgeKey: 'amcContracts' }]
   },
   {
     title: 'System',
-    links: [{ to: '/tech/settings', label: 'Settings', icon: Settings }]
+    links: [{ to: '/app/tech/settings', label: 'Settings', icon: Settings }]
   }
 ];
 
 const adminRouteAccess = [
-  { prefix: '/admin/dashboard', permission: 'view_business_dashboard' },
-  { prefix: '/admin/technician-panel', permission: 'manage_users' },
-  { prefix: '/admin/technician-tasks', permission: 'assign_technician' },
-  { prefix: '/admin/bookings', permission: 'view_bookings' },
-  { prefix: '/admin/work-orders', permission: 'view_work_orders' },
-  { prefix: '/admin/customers', permission: 'view_customers' },
-  { prefix: '/admin/amc', permission: 'view_amc' },
-  { prefix: '/admin/warranties', permission: 'view_amc' },
-  { prefix: '/admin/parts', permission: 'view_inventory' },
-  { prefix: '/admin/stock', permission: 'view_stock_movements' },
-  { prefix: '/admin/documents', permission: 'view_documents' },
-  { prefix: '/admin/quotations', permission: 'view_documents' },
-  { prefix: '/admin/invoices', permission: 'view_invoices' },
-  { prefix: '/admin/payments', permission: 'view_payments' },
-  { prefix: '/admin/reports/finance', permission: 'view_reports' },
-  { prefix: '/admin/reports/inventory', permission: 'view_reports' },
-  { prefix: '/admin/reports/technicians', permission: 'view_reports' },
-  { prefix: '/admin/reports', permission: 'view_reports' },
-  { prefix: '/admin/notifications', roles: adminWorkspaceRoles },
-  { prefix: '/admin/audit-logs', permission: 'view_audit_logs' },
-  { prefix: '/admin/settings', permission: 'view_settings' }
+  { prefix: '/app/admin/dashboard', permission: 'view_business_dashboard' },
+  { prefix: '/app/admin/technician-panel', permission: 'manage_users' },
+  { prefix: '/app/admin/technician-tasks', permission: 'assign_technician' },
+  { prefix: '/app/admin/bookings', permission: 'view_bookings' },
+  { prefix: '/app/admin/work-orders', permission: 'view_work_orders' },
+  { prefix: '/app/admin/customers', permission: 'view_customers' },
+  { prefix: '/app/admin/amc', permission: 'view_amc' },
+  { prefix: '/app/admin/warranties', permission: 'view_amc' },
+  { prefix: '/app/admin/parts', permission: 'view_inventory' },
+  { prefix: '/app/admin/stock', permission: 'view_stock_movements' },
+  { prefix: '/app/admin/documents', permission: 'view_documents' },
+  { prefix: '/app/admin/quotations', permission: 'view_documents' },
+  { prefix: '/app/admin/invoices', permission: 'view_invoices' },
+  { prefix: '/app/admin/payments', permission: 'view_payments' },
+  { prefix: '/app/admin/reports/finance', permission: 'view_reports' },
+  { prefix: '/app/admin/reports/inventory', permission: 'view_reports' },
+  { prefix: '/app/admin/reports/technicians', permission: 'view_reports' },
+  { prefix: '/app/admin/reports', permission: 'view_reports' },
+  { prefix: '/app/admin/notifications', roles: adminWorkspaceRoles },
+  { prefix: '/app/admin/audit-logs', permission: 'view_audit_logs' },
+  { prefix: '/app/admin/settings', permission: 'view_settings' }
 ];
 
 const technicianRouteAccess = [
-  { prefix: '/tech/dashboard', permission: 'view_dashboard' },
-  { prefix: '/technician/dashboard', permission: 'view_dashboard' },
-  { prefix: '/tech/bookings', permission: 'view_bookings' },
-  { prefix: '/technician/bookings', permission: 'view_bookings' },
-  { prefix: '/tech/work-orders', permission: 'view_work_orders' },
-  { prefix: '/technician/work-orders', permission: 'view_work_orders' },
-  { prefix: '/tech/customers', permission: 'view_customers' },
-  { prefix: '/technician/customers', permission: 'view_customers' },
-  { prefix: '/tech/invoices', permission: 'view_invoices' },
-  { prefix: '/technician/invoices', permission: 'view_invoices' },
-  { prefix: '/tech/payments', permission: 'view_payments' },
-  { prefix: '/technician/payments', permission: 'view_payments' },
-  { prefix: '/tech/parts', permission: 'view_inventory' },
-  { prefix: '/technician/parts', permission: 'view_inventory' },
-  { prefix: '/tech/amc', permission: 'view_amc' },
-  { prefix: '/technician/amc', permission: 'view_amc' },
-  { prefix: '/tech/warranties', permission: 'view_amc' },
-  { prefix: '/technician/warranties', permission: 'view_amc' },
-  { prefix: '/tech/settings' },
-  { prefix: '/technician/settings' },
-  { prefix: '/technician/profile' }
+  { prefix: '/app/tech/dashboard', permission: 'view_dashboard' },
+  { prefix: '/app/tech/dashboard', permission: 'view_dashboard' },
+  { prefix: '/app/tech/bookings', permission: 'view_bookings' },
+  { prefix: '/app/tech/bookings', permission: 'view_bookings' },
+  { prefix: '/app/tech/work-orders', permission: 'view_work_orders' },
+  { prefix: '/app/tech/work-orders', permission: 'view_work_orders' },
+  { prefix: '/app/tech/customers', permission: 'view_customers' },
+  { prefix: '/app/tech/customers', permission: 'view_customers' },
+  { prefix: '/app/tech/invoices', permission: 'view_invoices' },
+  { prefix: '/app/tech/invoices', permission: 'view_invoices' },
+  { prefix: '/app/tech/payments', permission: 'view_payments' },
+  { prefix: '/app/tech/payments', permission: 'view_payments' },
+  { prefix: '/app/tech/parts', permission: 'view_inventory' },
+  { prefix: '/app/tech/parts', permission: 'view_inventory' },
+  { prefix: '/app/tech/amc', permission: 'view_amc' },
+  { prefix: '/app/tech/amc', permission: 'view_amc' },
+  { prefix: '/app/tech/warranties', permission: 'view_amc' },
+  { prefix: '/app/tech/warranties', permission: 'view_amc' },
+  { prefix: '/app/tech/settings' },
+  { prefix: '/app/tech/settings' },
+  { prefix: '/app/tech/profile' }
 ];
 
 function canSeeLink(link, subject) {
@@ -203,7 +204,17 @@ function currentUserAvatarUrl(user) {
 }
 
 function currentUserInitial(user, fallback = 'A') {
-  return String(user?.name || user?.username || fallback).trim().slice(0, 1).toUpperCase() || fallback;
+  const source = String(user?.name || user?.username || fallback).trim();
+  if (!source) return fallback.toUpperCase();
+
+  const words = source.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return `${words[0]?.[0] || ''}${words[1]?.[0] || ''}`.toUpperCase();
+  }
+
+  const compact = source.replace(/[^a-z0-9]/gi, '');
+  if (!compact) return fallback.toUpperCase();
+  return compact.slice(0, compact.length > 1 ? 2 : 1).toUpperCase();
 }
 
 const sidebarCollapsedStoragePrefix = 'us:dashboard-sidebar-collapsed:';
@@ -235,9 +246,31 @@ function persistSidebarCollapsedState(role, collapsed) {
 function CurrentUserAvatar({ user, fallback = 'A', className = '' }) {
   const avatarUrl = currentUserAvatarUrl(user);
   const initial = currentUserInitial(user, fallback);
+  const [imageState, setImageState] = useState(avatarUrl ? 'loading' : 'idle');
+
+  useEffect(() => {
+    setImageState(avatarUrl ? 'loading' : 'idle');
+  }, [avatarUrl]);
+
+  const hasLoadedImage = Boolean(avatarUrl) && imageState === 'loaded';
+  const shouldRenderImage = Boolean(avatarUrl) && imageState !== 'error';
+  const avatarLabel = `${user?.name || user?.username || 'User'} avatar`;
+
   return (
-    <div className={`current-user-avatar ${className}`}>
-      {avatarUrl ? <img src={avatarUrl} alt={`${user?.name || user?.username || 'User'} avatar`} /> : <span>{initial}</span>}
+    <div
+      className={`current-user-avatar ${hasLoadedImage ? 'current-user-avatar-has-image' : 'current-user-avatar-fallback'} ${className}`}
+      aria-label={avatarLabel}
+    >
+      <span className="current-user-avatar-fallback-text" aria-hidden={hasLoadedImage}>{initial}</span>
+      {shouldRenderImage ? (
+        <img
+          src={avatarUrl}
+          alt={avatarLabel}
+          className={hasLoadedImage ? 'is-loaded' : 'is-loading'}
+          onLoad={() => setImageState('loaded')}
+          onError={() => setImageState('error')}
+        />
+      ) : null}
     </div>
   );
 }
@@ -298,7 +331,8 @@ function sidebarBadgeClass(tone) {
     blue: 'enterprise-sidebar-badge-blue',
     orange: 'enterprise-sidebar-badge-orange',
     red: 'enterprise-sidebar-badge-red',
-    green: 'enterprise-sidebar-badge-green'
+    green: 'enterprise-sidebar-badge-green',
+    notification: 'enterprise-sidebar-badge-notification'
   };
   return classes[tone] || classes.blue;
 }
@@ -413,7 +447,7 @@ function buildSidebarBadges(dashboardData) {
     lowStock: { value: lowStockCount, tone: Number(alerts.outOfStockItems || stats.lowStockCritical || 0) > 0 ? 'red' : 'orange' },
     pendingPayments: { value: paymentsBadgeCount > 0 ? paymentsBadgeCount : null, tone: 'red' },
     amcRenewals: { value: amcRenewalBadgeCountFromDashboard(dashboardData), tone: stats.expiredAmcContracts > 0 ? 'red' : 'orange' },
-    notifications: { value: dashboardData?.notificationsUnreadCount || 0, tone: 'blue' }
+    notifications: { value: dashboardData?.notificationsUnreadCount || 0, tone: 'notification' }
   };
 }
 
@@ -534,14 +568,14 @@ function sidebarBadgeKeys(groups) {
 function notificationTarget(item, role) {
   if (item?.target) return item.target;
   const normalizedRole = normalizeRole(role);
-  const base = normalizedRole === 'technician' ? '/tech' : '/admin';
+  const base = normalizedRole === 'technician' ? '/app/tech' : '/app/admin';
   const id = item?.sourceId || '';
   const text = `${item?.type || ''} ${item?.title || ''} ${item?.message || ''}`.toLowerCase();
   if (text.includes('quotation') || text.includes('quote')) return `${base}/documents?type=quotation`;
-  if (text.includes('low stock') || text.includes('stock')) return '/admin/parts';
+  if (text.includes('low stock') || text.includes('stock')) return '/app/admin/parts';
   if (text.includes('payment')) return `${base}/invoices`;
   if (text.includes('invoice')) return `${base}/invoices`;
-  if (text.includes('amc') || text.includes('renewal')) return normalizedRole === 'technician' ? '/tech/amc-contracts' : '/admin/amc-renewals';
+  if (text.includes('amc') || text.includes('renewal')) return normalizedRole === 'technician' ? '/app/tech/amc-contracts' : '/app/admin/amc-renewals';
   if (text.includes('booking')) return `${base}/bookings`;
   if (text.includes('work order') || text.includes('job') || item?.type === 'WORK_ORDER') {
     if (id) return `${base}/work-orders/${id}`;
@@ -567,8 +601,8 @@ function shouldHideTechnicianSidebarBadge(link) {
   const to = String(link?.to || '').trim().toLowerCase();
   return label === 'customers'
     || label === 'amc contracts'
-    || to === '/tech/customers'
-    || to === '/tech/amc-contracts';
+    || to === '/app/tech/customers'
+    || to === '/app/tech/amc-contracts';
 }
 
 function SidebarItem({ link, close, badge, collapsed = false }) {
@@ -591,7 +625,7 @@ function SidebarItem({ link, close, badge, collapsed = false }) {
   return (
     <NavLink
       to={link.to}
-      end={link.to === '/admin/dashboard' || link.to === '/tech/dashboard' || link.to === '/technician/dashboard'}
+      end={link.to === '/app/admin/dashboard' || link.to === '/app/tech/dashboard' || link.to === '/app/tech/dashboard'}
       onClick={close}
       aria-label={ariaLabel}
       title={ariaLabel || link.label}
@@ -609,8 +643,8 @@ function SidebarItem({ link, close, badge, collapsed = false }) {
 function isSidebarLinkActive(to, location, isActive) {
   const [path, search = ''] = to.split('?');
   if (search) return location.pathname === path && location.search === `?${search}`;
-  if (to === '/admin/dashboard' || to === '/tech/dashboard' || to === '/technician/dashboard') return location.pathname === path;
-  if (to === '/admin/documents') return location.pathname.startsWith(path) && !new URLSearchParams(location.search).has('type');
+  if (to === '/app/admin/dashboard' || to === '/app/tech/dashboard' || to === '/app/tech/dashboard') return location.pathname === path;
+  if (to === '/app/admin/documents') return location.pathname.startsWith(path) && !new URLSearchParams(location.search).has('type');
   return isActive;
 }
 
@@ -673,7 +707,7 @@ function AdminSidebar({ close, collapsed = false, onToggleCollapse = null }) {
 
   function handleLogout() {
     logout();
-    navigate('/admin/login');
+    navigate('/app');
   }
 
   return (
@@ -795,7 +829,7 @@ function TechnicianSidebar({ close, collapsed = false, onToggleCollapse = null }
 
   function handleLogout() {
     logout();
-    navigate('/technician/login');
+    navigate('/app');
   }
 
   return (
@@ -889,7 +923,7 @@ function GlobalSearch({ role, permissionSubject = role }) {
   const searchRef = useRef(null);
   const requestRef = useRef(request);
   const isTechnician = normalizeRole(role) === 'technician';
-  const base = isTechnician ? '/tech' : '/admin';
+  const base = isTechnician ? '/app/tech' : '/app/admin';
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [resultGroups, setResultGroups] = useState([]);
@@ -1103,11 +1137,11 @@ function NotificationCenter({ role }) {
       const data = await request('/notifications');
       const remoteRows = data.notifications || [];
       const rows = remoteRows.length ? remoteRows : normalizeRole(role) === 'technician' ? [] : fallbackNotificationRows();
-      const normalizedRows = rows.map((item) => normalizeNotification(item, role));
+      const normalizedRows = filterClearedNotifications(rows.map((item) => normalizeNotification(item, role)));
       setNotifications(normalizedRows);
       setUnreadCount(remoteRows.length ? finiteNumber(data.unreadCount ?? unreadNotificationCount(normalizedRows)) : unreadNotificationCount(normalizedRows));
     } catch {
-      const fallbackRows = (normalizeRole(role) === 'technician' ? [] : fallbackNotificationRows()).map((item) => normalizeNotification(item, role));
+      const fallbackRows = filterClearedNotifications((normalizeRole(role) === 'technician' ? [] : fallbackNotificationRows()).map((item) => normalizeNotification(item, role)));
       setNotifications(fallbackRows);
       setUnreadCount(unreadNotificationCount(fallbackRows));
     } finally {
@@ -1188,7 +1222,11 @@ function NotificationCenter({ role }) {
         aria-expanded={open}
       >
         <Bell className="h-5 w-5" />
-        {unreadCount ? <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">{unreadCount}</span> : null}
+        {unreadCount ? (
+          <span className="enterprise-notification-bell-badge" aria-hidden="true">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        ) : null}
       </button>
       {open ? (
         <div className="notification-drawer">
@@ -1229,7 +1267,7 @@ function NotificationCenter({ role }) {
                 className="btn btn-secondary mt-1 w-full justify-center"
                 onClick={() => {
                   setOpen(false);
-                  navigate(normalizeRole(role) === 'technician' ? '/tech/dashboard' : '/admin/notifications');
+                  navigate(normalizeRole(role) === 'technician' ? '/app/tech/dashboard' : '/app/admin/notifications');
                 }}
               >
                 View all notifications
@@ -1337,7 +1375,7 @@ export default function DashboardLayout({ role }) {
 
   if (role === 'admin') {
     const allowed = canOpenAdminPath(location.pathname, user || role);
-    const auditOnly = location.pathname.startsWith('/admin/audit-logs');
+    const auditOnly = location.pathname.startsWith('/app/admin/audit-logs');
     return (
       <div className={`app-shell admin-shell min-h-screen bg-[var(--bg)] ${shellThemeClass}`} {...shellThemeProps}>
         <div className="fixed inset-y-0 left-0 z-40 hidden xl:block" style={{ width: sidebarCollapsed ? sidebarCollapsedCompactWidth : sidebarExpandedWidth }}>

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { LOGO_FULL_PATH, LOGO_ICON_PATH } from '../config.js';
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -504,14 +505,29 @@ function drawSignatureElement(doc, element, frame, context) {
   });
 }
 
+function resolveDesignImagePath(content = {}, company = {}) {
+  const mode = String(content.imageMode || '').toLowerCase();
+  const assetPath = String(content.assetPath || content.imageUrl || content.src || '').trim();
+  if (mode === 'watermark' || assetPath.endsWith('/logo-icon.png') || assetPath.endsWith('\\logo-icon.png')) {
+    return fs.existsSync(LOGO_ICON_PATH) ? LOGO_ICON_PATH : '';
+  }
+  if (mode === 'logo' || !mode || assetPath.endsWith('/logo-full.png') || assetPath.endsWith('\\logo-full.png')) {
+    const logoPath = company.logoFilePath || LOGO_FULL_PATH;
+    if (logoPath && fs.existsSync(logoPath)) return logoPath;
+    return fs.existsSync(LOGO_FULL_PATH) ? LOGO_FULL_PATH : '';
+  }
+  if (assetPath && fs.existsSync(assetPath)) return assetPath;
+  return '';
+}
+
 function drawImageElement(doc, element, frame, company = {}) {
   const style = element.style || {};
   const content = contentForElement(element);
   drawElementShell(doc, element, frame);
-  const logoPath = company.logoFilePath;
-  if ((content.imageMode || 'logo') === 'logo' && logoPath && fs.existsSync(logoPath)) {
+  const imagePath = resolveDesignImagePath(content, company);
+  if (imagePath) {
     const padding = content.fitToFrame ? 0 : clampNumber(style.padding ?? 12, 12, 0, 48);
-    doc.image(logoPath, frame.x + padding, frame.y + padding, {
+    doc.image(imagePath, frame.x + padding, frame.y + padding, {
       fit: [Math.max(20, frame.width - padding * 2), Math.max(20, frame.height - padding * 2)],
       align: 'center',
       valign: 'center'
@@ -564,19 +580,26 @@ function drawTableElement(doc, element, frame, context) {
   const headerTextColor = style.headerTextColor || '#ffffff';
   const columns = Array.isArray(content.columns) && content.columns.length ? content.columns.slice(0, 6) : ['Description', 'Qty', 'Rate', 'Total'];
   const rows = tableRowsForElement(content, context);
-  const paddingX = clampNumber(style.paddingX ?? style.padding ?? 10, 10, 0, 48);
-  const paddingY = clampNumber(style.paddingY ?? style.padding ?? 8, 8, 0, 48);
+  const outerPaddingX = clampNumber(style.tablePaddingX ?? style.outerPaddingX ?? style.padding ?? 0, 0, 0, 48);
+  const outerPaddingY = clampNumber(style.tablePaddingY ?? style.outerPaddingY ?? style.padding ?? 0, 0, 0, 48);
+  const cellPaddingX = clampNumber(style.paddingX, 4, 0, 24);
+  const cellPaddingY = clampNumber(style.paddingY, 5, 0, 24);
+  const rowBackgroundColor = style.rowBackgroundColor || '#ffffff';
+  const alternateRowBackgroundColor = style.alternateRowBackgroundColor || '#f8fafc';
+  const borderColor = style.borderColor || '#d8e5f7';
+  const borderWidth = clampNumber(style.borderWidth, 0.5, 0, 4);
   const titleHeight = content.title ? 16 : 0;
-  const tableX = frame.x + paddingX;
-  const tableY = frame.y + paddingY + titleHeight;
-  const tableWidth = Math.max(20, frame.width - paddingX * 2);
+  const tableX = frame.x + outerPaddingX;
+  const tableY = frame.y + outerPaddingY + titleHeight;
+  const tableWidth = Math.max(20, frame.width - outerPaddingX * 2);
   const rowHeight = clampNumber(style.rowHeight, 18, 12, 34);
   const columnWidths = tableColumnWidths(content, columns, tableWidth);
+  const align = style.alignment || element.alignment || 'left';
   drawElementShell(doc, element, frame);
   if (content.title) {
     useFont(doc, 'BodyBold', 'Helvetica-Bold');
     doc.fontSize(Math.max(7, clampNumber(style.fontSize, 12, 8, 32) * 0.72)).fillColor(accent)
-      .text(renderText(content.title, context), frame.x + paddingX, frame.y + 8, { width: tableWidth, height: 12 });
+      .text(renderText(content.title, context), frame.x + outerPaddingX, frame.y + 8, { width: tableWidth, height: 12 });
   }
   doc.roundedRect(tableX, tableY, tableWidth, rowHeight, 4).fill(headerBackground);
   useFont(doc, 'BodyBold', 'Helvetica-Bold');
@@ -584,9 +607,10 @@ function drawTableElement(doc, element, frame, context) {
   let columnX = tableX;
   columns.forEach((column, index) => {
     const columnWidth = columnWidths[index] || (tableWidth / columns.length);
-    doc.text(renderText(column, context), columnX + 4, tableY + 5, {
-      width: Math.max(8, columnWidth - 8),
-      height: rowHeight - 6
+    doc.text(renderText(column, context), columnX + cellPaddingX, tableY + cellPaddingY, {
+      width: Math.max(8, columnWidth - cellPaddingX * 2),
+      height: Math.max(6, rowHeight - cellPaddingY * 2),
+      align
     });
     columnX += columnWidth;
   });
@@ -595,20 +619,83 @@ function drawTableElement(doc, element, frame, context) {
   rows.forEach((row, rowIndex) => {
     const rowY = tableY + rowHeight + rowIndex * rowHeight;
     if (rowY + rowHeight > frame.y + frame.height - 6) return;
-    doc.rect(tableX, rowY, tableWidth, rowHeight).fill(rowIndex % 2 ? '#ffffff' : '#f8fafc');
+    doc.rect(tableX, rowY, tableWidth, rowHeight).fill(rowIndex % 2 ? alternateRowBackgroundColor : rowBackgroundColor);
     columnX = tableX;
     (Array.isArray(row) ? row : [row]).slice(0, columns.length).forEach((cell, cellIndex) => {
       const columnWidth = columnWidths[cellIndex] || (tableWidth / columns.length);
-      doc.fillColor(style.textColor || '#0f172a').text(renderText(cell, context), columnX + 4, rowY + 5, {
-        width: Math.max(8, columnWidth - 8),
-        height: rowHeight - 6,
-        lineGap: 1
+      doc.fillColor(style.textColor || '#0f172a').text(renderText(cell, context), columnX + cellPaddingX, rowY + cellPaddingY, {
+        width: Math.max(8, columnWidth - cellPaddingX * 2),
+        height: Math.max(6, rowHeight - cellPaddingY * 2),
+        lineGap: 1,
+        align
       });
       columnX += columnWidth;
     });
   });
   const tableHeight = Math.min(rowHeight * (rows.length + 1), Math.max(rowHeight, frame.y + frame.height - tableY - 6));
-  doc.rect(tableX, tableY, tableWidth, tableHeight).strokeColor(style.borderColor || '#d8e5f7').lineWidth(0.5).stroke();
+  if (borderWidth > 0) {
+    doc.rect(tableX, tableY, tableWidth, tableHeight).strokeColor(borderColor).lineWidth(borderWidth).stroke();
+  }
+}
+
+function drawScaledIcon(doc, frame, baseSize, draw) {
+  const size = Math.max(1, Math.min(frame.width, frame.height));
+  const scale = size / baseSize;
+  const x = frame.x + Math.max(0, (frame.width - baseSize * scale) / 2);
+  const y = frame.y + Math.max(0, (frame.height - baseSize * scale) / 2);
+  doc.save();
+  doc.translate(x, y);
+  doc.scale(scale);
+  draw();
+  doc.restore();
+}
+
+function drawContactVariantIcon(doc, type, frame, color) {
+  drawScaledIcon(doc, frame, 18, () => {
+    doc.lineWidth(1.15).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
+    if (type === 'address') {
+      doc.circle(7, 6.5, 4.8).stroke();
+      doc.circle(7, 6.5, 1.2).fill();
+      doc.moveTo(7, 11.3).lineTo(7, 15.8).stroke();
+    } else if (type === 'phone') {
+      doc.path('M2 2 C4.5 9.5 8.2 13 15.5 15.5').stroke();
+      doc.path('M2 2 L5.5 1.3 L7.7 5.3 L5.5 6.7').stroke();
+      doc.path('M10.4 10.3 L12 8.2 L16.2 10.5 L15.5 15.5').stroke();
+    } else if (type === 'email') {
+      doc.roundedRect(1.5, 3, 15, 10.5, 1.4).stroke();
+      doc.moveTo(2.8, 4.7).lineTo(9, 9).lineTo(15.2, 4.7).stroke();
+    } else if (type === 'website') {
+      doc.circle(8.5, 8, 6.3).stroke();
+      doc.moveTo(2.5, 8).lineTo(14.5, 8).stroke();
+      doc.moveTo(8.5, 1.8).bezierCurveTo(6.1, 4.6, 6.1, 11.4, 8.5, 14.2).stroke();
+      doc.moveTo(8.5, 1.8).bezierCurveTo(10.9, 4.6, 10.9, 11.4, 8.5, 14.2).stroke();
+    }
+  });
+}
+
+function drawSmallVariantIcon(doc, type, frame, color) {
+  drawScaledIcon(doc, frame, 18, () => {
+    doc.lineWidth(1.05).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
+    if (type === 'invoice') {
+      doc.roundedRect(2, 1.5, 12.5, 16, 1.2).stroke();
+      doc.moveTo(5, 6).lineTo(11.5, 6).stroke();
+      doc.moveTo(5, 9.5).lineTo(11.5, 9.5).stroke();
+      doc.moveTo(5, 13).lineTo(10, 13).stroke();
+    } else if (type === 'work') {
+      doc.roundedRect(1.5, 4, 14, 13, 1.6).stroke();
+      doc.roundedRect(5, 1, 7, 4.8, 1.3).stroke();
+      doc.circle(12.4, 14.2, 2.4).stroke();
+    } else if (type === 'date') {
+      doc.roundedRect(1.5, 3.5, 15, 14, 1.5).stroke();
+      doc.moveTo(1.5, 7).lineTo(16.5, 7).stroke();
+      doc.moveTo(5.2, 1.8).lineTo(5.2, 5).stroke();
+      doc.moveTo(12.8, 1.8).lineTo(12.8, 5).stroke();
+    } else if (type === 'status') {
+      doc.roundedRect(1.5, 4, 15, 11.5, 1.5).stroke();
+      doc.moveTo(1.5, 7).lineTo(16.5, 7).stroke();
+      doc.circle(12, 12, 1.4).stroke();
+    }
+  });
 }
 
 function drawIconElement(doc, element, frame, context) {
@@ -616,8 +703,16 @@ function drawIconElement(doc, element, frame, context) {
   const content = contentForElement(element);
   const accent = style.accentColor || '#0284c7';
   const label = renderText(content.label || content.iconName || element.name || 'Icon', context);
-  const variant = content.variant || content.iconName || '';
+  const variant = String(content.variant || content.iconName || '').toLowerCase();
   drawElementShell(doc, element, frame);
+  if (['address', 'phone', 'email', 'website'].includes(variant)) {
+    drawContactVariantIcon(doc, variant, frame, accent);
+    return;
+  }
+  if (['invoice', 'work', 'date', 'status'].includes(variant)) {
+    drawSmallVariantIcon(doc, variant, frame, accent);
+    return;
+  }
   if (variant === 'dot') {
     doc.circle(frame.x + frame.width / 2, frame.y + frame.height / 2, Math.min(frame.width, frame.height) / 2).fillColor(accent).fill();
     return;

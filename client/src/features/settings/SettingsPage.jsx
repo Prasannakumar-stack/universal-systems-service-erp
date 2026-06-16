@@ -359,7 +359,7 @@ const settingsOverviewGroups = [
     cards: [
       {
         id: 'bookings',
-        route: '/admin/bookings',
+        route: '/app/admin/bookings',
         icon: BookOpenCheck,
         title: 'Bookings',
         description: 'Open live service intake, customer requests, and booking operations.',
@@ -369,7 +369,7 @@ const settingsOverviewGroups = [
       },
       {
         id: 'workOrders',
-        route: '/admin/work-orders',
+        route: '/app/admin/work-orders',
         icon: Wrench,
         title: 'Work Orders',
         description: 'Open live job execution, dispatch, technician assignment, and service workflow pages.',
@@ -404,7 +404,7 @@ const settingsOverviewGroups = [
     cards: [
       {
         id: 'documentsPdfs',
-        route: '/admin/settings/documents-pdfs',
+        route: '/app/admin/settings/documents-pdfs',
         icon: FileText,
         title: 'Documents & PDFs',
         description: 'Manage PDF templates, document previews, and numbering.',
@@ -430,7 +430,7 @@ const settingsOverviewGroups = [
     cards: [
       {
         id: 'taxGst',
-        route: '/admin/settings/tax-gst',
+        route: '/app/admin/settings/tax-gst',
         icon: Percent,
         title: 'Tax / GST',
         description: 'Configure tax rates, GST details, HSN/SAC codes, and invoice tax display settings.',
@@ -439,7 +439,7 @@ const settingsOverviewGroups = [
       },
       {
         id: 'paymentSettings',
-        route: '/admin/settings/payment-settings',
+        route: '/app/admin/settings/payment-settings',
         icon: WalletCards,
         title: 'Payment Settings',
         description: 'Configure payment methods, terms, reminders, and invoice payment settings.',
@@ -448,7 +448,7 @@ const settingsOverviewGroups = [
       },
       {
         id: 'invoices',
-        route: '/admin/invoices',
+        route: '/app/admin/invoices',
         icon: ReceiptText,
         title: 'Invoices',
         description: 'Open live invoice records, payment status, balances, and finance activity.',
@@ -558,7 +558,7 @@ function TeamAccessSection() {
             <p className="mt-2 max-w-2xl text-sm leading-6 muted">Manage technician login access, temporary passwords, and account status.</p>
           </div>
         </div>
-        <Link className="btn btn-primary admin-compact-button shrink-0" to="/admin/technician-panel">
+        <Link className="btn btn-primary admin-compact-button shrink-0" to="/app/admin/technician-panel">
           <Users className="h-4 w-4" />
           Manage Staff / Technicians
         </Link>
@@ -961,7 +961,7 @@ function UsersRolesSection({ onDirtyChange = null }) {
                 ))}
               </select>
             </label>
-            <Link className="btn btn-secondary admin-compact-button" to="/admin/audit-logs">
+            <Link className="btn btn-secondary admin-compact-button" to="/app/admin/audit-logs">
               <ReceiptText className="h-4 w-4" />
               Audit Logs
             </Link>
@@ -1100,7 +1100,7 @@ function UsersRolesSection({ onDirtyChange = null }) {
             <h3 className="text-xl font-black">Users & Role Assignments</h3>
             <p className="mt-1 text-sm muted">Review existing users without changing Staff / Technicians management.</p>
           </div>
-          <Link className="btn btn-primary admin-compact-button" to="/admin/technician-panel">
+          <Link className="btn btn-primary admin-compact-button" to="/app/admin/technician-panel">
             <Users className="h-4 w-4" />
             Manage Staff / Technicians
           </Link>
@@ -2293,7 +2293,7 @@ function AdminProfileSection({ onDirtyChange = null }) {
               <p>Latest real account activity from audit history.</p>
             </div>
           </div>
-          <Link className="btn btn-secondary admin-profile-activity-link" to="/admin/audit-logs">
+          <Link className="btn btn-secondary admin-profile-activity-link" to="/app/admin/audit-logs">
             View Full Activity
             <ChevronRight className="h-4 w-4" />
           </Link>
@@ -2785,7 +2785,7 @@ function BackupStorageSection({ onDirtyChange = null, onOpenTab = null }) {
       <section>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <AdminMetricCard icon={HardDrive} label="Storage Used" value={formatBytes(storage.storageUsed)} helper="Uploads, PDFs, backups" tone="blue" />
-          <AdminMetricCard icon={FileText} label="Uploaded Documents" value={formatBytes(storage.uploadedDocumentsStorage)} helper={`${storage.uploadedDocumentCount || 0} generated PDFs`} tone="cyan" actionLabel="View Documents" onAction={() => navigate('/admin/documents')} />
+          <AdminMetricCard icon={FileText} label="Uploaded Documents" value={formatBytes(storage.uploadedDocumentsStorage)} helper={`${storage.uploadedDocumentCount || 0} generated PDFs`} tone="cyan" actionLabel="View Documents" onAction={() => navigate('/app/admin/documents')} />
           <AdminMetricCard icon={ImageUp} label="Image Uploads" value={formatBytes(storage.imageUploadStorage)} helper={`${storage.imageUploadCount || 0} uploaded images`} tone="green" actionLabel="View Images" onAction={() => onOpenTab ? onOpenTab('publicWebsite') : push('Open Public Website Settings to review uploaded images.', 'info')} />
           <AdminMetricCard icon={DatabaseBackup} label="Backup Files" value={formatBytes(storage.backupStorage)} helper={`${storage.backupCount || 0} backup bundles`} tone="amber" actionLabel="View Backups" onAction={() => recentBackupsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
         </div>
@@ -4979,7 +4979,7 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
     if (!canLeaveActiveTab()) return;
     if ((nextTabId === 'documentsPdfs' || nextTabId === 'taxGst' || nextTabId === 'paymentSettings') && !standaloneTab) {
       clearActiveDirtyFlag();
-      navigate(nextTabId === 'documentsPdfs' ? '/admin/settings/documents-pdfs' : nextTabId === 'taxGst' ? '/admin/settings/tax-gst' : '/admin/settings/payment-settings');
+      navigate(nextTabId === 'documentsPdfs' ? '/app/admin/settings/documents-pdfs' : nextTabId === 'taxGst' ? '/app/admin/settings/tax-gst' : '/app/admin/settings/payment-settings');
       return;
     }
     clearActiveDirtyFlag();
@@ -5094,7 +5094,7 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
               <Download className="h-4 w-4" />
               Export Settings
             </button>
-            <Link className="btn btn-secondary admin-compact-button" to="/admin/audit-logs">
+            <Link className="btn btn-secondary admin-compact-button" to="/app/admin/audit-logs">
               <ReceiptText className="h-4 w-4" />
               View Audit Logs
             </Link>

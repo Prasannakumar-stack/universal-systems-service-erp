@@ -431,8 +431,8 @@ export function InventoryPage({ role = 'admin' }) {
                 const partId = part.id || part._id;
                 const stockValue = Number(part.onHand || 0) * Number(part.costPrice || 0);
                 const reservedQuantity = Number(part.reserved || 0);
-                const brandLabel = part.brand || '—';
-                const deviceModelLabel = part.deviceModel || '—';
+                const brandLabel = part.brand || 'Ã¢â‚¬â€';
+                const deviceModelLabel = part.deviceModel || 'Ã¢â‚¬â€';
                 return (
                   <tr key={partId}>
                     <td className="font-bold inventory-product-cell">
@@ -482,11 +482,11 @@ export function InventoryPage({ role = 'admin' }) {
                           <div className="inventory-row-action-menu" role="menu">
                             {canEditStock ? <button type="button" role="menuitem" onClick={() => { setStockChoicePart(part); setActionMenuId(''); }}><PackagePlus className="h-4 w-4" />Add Stock</button> : null}
                             {canEditStock ? <button type="button" role="menuitem" onClick={() => { setEditor(part); setActionMenuId(''); }}><Edit3 className="h-4 w-4" />Edit Part</button> : null}
-                            {canViewStockMovements ? <Link role="menuitem" to={`/admin/parts?tab=stock-movements&partId=${partId}`} onClick={() => setActionMenuId('')}><ClipboardList className="h-4 w-4" />View Movements</Link> : null}
+                            {canViewStockMovements ? <Link role="menuitem" to={`/app/admin/parts?tab=stock-movements&partId=${partId}`} onClick={() => setActionMenuId('')}><ClipboardList className="h-4 w-4" />View Movements</Link> : null}
                             {canDeletePart ? <button type="button" role="menuitem" className="inventory-row-menu-danger" onClick={() => { setDeletePart(part); setActionMenuId(''); }}><Trash2 className="h-4 w-4" />Delete</button> : null}
                           </div>
                         ) : null}
-                      </div> : <span className="inventory-not-specified">—</span>}
+                      </div> : <span className="inventory-not-specified">Ã¢â‚¬â€</span>}
                     </td>
                   </tr>
                 );
@@ -512,7 +512,7 @@ export function InventoryPage({ role = 'admin' }) {
           onPurchase={() => {
             setPurchasePart(stockChoicePart);
             setStockChoicePart(null);
-            if (!isTechnician) navigate('/admin/parts?tab=purchases');
+            if (!isTechnician) navigate('/app/admin/parts?tab=purchases');
           }}
         />
       ) : null}
@@ -583,11 +583,11 @@ function InventoryPartModalLegacy({ part, onClose, onSave }) {
           </label>
           <label>
             <span className="label">Cost Price</span>
-            <span className="relative block"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold muted">₹</span><input className="input pl-7" type="number" min="0" step="0.01" value={form.costPrice} onChange={(event) => update('costPrice', event.target.value)} /></span>
+            <span className="relative block"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold muted">Ã¢â€šÂ¹</span><input className="input pl-7" type="number" min="0" step="0.01" value={form.costPrice} onChange={(event) => update('costPrice', event.target.value)} /></span>
           </label>
           <label>
             <span className="label">Selling Price</span>
-            <span className="relative block"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold muted">₹</span><input className="input pl-7" type="number" min="0" step="0.01" value={form.sellingPrice} onChange={(event) => update('sellingPrice', event.target.value)} /></span>
+            <span className="relative block"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold muted">Ã¢â€šÂ¹</span><input className="input pl-7" type="number" min="0" step="0.01" value={form.sellingPrice} onChange={(event) => update('sellingPrice', event.target.value)} /></span>
           </label>
           <label><span className="label">On Hand</span><input className="input" type="number" min="0" value={form.onHand} onChange={(event) => update('onHand', event.target.value)} /></label>
           <label><span className="label">Reserved</span><input className="input" type="number" min="0" value={form.reserved} onChange={(event) => update('reserved', event.target.value)} /></label>
@@ -750,12 +750,12 @@ function InventoryPartModal({ part, parts = [], onClose, onSave }) {
             </label>
             <label className="inventory-part-field">
               <span className="label">{requiredLabel('Cost Price')}</span>
-              <span className="inventory-currency-input"><span>₹</span><input className="input" type="number" min="0" step="1" value={form.costPrice} onChange={(event) => update('costPrice', event.target.value)} required /></span>
+              <span className="inventory-currency-input"><span>Ã¢â€šÂ¹</span><input className="input" type="number" min="0" step="1" value={form.costPrice} onChange={(event) => update('costPrice', event.target.value)} required /></span>
               {errors.costPrice ? <small>{errors.costPrice}</small> : null}
             </label>
             <label className="inventory-part-field">
               <span className="label">{requiredLabel('Selling Price')}</span>
-              <span className="inventory-currency-input"><span>₹</span><input className="input" type="number" min="0" step="1" value={form.sellingPrice} onChange={(event) => update('sellingPrice', event.target.value)} required /></span>
+              <span className="inventory-currency-input"><span>Ã¢â€šÂ¹</span><input className="input" type="number" min="0" step="1" value={form.sellingPrice} onChange={(event) => update('sellingPrice', event.target.value)} required /></span>
               {errors.sellingPrice ? <small>{errors.sellingPrice}</small> : null}
             </label>
             <label className="inventory-part-field">

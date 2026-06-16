@@ -631,10 +631,10 @@ export function amcWhatsappHref(contract) {
 }
 
 export const reportSections = [
-  { id: 'main', label: 'Business', to: '/admin/reports' },
-  { id: 'technicians', label: 'Technician', to: '/admin/reports/technicians' },
-  { id: 'inventory', label: 'Inventory', to: '/admin/reports/inventory' },
-  { id: 'finance', label: 'Payments', to: '/admin/reports/finance' }
+  { id: 'main', label: 'Business', to: '/app/admin/reports' },
+  { id: 'technicians', label: 'Technician', to: '/app/admin/reports/technicians' },
+  { id: 'inventory', label: 'Inventory', to: '/app/admin/reports/inventory' },
+  { id: 'finance', label: 'Payments', to: '/app/admin/reports/finance' }
 ];
 
 export function normalizeReportSection(section = 'main') {
@@ -693,7 +693,7 @@ export function completionHours(order) {
 
 export function averageHours(orders = []) {
   const values = orders.map(completionHours).filter((value) => value !== null);
-  if (!values.length) return '—';
+  if (!values.length) return 'â€”';
   const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
   return avg >= 24 ? `${(avg / 24).toFixed(1)} days` : `${avg.toFixed(1)} hrs`;
 }
@@ -818,7 +818,7 @@ export function TechnicianLoadingCards() {
   );
 }
 
-export function TechnicianJobCard({ job, base = '/tech/work-orders', onStatusChange = null, compact = false }) {
+export function TechnicianJobCard({ job, base = '/app/tech/work-orders', onStatusChange = null, compact = false }) {
   const customer = customerFromOrder(job);
   const phone = customerPhone(job);
   const priority = jobPriority(job);

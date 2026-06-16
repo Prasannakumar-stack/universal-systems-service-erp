@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
+import PwaRouteManager from './components/PwaRouteManager.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { ToastProvider } from './context/ToastContext.jsx';
 import { initCustomCursor } from './utils/customCursor.js';
@@ -17,6 +18,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <ToastProvider>
         <AuthProvider>
           <App />
+          <PwaRouteManager />
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

@@ -11,7 +11,6 @@ import {
   MessageCircle,
   Phone,
   Search,
-  ShieldCheck,
   Wrench,
   X
 } from 'lucide-react';
@@ -56,10 +55,6 @@ function NavItems({ onClick, links }) {
           {link.label}
         </NavLink>
       ))}
-      <a href="/admin/login" onClick={onClick} className="btn btn-secondary nav-admin-link">
-        <ShieldCheck className="h-4 w-4" />
-        Admin Login
-      </a>
     </>
   );
 }
@@ -118,10 +113,6 @@ function PublicMaintenancePage({ settings }) {
                 WhatsApp
               </a>
             ) : null}
-            <a className="btn btn-secondary btn-xl" href="/admin/login">
-              <ShieldCheck className="h-4 w-4" />
-              Admin Login
-            </a>
           </div>
         </section>
       </div>
@@ -261,6 +252,9 @@ function PublicLayoutShell() {
         </div>
         <div className="footer-copyright border-t border-[var(--line)] py-4 text-center text-xs muted">
           <span>&copy; 2026 Universal Systems. All rights reserved.</span>
+          <a className="footer-staff-link" href="/app" aria-label="Open Universal Systems staff app">
+            Staff App
+          </a>
         </div>
       </footer>
     </div>

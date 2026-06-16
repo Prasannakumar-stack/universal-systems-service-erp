@@ -3,6 +3,13 @@ import { apiBase } from '../utils/constants.js';
 
 const AuthContext = createContext(null);
 
+function toNetworkMessage(error) {
+  if (error instanceof TypeError && /fetch/i.test(error.message || '')) {
+    return 'Cannot connect to server. Please check backend is running.';
+  }
+  return error?.message || 'Request failed';
+}
+
 async function parseResponse(response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.message || 'Request failed');
@@ -38,24 +45,33 @@ export function AuthProvider({ children }) {
       const headers = new Headers(options.headers || {});
       if (!(options.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
       if (token) headers.set('Authorization', `Bearer ${token}`);
-      return parseResponse(
-        await fetch(`${apiBase}${path}`, {
-          ...options,
-          headers
-        })
-      );
+      try {
+        return parseResponse(
+          await fetch(`${apiBase}${path}`, {
+            ...options,
+            headers
+          })
+        );
+      } catch (error) {
+        throw new Error(toNetworkMessage(error));
+      }
     },
     [token]
   );
 
   const login = useCallback(async (username, password) => {
-    const data = await parseResponse(
-      await fetch(`${apiBase}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      })
-    );
+    let data;
+    try {
+      data = await parseResponse(
+        await fetch(`${apiBase}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        })
+      );
+    } catch (error) {
+      throw new Error(toNetworkMessage(error));
+    }
     if (data.success !== true) {
       throw new Error(data.message || 'Invalid credentials');
     }

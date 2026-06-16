@@ -154,7 +154,7 @@ export function AMCRenewalsPage({ role = 'admin' }) {
   const canRenewAmc = can(permissionSubject, 'renew_amc');
   const canCreateAmcJob = can(permissionSubject, 'create_amc_job');
   const canSendPdfWhatsapp = can(permissionSubject, 'send_pdf_whatsapp');
-  const base = isTechnician ? '/tech' : '/admin';
+  const base = isTechnician ? '/app/tech' : '/app/admin';
   const { data, loading, error, reload } = useResource(() => request('/amc/renewals'), [request]);
   const renewals = data?.renewals || [];
   const expiring = renewals.filter((contract) => contract.renewalStatus === 'Renewal Due');

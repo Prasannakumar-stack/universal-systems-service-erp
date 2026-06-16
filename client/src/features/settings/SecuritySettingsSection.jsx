@@ -489,7 +489,7 @@ export default function SecuritySettingsSection() {
             <Download className="h-4 w-4" />
             Export Settings
           </button>
-          <Link className="btn btn-secondary admin-compact-button" to="/admin/audit-logs">
+          <Link className="btn btn-secondary admin-compact-button" to="/app/admin/audit-logs">
             <Eye className="h-4 w-4" />
             View Audit Logs
           </Link>
@@ -580,7 +580,7 @@ export default function SecuritySettingsSection() {
           icon={FileText}
           title="Audit Trail"
           subtitle="Control real audit writing and retention."
-          action={<Link className="security-settings-quiet-link" to="/admin/audit-logs">Open logs</Link>}
+          action={<Link className="security-settings-quiet-link" to="/app/admin/audit-logs">Open logs</Link>}
         >
           <div className="security-settings-list">
             <SecurityToggle label="Audit logging enabled" checked={draft.audit.enabled} onChange={(value) => handleToggle('audit', 'enabled', value)} />
@@ -600,7 +600,7 @@ export default function SecuritySettingsSection() {
             onChange={(value) => updateDraft('audit', 'retentionDays', value)}
           />
           <div className="security-settings-card-actions">
-            <Link className="btn btn-secondary admin-compact-button" to="/admin/audit-logs">
+            <Link className="btn btn-secondary admin-compact-button" to="/app/admin/audit-logs">
               <Eye className="h-4 w-4" />
               View Audit Logs
             </Link>

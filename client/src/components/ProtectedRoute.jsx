@@ -28,13 +28,13 @@ export default function ProtectedRoute({ role, allowedRoles = null, loginPath = 
     );
   }
 
-  const loginTarget = loginPath || (role === 'admin' ? '/admin/login' : '/technician/login');
+  const loginTarget = loginPath || '/app';
   if (!user) return <Navigate to={loginTarget} replace state={{ from: location }} />;
   const roles = allowedRoles || (role ? [role] : []);
-  if (roles.length && !canAccessRoles(user.role, roles)) return <UnauthorizedState userRole={user.role} auditOnly={location.pathname.startsWith('/admin/audit-logs')} />;
+  if (roles.length && !canAccessRoles(user.role, roles)) return <UnauthorizedState userRole={user.role} auditOnly={location.pathname.startsWith('/app/admin/audit-logs')} />;
   if (user.forcePasswordReset) {
-    const resetTarget = user.role === 'technician' ? '/tech/settings' : '/admin/settings?tab=adminProfile';
-    const alreadyOnResetPage = location.pathname === '/tech/settings' || location.pathname === '/technician/settings' || location.pathname === '/admin/settings';
+    const resetTarget = user.role === 'technician' ? '/app/tech/settings' : '/app/admin/settings?tab=adminProfile';
+    const alreadyOnResetPage = location.pathname === '/app/tech/settings' || location.pathname === '/app/admin/settings';
     if (!alreadyOnResetPage) return <Navigate to={resetTarget} replace state={{ from: location, forcePasswordReset: true }} />;
   }
   return <Outlet />;

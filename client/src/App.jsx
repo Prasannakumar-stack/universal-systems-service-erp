@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import PublicLayout from './components/PublicLayout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import DashboardLayout from './components/DashboardLayout.jsx';
@@ -56,6 +56,13 @@ function lazyElement(element) {
   return <Suspense fallback={<RouteLoadingFallback />}>{element}</Suspense>;
 }
 
+function LegacyWorkspaceRedirect({ fromPrefix, toPrefix, defaultPath = '/dashboard' }) {
+  const location = useLocation();
+  const suffix = location.pathname.startsWith(fromPrefix) ? location.pathname.slice(fromPrefix.length) : '';
+  const nextSuffix = suffix && suffix !== '/' ? suffix : defaultPath;
+  return <Navigate to={`${toPrefix}${nextSuffix}${location.search}${location.hash}`} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -67,32 +74,33 @@ export default function App() {
         <Route path="/book-service" element={<BookService />} />
       </Route>
 
-      <Route path="/admin/login" element={<Login role="admin" />} />
-      <Route path="/technician/login" element={<Login role="technician" />} />
+      <Route path="/app" element={<Login role="staff" appMode />} />
+      <Route path="/admin/login" element={<Navigate to="/app" replace />} />
+      <Route path="/technician/login" element={<Navigate to="/app" replace />} />
 
-      <Route element={<ProtectedRoute role="admin" allowedRoles={adminWorkspaceRoles} loginPath="/admin/login" />}>
-        <Route path="/admin" element={<DashboardLayout role="admin" />}>
-          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+      <Route element={<ProtectedRoute role="admin" allowedRoles={adminWorkspaceRoles} loginPath="/app" />}>
+        <Route path="/app/admin" element={<DashboardLayout role="admin" />}>
+          <Route index element={<Navigate to="/app/admin/dashboard" replace />} />
           <Route path="dashboard" element={lazyElement(<AdminDashboard />)} />
           <Route path="technician-panel" element={lazyElement(<TechnicianPanelPage />)} />
           <Route path="bookings" element={lazyElement(<BookingsPage />)} />
           <Route path="work-orders" element={lazyElement(<WorkOrdersPage role="admin" />)} />
           <Route path="work-orders/:id" element={lazyElement(<WorkOrderDetailsPage role="admin" />)} />
-          <Route path="dispatch-board" element={<Navigate to="/admin/work-orders?view=dispatch" replace />} />
-          <Route path="technician-tasks" element={<Navigate to="/admin/work-orders?view=technicians" replace />} />
-          <Route path="installations-projects" element={<Navigate to="/admin/work-orders" replace />} />
+          <Route path="dispatch-board" element={<Navigate to="/app/admin/work-orders?view=dispatch" replace />} />
+          <Route path="technician-tasks" element={<Navigate to="/app/admin/work-orders?view=technicians" replace />} />
+          <Route path="installations-projects" element={<Navigate to="/app/admin/work-orders" replace />} />
           <Route path="customers" element={lazyElement(<CustomersPage />)} />
           <Route path="customers/:id" element={lazyElement(<CustomerProfilePage />)} />
-          <Route path="customer-360" element={<Navigate to="/admin/customers" replace />} />
-          <Route path="devices-assets" element={<Navigate to="/admin/customers" replace />} />
-          <Route path="service-history" element={<Navigate to="/admin/customers" replace />} />
+          <Route path="customer-360" element={<Navigate to="/app/admin/customers" replace />} />
+          <Route path="devices-assets" element={<Navigate to="/app/admin/customers" replace />} />
+          <Route path="service-history" element={<Navigate to="/app/admin/customers" replace />} />
           <Route path="documents" element={lazyElement(<DocumentsPage />)} />
           <Route path="documents/new" element={lazyElement(<CreateDocumentPage />)} />
           <Route path="documents/:id" element={lazyElement(<DocumentPreviewPage />)} />
-          <Route path="quotations" element={<Navigate to="/admin/documents?type=quotation" replace />} />
+          <Route path="quotations" element={<Navigate to="/app/admin/documents?type=quotation" replace />} />
           <Route path="payments" element={lazyElement(<PaymentsPage />)} />
           <Route path="parts" element={lazyElement(<InventoryPage />)} />
-          <Route path="stock-management" element={<Navigate to="/admin/parts" replace />} />
+          <Route path="stock-management" element={<Navigate to="/app/admin/parts" replace />} />
           <Route path="stock-movements" element={lazyElement(<InventoryPage />)} />
           <Route path="amc-contracts" element={lazyElement(<AMCContractsPage />)} />
           <Route path="amc-schedule" element={lazyElement(<AMCSchedulePage />)} />
@@ -101,15 +109,15 @@ export default function App() {
           <Route path="audit-logs" element={lazyElement(<AuditLogsPage />)} />
           <Route path="invoices" element={lazyElement(<InvoicesPage />)} />
           <Route path="reports" element={lazyElement(<ReportsAnalyticsPage section="main" />)} />
-          <Route path="reports/operations" element={<Navigate to="/admin/reports" replace />} />
+          <Route path="reports/operations" element={<Navigate to="/app/admin/reports" replace />} />
           <Route path="reports/technicians" element={lazyElement(<ReportsAnalyticsPage section="technicians" />)} />
           <Route path="reports/finance" element={lazyElement(<ReportsAnalyticsPage section="finance" />)} />
           <Route path="reports/payments" element={lazyElement(<ReportsAnalyticsPage section="payments" />)} />
           <Route path="reports/inventory" element={lazyElement(<ReportsAnalyticsPage section="inventory" />)} />
-          <Route path="reports/amc" element={<Navigate to="/admin/reports" replace />} />
-          <Route path="reports/customers" element={<Navigate to="/admin/reports" replace />} />
-          <Route path="inventory-reports" element={<Navigate to="/admin/reports/inventory" replace />} />
-          <Route path="payment-reports" element={<Navigate to="/admin/reports/finance" replace />} />
+          <Route path="reports/amc" element={<Navigate to="/app/admin/reports" replace />} />
+          <Route path="reports/customers" element={<Navigate to="/app/admin/reports" replace />} />
+          <Route path="inventory-reports" element={<Navigate to="/app/admin/reports/inventory" replace />} />
+          <Route path="payment-reports" element={<Navigate to="/app/admin/reports/finance" replace />} />
           <Route path="notifications" element={lazyElement(<NotificationsPage role="admin" />)} />
           <Route path="settings" element={lazyElement(<SystemSettingsPage />)} />
           <Route path="settings/backup-storage" element={lazyElement(<SystemSettingsPage initialTab="backup-storage" />)} />
@@ -121,9 +129,9 @@ export default function App() {
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute role="technician" allowedRoles={['technician']} loginPath="/technician/login" />}>
-        <Route path="/tech" element={<DashboardLayout role="technician" />}>
-          <Route index element={<Navigate to="/tech/dashboard" replace />} />
+      <Route element={<ProtectedRoute role="technician" allowedRoles={['technician']} loginPath="/app" />}>
+        <Route path="/app/tech" element={<DashboardLayout role="technician" />}>
+          <Route index element={<Navigate to="/app/tech/dashboard" replace />} />
           <Route path="dashboard" element={lazyElement(<TechnicianDashboard />)} />
           <Route path="bookings" element={lazyElement(<BookingsPage role="technician" />)} />
           <Route path="work-orders" element={lazyElement(<WorkOrdersPage role="technician" />)} />
@@ -134,31 +142,17 @@ export default function App() {
           <Route path="payments" element={lazyElement(<PaymentsPage role="technician" />)} />
           <Route path="parts" element={lazyElement(<InventoryPage role="technician" />)} />
           <Route path="amc-contracts" element={lazyElement(<AMCContractsPage role="technician" />)} />
-          <Route path="amc-contracts/schedule" element={<Navigate to="/tech/amc-schedule" replace />} />
+          <Route path="amc-contracts/schedule" element={<Navigate to="/app/tech/amc-schedule" replace />} />
           <Route path="amc-schedule" element={lazyElement(<AMCSchedulePage role="technician" />)} />
           <Route path="amc-renewals" element={lazyElement(<AMCRenewalsPage role="technician" />)} />
           <Route path="warranties" element={lazyElement(<WarrantiesPage role="technician" />)} />
           <Route path="settings" element={lazyElement(<TechnicianSettingsPage />)} />
         </Route>
-        <Route path="/technician" element={<DashboardLayout role="technician" />}>
-          <Route index element={<Navigate to="/technician/dashboard" replace />} />
-          <Route path="dashboard" element={lazyElement(<TechnicianDashboard />)} />
-          <Route path="bookings" element={<Navigate to="/tech/bookings" replace />} />
-          <Route path="work-orders" element={<Navigate to="/tech/work-orders" replace />} />
-          <Route path="customers" element={<Navigate to="/tech/customers" replace />} />
-          <Route path="customers/:id" element={lazyElement(<CustomerProfilePage role="technician" />)} />
-          <Route path="invoices" element={<Navigate to="/tech/invoices" replace />} />
-          <Route path="payments" element={<Navigate to="/tech/payments" replace />} />
-          <Route path="parts" element={<Navigate to="/tech/parts" replace />} />
-          <Route path="amc-contracts" element={<Navigate to="/tech/amc-contracts" replace />} />
-          <Route path="amc-contracts/schedule" element={<Navigate to="/tech/amc-schedule" replace />} />
-          <Route path="amc-schedule" element={<Navigate to="/tech/amc-schedule" replace />} />
-          <Route path="amc-renewals" element={<Navigate to="/tech/amc-renewals" replace />} />
-          <Route path="warranties" element={<Navigate to="/tech/warranties" replace />} />
-          <Route path="settings" element={<Navigate to="/tech/settings" replace />} />
-          <Route path="profile" element={<Navigate to="/tech/settings" replace />} />
-        </Route>
       </Route>
+
+      <Route path="/admin/*" element={<LegacyWorkspaceRedirect fromPrefix="/admin" toPrefix="/app/admin" />} />
+      <Route path="/tech/*" element={<LegacyWorkspaceRedirect fromPrefix="/tech" toPrefix="/app/tech" />} />
+      <Route path="/technician/*" element={<LegacyWorkspaceRedirect fromPrefix="/technician" toPrefix="/app/tech" />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
