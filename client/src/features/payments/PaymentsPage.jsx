@@ -177,12 +177,14 @@ export function PaymentsPage({ role = 'admin' }) {
   const { request, user } = useAuth();
   const { push } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
   const effectiveRole = user?.role || role;
   const normalizedRole = normalizeRole(effectiveRole);
   const isTechnician = normalizedRole === 'technician';
   const permissionSubject = user || effectiveRole;
   const canRecordPayments = can(permissionSubject, 'record_payment');
   const canReversePayments = normalizedRole === 'admin' && can(permissionSubject, 'edit_payment');
+  const canViewWorkOrders = can(permissionSubject, 'view_work_orders');
   const base = isTechnician ? '/tech' : '/admin';
   const invoiceIdParam = useMemo(() => new URLSearchParams(location.search).get('invoiceId') || '', [location.search]);
   const invoiceIdParamHandled = useRef('');
@@ -315,6 +317,7 @@ export function PaymentsPage({ role = 'admin' }) {
   const selectedDocumentKind = invoiceDocumentKind(selectedInvoice);
   const selectedDocumentLabel = invoiceDocumentLabel(selectedInvoice);
   const selectedIsCreditNote = selectedDocumentKind === 'credit_note';
+  const selectedWorkOrderId = recordId(selectedInvoice?.workOrderId);
   const selectedParentInvoiceId = recordId(selectedInvoice?.parentInvoiceId || selectedInvoice?.adjustmentForInvoiceId);
   const selectedParentInvoiceLabel = selectedParentInvoiceId
     ? getInvoiceDisplayId(selectedInvoice?.parentInvoiceId || selectedInvoice?.adjustmentForInvoiceId) || selectedParentInvoiceId
@@ -437,6 +440,23 @@ export function PaymentsPage({ role = 'admin' }) {
     return <span className="muted">-</span>;
   }
 
+  async function openLinkedWorkOrder() {
+    if (!selectedWorkOrderId) {
+      push('Linked work order not found.', 'error');
+      return;
+    }
+    if (!canViewWorkOrders) {
+      push('You do not have permission to view Work Orders', 'error');
+      return;
+    }
+    try {
+      await request(`/work-orders/${selectedWorkOrderId}`);
+      navigate(`${base}/work-orders/${selectedWorkOrderId}`);
+    } catch {
+      push('Linked work order not found.', 'error');
+    }
+  }
+
   function canReversePaymentRow(payment) {
     return canReversePayments && recordId(payment?.invoiceId) && payment?.status !== 'Reversed' && !payment?.reversedAt && Number(payment?.paidAmount || 0) > 0;
   }
@@ -543,7 +563,21 @@ export function PaymentsPage({ role = 'admin' }) {
                   <BillingInfo label="Document Type" value={selectedDocumentLabel} tone={selectedIsCreditNote ? 'amber' : selectedDocumentKind === 'extra_invoice' ? 'green' : ''} />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <BillingInfo label="Linked Source" value={invoiceSourceLabel(selectedInvoice)} />
+                  <BillingInfo
+                    label="Linked Source"
+                    value={invoiceSourceLabel(selectedInvoice)}
+                    valueNode={selectedWorkOrderId ? (
+                      <button
+                        type="button"
+                        className={`billing-inline-link mt-1 ${canViewWorkOrders ? '' : 'billing-inline-link-disabled'}`.trim()}
+                        onClick={openLinkedWorkOrder}
+                        disabled={!canViewWorkOrders}
+                        title={canViewWorkOrders ? 'View full service process' : 'You do not have permission to view Work Orders'}
+                      >
+                        {invoiceSourceLabel(selectedInvoice)}
+                      </button>
+                    ) : null}
+                  />
                   <BillingInfo label="Parent Invoice / Work Order" value={selectedParentInvoiceLabel} />
                 </div>
                 <div className="billing-info-block">
@@ -791,11 +825,13 @@ function BillingMetricCard({ icon: Icon, label, value, helper, tone = 'blue', gl
   );
 }
 
-function BillingInfo({ label, value, tone = '', strong = false }) {
+function BillingInfo({ label, value, valueNode = null, tone = '', strong = false }) {
   return (
     <div className="billing-info-block">
       <p className="text-xs font-black uppercase text-slate-400">{label}</p>
-      <p className={`mt-1 truncate ${strong ? 'font-black' : 'font-bold'} ${tone === 'green' ? 'text-emerald-100' : tone === 'amber' ? 'text-amber-100' : 'text-slate-100'}`} title={String(value)}>{value}</p>
+      {valueNode ? valueNode : (
+        <p className={`mt-1 truncate ${strong ? 'font-black' : 'font-bold'} ${tone === 'green' ? 'text-emerald-100' : tone === 'amber' ? 'text-amber-100' : 'text-slate-100'}`} title={String(value)}>{value}</p>
+      )}
     </div>
   );
 }

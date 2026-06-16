@@ -235,6 +235,7 @@ function clampNumber(value, fallback, min, max) {
 
 function designElements(config = {}) {
   if (config.design?.enabled !== true) return [];
+  if (config.design?.published !== true && config.design?.previewDraft !== true) return [];
   const sectionSource = Array.isArray(config.design?.sections) ? config.design.sections : [];
   const sections = sectionSource
     .filter((section) => section && section.enabled !== false && section.visible !== false)
@@ -301,6 +302,8 @@ function drawElementShell(doc, element, frame) {
   const borderWidth = clampNumber(style.borderWidth, 1, 0, 8);
   const background = style.backgroundColor || element.backgroundColor || '#ffffff';
   const borderColor = style.borderColor || element.borderColor || '#cbd5e1';
+  const transparentBackground = String(background).toLowerCase() === 'transparent';
+  if (!style.shadow && transparentBackground && borderWidth <= 0) return;
   if (style.shadow) {
     doc.save();
     doc.opacity(0.08).roundedRect(frame.x + 4, frame.y + 5, frame.width, frame.height, radius).fill('#0f172a');
@@ -318,15 +321,23 @@ function drawElementShell(doc, element, frame) {
 function drawDividerElement(doc, element, frame, context = {}) {
   const style = element.style || {};
   const color = style.accentColor || '#0284c7';
-  const y = frame.y + Math.max(4, frame.height / 2);
+  const vertical = style.orientation === 'vertical' || Number(style.rotate) === 90;
+  const lineWidth = clampNumber(style.dividerThickness, 2, 1, 8);
   doc.save();
-  doc.strokeColor(color).lineWidth(clampNumber(style.dividerThickness, 2, 1, 8));
+  doc.strokeColor(color).lineWidth(lineWidth);
   if (style.dividerStyle === 'dashed') doc.dash(6, { space: 4 });
   if (style.dividerStyle === 'dotted') doc.dash(1, { space: 3 });
-  doc.moveTo(frame.x, y).lineTo(frame.x + frame.width, y).stroke();
+  if (vertical) {
+    const x = frame.x + Math.max(0, frame.width / 2);
+    doc.moveTo(x, frame.y).lineTo(x, frame.y + frame.height).stroke();
+  } else {
+    const y = frame.y + Math.max(0, frame.height / 2);
+    doc.moveTo(frame.x, y).lineTo(frame.x + frame.width, y).stroke();
+  }
   if (doc.undash) doc.undash();
   const label = cleanText(contentForElement(element).label, '');
-  if (label) {
+  if (label && !vertical) {
+    const y = frame.y + Math.max(0, frame.height / 2);
     useFont(doc, 'BodyBold', 'Helvetica-Bold');
     doc.roundedRect(frame.x + 12, y - 8, Math.min(170, frame.width - 24), 16, 8).fill('#ffffff');
     doc.fontSize(7.6).fillColor(color).text(renderText(label, context), frame.x + 18, y - 5, { width: Math.min(158, frame.width - 36) });
@@ -338,12 +349,14 @@ function drawTextElement(doc, element, frame, context) {
   const style = element.style || {};
   const content = contentForElement(element);
   const text = renderText(content.text || element.title || element.name || 'Text block', context);
+  const paddingX = clampNumber(style.paddingX ?? style.padding ?? 12, 12, 0, 48);
+  const paddingY = clampNumber(style.paddingY ?? style.padding ?? 12, 12, 0, 48);
   drawElementShell(doc, element, frame);
   useFont(doc, Number(style.fontWeight || 700) >= 700 ? 'BodyBold' : 'Body', Number(style.fontWeight || 700) >= 700 ? 'Helvetica-Bold' : 'Helvetica');
   doc.fontSize(clampNumber(style.fontSize, 13, 8, 32)).fillColor(style.textColor || element.textColor || '#0f172a')
-    .text(text, frame.x + 12, frame.y + 12, {
-      width: Math.max(12, frame.width - 24),
-      height: Math.max(8, frame.height - 18),
+    .text(text, frame.x + paddingX, frame.y + paddingY, {
+      width: Math.max(12, frame.width - paddingX * 2),
+      height: Math.max(8, frame.height - paddingY * 2),
       align: style.alignment || element.alignment || 'left',
       lineGap: 2
     });
@@ -354,6 +367,7 @@ function drawCardElement(doc, element, frame, context) {
   const content = contentForElement(element);
   const accent = style.accentColor || '#0284c7';
   drawElementShell(doc, element, frame);
+  if (content.boxOnly) return;
   doc.rect(frame.x, frame.y, 5, frame.height).fill(accent);
   useFont(doc, 'BodyBold', 'Helvetica-Bold');
   doc.fontSize(Math.max(8, clampNumber(style.fontSize, 13, 8, 32) * 0.78)).fillColor(accent)
@@ -374,6 +388,8 @@ function drawSectionElement(doc, element, frame, context) {
   const style = element.style || {};
   const content = contentForElement(element);
   const accent = style.accentColor || '#0f2a52';
+  const headerBackground = style.headerBackgroundColor || accent;
+  const headerTextColor = style.headerTextColor || '#ffffff';
   const kind = content.kind || element.role || 'details';
   drawElementShell(doc, { ...element, type: 'card' }, frame);
   doc.rect(frame.x, frame.y, 5, frame.height).fill(accent);
@@ -402,9 +418,9 @@ function drawSectionElement(doc, element, frame, context) {
     const columns = Array.isArray(content.columns) && content.columns.length ? content.columns.slice(0, 4) : ['Description', 'Qty', 'Rate', 'Total'];
     const rows = Array.isArray(content.rows) && content.rows.length ? content.rows.slice(0, 4) : [];
     const columnWidth = bodyWidth / columns.length;
-    doc.roundedRect(bodyX, bodyY, bodyWidth, 18, 5).fill(accent);
+    doc.roundedRect(bodyX, bodyY, bodyWidth, 18, 5).fill(headerBackground);
     useFont(doc, 'BodyBold', 'Helvetica-Bold');
-    doc.fontSize(6.8).fillColor('#ffffff');
+    doc.fontSize(6.8).fillColor(headerTextColor);
     columns.forEach((column, index) => {
       doc.text(renderText(column, context), bodyX + index * columnWidth + 4, bodyY + 5, { width: columnWidth - 8 });
     });
@@ -494,8 +510,9 @@ function drawImageElement(doc, element, frame, company = {}) {
   drawElementShell(doc, element, frame);
   const logoPath = company.logoFilePath;
   if ((content.imageMode || 'logo') === 'logo' && logoPath && fs.existsSync(logoPath)) {
-    doc.image(logoPath, frame.x + 12, frame.y + 12, {
-      fit: [Math.max(20, frame.width - 24), Math.max(20, frame.height - 24)],
+    const padding = content.fitToFrame ? 0 : clampNumber(style.padding ?? 12, 12, 0, 48);
+    doc.image(logoPath, frame.x + padding, frame.y + padding, {
+      fit: [Math.max(20, frame.width - padding * 2), Math.max(20, frame.height - padding * 2)],
       align: 'center',
       valign: 'center'
     });
@@ -520,33 +537,58 @@ function drawSpacerElement(doc, element, frame) {
   doc.restore();
 }
 
+function tableColumnWidths(content = {}, columns = [], tableWidth = 0) {
+  const source = Array.isArray(content.columnWidths) ? content.columnWidths : [];
+  const weights = columns.map((_column, index) => {
+    const value = Number(source[index]);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  });
+  const total = weights.reduce((sum, value) => sum + value, 0) || columns.length || 1;
+  return weights.map((value) => (tableWidth * value) / total);
+}
+
+function tableRowsForElement(content = {}, context = {}) {
+  const previewRows = Array.isArray(content.rows) && content.rows.length ? content.rows.slice(0, 12) : [['Item', '1', 'Rs. 0', 'Rs. 0']];
+  if (content.dynamicRows !== true || !Array.isArray(context.invoice_items) || !context.invoice_items.length) return previewRows;
+  const rowTemplate = Array.isArray(content.rowTemplate) && content.rowTemplate.length
+    ? content.rowTemplate
+    : ['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}'];
+  return context.invoice_items.slice(0, 24).map((item) => rowTemplate.map((cell) => renderText(cell, { ...context, ...item })));
+}
+
 function drawTableElement(doc, element, frame, context) {
   const style = element.style || {};
   const content = contentForElement(element);
   const accent = style.accentColor || '#0f2a52';
+  const headerBackground = style.headerBackgroundColor || accent;
+  const headerTextColor = style.headerTextColor || '#ffffff';
   const columns = Array.isArray(content.columns) && content.columns.length ? content.columns.slice(0, 6) : ['Description', 'Qty', 'Rate', 'Total'];
-  const rows = Array.isArray(content.rows) && content.rows.length ? content.rows.slice(0, 12) : [['Item', '1', 'Rs. 0', 'Rs. 0']];
-  const paddingX = 10;
+  const rows = tableRowsForElement(content, context);
+  const paddingX = clampNumber(style.paddingX ?? style.padding ?? 10, 10, 0, 48);
+  const paddingY = clampNumber(style.paddingY ?? style.padding ?? 8, 8, 0, 48);
   const titleHeight = content.title ? 16 : 0;
   const tableX = frame.x + paddingX;
-  const tableY = frame.y + 8 + titleHeight;
+  const tableY = frame.y + paddingY + titleHeight;
   const tableWidth = Math.max(20, frame.width - paddingX * 2);
   const rowHeight = clampNumber(style.rowHeight, 18, 12, 34);
-  const columnWidth = tableWidth / columns.length;
+  const columnWidths = tableColumnWidths(content, columns, tableWidth);
   drawElementShell(doc, element, frame);
   if (content.title) {
     useFont(doc, 'BodyBold', 'Helvetica-Bold');
     doc.fontSize(Math.max(7, clampNumber(style.fontSize, 12, 8, 32) * 0.72)).fillColor(accent)
       .text(renderText(content.title, context), frame.x + paddingX, frame.y + 8, { width: tableWidth, height: 12 });
   }
-  doc.roundedRect(tableX, tableY, tableWidth, rowHeight, 4).fill(accent);
+  doc.roundedRect(tableX, tableY, tableWidth, rowHeight, 4).fill(headerBackground);
   useFont(doc, 'BodyBold', 'Helvetica-Bold');
-  doc.fontSize(Math.max(5.8, clampNumber(style.fontSize, 10, 8, 32) * 0.62)).fillColor('#ffffff');
+  doc.fontSize(Math.max(5.8, clampNumber(style.fontSize, 10, 8, 32) * 0.62)).fillColor(headerTextColor);
+  let columnX = tableX;
   columns.forEach((column, index) => {
-    doc.text(renderText(column, context), tableX + index * columnWidth + 4, tableY + 5, {
+    const columnWidth = columnWidths[index] || (tableWidth / columns.length);
+    doc.text(renderText(column, context), columnX + 4, tableY + 5, {
       width: Math.max(8, columnWidth - 8),
       height: rowHeight - 6
     });
+    columnX += columnWidth;
   });
   useFont(doc, 'Body', 'Helvetica');
   doc.fontSize(Math.max(5.8, clampNumber(style.fontSize, 10, 8, 32) * 0.6));
@@ -554,12 +596,15 @@ function drawTableElement(doc, element, frame, context) {
     const rowY = tableY + rowHeight + rowIndex * rowHeight;
     if (rowY + rowHeight > frame.y + frame.height - 6) return;
     doc.rect(tableX, rowY, tableWidth, rowHeight).fill(rowIndex % 2 ? '#ffffff' : '#f8fafc');
+    columnX = tableX;
     (Array.isArray(row) ? row : [row]).slice(0, columns.length).forEach((cell, cellIndex) => {
-      doc.fillColor(style.textColor || '#0f172a').text(renderText(cell, context), tableX + cellIndex * columnWidth + 4, rowY + 5, {
+      const columnWidth = columnWidths[cellIndex] || (tableWidth / columns.length);
+      doc.fillColor(style.textColor || '#0f172a').text(renderText(cell, context), columnX + 4, rowY + 5, {
         width: Math.max(8, columnWidth - 8),
         height: rowHeight - 6,
         lineGap: 1
       });
+      columnX += columnWidth;
     });
   });
   const tableHeight = Math.min(rowHeight * (rows.length + 1), Math.max(rowHeight, frame.y + frame.height - tableY - 6));
@@ -571,7 +616,56 @@ function drawIconElement(doc, element, frame, context) {
   const content = contentForElement(element);
   const accent = style.accentColor || '#0284c7';
   const label = renderText(content.label || content.iconName || element.name || 'Icon', context);
+  const variant = content.variant || content.iconName || '';
   drawElementShell(doc, element, frame);
+  if (variant === 'dot') {
+    doc.circle(frame.x + frame.width / 2, frame.y + frame.height / 2, Math.min(frame.width, frame.height) / 2).fillColor(accent).fill();
+    return;
+  }
+  if (variant === 'check') {
+    const radius = Math.min(frame.width, frame.height) / 2;
+    const cx = frame.x + frame.width / 2;
+    const cy = frame.y + frame.height / 2;
+    doc.circle(cx, cy, radius).fillColor(accent).fill();
+    doc.strokeColor('#ffffff').lineWidth(Math.max(0.7, radius * 0.26)).lineCap('round').lineJoin('round')
+      .moveTo(cx - radius * 0.45, cy)
+      .lineTo(cx - radius * 0.12, cy + radius * 0.35)
+      .lineTo(cx + radius * 0.45, cy - radius * 0.42)
+      .stroke();
+    return;
+  }
+  if (variant === 'rupee') {
+    const size = Math.min(frame.width, frame.height);
+    doc.circle(frame.x + size / 2, frame.y + size / 2, size / 2 - 1).strokeColor(accent).lineWidth(1.7).stroke();
+    useFont(doc, 'BodyBold', 'Helvetica-Bold');
+    doc.fontSize(Math.max(12, size * 0.62)).fillColor(accent).text('Rs', frame.x, frame.y + size * 0.24, { width: size, align: 'center' });
+    return;
+  }
+  if (variant === 'document') {
+    const size = Math.min(frame.width, frame.height);
+    const x = frame.x + Math.max(0, (frame.width - size) / 2);
+    const y = frame.y + Math.max(0, (frame.height - size) / 2);
+    doc.circle(x + size / 2, y + size / 2, size / 2 - 1).strokeColor(accent).lineWidth(0.8).stroke();
+    doc.roundedRect(x + size * 0.31, y + size * 0.24, size * 0.36, size * 0.52, 1.2).strokeColor(accent).lineWidth(1.3).stroke();
+    doc.moveTo(x + size * 0.4, y + size * 0.4).lineTo(x + size * 0.6, y + size * 0.4).stroke();
+    doc.moveTo(x + size * 0.4, y + size * 0.52).lineTo(x + size * 0.6, y + size * 0.52).stroke();
+    doc.moveTo(x + size * 0.4, y + size * 0.64).lineTo(x + size * 0.55, y + size * 0.64).stroke();
+    return;
+  }
+  if (variant === 'completion' || variant === 'handshake') {
+    const size = Math.min(frame.width, frame.height);
+    const cx = frame.x + frame.width / 2;
+    const cy = frame.y + Math.min(frame.height / 2, size / 2 + 1);
+    doc.circle(cx, cy, size * 0.42).fillColor(variant === 'completion' ? accent : '#0d3b91').fill();
+    doc.strokeColor('#ffffff').lineWidth(Math.max(1, size * 0.06)).lineCap('round').lineJoin('round');
+    if (variant === 'completion') {
+      doc.moveTo(cx - size * 0.18, cy).lineTo(cx - size * 0.04, cy + size * 0.14).lineTo(cx + size * 0.25, cy - size * 0.18).stroke();
+    } else {
+      doc.moveTo(cx - size * 0.22, cy).lineTo(cx - size * 0.05, cy - size * 0.12).lineTo(cx + size * 0.2, cy + size * 0.14).stroke();
+      doc.moveTo(cx - size * 0.12, cy + size * 0.18).lineTo(cx + size * 0.12, cy + size * 0.18).stroke();
+    }
+    return;
+  }
   const iconSize = Math.min(22, Math.max(12, frame.height - 14), Math.max(12, frame.width * 0.32));
   const iconX = frame.x + 8;
   const iconY = frame.y + Math.max(6, (frame.height - iconSize) / 2);
@@ -591,16 +685,27 @@ function drawIconElement(doc, element, frame, context) {
 
 function drawDesignElement(doc, element, context, company) {
   const frame = designElementFrame(element);
-  if (element.type === 'section') return drawSectionElement(doc, element, frame, context);
-  if (element.type === 'divider') return drawDividerElement(doc, element, frame, context);
-  if (element.type === 'spacer') return drawSpacerElement(doc, element, frame);
-  if (element.type === 'table') return drawTableElement(doc, element, frame, context);
-  if (element.type === 'icon') return drawIconElement(doc, element, frame, context);
-  if (element.type === 'card') return drawCardElement(doc, element, frame, context);
-  if (element.type === 'qr') return drawQrElement(doc, element, frame, context);
-  if (element.type === 'signature') return drawSignatureElement(doc, element, frame, context);
-  if (element.type === 'image') return drawImageElement(doc, element, frame, company);
-  return drawTextElement(doc, element, frame, context);
+  const opacity = clampNumber(element.style?.opacity, 1, 0, 1);
+  const draw = () => {
+    if (element.type === 'section') return drawSectionElement(doc, element, frame, context);
+    if (element.type === 'divider') return drawDividerElement(doc, element, frame, context);
+    if (element.type === 'spacer') return drawSpacerElement(doc, element, frame);
+    if (element.type === 'table') return drawTableElement(doc, element, frame, context);
+    if (element.type === 'icon') return drawIconElement(doc, element, frame, context);
+    if (element.type === 'card') return drawCardElement(doc, element, frame, context);
+    if (element.type === 'qr') return drawQrElement(doc, element, frame, context);
+    if (element.type === 'signature') return drawSignatureElement(doc, element, frame, context);
+    if (element.type === 'image') return drawImageElement(doc, element, frame, company);
+    return drawTextElement(doc, element, frame, context);
+  };
+  if (opacity < 1) {
+    doc.save();
+    doc.opacity(opacity);
+    draw();
+    doc.restore();
+    return undefined;
+  }
+  return draw();
 }
 
 function drawDesignPdfPages(doc, options = {}) {
@@ -615,7 +720,9 @@ function drawDesignPdfPages(doc, options = {}) {
     }
     pagesAdded += 1;
     doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT).fill(config.design?.page?.backgroundColor || '#ffffff');
-    doc.strokeColor('#e2e8f0').lineWidth(0.7).rect(18, 18, PAGE_WIDTH - 36, PAGE_HEIGHT - 36).stroke();
+    if (config.design?.showPageBoundary === true) {
+      doc.strokeColor('#e2e8f0').lineWidth(0.7).rect(18, 18, PAGE_WIDTH - 36, PAGE_HEIGHT - 36).stroke();
+    }
     page.elements
       .slice()
       .sort((a, b) => Number(a.zIndex || 0) - Number(b.zIndex || 0))
@@ -626,6 +733,7 @@ function drawDesignPdfPages(doc, options = {}) {
 
 export function shouldRenderVisualDesign(config = {}) {
   return config.design?.enabled === true
+    && (config.design?.published === true || config.design?.previewDraft === true)
     && config.design?.visualElementMode !== false
     && designElements(config).length > 0;
 }

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate, requireRole } from '../auth.js';
 import { requirePermission } from '../permissions.js';
-import { getByKey, list, preview, reset, restore, update } from '../controllers/pdfTemplateController.js';
+import { getByKey, list, manifest, preview, reset, restore, update } from '../controllers/pdfTemplateController.js';
 import { asyncHandler } from '../utils/http.js';
 
 const router = Router();
@@ -9,6 +9,7 @@ const router = Router();
 router.use(authenticate);
 router.get('/', requirePermission('view_settings'), asyncHandler(list));
 router.get('/:key', requirePermission('view_settings'), asyncHandler(getByKey));
+router.post('/:key/manifest', requirePermission('view_settings'), asyncHandler(manifest));
 router.post('/:key/preview', requirePermission('view_settings'), asyncHandler(preview));
 router.patch('/:key', requireRole('admin'), requirePermission('manage_pdf_templates'), asyncHandler(update));
 router.post('/:key/reset', requireRole('admin'), requirePermission('manage_pdf_templates'), asyncHandler(reset));

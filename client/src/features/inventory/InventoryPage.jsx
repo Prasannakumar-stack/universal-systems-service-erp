@@ -442,8 +442,8 @@ export function InventoryPage({ role = 'admin' }) {
                     <td><span className="inventory-category-badge" title={part.category || 'General'}>{part.category || 'General'}</span></td>
                     <td>
                       <div className="inventory-detail-stack">
-                        <span><b>Brand:</b> <em className={!part.brand ? 'inventory-not-specified' : ''}>{brandLabel}</em></span>
-                        <span><b>Model:</b> <em className={!part.deviceModel ? 'inventory-not-specified' : ''}>{deviceModelLabel}</em></span>
+                        <span><b>Brand:</b> <em className={!part.brand ? 'inventory-not-specified' : ''}>{part.brand || '-'}</em></span>
+                        <span><b>Model:</b> <em className={!part.deviceModel ? 'inventory-not-specified' : ''}>{part.deviceModel || '-'}</em></span>
                       </div>
                     </td>
                     <td>

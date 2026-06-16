@@ -64,6 +64,7 @@ const placeholders = [
   '{{company_name}}',
   '{{company_phone}}',
   '{{company_email}}',
+  '{{company_website}}',
   '{{company_address}}',
   '{{customer_name}}',
   '{{customer_phone}}',
@@ -76,18 +77,30 @@ const placeholders = [
   '{{quotation_date}}',
   '{{work_order_no}}',
   '{{work_order_id}}',
+  '{{payment_status}}',
   '{{amc_contract_no}}',
   '{{amc_reference}}',
   '{{service_name}}',
   '{{service_type}}',
   '{{device}}',
+  '{{device_name}}',
+  '{{device_brand}}',
+  '{{device_model}}',
   '{{brand_model}}',
   '{{problem_complaint}}',
+  '{{problem_description}}',
   '{{technician_name}}',
   '{{total_amount}}',
+  '{{subtotal_amount}}',
   '{{final_total}}',
   '{{amount_paid}}',
   '{{balance_due}}',
+  '{{amount_in_words}}',
+  '{{item_index}}',
+  '{{item_description}}',
+  '{{item_quantity}}',
+  '{{item_unit_price}}',
+  '{{item_total}}',
   '{{amc_start_date}}',
   '{{amc_end_date}}',
   '{{next_service_date}}',
@@ -215,13 +228,13 @@ const builderTextPresets = [
 ];
 
 const builderVariableGroups = [
-  ['Company variables', ['{{company.name}}', '{{company.phone}}', '{{company.email}}', '{{company.address}}']],
-  ['Customer variables', ['{{customer.name}}', '{{customer.phone}}', '{{customer.address}}']],
-  ['Booking variables', ['{{booking.id}}', '{{booking.serviceType}}', '{{booking.device}}']],
-  ['Work Order variables', ['{{workOrder.id}}', '{{technician.name}}', '{{workOrder.problemComplaint}}']],
-  ['Invoice variables', ['{{invoice.number}}', '{{invoice.date}}', '{{invoice.total}}']],
-  ['Quotation variables', ['{{quotation.number}}', '{{quotation.date}}', '{{quotation.validityDays}}']],
-  ['AMC variables', ['{{amc.contractNo}}', '{{amc.startDate}}', '{{amc.endDate}}']]
+  ['Company variables', ['{{company_name}}', '{{company_phone}}', '{{company_email}}', '{{company_website}}', '{{company_address}}']],
+  ['Customer variables', ['{{customer_name}}', '{{customer_phone}}', '{{customer_address}}']],
+  ['Work Order variables', ['{{work_order_id}}', '{{service_type}}', '{{device_name}}', '{{device_brand}}', '{{device_model}}', '{{problem_description}}', '{{technician_name}}']],
+  ['Invoice variables', ['{{invoice_number}}', '{{invoice_date}}', '{{payment_status}}', '{{subtotal_amount}}', '{{amount_paid}}', '{{balance_due}}', '{{final_total}}', '{{amount_in_words}}']],
+  ['Item row variables', ['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}']],
+  ['Quotation variables', ['{{quotation_number}}', '{{quotation_date}}']],
+  ['AMC variables', ['{{amc_contract_no}}', '{{amc_start_date}}', '{{amc_end_date}}']]
 ];
 
 const defaultElementStyles = {
@@ -272,7 +285,7 @@ function designStateFromConfig(config = {}) {
   return normalizeDesignState(cloneValue(config.design || {}));
 }
 
-function mergeDesignStateForSave(config = {}, designState = {}) {
+function mergeDesignStateForSave(config = {}, designState = {}, options = {}) {
   const currentDesign = config.design || {};
   const normalizedDesign = normalizeDesignState(designState);
   const visualElementMode = normalizedDesign.visualElementMode !== false;
@@ -310,7 +323,12 @@ function mergeDesignStateForSave(config = {}, designState = {}) {
       elements: saveElements,
       customElements: saveElements,
       enabled: true,
-      confirmed: true,
+      confirmed: options.publish === true,
+      mode: normalizedDesign.mode === 'manifest' ? 'manifest' : (currentDesign.mode || 'legacy'),
+      published: options.publish === true,
+      previewDraft: options.previewDraft === true,
+      baseTemplateVersion: normalizedDesign.baseTemplateVersion || currentDesign.baseTemplateVersion || config.version || 1,
+      overrides: normalizedDesign.overrides || currentDesign.overrides || {},
       lockedDefaultSections: true
     }
   };
@@ -1096,7 +1114,15 @@ function normalizeElementType(type = 'text') {
 }
 
 function contentDefaultsForElement(type = 'text') {
-  if (type === 'table') return { title: 'Table', columns: ['Description', 'Qty', 'Rate', 'Total'], rows: [['Item', '1', 'Rs. 0', 'Rs. 0']] };
+  if (type === 'table') return {
+    title: 'Table',
+    columns: ['S.No', 'Description', 'Qty', 'Unit Price', 'Total'],
+    columnWidths: [0.6, 2.4, 0.8, 1.2, 1.2],
+    previewRowCount: 5,
+    dynamicRows: true,
+    rowTemplate: ['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}'],
+    rows: [['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}']]
+  };
   if (type === 'icon') return { label: 'Icon', iconName: 'star' };
   if (type === 'card') return { title: 'Card title', body: 'Add details here', twoColumn: false };
   if (type === 'qr') return { label: 'QR CODE', qrType: 'payment', helperText: 'Payment / contact QR placeholder' };
@@ -1123,6 +1149,19 @@ function parseTableColumns(value = '') {
 function formatTableRows(rows = []) {
   const sourceRows = Array.isArray(rows) && rows.length ? rows : contentDefaultsForElement('table').rows;
   return sourceRows.map((row) => (Array.isArray(row) ? row : [row]).join(' | ')).join('\n');
+}
+
+function formatTableColumnWidths(widths = []) {
+  return (Array.isArray(widths) && widths.length ? widths : [0.6, 2.4, 0.8, 1.2, 1.2]).join(' | ');
+}
+
+function parseTableColumnWidths(value = '', columnCount = 5) {
+  const widths = String(value || '')
+    .split('|')
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item) && item > 0)
+    .slice(0, Math.max(1, columnCount));
+  return widths.length ? widths : Array.from({ length: Math.max(1, columnCount) }, () => 1);
 }
 
 function parseTableRows(value = '', columnCount = 4) {
@@ -1275,6 +1314,11 @@ function normalizeDesignState(source = {}) {
     ...source,
     enabled: source.enabled === true,
     confirmed: source.confirmed === true,
+    mode: source.mode === 'manifest' ? 'manifest' : (source.mode || 'legacy'),
+    published: source.published === true,
+    previewDraft: source.previewDraft === true,
+    baseTemplateVersion: Number(source.baseTemplateVersion || 1),
+    overrides: source.overrides && typeof source.overrides === 'object' ? source.overrides : {},
     lockedDefaultSections: true,
     visualElementMode: source.visualElementMode !== false,
     blank: source.blank === true,
@@ -1308,6 +1352,66 @@ function normalizeDesignState(source = {}) {
     customElements: elements,
     savedTemplates: Array.isArray(source.savedTemplates) ? source.savedTemplates : [],
     sectionOptions: source.sectionOptions || {}
+  };
+}
+
+function designStateFromManifest(manifest = {}, current = {}) {
+  const manifestElements = Array.isArray(manifest.elements) ? manifest.elements : [];
+  const elements = manifestElements.map((element, index) => normalizeBuilderElement({
+    ...element,
+    id: element.id || `manifest-element-${index + 1}`,
+    pageId: element.pageId || `page-${element.page || 1}`,
+    locked: element.locked === true,
+    manifestSource: manifest.source || 'current-pdf-layout',
+    manifestSemanticId: element.manifest?.semanticId || element.id || '',
+    sourceKey: element.manifest?.semanticId || element.id || '',
+    designGenerated: true
+  }, index));
+  const pages = Array.isArray(manifest.pages) && manifest.pages.length
+    ? manifest.pages.map((page, index) => ({
+      id: page.id || `page-${index + 1}`,
+      name: page.name || `Page ${index + 1}`,
+      elements: Array.isArray(page.elements)
+        ? page.elements
+        : elements.filter((element) => (element.pageId || 'page-1') === (page.id || `page-${index + 1}`)).map((element) => element.id),
+      manifest: true
+    }))
+    : normalizeDesignPages({}, elements, []);
+  return normalizeDesignState({
+    ...current,
+    mode: 'manifest',
+    enabled: true,
+    published: false,
+    confirmed: false,
+    blank: false,
+    visualElementMode: true,
+    freeLayoutMode: true,
+    manifestKey: manifest.key || '',
+    manifestSource: manifest.source || 'current-pdf-layout',
+    manifestLabel: manifest.label || 'Current PDF layout',
+    sections: [],
+    elements,
+    customElements: elements,
+    pages,
+    canvas: {
+      ...(current.canvas || {}),
+      size: 'A4',
+      orientation: 'portrait',
+      zoom: current.canvas?.zoom || 'fit-width'
+    }
+  });
+}
+
+function configForDefaultPdfPreview(config = {}) {
+  return {
+    ...config,
+    editMode: 'structured',
+    design: {
+      ...(config.design || {}),
+      enabled: false,
+      published: false,
+      previewDraft: false
+    }
   };
 }
 
@@ -1356,7 +1460,9 @@ function styleForBuilderElement(element = {}, selected = false) {
     boxShadow: style.shadow ? '0 14px 28px rgba(15, 23, 42, 0.16)' : 'none',
     textAlign: style.alignment || element.alignment || 'left',
     fontSize: clampBuilderNumber(style.fontSize, 13, 8, 32),
-    fontWeight: style.fontWeight || 700
+    fontWeight: style.fontWeight || 700,
+    padding: element.type === 'divider' ? 0 : (style.padding ?? '0.5rem'),
+    opacity: clampBuilderNumber(style.opacity, 1, 0, 1)
   };
 }
 
@@ -1808,9 +1914,11 @@ function DesignModeWorkspace({
   previewUrl,
   previewLoading,
   previewError,
+  token,
   onBack,
   onPreview,
   onDownload,
+  onPublishDesign,
   onShowVariables
 }) {
   const disabled = !canEdit || saving;
@@ -1827,7 +1935,7 @@ function DesignModeWorkspace({
   const gridEnabled = canvasDesign.gridEnabled === true;
   const layoutGuidesEnabled = canvasDesign.layoutGuides === true;
   const freeLayoutMode = canvasDesign.freeLayoutMode === true;
-  const [activeRail, setActiveRail] = useState('templates');
+  const [activeRail, setActiveRail] = useState('');
   const [selectedLayerId, setSelectedLayerId] = useState('');
   const [currentPageId, setCurrentPageId] = useState(pages[0]?.id || 'page-1');
   const [zoom, setZoom] = useState(canvasDesign.canvas.zoom === 'fit' ? 'fit-width' : canvasDesign.canvas.zoom || 'fit-width');
@@ -1836,14 +1944,21 @@ function DesignModeWorkspace({
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [rightInspectorOpen, setRightInspectorOpen] = useState(false);
   const [fullScreenEditor, setFullScreenEditor] = useState(true);
+  const [showReferenceLayer, setShowReferenceLayer] = useState(false);
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [interaction, setInteraction] = useState(null);
   const [editingElementId, setEditingElementId] = useState('');
+  const [manifestState, setManifestState] = useState({ loading: false, error: '', data: null });
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [revertConfirmOpen, setRevertConfirmOpen] = useState(false);
   const paperRef = useRef(null);
+  const variableCursorRef = useRef(null);
+  const clipboardLayerRef = useRef(null);
   const freeLayoutWarningShownRef = useRef(false);
   const normalizedSignature = stableJson(normalizedDesign);
   const rawDesignSignature = stableJson(designDraft);
+  const draftSignature = stableJson(draft);
 
   useEffect(() => {
     if (rawDesignSignature !== normalizedSignature) setDesignDraft(normalizedDesign);
@@ -1854,7 +1969,37 @@ function DesignModeWorkspace({
     setRedoStack([]);
     setSelectedLayerId('');
     setCurrentPageId('page-1');
+    setActiveRail('');
+    setRightInspectorOpen(false);
+    setShowReferenceLayer(false);
+    setManifestState({ loading: false, error: '', data: null });
   }, [template.key]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadManifest() {
+      setManifestState((current) => ({ ...current, loading: true, error: '' }));
+      try {
+        const response = await fetch(`${apiBase}/pdf-templates/${template.key}/manifest`, {
+          method: 'POST',
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ config: draft })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.message || 'PDF layout manifest failed to load');
+        if (!cancelled) setManifestState({ loading: false, error: '', data: payload.manifest || null });
+      } catch (err) {
+        if (!cancelled) setManifestState({ loading: false, error: err.message || 'PDF layout manifest failed to load', data: null });
+      }
+    }
+    loadManifest();
+    return () => {
+      cancelled = true;
+    };
+  }, [template.key, token, draftSignature]);
 
   useEffect(() => {
     if (!pages.some((page) => page.id === currentPageId)) setCurrentPageId(pages[0]?.id || 'page-1');
@@ -1922,8 +2067,10 @@ function DesignModeWorkspace({
   const currentPage = pages.find((page) => page.id === currentPageId) || pages[0] || { id: 'page-1', name: 'Page 1' };
   const currentPageIndex = Math.max(0, pages.findIndex((page) => page.id === currentPage.id));
   const referencePdfUrl = previewUrl ? `${previewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&page=${currentPageIndex + 1}` : '';
+  const activeReferencePdfUrl = showReferenceLayer ? referencePdfUrl : '';
   const zoomScale = zoom === '125' ? 1.25 : zoom === '100' ? 1 : zoom === '75' ? 0.75 : zoom === 'fit-width' ? 1.1 : 0.88;
-  const previewConfig = useMemo(() => mergeDesignStateForSave(draft, canvasDesign), [draft, canvasDesign]);
+  const previewConfig = useMemo(() => mergeDesignStateForSave(draft, canvasDesign, { previewDraft: true }), [draft, canvasDesign]);
+  const defaultPreviewConfig = useMemo(() => configForDefaultPdfPreview(draft), [draft]);
   const visiblePageSections = canvasSections
     .filter((section) => (section.pageId || 'page-1') === currentPage.id && section.visible !== false && section.enabled !== false)
     .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
@@ -2077,7 +2224,6 @@ function DesignModeWorkspace({
       return { ...current, elements: nextElements, customElements: nextElements };
     });
     setSelectedLayerId(nextElement.id);
-    setActiveRail('layers');
   }
 
   function addTextPreset(preset) {
@@ -2096,11 +2242,21 @@ function DesignModeWorkspace({
       return { ...current, elements: nextElements, customElements: nextElements };
     });
     setSelectedLayerId(nextElement.id);
-    setActiveRail('layers');
   }
 
   function applyDefaultTemplateLayout() {
     if (disabled) return;
+    if (manifestState.data?.elements?.length) {
+      const manifestDesign = designStateFromManifest(manifestState.data, canvasDesign);
+      commitDesign((current) => ({
+        ...manifestDesign,
+        savedTemplates: current.savedTemplates || []
+      }));
+      setSelectedLayerId('');
+      setCurrentPageId(manifestDesign.pages?.[0]?.id || 'page-1');
+      setActiveRail('');
+      return;
+    }
     const defaultSections = buildDefaultTemplateSections(template, sections, draft);
     const defaultElements = visualElementsFromSections(defaultSections, template, draft);
     commitDesign((current) => ({
@@ -2115,7 +2271,23 @@ function DesignModeWorkspace({
     }));
     setSelectedLayerId('');
     setCurrentPageId('page-1');
-    setActiveRail('layers');
+    setActiveRail('');
+  }
+
+  function revertDraftDesign() {
+    const sourceDesign = designStateFromConfig(draft);
+    if (sourceDesign.published === true && sourceDesign.mode === 'manifest' && sourceDesign.elements.length) {
+      setDesignDraft(sourceDesign);
+    } else if (manifestState.data?.elements?.length) {
+      setDesignDraft(designStateFromManifest(manifestState.data, sourceDesign));
+    } else {
+      setDesignDraft(sourceDesign);
+    }
+    setUndoStack([]);
+    setRedoStack([]);
+    setSelectedLayerId('');
+    setCurrentPageId('page-1');
+    setActiveRail('');
   }
 
   function startBlankDesign() {
@@ -2133,7 +2305,7 @@ function DesignModeWorkspace({
     }));
     setSelectedLayerId('');
     setCurrentPageId('page-1');
-    setActiveRail('elements');
+    setActiveRail('');
   }
 
   function duplicateCurrentTemplate() {
@@ -2263,6 +2435,63 @@ function DesignModeWorkspace({
     else if (selectedSection?.system === false) deleteSection(selectedSection.id);
   }
 
+  function copySelectedLayerToClipboard() {
+    if (selectedElement) {
+      clipboardLayerRef.current = { kind: 'element', item: cloneValue(selectedElement) };
+      return;
+    }
+    if (selectedSection) {
+      clipboardLayerRef.current = { kind: 'section', item: cloneValue(selectedSection) };
+    }
+  }
+
+  function pasteClipboardLayer() {
+    if (disabled || !clipboardLayerRef.current?.item) return;
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    if (clipboardLayerRef.current.kind === 'element') {
+      const copy = normalizeBuilderElement({
+        ...cloneValue(clipboardLayerRef.current.item),
+        id: `element-${stamp}`,
+        name: `${clipboardLayerRef.current.item.name || 'Element'} Copy`,
+        pageId: currentPage.id,
+        x: Math.min(builderCanvas.width - 24, Number(clipboardLayerRef.current.item.x || 0) + 18),
+        y: Math.min(builderCanvas.height - 12, Number(clipboardLayerRef.current.item.y || 0) + 18),
+        zIndex: Math.max(...elements.map((item) => item.zIndex || 1), 1) + 1
+      }, elements.length);
+      commitDesign((current) => {
+        const nextElements = [...current.elements, copy];
+        return { ...current, elements: nextElements, customElements: nextElements };
+      });
+      setSelectedLayerId(copy.id);
+      return;
+    }
+    const copy = normalizeBuilderSection({
+      ...cloneValue(clipboardLayerRef.current.item),
+      id: `section-${stamp}`,
+      sourceKey: '',
+      sourceIndex: undefined,
+      system: false,
+      locked: false,
+      rendererFrame: false,
+      layoutSource: 'custom',
+      name: `${clipboardLayerRef.current.item.name || clipboardLayerRef.current.item.title || 'Section'} Copy`,
+      title: `${clipboardLayerRef.current.item.title || clipboardLayerRef.current.item.name || 'Section'} Copy`,
+      pageId: currentPage.id,
+      x: Math.min(builderCanvas.width - 24, Number(clipboardLayerRef.current.item.x || 0) + 18),
+      y: Math.min(builderCanvas.height - 12, Number(clipboardLayerRef.current.item.y || 0) + 18),
+      zIndex: Math.max(...canvasSections.map((item) => item.zIndex || 1), 1) + 1
+    }, canvasSections.length);
+    commitDesign((current) => {
+      const nextSections = [...current.sections, copy];
+      return {
+        ...current,
+        sections: nextSections,
+        pages: normalizeDesignPages(current, current.elements, nextSections)
+      };
+    });
+    setSelectedLayerId(copy.id);
+  }
+
   function toggleSelectedLayerLock() {
     if (!selectedLayer || disabled) return;
     if (selectedElement) {
@@ -2304,6 +2533,10 @@ function DesignModeWorkspace({
     setRightInspectorOpen(true);
     setInspectorCollapsed(false);
     setActiveInspectorTab('content');
+  }
+
+  function toggleRailDrawer(railId) {
+    setActiveRail((current) => (current === railId ? '' : railId));
   }
 
   function commitInlineElementText(elementId, value) {
@@ -2559,6 +2792,31 @@ function DesignModeWorkspace({
     function onKeyDown(event) {
       if ((!selectedElement && !selectedSection) || disabled) return;
       if (editingElementId) return;
+      const target = event.target;
+      const targetTag = String(target?.tagName || '').toLowerCase();
+      if (target?.isContentEditable || ['input', 'textarea', 'select'].includes(targetTag)) return;
+      const shortcutKey = String(event.key || '').toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && shortcutKey === 'c') {
+        event.preventDefault();
+        copySelectedLayerToClipboard();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && shortcutKey === 'v') {
+        event.preventDefault();
+        pasteClipboardLayer();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && shortcutKey === 'd') {
+        event.preventDefault();
+        duplicateSelectedLayer();
+        return;
+      }
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (selectedLayerLocked) return;
+        event.preventDefault();
+        deleteSelectedLayer();
+        return;
+      }
       const deltas = {
         ArrowLeft: [-1, 0],
         ArrowRight: [1, 0],
@@ -2585,15 +2843,25 @@ function DesignModeWorkspace({
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedElement, selectedSection, freeLayoutMode, disabled, editingElementId]);
+  }, [selectedElement, selectedSection, selectedLayerLocked, freeLayoutMode, disabled, editingElementId]);
 
   function insertVariable(variable) {
+    const cursor = variableCursorRef.current;
     if (!selectedElement && !selectedSection) {
       onShowVariables?.();
       return;
     }
     if (selectedSection) {
       const content = selectedSection.content || {};
+      if (cursor?.kind === 'section' && cursor.id === selectedSection.id && cursor.target) {
+        const currentValue = String(content[cursor.target] || '');
+        const start = clampBuilderNumber(cursor.start, currentValue.length, 0, currentValue.length);
+        const end = clampBuilderNumber(cursor.end, start, start, currentValue.length);
+        const nextValue = `${currentValue.slice(0, start)}${variable}${currentValue.slice(end)}`;
+        variableCursorRef.current = { ...cursor, value: nextValue, start: start + variable.length, end: start + variable.length };
+        patchSection(selectedSection.id, { content: { [cursor.target]: nextValue } });
+        return;
+      }
       patchSection(selectedSection.id, {
         content: {
           body: `${content.body || ''}${content.body ? ' ' : ''}${variable}`
@@ -2602,6 +2870,15 @@ function DesignModeWorkspace({
       return;
     }
     const content = selectedElement.content || {};
+    if (cursor?.kind === 'element' && cursor.id === selectedElement.id && cursor.target) {
+      const currentValue = String(content[cursor.target] || '');
+      const start = clampBuilderNumber(cursor.start, currentValue.length, 0, currentValue.length);
+      const end = clampBuilderNumber(cursor.end, start, start, currentValue.length);
+      const nextValue = `${currentValue.slice(0, start)}${variable}${currentValue.slice(end)}`;
+      variableCursorRef.current = { ...cursor, value: nextValue, start: start + variable.length, end: start + variable.length };
+      patchElement(selectedElement.id, { content: { [cursor.target]: nextValue } });
+      return;
+    }
     const target = selectedElement.type === 'card'
       ? 'body'
       : selectedElement.type === 'qr'
@@ -2614,6 +2891,18 @@ function DesignModeWorkspace({
         [target]: `${content[target] || ''}${content[target] ? ' ' : ''}${variable}`
       }
     });
+  }
+
+  function rememberVariableCursor(kind, id, target, value, event) {
+    const control = event?.currentTarget;
+    variableCursorRef.current = {
+      kind,
+      id,
+      target,
+      value: String(value || ''),
+      start: typeof control?.selectionStart === 'number' ? control.selectionStart : String(value || '').length,
+      end: typeof control?.selectionEnd === 'number' ? control.selectionEnd : String(value || '').length
+    };
   }
 
   const filteredVariableGroups = builderVariableGroups
@@ -2637,16 +2926,17 @@ function DesignModeWorkspace({
               </div>
               <div className="min-w-0">
                 <p>{template.name}</p>
-                <small>Current template layout</small>
+                <small>{manifestState.loading ? 'Loading real PDF layout...' : manifestState.error ? 'Fallback layout available' : 'Real current PDF layout manifest'}</small>
               </div>
               <button type="button" className="btn btn-secondary justify-center" disabled={disabled} onClick={duplicateCurrentTemplate}>
                 <Copy className="h-4 w-4" />
                 Duplicate
               </button>
-              <button type="button" className="btn btn-primary justify-center" disabled={disabled} onClick={applyDefaultTemplateLayout}>
+              <button type="button" className="btn btn-primary justify-center" disabled={disabled || manifestState.loading} onClick={applyDefaultTemplateLayout}>
                 <LayoutGrid className="h-4 w-4" />
                 Start from Current Template
               </button>
+              {manifestState.error ? <small className="text-amber-200">{manifestState.error}</small> : null}
             </article>
             <article className="pdf-template-gallery-card">
               <div className="pdf-template-gallery-preview is-system">
@@ -2884,13 +3174,21 @@ function DesignModeWorkspace({
 
     if (tabId === 'content') {
       if (selectedElement) {
-        return <ElementContentControls element={selectedElement} disabled={disabled || selectedElement.locked} onPatch={(patch) => patchElement(selectedElement.id, patch)} onOpenVariables={() => setActiveRail('variables')} />;
+        return (
+          <ElementContentControls
+            element={selectedElement}
+            disabled={disabled || selectedElement.locked}
+            onPatch={(patch) => patchElement(selectedElement.id, patch)}
+            onOpenVariables={() => setActiveRail('variables')}
+            onRememberCursor={(target, value, event) => rememberVariableCursor('element', selectedElement.id, target, value, event)}
+          />
+        );
       }
       return (
         <div className="pdf-inspector-grid">
           <BuilderTextInput label="Section name" value={selectedSection.name || selectedSection.title} disabled={disabled} onChange={(value) => patchSection(selectedSection.id, { name: value, title: value, content: { title: value } })} />
-          <BuilderTextInput label="Preview title" value={selectedSection.content?.title || selectedSection.title} disabled={disabled} onChange={(value) => patchSection(selectedSection.id, { content: { title: value } })} />
-          <BuilderTextarea label="Preview body" value={selectedSection.content?.body || ''} disabled={disabled} rows={3} onChange={(value) => patchSection(selectedSection.id, { content: { body: value } })} />
+          <BuilderTextInput label="Preview title" value={selectedSection.content?.title || selectedSection.title} disabled={disabled} onChange={(value) => patchSection(selectedSection.id, { content: { title: value } })} onCursor={(event) => rememberVariableCursor('section', selectedSection.id, 'title', selectedSection.content?.title || selectedSection.title, event)} />
+          <BuilderTextarea label="Preview body" value={selectedSection.content?.body || ''} disabled={disabled} rows={3} onChange={(value) => patchSection(selectedSection.id, { content: { body: value } })} onCursor={(event) => rememberVariableCursor('section', selectedSection.id, 'body', selectedSection.content?.body || '', event)} />
           <button type="button" className="btn btn-secondary justify-center pdf-field-full" onClick={() => setActiveRail('variables')}>
             <ShieldCheck className="h-4 w-4" />
             Variable insert helper
@@ -3045,21 +3343,40 @@ function DesignModeWorkspace({
   }
 
   return (
-    <div className={`pdf-builder-workspace ${fullScreenEditor ? 'is-fullscreen' : ''} ${rightInspectorOpen ? 'has-right-inspector' : ''} ${inspectorCollapsed ? 'is-inspector-collapsed' : ''}`}>
+    <>
+    <div className={`pdf-builder-workspace ${fullScreenEditor ? 'is-fullscreen' : ''} ${activeRail ? 'has-left-drawer' : ''} ${rightInspectorOpen ? 'has-right-inspector' : ''} ${inspectorCollapsed ? 'is-inspector-collapsed' : ''}`}>
       <section className="pdf-builder-toolbar">
         <div className="pdf-builder-toolbar-title">
-          <span className="pdf-builder-warning">ADVANCED MODE - CHANGES APPLY ONLY AFTER SAVE</span>
-          <span className="pdf-builder-mode">VISUAL PDF BUILDER</span>
-          {hasUnsavedDesignChanges ? <span className="pdf-builder-unsaved">Unsaved changes</span> : <span className="pdf-builder-saved">Saved template view</span>}
+          <span className="pdf-builder-warning">Design Mode - default PDFs change only after Publish</span>
+          <span className="pdf-builder-mode">{canvasDesign.mode === 'manifest' ? 'MANIFEST PDF BUILDER' : 'VISUAL PDF BUILDER'}</span>
+          <span className={`pdf-state-badge ${canvasDesign.published ? 'is-on' : 'is-fixed'}`}>{canvasDesign.published ? 'Published Design' : 'Draft Design'}</span>
+          {!canvasDesign.published ? <span className="pdf-state-badge is-off">Not Published</span> : null}
+          {hasUnsavedDesignChanges ? <span className="pdf-builder-unsaved">Unsaved Changes</span> : <span className="pdf-builder-saved">Saved Draft</span>}
         </div>
         <div className="pdf-builder-toolbar-actions">
+          <button type="button" className="btn btn-primary admin-compact-button" disabled={disabled || manifestState.loading} onClick={applyDefaultTemplateLayout}>
+            {manifestState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LayoutGrid className="h-4 w-4" />}
+            Start from Current Template
+          </button>
+          <button type="button" className={`btn admin-compact-button ${activeRail === 'templates' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => toggleRailDrawer('templates')}>
+            <LayoutGrid className="h-4 w-4" />
+            Templates
+          </button>
+          <button type="button" className={`btn admin-compact-button ${activeRail === 'layers' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => toggleRailDrawer('layers')}>
+            <Layers className="h-4 w-4" />
+            Layers
+          </button>
+          <button type="button" className={`btn admin-compact-button ${activeRail === 'elements' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => toggleRailDrawer('elements')}>
+            <Plus className="h-4 w-4" />
+            Elements
+          </button>
           <button type="button" className={`btn admin-compact-button ${fullScreenEditor ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setFullScreenEditor((value) => !value)}>
             <Maximize2 className="h-4 w-4" />
             {fullScreenEditor ? 'Exit Full Screen' : 'Full Screen Editor'}
           </button>
           <button type="button" className={`btn admin-compact-button ${rightInspectorOpen ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setRightInspectorOpen((value) => !value)}>
             <Settings2 className="h-4 w-4" />
-            Inspector Right Panel
+            Advanced Inspector
           </button>
           <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={onBack}>
             <LayoutGrid className="h-4 w-4" />
@@ -3071,26 +3388,45 @@ function DesignModeWorkspace({
           <button type="button" className="icon-button" disabled={!redoStack.length || disabled} onClick={redoDesign} title="Redo">
             <Redo2 className="h-4 w-4" />
           </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => setActiveRail('variables')}>
+          <button type="button" className={`btn admin-compact-button ${activeRail === 'variables' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => toggleRailDrawer('variables')}>
             <ShieldCheck className="h-4 w-4" />
             Variables
           </button>
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onPreview(template, defaultPreviewConfig)}>
+            {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
+            Preview Default PDF
+          </button>
           <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onPreview(template, previewConfig)}>
             {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-            Preview PDF
+            Preview Draft PDF
           </button>
           <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onDownload(template, previewConfig)}>
             {busyKey === `download-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Download Sample PDF
+            Download Draft PDF
+          </button>
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || saving || Boolean(busyKey)} onClick={() => {
+            setPublishConfirmOpen(false);
+            setRevertConfirmOpen(true);
+          }}>
+            <RotateCcw className="h-4 w-4" />
+            Revert Draft
           </button>
           <button type="submit" className="btn btn-primary admin-compact-button pdf-builder-save-button" disabled={!canEdit || saving || Boolean(busyKey)}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? 'Saving...' : 'Save Template'}
+            {saving ? 'Saving...' : 'Save Draft'}
+          </button>
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || saving || Boolean(busyKey)} onClick={() => {
+            setRevertConfirmOpen(false);
+            setPublishConfirmOpen(true);
+          }}>
+            <ShieldCheck className="h-4 w-4" />
+            Publish Design
           </button>
         </div>
       </section>
 
       <div className="pdf-builder-shell">
+        {activeRail ? (
         <aside className="pdf-builder-rail" aria-label="Design builder tools">
           {builderRailItems.map((item) => {
             const Icon = item.icon;
@@ -3108,17 +3444,22 @@ function DesignModeWorkspace({
             );
           })}
         </aside>
+        ) : null}
 
+        {activeRail ? (
         <aside className="pdf-builder-panel">
           <div className="pdf-builder-panel-header">
             <div>
               <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">{builderRailItems.find((item) => item.id === activeRail)?.label}</p>
               <h3>{activeRail === 'templates' ? 'Template Gallery' : activeRail === 'elements' ? 'Elements' : activeRail === 'text' ? 'Text' : activeRail === 'uploads' ? 'Uploads / Logo' : activeRail === 'layers' ? 'Layers' : activeRail === 'pages' ? 'Pages' : activeRail === 'variables' ? 'Variables' : 'Saved Versions'}</h3>
             </div>
-            <SlidersHorizontal className="h-4 w-4 text-sky-100/70" />
+            <button type="button" className="icon-button" onClick={() => setActiveRail('')} title="Close drawer">
+              <X className="h-4 w-4" />
+            </button>
           </div>
           {renderRailPanel()}
         </aside>
+        ) : null}
 
         <div className="pdf-builder-stage">
           <main className="pdf-builder-canvas">
@@ -3152,6 +3493,10 @@ function DesignModeWorkspace({
                 {layoutGuidesEnabled ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                 Show Layout Guides
               </button>
+              <button type="button" className={`pdf-canvas-pill ${showReferenceLayer ? 'is-active' : ''}`} disabled={!referencePdfUrl} onClick={() => setShowReferenceLayer((value) => !value)}>
+                {showReferenceLayer ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                Show PDF Reference Layer
+              </button>
               <button type="button" className={`pdf-canvas-pill ${snapEnabled ? 'is-active' : ''}`} onClick={() => updateCanvasOption('canvas.snap', !snapEnabled)}>
                 <Move className="h-3.5 w-3.5" />
                 Snap
@@ -3166,7 +3511,7 @@ function DesignModeWorkspace({
             <div className="pdf-paper-stage" style={{ width: builderCanvas.width * zoomScale, height: builderCanvas.height * zoomScale }}>
               <div
                 ref={paperRef}
-                className={`pdf-a4-page ${gridEnabled ? 'has-grid' : ''} ${referencePdfUrl ? 'has-reference-layer' : ''} ${layoutGuidesEnabled ? 'show-layout-guides' : ''}`}
+                className={`pdf-a4-page ${gridEnabled ? 'has-grid' : ''} ${activeReferencePdfUrl ? 'has-reference-layer' : ''} ${layoutGuidesEnabled ? 'show-layout-guides' : ''}`}
                 style={{
                   width: builderCanvas.width,
                   height: builderCanvas.height,
@@ -3174,21 +3519,21 @@ function DesignModeWorkspace({
                 }}
                 onPointerDown={() => setSelectedLayerId('')}
               >
-                {referencePdfUrl ? (
+                {activeReferencePdfUrl ? (
                   <>
                     <iframe
                       title={`${template.name} rendered PDF reference page ${currentPageIndex + 1}`}
-                      src={referencePdfUrl}
+                      src={activeReferencePdfUrl}
                       className="pdf-canvas-reference"
                     />
                     <div className="pdf-canvas-reference-shield" aria-hidden="true" />
                   </>
-                ) : (
+                ) : showReferenceLayer ? (
                   <div className="pdf-canvas-reference-empty">
                     <FileText className="h-5 w-5" />
                     <span>{previewLoading ? 'Loading rendered PDF reference...' : previewError || 'Rendered PDF reference is not available yet.'}</span>
                   </div>
-                )}
+                ) : null}
                 {visiblePageSections.map((section) => {
                   const layer = sectionLayers.find((item) => item.id === section.id);
                   return (
@@ -3215,10 +3560,18 @@ function DesignModeWorkspace({
                     onSelect={() => setSelectedLayerId(element.id)}
                     onEditStart={() => {
                       setSelectedLayerId(element.id);
-                      setEditingElementId(element.id);
+                      if (['text', 'card', 'icon'].includes(element.type)) {
+                        setEditingElementId(element.id);
+                      } else {
+                        setEditingElementId('');
+                        setRightInspectorOpen(true);
+                        setInspectorCollapsed(false);
+                        setActiveInspectorTab(element.type === 'table' ? 'content' : 'style');
+                      }
                     }}
                     onInlineCommit={(value) => commitInlineElementText(element.id, value)}
                     onInlineCancel={() => setEditingElementId('')}
+                    onInlineCursor={(target, value, event) => rememberVariableCursor('element', element.id, target, value, event)}
                     onDragStart={(event) => beginElementInteraction(event, element, 'move')}
                     onResizeStart={(event, handle) => beginElementInteraction(event, element, 'resize', handle)}
                   />
@@ -3226,6 +3579,8 @@ function DesignModeWorkspace({
                 {selectedLayer && selectedFrame ? (
                   <FloatingLayerToolbar
                     frame={selectedFrame}
+                    layer={selectedLayer}
+                    element={selectedElement}
                     locked={selectedLayerLocked}
                     canEditFrame={selectedCanEditFrame}
                     canDelete={Boolean(selectedElement) || selectedSection?.system === false}
@@ -3237,12 +3592,21 @@ function DesignModeWorkspace({
                     onBringForward={bringSelectedLayerForward}
                     onSendBackward={sendSelectedLayerBackward}
                     onAlign={alignSelectedLayerCenter}
+                    onPatch={(patch) => {
+                      if (selectedElement) patchElement(selectedElement.id, patch);
+                      else if (selectedSection) patchSection(selectedSection.id, patch);
+                    }}
+                    onOpenInspector={(tab = 'content') => {
+                      setRightInspectorOpen(true);
+                      setInspectorCollapsed(false);
+                      setActiveInspectorTab(tab);
+                    }}
                   />
                 ) : null}
                 <div className="pdf-page-break-guide">Page break safe zone</div>
                 {visiblePageSections.length === 0 && visiblePageElements.length === 0 ? (
                   <div className="pdf-canvas-empty">
-                    <p>Choose a template or add an element from the left panel.</p>
+                    <p>Click Start from Current Template to load the editable PDF canvas.</p>
                   </div>
                 ) : null}
               </div>
@@ -3259,6 +3623,31 @@ function DesignModeWorkspace({
         ) : null}
       </div>
     </div>
+    {publishConfirmOpen ? (
+      <ConfirmModal
+        title="Publish PDF design?"
+        message="This will apply the current design to future generated Invoice PDFs. Existing saved PDFs will not be changed."
+        confirmLabel="Publish Design"
+        onCancel={() => setPublishConfirmOpen(false)}
+        onConfirm={() => {
+          setPublishConfirmOpen(false);
+          onPublishDesign?.(canvasDesign);
+        }}
+      />
+    ) : null}
+    {revertConfirmOpen ? (
+      <ConfirmModal
+        title="Revert draft design?"
+        message="Discard draft design changes and return to the last published/default layout?"
+        confirmLabel="Revert Draft"
+        onCancel={() => setRevertConfirmOpen(false)}
+        onConfirm={() => {
+          setRevertConfirmOpen(false);
+          revertDraftDesign();
+        }}
+      />
+    ) : null}
+    </>
   );
 }
 
@@ -3361,7 +3750,7 @@ function BuilderCanvasSection({ section, layer, selected, disabled, freeLayoutMo
   );
 }
 
-function BuilderCanvasElement({ element, selected, disabled, editing = false, onSelect, onEditStart, onInlineCommit, onInlineCancel, onDragStart, onResizeStart }) {
+function BuilderCanvasElement({ element, selected, disabled, editing = false, onSelect, onEditStart, onInlineCommit, onInlineCancel, onInlineCursor, onDragStart, onResizeStart }) {
   const Icon = elementIconForType(element.type);
   const style = styleForBuilderElement(element, selected);
   const content = element.content || {};
@@ -3369,6 +3758,13 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
   const inlineInputRef = useRef(null);
   const [inlineValue, setInlineValue] = useState(elementPrimaryText(element));
   const inlineEditable = ['text', 'card', 'icon'].includes(element.type);
+  const doubleClickEditable = inlineEditable || element.type === 'table' || element.type === 'divider' || element.type === 'image';
+  const inlineTarget = element.type === 'card' ? 'body' : element.type === 'icon' ? 'label' : 'text';
+  const tableColumns = content.columns?.length ? content.columns : contentDefaultsForElement('table').columns;
+  const tableColumnTemplate = Array.isArray(content.columnWidths) && content.columnWidths.length
+    ? tableColumns.map((_column, index) => `${Math.max(0.2, Number(content.columnWidths[index]) || 1)}fr`).join(' ')
+    : `repeat(${Math.max(1, tableColumns.length || 4)}, minmax(0, 1fr))`;
+  const tablePreviewCount = clampBuilderNumber(content.previewRowCount, 5, 1, 12);
 
   useEffect(() => {
     if (editing) setInlineValue(elementPrimaryText(element));
@@ -3399,7 +3795,7 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
         if (!locked) onDragStart(event);
       }}
       onDoubleClick={(event) => {
-        if (!inlineEditable || locked) return;
+        if (!doubleClickEditable || locked) return;
         event.preventDefault();
         event.stopPropagation();
         onEditStart?.();
@@ -3415,6 +3811,10 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
           value={inlineValue}
           onPointerDown={(event) => event.stopPropagation()}
           onChange={(event) => setInlineValue(event.target.value)}
+          onFocus={(event) => onInlineCursor?.(inlineTarget, inlineValue, event)}
+          onSelect={(event) => onInlineCursor?.(inlineTarget, inlineValue, event)}
+          onClick={(event) => onInlineCursor?.(inlineTarget, inlineValue, event)}
+          onKeyUp={(event) => onInlineCursor?.(inlineTarget, inlineValue, event)}
           onBlur={finishInlineEdit}
           onKeyDown={(event) => {
             if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') finishInlineEdit();
@@ -3428,20 +3828,20 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
         <div className="pdf-canvas-table">
           {content.title ? <p>{content.title}</p> : null}
           <div className="pdf-canvas-table-grid">
-            <div className="pdf-canvas-table-head" style={{ gridTemplateColumns: `repeat(${Math.max(1, (content.columns || []).length || 4)}, minmax(0, 1fr))`, minHeight: element.style?.rowHeight || 18 }}>
-              {(content.columns?.length ? content.columns : contentDefaultsForElement('table').columns).slice(0, 6).map((column, columnIndex) => <span key={`${column}-${columnIndex}`}>{column}</span>)}
+            <div className="pdf-canvas-table-head" style={{ gridTemplateColumns: tableColumnTemplate, minHeight: element.style?.rowHeight || 18, background: element.style?.headerBackgroundColor || element.style?.accentColor || '#0f2a52', color: element.style?.headerTextColor || '#ffffff' }}>
+              {tableColumns.slice(0, 6).map((column, columnIndex) => <span key={`${column}-${columnIndex}`}>{column}</span>)}
             </div>
-            {(content.rows?.length ? content.rows : contentDefaultsForElement('table').rows).slice(0, 5).map((row, rowIndex) => (
-              <div key={`table-row-${rowIndex}`} className="pdf-canvas-table-row" style={{ gridTemplateColumns: `repeat(${Math.max(1, (content.columns || []).length || 4)}, minmax(0, 1fr))`, minHeight: element.style?.rowHeight || 18 }}>
-                {(Array.isArray(row) ? row : [row]).slice(0, Math.max(1, (content.columns || []).length || 4)).map((cell, cellIndex) => <span key={`${cell}-${cellIndex}`}>{cell}</span>)}
+            {(content.rows?.length ? content.rows : contentDefaultsForElement('table').rows).slice(0, tablePreviewCount).map((row, rowIndex) => (
+              <div key={`table-row-${rowIndex}`} className="pdf-canvas-table-row" style={{ gridTemplateColumns: tableColumnTemplate, minHeight: element.style?.rowHeight || 18 }}>
+                {(Array.isArray(row) ? row : [row]).slice(0, Math.max(1, tableColumns.length || 4)).map((cell, cellIndex) => <span key={`${cell}-${cellIndex}`}>{cell}</span>)}
               </div>
             ))}
           </div>
         </div>
       ) : element.type === 'icon' ? (
-        <div className="pdf-canvas-icon">
-          <Box className="h-4 w-4" />
-          <span>{content.label || content.iconName || 'Icon'}</span>
+        <div className={`pdf-canvas-icon is-${content.variant || content.iconName || 'generic'}`}>
+          {content.variant === 'dot' ? <span className="pdf-canvas-dot" /> : content.variant === 'check' ? <span className="pdf-canvas-check">✓</span> : <Box className="h-4 w-4" />}
+          <span>{content.label || (content.variant ? '' : content.iconName) || ''}</span>
         </div>
       ) : element.type === 'qr' ? (
         <div className="pdf-canvas-qr">
@@ -3456,7 +3856,7 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
           <small>{[content.name, content.designation].filter(Boolean).join(' · ') || 'Name / designation'}</small>
         </div>
       ) : element.type === 'divider' ? (
-        <div className="pdf-canvas-divider" style={{ borderTopWidth: element.style?.dividerThickness || 2, borderTopStyle: element.style?.dividerStyle || 'solid', borderColor: element.style?.accentColor || '#0284c7' }}>
+        <div className={`pdf-canvas-divider ${element.style?.orientation === 'vertical' || Number(element.style?.rotate) === 90 ? 'is-vertical' : ''}`} style={{ borderTopWidth: element.style?.orientation === 'vertical' || Number(element.style?.rotate) === 90 ? 0 : element.style?.dividerThickness || 2, borderLeftWidth: element.style?.orientation === 'vertical' || Number(element.style?.rotate) === 90 ? element.style?.dividerThickness || 2 : 0, borderTopStyle: element.style?.dividerStyle || 'solid', borderLeftStyle: element.style?.dividerStyle || 'solid', borderColor: element.style?.accentColor || '#0284c7' }}>
           {content.label ? <span>{content.label}</span> : null}
         </div>
       ) : element.type === 'spacer' ? (
@@ -3464,10 +3864,12 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
       ) : element.type === 'image' ? (
         <div className="pdf-canvas-image"><ImageIcon className="h-5 w-5" /><span>{content.label || 'Image / Logo'}</span></div>
       ) : element.type === 'card' ? (
-        <div className={`pdf-canvas-card ${element.twoColumn ? 'is-two-column' : ''}`}>
-          <p><Icon className="h-3.5 w-3.5" />{content.title || element.name}</p>
-          <span>{content.body || 'Add details here'}</span>
-        </div>
+        content.boxOnly ? <div className="pdf-canvas-card-box" /> : (
+          <div className={`pdf-canvas-card ${element.twoColumn ? 'is-two-column' : ''}`}>
+            <p><Icon className="h-3.5 w-3.5" />{content.title || element.name}</p>
+            <span>{content.body || 'Add details here'}</span>
+          </div>
+        )
       ) : (
         <div className="pdf-canvas-text">{elementPrimaryText(element) || 'New text block'}</div>
       )}
@@ -3487,6 +3889,8 @@ function BuilderCanvasElement({ element, selected, disabled, editing = false, on
 
 function FloatingLayerToolbar({
   frame,
+  layer,
+  element,
   locked,
   canEditFrame,
   canDelete,
@@ -3497,13 +3901,25 @@ function FloatingLayerToolbar({
   onToggleLock,
   onBringForward,
   onSendBackward,
-  onAlign
+  onAlign,
+  onPatch,
+  onOpenInspector
 }) {
-  const width = 292;
+  const width = element ? 520 : 338;
   const top = Number(frame.y || 0) > 42
-    ? Number(frame.y || 0) - 40
+    ? Number(frame.y || 0) - 46
     : Number(frame.y || 0) + Number(frame.height || 0) + 8;
   const left = clampBuilderNumber(Number(frame.x || 0), 8, 8, Math.max(8, builderCanvas.width - width - 8));
+  const style = element?.style || {};
+  const content = element?.content || {};
+  const patchStyle = (patch) => onPatch?.({ style: patch });
+  const cycleAlignment = () => {
+    const order = ['left', 'center', 'right'];
+    const current = style.alignment || element?.alignment || 'left';
+    const next = order[(order.indexOf(current) + 1) % order.length] || 'left';
+    onPatch?.({ alignment: next, style: { alignment: next } });
+  };
+  const alignmentIcon = style.alignment === 'right' ? <AlignRight className="h-3.5 w-3.5" /> : style.alignment === 'center' ? <AlignCenter className="h-3.5 w-3.5" /> : <AlignLeft className="h-3.5 w-3.5" />;
   return (
     <div
       className="pdf-floating-toolbar"
@@ -3531,6 +3947,76 @@ function FloatingLayerToolbar({
       </button>
       <button type="button" className="pdf-floating-tool" disabled={!canEditFrame} onClick={onAlign} title="Align center on page">
         <AlignCenter className="h-3.5 w-3.5" />
+      </button>
+      {element?.type === 'text' ? (
+        <>
+          <label className="pdf-floating-mini-field" title="Font size">
+            <span>Size</span>
+            <input type="number" min="6" max="42" value={style.fontSize ?? 13} disabled={locked} onChange={(event) => patchStyle({ fontSize: Number(event.target.value) })} />
+          </label>
+          <button type="button" className={`pdf-floating-tool ${Number(style.fontWeight || 700) >= 700 ? 'is-primary' : ''}`} disabled={locked} onClick={() => patchStyle({ fontWeight: Number(style.fontWeight || 700) >= 700 ? 500 : 800 })} title="Bold">
+            <span>B</span>
+          </button>
+          <button type="button" className="pdf-floating-tool" disabled={locked} onClick={cycleAlignment} title="Align text">
+            {alignmentIcon}
+          </button>
+          <label className="pdf-floating-color" title="Text color">
+            <Palette className="h-3.5 w-3.5" />
+            <input type="color" value={style.textColor || '#0f172a'} disabled={locked} onChange={(event) => patchStyle({ textColor: event.target.value })} />
+          </label>
+        </>
+      ) : null}
+      {element?.type === 'card' ? (
+        <>
+          <label className="pdf-floating-color" title="Fill color">
+            <Square className="h-3.5 w-3.5" />
+            <input type="color" value={style.backgroundColor && style.backgroundColor !== 'transparent' ? style.backgroundColor : '#ffffff'} disabled={locked} onChange={(event) => patchStyle({ backgroundColor: event.target.value })} />
+          </label>
+          <label className="pdf-floating-color" title="Border color">
+            <Minus className="h-3.5 w-3.5" />
+            <input type="color" value={style.borderColor || '#cbd5e1'} disabled={locked} onChange={(event) => patchStyle({ borderColor: event.target.value })} />
+          </label>
+          <label className="pdf-floating-mini-field" title="Border radius">
+            <span>Radius</span>
+            <input type="number" min="0" max="32" value={style.borderRadius ?? 8} disabled={locked} onChange={(event) => patchStyle({ borderRadius: Number(event.target.value) })} />
+          </label>
+        </>
+      ) : null}
+      {element?.type === 'table' ? (
+        <>
+          <button type="button" className="pdf-floating-tool is-primary" disabled={locked} onClick={() => onOpenInspector?.('content')} title="Edit table">
+            <Edit3 className="h-3.5 w-3.5" />
+            <span>Edit Table</span>
+          </button>
+          <button type="button" className="pdf-floating-tool" disabled={locked} onClick={() => onOpenInspector?.('content')} title="Columns">
+            <Columns2 className="h-3.5 w-3.5" />
+            <span>Columns</span>
+          </button>
+          <label className="pdf-floating-color" title="Header background">
+            <Palette className="h-3.5 w-3.5" />
+            <input type="color" value={style.headerBackgroundColor || style.accentColor || '#0f2a52'} disabled={locked} onChange={(event) => patchStyle({ headerBackgroundColor: event.target.value, accentColor: event.target.value })} />
+          </label>
+        </>
+      ) : null}
+      {element && ['icon', 'divider', 'image'].includes(element.type) ? (
+        <>
+          <label className="pdf-floating-color" title="Stroke / accent color">
+            <Palette className="h-3.5 w-3.5" />
+            <input type="color" value={style.accentColor || '#0284c7'} disabled={locked} onChange={(event) => patchStyle({ accentColor: event.target.value, textColor: event.target.value })} />
+          </label>
+          <label className="pdf-floating-mini-field" title={element.type === 'divider' ? 'Stroke' : 'Size'}>
+            <span>{element.type === 'divider' ? 'Stroke' : 'Size'}</span>
+            <input type="number" min="1" max="42" value={element.type === 'divider' ? style.dividerThickness ?? 2 : style.fontSize ?? 13} disabled={locked} onChange={(event) => patchStyle(element.type === 'divider' ? { dividerThickness: Number(event.target.value) } : { fontSize: Number(event.target.value) })} />
+          </label>
+          <button type="button" className="pdf-floating-tool" disabled={locked} onClick={() => onOpenInspector?.('content')} title={element.type === 'icon' ? 'Replace icon' : 'More options'}>
+            <Box className="h-3.5 w-3.5" />
+            <span>{element.type === 'icon' ? 'Replace Icon' : 'Options'}</span>
+          </button>
+        </>
+      ) : null}
+      <button type="button" className="pdf-floating-tool" onClick={() => onOpenInspector?.(element?.type === 'table' ? 'content' : 'style')} title={`More options for ${layer?.title || content.title || 'selected element'}`}>
+        <SlidersHorizontal className="h-3.5 w-3.5" />
+        <span>More</span>
       </button>
     </div>
   );
@@ -3605,20 +4091,39 @@ function BuilderToggle({ label, checked, disabled, onChange }) {
   );
 }
 
-function BuilderTextInput({ label, value, disabled, onChange }) {
+function BuilderTextInput({ label, value, disabled, onChange, onCursor = null }) {
   return (
     <label className="pdf-control-field pdf-field-full">
       <span className="label">{label}</span>
-      <input className="input" value={value || ''} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+      <input
+        className="input"
+        value={value || ''}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        onFocus={onCursor || undefined}
+        onSelect={onCursor || undefined}
+        onClick={onCursor || undefined}
+        onKeyUp={onCursor || undefined}
+      />
     </label>
   );
 }
 
-function BuilderTextarea({ label, value, disabled, rows = 4, onChange }) {
+function BuilderTextarea({ label, value, disabled, rows = 4, onChange, onCursor = null }) {
   return (
     <label className="pdf-control-field pdf-field-full">
       <span className="label">{label}</span>
-      <textarea className="input min-h-24" rows={rows} value={value || ''} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+      <textarea
+        className="input min-h-24"
+        rows={rows}
+        value={value || ''}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        onFocus={onCursor || undefined}
+        onSelect={onCursor || undefined}
+        onClick={onCursor || undefined}
+        onKeyUp={onCursor || undefined}
+      />
     </label>
   );
 }
@@ -3643,19 +4148,20 @@ function BuilderSelect({ label, value, options, disabled, onChange }) {
   );
 }
 
-function ElementContentControls({ element, disabled, onPatch, onOpenVariables }) {
+function ElementContentControls({ element, disabled, onPatch, onOpenVariables, onRememberCursor = null }) {
   const content = element.content || {};
+  const remember = (target, value) => (event) => onRememberCursor?.(target, value, event);
   return (
     <div className="pdf-inspector-grid">
       <BuilderTextInput label="Element name" value={element.name} disabled={disabled} onChange={(value) => onPatch({ name: value, title: value })} />
       {element.type === 'card' ? (
         <>
-          <BuilderTextInput label="Title" value={content.title} disabled={disabled} onChange={(value) => onPatch({ content: { title: value } })} />
-          <BuilderTextarea label="Body/content text" value={content.body} disabled={disabled} onChange={(value) => onPatch({ content: { body: value } })} />
+          <BuilderTextInput label="Title" value={content.title} disabled={disabled} onChange={(value) => onPatch({ content: { title: value } })} onCursor={remember('title', content.title)} />
+          <BuilderTextarea label="Body/content text" value={content.body} disabled={disabled} onChange={(value) => onPatch({ content: { body: value } })} onCursor={remember('body', content.body)} />
         </>
       ) : element.type === 'table' ? (
         <>
-          <BuilderTextInput label="Table title" value={content.title} disabled={disabled} onChange={(value) => onPatch({ content: { title: value } })} />
+          <BuilderTextInput label="Table title" value={content.title} disabled={disabled} onChange={(value) => onPatch({ content: { title: value } })} onCursor={remember('title', content.title)} />
           <BuilderTextarea
             label="Columns, separated with |"
             value={formatTableColumns(content.columns)}
@@ -3663,11 +4169,26 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables })
             rows={2}
             onChange={(value) => {
               const columns = parseTableColumns(value);
-              onPatch({ content: { columns, rows: parseTableRows(formatTableRows(content.rows), columns.length) } });
+              onPatch({ content: { columns, rows: parseTableRows(formatTableRows(content.rows), columns.length), columnWidths: parseTableColumnWidths(formatTableColumnWidths(content.columnWidths), columns.length) } });
             }}
           />
           <BuilderTextarea
-            label="Rows, one row per line"
+            label="Column widths, separated with |"
+            value={formatTableColumnWidths(content.columnWidths)}
+            disabled={disabled}
+            rows={2}
+            onChange={(value) => onPatch({ content: { columnWidths: parseTableColumnWidths(value, (content.columns || []).length || 5) } })}
+          />
+          <BuilderNumberInput
+            label="Preview row count"
+            value={content.previewRowCount ?? 5}
+            min={1}
+            max={12}
+            disabled={disabled}
+            onChange={(value) => onPatch({ content: { previewRowCount: value } })}
+          />
+          <BuilderTextarea
+            label="Preview rows (design only), one row per line"
             value={formatTableRows(content.rows)}
             disabled={disabled}
             rows={5}
@@ -3676,25 +4197,25 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables })
         </>
       ) : element.type === 'icon' ? (
         <>
-          <BuilderTextInput label="Icon label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} />
-          <BuilderTextInput label="Icon name" value={content.iconName} disabled={disabled} onChange={(value) => onPatch({ content: { iconName: value } })} />
+          <BuilderTextInput label="Icon label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} onCursor={remember('label', content.label)} />
+          <BuilderTextInput label="Icon name" value={content.iconName} disabled={disabled} onChange={(value) => onPatch({ content: { iconName: value } })} onCursor={remember('iconName', content.iconName)} />
         </>
       ) : element.type === 'qr' ? (
         <>
-          <BuilderTextInput label="QR label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} />
+          <BuilderTextInput label="QR label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} onCursor={remember('label', content.label)} />
           <BuilderSelect label="QR type" value={content.qrType || element.qrType || 'payment'} options={[['payment', 'Payment'], ['contact', 'Contact'], ['company', 'Company'], ['custom', 'Custom']]} disabled={disabled} onChange={(value) => onPatch({ qrType: value, content: { qrType: value } })} />
-          <BuilderTextarea label="Helper text" value={content.helperText} disabled={disabled} rows={3} onChange={(value) => onPatch({ content: { helperText: value } })} />
+          <BuilderTextarea label="Helper text" value={content.helperText} disabled={disabled} rows={3} onChange={(value) => onPatch({ content: { helperText: value } })} onCursor={remember('helperText', content.helperText)} />
         </>
       ) : element.type === 'signature' ? (
         <>
-          <BuilderTextInput label="Label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} />
-          <BuilderTextInput label="Name" value={content.name} disabled={disabled} onChange={(value) => onPatch({ content: { name: value } })} />
-          <BuilderTextInput label="Designation" value={content.designation} disabled={disabled} onChange={(value) => onPatch({ content: { designation: value } })} />
+          <BuilderTextInput label="Label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} onCursor={remember('label', content.label)} />
+          <BuilderTextInput label="Name" value={content.name} disabled={disabled} onChange={(value) => onPatch({ content: { name: value } })} onCursor={remember('name', content.name)} />
+          <BuilderTextInput label="Designation" value={content.designation} disabled={disabled} onChange={(value) => onPatch({ content: { designation: value } })} onCursor={remember('designation', content.designation)} />
         </>
       ) : element.type === 'divider' || element.type === 'spacer' || element.type === 'image' ? (
-        <BuilderTextInput label="Label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} />
+        <BuilderTextInput label="Label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} onCursor={remember('label', content.label)} />
       ) : (
-        <BuilderTextarea label="Body/content text" value={content.text || elementPrimaryText(element)} disabled={disabled} onChange={(value) => onPatch({ content: { text: value } })} />
+        <BuilderTextarea label="Body/content text" value={content.text || elementPrimaryText(element)} disabled={disabled} onChange={(value) => onPatch({ content: { text: value } })} onCursor={remember('text', content.text || elementPrimaryText(element))} />
       )}
       <button type="button" className="btn btn-secondary justify-center pdf-field-full" onClick={onOpenVariables}>
         <ShieldCheck className="h-4 w-4" />
@@ -3750,7 +4271,11 @@ function ElementStyleControls({ element, disabled, onPatch }) {
       <BuilderNumberInput label="Font size" value={style.fontSize ?? 13} min={8} max={32} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontSize: value } })} />
       <BuilderSelect label="Font weight" value={String(style.fontWeight || 700)} options={[['400', 'Regular'], ['600', 'Semi bold'], ['700', 'Bold'], ['800', 'Extra bold']]} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontWeight: Number(value) } })} />
       {element.type === 'table' ? (
-        <BuilderNumberInput label="Table row height" value={style.rowHeight ?? 18} min={12} max={34} disabled={disabled} onChange={(value) => onPatch({ style: { rowHeight: value } })} />
+        <>
+          <ColorControl label="Header background" value={style.headerBackgroundColor || style.accentColor || '#0f2a52'} disabled={disabled} onChange={(value) => onPatch({ style: { headerBackgroundColor: value, accentColor: value } })} />
+          <ColorControl label="Header text color" value={style.headerTextColor || '#ffffff'} disabled={disabled} onChange={(value) => onPatch({ style: { headerTextColor: value } })} />
+          <BuilderNumberInput label="Table row height" value={style.rowHeight ?? 18} min={12} max={34} disabled={disabled} onChange={(value) => onPatch({ style: { rowHeight: value } })} />
+        </>
       ) : null}
       {element.type === 'divider' ? (
         <>
@@ -4602,6 +5127,11 @@ function StructuredTemplateEditor({
     onSave(event, designMode || designDraftDirty ? mergeDesignStateForSave(draft, designForSave) : draft);
   }
 
+  function publishDesign(designForPublish = designDraft) {
+    const nextDesign = designStateWithTemplateSections(designForPublish, sections, draft, template);
+    onSave(null, mergeDesignStateForSave(draft, nextDesign, { publish: true }));
+  }
+
   function switchToStructuredMode() {
     setUiMode('structured');
   }
@@ -4689,9 +5219,11 @@ function StructuredTemplateEditor({
           previewUrl={previewUrl}
           previewLoading={previewLoading}
           previewError={previewError}
+          token={token}
           onBack={switchToStructuredMode}
           onPreview={onPreview}
           onDownload={onDownload}
+          onPublishDesign={publishDesign}
           onShowVariables={onShowVariables}
         />
       ) : (
@@ -4714,7 +5246,7 @@ function StructuredTemplateEditor({
       {designConfirmOpen ? (
         <ConfirmModal
           title="Switch to Design Mode?"
-          message="Design Mode gives visual layout control. Existing PDF design will not change until you save. Continue?"
+          message="Design Mode gives visual layout control. Drafts are safe, and generated PDFs change only after you publish the design. Continue?"
           confirmLabel="Continue"
           onCancel={() => setDesignConfirmOpen(false)}
           onConfirm={() => {

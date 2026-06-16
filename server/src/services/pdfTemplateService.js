@@ -19,6 +19,7 @@ import {
 import { renderInvoicePdf, sampleInvoiceData } from './invoicePdfTemplate.js';
 import { renderQuotationPdf, sampleQuotationData } from './quotationPdfTemplate.js';
 import { renderServiceCompletedPdf, sampleServiceCompletedData } from './serviceCompletedPdfTemplate.js';
+import { buildPdfTemplateManifest } from './pdfTemplateManifestService.js';
 
 export const PDF_TEMPLATE_PLACEHOLDERS = [
   '{{company_name}}',
@@ -306,6 +307,11 @@ function commonStructuredConfig(key, flat = {}) {
       design: {
         enabled: false,
         confirmed: false,
+        mode: 'legacy',
+        published: false,
+        previewDraft: false,
+        baseTemplateVersion: 1,
+        overrides: {},
         lockedDefaultSections: true,
         canvas: {
           size: 'A4',
@@ -890,6 +896,11 @@ function sanitizeConfig(payload = {}, key = '') {
     : [];
   sanitized.design.enabled = boolValue(sanitized.design.enabled, false);
   sanitized.design.confirmed = boolValue(sanitized.design.confirmed, false);
+  sanitized.design.mode = sanitized.design.mode === 'manifest' ? 'manifest' : 'legacy';
+  sanitized.design.published = boolValue(sanitized.design.published, false);
+  sanitized.design.previewDraft = boolValue(sanitized.design.previewDraft, false);
+  sanitized.design.baseTemplateVersion = clampNumber(sanitized.design.baseTemplateVersion, defaults.design.baseTemplateVersion || 1, 1, 999999);
+  sanitized.design.overrides = isPlainObject(sanitized.design.overrides) ? sanitized.design.overrides : {};
   sanitized.design.lockedDefaultSections = true;
   sanitized.design.blank = boolValue(sanitized.design.blank, false);
   sanitized.design.freeLayoutMode = boolValue(sanitized.design.freeLayoutMode, false);
@@ -1088,6 +1099,15 @@ export async function getPdfTemplate(key) {
   return serializeTemplate(template);
 }
 
+export async function getPdfTemplateManifest(key, options = {}) {
+  const template = await getPdfTemplate(key);
+  const config = options.config && isPlainObject(options.config)
+    ? sanitizeConfig(options.config, template.key)
+    : sanitizeConfig(template.config || {}, template.key);
+  const company = await getCompanyIdentity().catch(() => COMPANY);
+  return buildPdfTemplateManifest(template.key, config, { company });
+}
+
 export async function getTemplateByKey(key) {
   if (!definitionsByKey.has(key)) return null;
   const template = await findTemplate(key);
@@ -1190,6 +1210,7 @@ function fallbackCompany(company = COMPANY) {
     address: company.address || COMPANY.address,
     phones: Array.isArray(company.phones) && company.phones.length ? company.phones : COMPANY.phones,
     email: company.email || COMPANY.email,
+    website: company.website || COMPANY.website || 'usmettur.com',
     whatsappNumber: company.whatsappNumber || '',
     logoFilePath: company.logoFilePath || LOGO_FULL_PATH
   };
@@ -1206,10 +1227,22 @@ export function buildTemplateContext(source = {}, company = COMPANY) {
   const amountPaid = source.amountPaid ?? source.paidAmount ?? 0;
   const balanceDue = source.balanceDue ?? source.balance ?? Math.max(0, Number(finalTotal || 0) - Number(amountPaid || 0));
   const serviceName = source.serviceName || source.serviceType || '-';
+  const brandModel = source.brandModel || [source.deviceBrand, source.deviceModel].filter(Boolean).join(' ').trim();
+  const [fallbackDeviceBrand = '-', ...fallbackDeviceModelParts] = String(brandModel || '-').split(' ');
+  const invoiceItems = Array.isArray(source.items)
+    ? source.items.map((item, index) => ({
+      item_index: String(index + 1),
+      item_description: item.description || item.name || '-',
+      item_quantity: String(item.quantity ?? item.qty ?? 1),
+      item_unit_price: formatAmount(item.unitPrice ?? item.price ?? item.rate ?? 0),
+      item_total: formatAmount(item.total ?? item.amount ?? 0)
+    }))
+    : [];
   return {
     company_name: currentCompany.name,
     company_phone: currentCompany.phones.join(' / '),
     company_email: currentCompany.email,
+    company_website: currentCompany.website,
     company_address: currentCompany.address || '-',
     customer_name: source.customerName || '-',
     customer_phone: source.customerPhone || '-',
@@ -1217,6 +1250,7 @@ export function buildTemplateContext(source = {}, company = COMPANY) {
     invoice_no: invoiceNumber,
     invoice_number: invoiceNumber,
     invoice_date: formatDate(source.invoiceDate || new Date()),
+    payment_status: source.paymentStatus || source.status || '-',
     quotation_no: quotationNumber,
     quotation_number: quotationNumber,
     quotation_date: formatDate(source.quotationDate || source.invoiceDate || new Date()),
@@ -1227,13 +1261,25 @@ export function buildTemplateContext(source = {}, company = COMPANY) {
     service_name: serviceName,
     service_type: source.serviceType || serviceName,
     device: source.device || '-',
-    brand_model: source.brandModel || '-',
-    problem_complaint: source.problemComplaint || '-',
+    device_name: source.deviceName || source.device || '-',
+    device_brand: source.deviceBrand || source.brand || (fallbackDeviceModelParts.length ? fallbackDeviceBrand : '-'),
+    device_model: source.deviceModel || source.model || (fallbackDeviceModelParts.length ? fallbackDeviceModelParts.join(' ') : brandModel || '-'),
+    brand_model: brandModel || '-',
+    problem_complaint: source.problemComplaint || source.problemDescription || '-',
+    problem_description: source.problemDescription || source.problemComplaint || '-',
     technician_name: source.technicianName || '-',
     total_amount: formatAmount(totalAmount),
+    subtotal_amount: formatAmount(source.subtotalAmount ?? source.subtotal ?? totalAmount),
     final_total: formatAmount(finalTotal),
     amount_paid: formatAmount(amountPaid),
     balance_due: formatAmount(balanceDue),
+    amount_in_words: source.amountInWords || source.amount_in_words || '-',
+    item_index: invoiceItems[0]?.item_index || '1',
+    item_description: invoiceItems[0]?.item_description || '-',
+    item_quantity: invoiceItems[0]?.item_quantity || '1',
+    item_unit_price: invoiceItems[0]?.item_unit_price || formatAmount(0),
+    item_total: invoiceItems[0]?.item_total || formatAmount(0),
+    invoice_items: invoiceItems,
     amc_start_date: formatDate(source.amcStartDate),
     amc_end_date: formatDate(source.amcEndDate),
     next_service_date: formatDate(source.nextServiceDate),

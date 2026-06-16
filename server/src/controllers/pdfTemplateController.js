@@ -1,6 +1,7 @@
 import {
   generatePdfTemplatePreview,
   getPdfTemplate,
+  getPdfTemplateManifest,
   listPdfTemplates,
   resetPdfTemplate,
   restorePdfTemplateVersion,
@@ -37,4 +38,11 @@ export async function preview(req, res) {
     config: req.body?.config
   });
   res.download(pdf.filePath, pdf.filename);
+}
+
+export async function manifest(req, res) {
+  const layoutManifest = await getPdfTemplateManifest(req.params.key, {
+    config: req.body?.config
+  });
+  res.json({ success: true, manifest: layoutManifest });
 }

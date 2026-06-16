@@ -753,6 +753,58 @@ function blankInvoiceData() {
   };
 }
 
+function splitBrandModel(value = '') {
+  const parts = String(value || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { brand: '-', model: parts[0] || '-' };
+  return { brand: parts[0], model: parts.slice(1).join(' ') };
+}
+
+function visualInvoiceContext(context = {}, invoice = {}, items = [], totals = {}) {
+  const brandModel = invoice.brandModel || [invoice.deviceBrand, invoice.deviceModel].filter(Boolean).join(' ').trim();
+  const fallback = splitBrandModel(brandModel);
+  const invoiceItems = items.map((item, index) => ({
+    item_index: String(index + 1),
+    item_description: cleanText(item.description, 'Service'),
+    item_quantity: String(item.quantity || 1),
+    item_unit_price: money(item.unitPrice),
+    item_total: money(item.total)
+  }));
+  return {
+    ...context,
+    invoice_no: invoice.invoiceNo || context.invoice_no || context.invoice_number || '-',
+    invoice_number: invoice.invoiceNo || context.invoice_number || context.invoice_no || '-',
+    invoice_date: invoice.invoiceDate || context.invoice_date || '-',
+    payment_status: invoice.paymentStatus || context.payment_status || '-',
+    customer_name: invoice.customerName || context.customer_name || '-',
+    customer_phone: invoice.customerPhone || context.customer_phone || '-',
+    customer_address: invoice.customerAddress || context.customer_address || '-',
+    work_order_id: invoice.jobReference || context.work_order_id || context.work_order_no || '-',
+    work_order_no: invoice.jobReference || context.work_order_no || context.work_order_id || '-',
+    service_type: invoice.serviceType || context.service_type || context.service_name || '-',
+    service_name: invoice.serviceType || context.service_name || context.service_type || '-',
+    device: invoice.device || context.device || '-',
+    device_name: invoice.deviceName || invoice.device || context.device_name || context.device || '-',
+    device_brand: invoice.deviceBrand || invoice.brand || context.device_brand || (fallback.model !== '-' ? fallback.brand : '-'),
+    device_model: invoice.deviceModel || invoice.model || context.device_model || (fallback.model !== '-' ? fallback.model : brandModel || '-'),
+    brand_model: brandModel || context.brand_model || '-',
+    problem_complaint: invoice.problemComplaint || invoice.problemDescription || context.problem_complaint || '-',
+    problem_description: invoice.problemDescription || invoice.problemComplaint || context.problem_description || context.problem_complaint || '-',
+    technician_name: invoice.technician || invoice.technicianName || context.technician_name || '-',
+    total_amount: money(totals.subtotal),
+    subtotal_amount: money(totals.subtotal),
+    final_total: money(totals.finalTotal),
+    amount_paid: money(totals.amountPaid),
+    balance_due: money(totals.balance),
+    amount_in_words: invoice.amountInWords || totals.words || context.amount_in_words || '-',
+    item_index: invoiceItems[0]?.item_index || '1',
+    item_description: invoiceItems[0]?.item_description || '-',
+    item_quantity: invoiceItems[0]?.item_quantity || '1',
+    item_unit_price: invoiceItems[0]?.item_unit_price || money(0),
+    item_total: invoiceItems[0]?.item_total || money(0),
+    invoice_items: invoiceItems
+  };
+}
+
 export function sampleInvoiceData() {
   return {
     invoiceNo: 'INV-2026-0089',
@@ -808,7 +860,7 @@ export function renderInvoicePdf(doc, options = {}) {
   };
 
   if (shouldRenderVisualDesign(config)) {
-    drawVisualDesignPdf(doc, { config, context, title, company });
+    drawVisualDesignPdf(doc, { config, context: visualInvoiceContext(context, invoice, items, totals), title, company });
     drawPageNumbers(doc, config);
     return { subtotal, finalTotal, amountPaid, balance };
   }

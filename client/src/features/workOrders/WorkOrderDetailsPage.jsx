@@ -2931,7 +2931,6 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 {item}
               </button>
             )) : <StatusBadge status={order.status} />}
-            {canAssignTechnician && !order.technicianId ? <button type="button" className={`${detailStatusButtonClass(false)} border-sky-400/30 text-sky-100`} onClick={autoAssignDetail}>Auto Assign Technician</button> : null}
           </div>
         </div> : null}
         {isTechnician ? (
