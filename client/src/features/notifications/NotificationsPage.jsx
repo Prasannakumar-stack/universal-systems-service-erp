@@ -362,13 +362,6 @@ export function NotificationsPage({ role = 'admin' }) {
         </div>
       </section>
 
-      {!loading && !hasUnread ? (
-        <div className="notifications-caught-up-hint" role="status">
-          <span className="notifications-caught-up-hint-dot" aria-hidden="true" />
-          <span className="notifications-caught-up-hint-text">All caught up — no unread notifications.</span>
-        </div>
-      ) : null}
-
       <section className="notifications-list-card" aria-live="polite">
         {loading ? (
           <div className="notifications-loading">

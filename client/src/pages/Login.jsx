@@ -8,26 +8,26 @@ import { staffWorkspacePath } from '../utils/roles.js';
 
 function BrandLogo({ appMode = false }) {
   return (
-    <span className="login-brand-lockup" aria-hidden="true">
+    <span className={`login-brand-lockup ${appMode ? 'login-brand-lockup-wordmark' : ''}`} aria-hidden="true">
       {appMode ? (
-        <span className="login-brand-image-frame">
-          <img src="/logo-icon.png" alt="" draggable="false" />
-        </span>
+        <img src="/logo-full.png" alt="" className="login-brand-wordmark" draggable="false" />
       ) : (
-        <svg className="login-brand-icon" viewBox="0 0 92 92">
-          <circle cx="46" cy="46" r="41" />
-          <path d="M8 46h76M46 5c-15 12-23 25-23 41s8 29 23 41M46 5c15 12 23 25 23 41s-8 29-23 41" />
-          <path d="M16 24c17 7 43 7 60 0M16 68c17-7 43-7 60 0" />
-          <path d="M46 5v82" />
-          <text x="46" y="62" textAnchor="middle">
-            US
-          </text>
-        </svg>
+        <>
+          <svg className="login-brand-icon" viewBox="0 0 92 92">
+            <circle cx="46" cy="46" r="41" />
+            <path d="M8 46h76M46 5c-15 12-23 25-23 41s8 29 23 41M46 5c15 12 23 25 23 41s-8 29-23 41" />
+            <path d="M16 24c17 7 43 7 60 0M16 68c17-7 43-7 60 0" />
+            <path d="M46 5v82" />
+            <text x="46" y="62" textAnchor="middle">
+              US
+            </text>
+          </svg>
+          <span className="login-brand-text">
+            <span>Universal</span>
+            <span>Systems</span>
+          </span>
+        </>
       )}
-      <span className="login-brand-text">
-        <span>Universal</span>
-        <span>Systems</span>
-      </span>
     </span>
   );
 }

@@ -86,6 +86,14 @@ function PublicNavbarLogo({ branding }) {
   );
 }
 
+function PublicHeaderLogo() {
+  return (
+    <span className="public-header-wordmark" aria-hidden="true">
+      <img src="/logo-full.png" alt="" className="public-header-wordmark-image" draggable="false" />
+    </span>
+  );
+}
+
 function PublicMaintenancePage({ settings }) {
   const contact = settings.contact || {};
   const phones = publicPhoneList(contact);
@@ -143,8 +151,8 @@ function PublicLayoutShell() {
     <div className="public-site-shell min-h-screen" style={{ '--public-accent': accentColor, '--brand': accentColor, '--brand-2': accentColor }}>
       <header className="public-header sticky top-0 z-50 border-b border-[var(--line)] backdrop-blur-xl">
         <div className="container-page flex h-18 items-center justify-between py-3">
-          <NavLink to="/" className="public-logo-link flex items-center" aria-label="Universal Systems home">
-            <PublicNavbarLogo branding={branding} />
+          <NavLink to="/" className="public-header-logo-link flex items-center" aria-label="Universal Systems home">
+            <PublicHeaderLogo />
           </NavLink>
           <nav className="public-nav hidden items-center gap-1 lg:flex">
             <NavItems links={links} />
@@ -159,8 +167,8 @@ function PublicLayoutShell() {
         <div className="public-mobile-scrim fixed inset-0 z-[60] bg-black/55 lg:hidden" onClick={() => setOpen(false)}>
           <div className="public-mobile-drawer ml-auto h-full w-80 max-w-[88vw] p-5 shadow-soft" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between">
-              <span className="public-logo-link public-logo-lockup inline-flex items-center">
-                <PublicNavbarLogo branding={branding} />
+              <span className="public-header-logo-link inline-flex items-center">
+                <PublicHeaderLogo />
               </span>
               <button className="icon-button h-9 w-9" onClick={() => setOpen(false)} aria-label="Close menu">
                 <X className="h-5 w-5" />
