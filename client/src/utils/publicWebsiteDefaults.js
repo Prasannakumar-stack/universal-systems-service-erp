@@ -150,6 +150,11 @@ const publicPageHeroImages = {
   bookService: '/Book%20Service%20Page%20image.png'
 };
 
+const companyLogoByVariant = {
+  header: '/logo-full.png',
+  mark: '/logo-icon.png'
+};
+
 export function mergePublicWebsiteSettings(settings = {}) {
   const merged = {
     ...defaultPublicWebsiteSettings,
@@ -173,6 +178,27 @@ export function publicAssetUrl(value) {
   if (/^https?:\/\//i.test(url) || url.startsWith('data:') || url.startsWith('blob:')) return url;
   if (url.startsWith('/uploads/')) return `${apiOrigin}${url}`;
   return url;
+}
+
+function uniqueValues(values) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+export function publicLogoSources(branding = {}, variant = 'mark') {
+  const companyLogo = companyLogoByVariant[variant] || companyLogoByVariant.mark;
+  const fallbackLogo = variant === 'header' ? companyLogoByVariant.mark : companyLogoByVariant.header;
+  const customLogo = publicAssetUrl(branding?.logoUrl);
+  const companySources = [publicAssetUrl(companyLogo), publicAssetUrl(fallbackLogo)];
+
+  if (branding?.useCompanyLogo === false && customLogo) {
+    return uniqueValues([customLogo, ...companySources]);
+  }
+
+  return uniqueValues(companySources);
+}
+
+export function publicLogoUrl(branding = {}, variant = 'mark') {
+  return publicLogoSources(branding, variant)[0] || '';
 }
 
 export function publicPageHeroImage(page) {

@@ -234,6 +234,42 @@ function clampNumber(value, fallback, min, max) {
   return Math.min(max, Math.max(min, number));
 }
 
+function isInvoiceManifestElement(element = {}) {
+  return [
+    element.id,
+    element.sourceKey,
+    element.manifestSemanticId,
+    element.manifest?.semanticId
+  ].some((value) => {
+    const text = String(value || '');
+    return text.startsWith('invoice.') || text.replace(/[^a-z0-9]/gi, '').toLowerCase().startsWith('invoice');
+  });
+}
+
+function isEditorHelperText(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  return [
+    '',
+    'divider',
+    'spacer',
+    'add details here',
+    'image / logo',
+    'text block',
+    'new text block',
+    'card title',
+    'card',
+    'table',
+    'icon'
+  ].includes(normalized);
+}
+
+function printableText(value = '', fallback = '', options = {}) {
+  const raw = String(value ?? '').trim();
+  if (options.suppressHelpers && isEditorHelperText(raw)) return '';
+  if (!raw) return fallback;
+  return raw;
+}
+
 function designElements(config = {}) {
   if (config.design?.enabled !== true) return [];
   if (config.design?.published !== true && config.design?.previewDraft !== true) return [];
@@ -276,6 +312,15 @@ function designPagesForElements(config = {}, elements = []) {
 }
 
 function designElementFrame(element = {}) {
+  if (isInvoiceManifestElement(element)) {
+    let x = clampNumber(element.x, 0, 0, PAGE_WIDTH);
+    let y = clampNumber(element.y, 0, 0, PAGE_HEIGHT);
+    let width = clampNumber(element.width, 1, 0.1, PAGE_WIDTH);
+    let height = clampNumber(element.height, 1, 0.1, PAGE_HEIGHT);
+    if (x + width > PAGE_WIDTH) width = Math.max(0.1, PAGE_WIDTH - x);
+    if (y + height > PAGE_HEIGHT) height = Math.max(0.1, PAGE_HEIGHT - y);
+    return { x, y, width, height };
+  }
   const margin = element.printSafe === false ? 0 : 24;
   const fallbackWidth = element.type === 'section' ? CONTENT_WIDTH : element.type === 'divider' ? 260 : 220;
   const fallbackHeight = element.type === 'section' ? 80 : element.type === 'divider' ? 22 : 76;
@@ -321,9 +366,10 @@ function drawElementShell(doc, element, frame) {
 
 function drawDividerElement(doc, element, frame, context = {}) {
   const style = element.style || {};
+  const invoiceElement = isInvoiceManifestElement(element);
   const color = style.accentColor || '#0284c7';
   const vertical = style.orientation === 'vertical' || Number(style.rotate) === 90;
-  const lineWidth = clampNumber(style.dividerThickness, 2, 1, 8);
+  const lineWidth = invoiceElement ? clampNumber(style.dividerThickness, 1, 0.1, 8) : clampNumber(style.dividerThickness, 2, 1, 8);
   doc.save();
   doc.strokeColor(color).lineWidth(lineWidth);
   if (style.dividerStyle === 'dashed') doc.dash(6, { space: 4 });
@@ -336,7 +382,9 @@ function drawDividerElement(doc, element, frame, context = {}) {
     doc.moveTo(frame.x, y).lineTo(frame.x + frame.width, y).stroke();
   }
   if (doc.undash) doc.undash();
-  const label = cleanText(contentForElement(element).label, '');
+  const label = invoiceElement && contentForElement(element).renderLabel !== true
+    ? ''
+    : printableText(contentForElement(element).label, '', { suppressHelpers: invoiceElement });
   if (label && !vertical) {
     const y = frame.y + Math.max(0, frame.height / 2);
     useFont(doc, 'BodyBold', 'Helvetica-Bold');
@@ -349,33 +397,52 @@ function drawDividerElement(doc, element, frame, context = {}) {
 function drawTextElement(doc, element, frame, context) {
   const style = element.style || {};
   const content = contentForElement(element);
-  const text = renderText(content.text || element.title || element.name || 'Text block', context);
-  const paddingX = clampNumber(style.paddingX ?? style.padding ?? 12, 12, 0, 48);
-  const paddingY = clampNumber(style.paddingY ?? style.padding ?? 12, 12, 0, 48);
+  const invoiceElement = isInvoiceManifestElement(element);
+  const rawText = invoiceElement
+    ? printableText(content.text, '', { suppressHelpers: true })
+    : (content.text || element.title || element.name || 'Text block');
+  const text = renderText(rawText, context);
+  if (!text && invoiceElement) return;
+  const paddingX = invoiceElement ? 0 : clampNumber(style.paddingX ?? style.padding ?? 12, 12, 0, 48);
+  const paddingY = invoiceElement ? 0 : clampNumber(style.paddingY ?? style.padding ?? 12, 12, 0, 48);
+  const fontSize = invoiceElement
+    ? clampNumber(style.fontSize, 9, 4, 40)
+    : clampNumber(style.fontSize, 13, 8, 32);
+  const lineHeight = clampNumber(style.lineHeight, invoiceElement ? 1.16 : 1.2, 0.85, 2.4);
+  const lineGap = invoiceElement ? Math.max(0, fontSize * (lineHeight - 1)) : 2;
   drawElementShell(doc, element, frame);
   useFont(doc, Number(style.fontWeight || 700) >= 700 ? 'BodyBold' : 'Body', Number(style.fontWeight || 700) >= 700 ? 'Helvetica-Bold' : 'Helvetica');
-  doc.fontSize(clampNumber(style.fontSize, 13, 8, 32)).fillColor(style.textColor || element.textColor || '#0f172a')
+  doc.fontSize(fontSize).fillColor(style.textColor || element.textColor || '#0f172a')
     .text(text, frame.x + paddingX, frame.y + paddingY, {
       width: Math.max(12, frame.width - paddingX * 2),
       height: Math.max(8, frame.height - paddingY * 2),
       align: style.alignment || element.alignment || 'left',
-      lineGap: 2
+      lineGap,
+      ellipsis: false
     });
 }
 
 function drawCardElement(doc, element, frame, context) {
   const style = element.style || {};
   const content = contentForElement(element);
+  const invoiceElement = isInvoiceManifestElement(element);
   const accent = style.accentColor || '#0284c7';
   drawElementShell(doc, element, frame);
   if (content.boxOnly) return;
+  const title = invoiceElement
+    ? printableText(content.title, '', { suppressHelpers: true })
+    : printableText(content.title || element.name, 'Card', { suppressHelpers: false });
+  const body = invoiceElement
+    ? printableText(content.body, '', { suppressHelpers: true })
+    : printableText(content.body, '-', { suppressHelpers: false });
+  if (invoiceElement && !title && !body) return;
   doc.rect(frame.x, frame.y, 5, frame.height).fill(accent);
   useFont(doc, 'BodyBold', 'Helvetica-Bold');
   doc.fontSize(Math.max(8, clampNumber(style.fontSize, 13, 8, 32) * 0.78)).fillColor(accent)
-    .text(renderText(content.title || element.name || 'Card', context), frame.x + 16, frame.y + 12, { width: Math.max(12, frame.width - 32) });
+    .text(renderText(title, context), frame.x + 16, frame.y + 12, { width: Math.max(12, frame.width - 32) });
   useFont(doc, Number(style.fontWeight || 700) >= 700 ? 'BodyBold' : 'Body', Number(style.fontWeight || 700) >= 700 ? 'Helvetica-Bold' : 'Helvetica');
   doc.fontSize(clampNumber(style.fontSize, 13, 8, 32) * 0.72).fillColor(style.textColor || '#0f172a')
-    .text(renderText(content.body || '-', context), frame.x + 16, frame.y + 34, {
+    .text(renderText(body, context), frame.x + 16, frame.y + 34, {
       width: Math.max(12, frame.width - 32),
       height: Math.max(8, frame.height - 42),
       columns: element.twoColumn ? 2 : 1,
@@ -523,6 +590,7 @@ function resolveDesignImagePath(content = {}, company = {}) {
 function drawImageElement(doc, element, frame, company = {}) {
   const style = element.style || {};
   const content = contentForElement(element);
+  const invoiceElement = isInvoiceManifestElement(element);
   drawElementShell(doc, element, frame);
   const imagePath = resolveDesignImagePath(content, company);
   if (imagePath) {
@@ -534,6 +602,7 @@ function drawImageElement(doc, element, frame, company = {}) {
     });
     return;
   }
+  if (invoiceElement) return;
   useFont(doc, 'BodyBold', 'Helvetica-Bold');
   doc.fontSize(9).fillColor(style.textColor || '#64748b')
     .text(cleanText(content.label, 'Image / Logo'), frame.x + 12, frame.y + Math.max(12, frame.height / 2 - 5), { width: frame.width - 24, align: 'center' });
@@ -541,6 +610,9 @@ function drawImageElement(doc, element, frame, company = {}) {
 
 function drawSpacerElement(doc, element, frame) {
   const style = element.style || {};
+  const invoiceElement = isInvoiceManifestElement(element);
+  const label = printableText(contentForElement(element).label, '', { suppressHelpers: invoiceElement });
+  if (invoiceElement && !label) return;
   doc.save();
   doc.roundedRect(frame.x, frame.y, frame.width, frame.height, 6)
     .strokeColor(style.borderColor || '#cbd5e1')
@@ -548,8 +620,10 @@ function drawSpacerElement(doc, element, frame) {
     .dash(3, { space: 3 })
     .stroke();
   if (doc.undash) doc.undash();
-  useFont(doc, 'BodyBold', 'Helvetica-Bold');
-  doc.fontSize(7.5).fillColor('#94a3b8').text(cleanText(contentForElement(element).label, 'Spacer'), frame.x, frame.y + Math.max(4, frame.height / 2 - 4), { width: frame.width, align: 'center' });
+  if (label) {
+    useFont(doc, 'BodyBold', 'Helvetica-Bold');
+    doc.fontSize(7.5).fillColor('#94a3b8').text(label, frame.x, frame.y + Math.max(4, frame.height / 2 - 4), { width: frame.width, align: 'center' });
+  }
   doc.restore();
 }
 
@@ -575,6 +649,7 @@ function tableRowsForElement(content = {}, context = {}) {
 function drawTableElement(doc, element, frame, context) {
   const style = element.style || {};
   const content = contentForElement(element);
+  const invoiceElement = isInvoiceManifestElement(element);
   const accent = style.accentColor || '#0f2a52';
   const headerBackground = style.headerBackgroundColor || accent;
   const headerTextColor = style.headerTextColor || '#ffffff';
@@ -588,7 +663,8 @@ function drawTableElement(doc, element, frame, context) {
   const alternateRowBackgroundColor = style.alternateRowBackgroundColor || '#f8fafc';
   const borderColor = style.borderColor || '#d8e5f7';
   const borderWidth = clampNumber(style.borderWidth, 0.5, 0, 4);
-  const titleHeight = content.title ? 16 : 0;
+  const tableTitle = printableText(content.title, '', { suppressHelpers: invoiceElement });
+  const titleHeight = tableTitle ? 16 : 0;
   const tableX = frame.x + outerPaddingX;
   const tableY = frame.y + outerPaddingY + titleHeight;
   const tableWidth = Math.max(20, frame.width - outerPaddingX * 2);
@@ -596,10 +672,10 @@ function drawTableElement(doc, element, frame, context) {
   const columnWidths = tableColumnWidths(content, columns, tableWidth);
   const align = style.alignment || element.alignment || 'left';
   drawElementShell(doc, element, frame);
-  if (content.title) {
+  if (tableTitle) {
     useFont(doc, 'BodyBold', 'Helvetica-Bold');
     doc.fontSize(Math.max(7, clampNumber(style.fontSize, 12, 8, 32) * 0.72)).fillColor(accent)
-      .text(renderText(content.title, context), frame.x + outerPaddingX, frame.y + 8, { width: tableWidth, height: 12 });
+      .text(renderText(tableTitle, context), frame.x + outerPaddingX, frame.y + 8, { width: tableWidth, height: 12 });
   }
   doc.roundedRect(tableX, tableY, tableWidth, rowHeight, 4).fill(headerBackground);
   useFont(doc, 'BodyBold', 'Helvetica-Bold');
@@ -701,10 +777,17 @@ function drawSmallVariantIcon(doc, type, frame, color) {
 function drawIconElement(doc, element, frame, context) {
   const style = element.style || {};
   const content = contentForElement(element);
+  const invoiceElement = isInvoiceManifestElement(element);
   const accent = style.accentColor || '#0284c7';
-  const label = renderText(content.label || content.iconName || element.name || 'Icon', context);
   const variant = String(content.variant || content.iconName || '').toLowerCase();
+  const label = renderText(
+    invoiceElement
+      ? printableText(content.label, '', { suppressHelpers: true })
+      : (content.label || content.iconName || element.name || 'Icon'),
+    context
+  );
   drawElementShell(doc, element, frame);
+  if (invoiceElement && !variant && !label) return;
   if (['address', 'phone', 'email', 'website'].includes(variant)) {
     drawContactVariantIcon(doc, variant, frame, accent);
     return;

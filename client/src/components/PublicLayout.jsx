@@ -4,7 +4,6 @@ import {
   ArrowRight,
   BadgeCheck,
   Clock3,
-  CreditCard,
   Mail,
   MapPin,
   Menu,
@@ -29,8 +28,7 @@ const footerHighlights = [
   { label: 'Same-day Support', Icon: Clock3 },
   { label: 'AMC Available', Icon: BadgeCheck },
   { label: 'WhatsApp Updates', Icon: MessageCircle },
-  { label: 'Clear Diagnosis', Icon: Search },
-  { label: 'Pay After Confirmation', Icon: CreditCard }
+  { label: 'Clear Diagnosis', Icon: Search }
 ];
 
 const footerServiceLinks = [

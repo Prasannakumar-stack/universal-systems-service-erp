@@ -653,52 +653,93 @@ function normalizeDesignElementType(type = 'text') {
   return advancedSectionTypes.has(normalized) ? normalized : 'text';
 }
 
+function isInvoiceDesignElement(element = {}) {
+  return [
+    element.id,
+    element.sourceKey,
+    element.manifestSemanticId,
+    element.manifest?.semanticId
+  ].some((value) => {
+    const text = String(value || '');
+    return text.startsWith('invoice.') || text.replace(/[^a-z0-9]/gi, '').toLowerCase().startsWith('invoice');
+  });
+}
+
+function sanitizeDesignColor(value, fallback = '#0f2a52') {
+  const text = clean(value || '');
+  if (text.toLowerCase() === 'transparent') return 'transparent';
+  return sanitizeColor(text || fallback, fallback);
+}
+
 function sanitizeDesignContent(type = 'text', content = {}, element = {}) {
+  const invoiceElement = isInvoiceDesignElement(element);
   const source = isPlainObject(content) ? content : { text: cleanText(content, '', 5000) };
   const common = {
     kind: cleanText(source.kind, type === 'section' ? 'details' : type, 80),
-    label: cleanText(source.label ?? element.label, '', 160),
-    title: cleanText(source.title ?? element.title, '', 160),
-    body: cleanText(source.body ?? element.body, '', 5000),
-    text: cleanText(source.text ?? (typeof element.content === 'string' ? element.content : ''), '', 5000),
-    helperText: cleanText(source.helperText ?? element.helperText, '', 1000),
+    label: cleanText(invoiceElement ? source.label : source.label ?? element.label, '', 160),
+    title: cleanText(invoiceElement ? source.title : source.title ?? element.title, '', 160),
+    body: cleanText(invoiceElement ? source.body : source.body ?? element.body, '', 5000),
+    text: cleanText(invoiceElement ? source.text : source.text ?? (typeof element.content === 'string' ? element.content : ''), '', 5000),
+    helperText: cleanText(invoiceElement ? source.helperText : source.helperText ?? element.helperText, '', 1000),
     name: cleanText(source.name ?? element.personName, '', 160),
     designation: cleanText(source.designation, '', 160),
     iconName: cleanText(source.iconName ?? element.iconName, '', 80),
+    variant: cleanText(source.variant ?? element.variant, '', 80),
     qrType: ['payment', 'contact', 'company', 'custom'].includes(source.qrType || element.qrType) ? (source.qrType || element.qrType) : 'payment',
-    imageMode: ['logo', 'placeholder', 'custom'].includes(source.imageMode || element.imageMode) ? (source.imageMode || element.imageMode) : 'logo',
+    imageMode: ['logo', 'placeholder', 'custom', 'watermark'].includes(source.imageMode || element.imageMode) ? (source.imageMode || element.imageMode) : 'logo',
+    assetPath: cleanText(source.assetPath ?? element.assetPath, '', 500),
+    imageUrl: cleanText(source.imageUrl ?? element.imageUrl, '', 500),
+    src: cleanText(source.src ?? element.src, '', 500),
+    fitToFrame: boolValue(source.fitToFrame ?? element.fitToFrame, true),
+    backgroundElement: boolValue(source.backgroundElement ?? element.backgroundElement, false),
+    boxOnly: boolValue(source.boxOnly ?? element.boxOnly, false),
+    renderLabel: boolValue(source.renderLabel ?? element.renderLabel, false),
     twoColumn: boolValue(source.twoColumn ?? element.twoColumn, false),
     columns: Array.isArray(source.columns) ? source.columns.map((item) => cleanText(item, '', 80)).slice(0, 8) : [],
+    columnWidths: Array.isArray(source.columnWidths) ? source.columnWidths.map((item) => clampNumber(item, 1, 0.1, 999)).slice(0, 8) : [],
+    previewRowCount: clampNumber(source.previewRowCount, 5, 1, 24),
+    dynamicRows: boolValue(source.dynamicRows, false),
+    rowTemplate: Array.isArray(source.rowTemplate) ? source.rowTemplate.map((item) => cleanText(item, '', 160)).slice(0, 8) : [],
     rows: Array.isArray(source.rows)
       ? source.rows.map((row) => (Array.isArray(row) ? row.map((item) => cleanText(item, '', 160)).slice(0, 8) : [cleanText(row, '', 160)])).slice(0, 12)
       : []
   };
-  if (type === 'card' && !common.title) common.title = cleanText(element.name, 'Card title', 160);
+  if (type === 'card' && !common.title && !common.boxOnly && !invoiceElement) common.title = cleanText(element.name, 'Card title', 160);
   if (type === 'qr' && !common.label) common.label = 'QR CODE';
   if (type === 'signature' && !common.label) common.label = 'Authorized Signature';
-  if (type === 'table' && !common.title) common.title = 'Table';
-  if (type === 'icon' && !common.label) common.label = cleanText(source.iconName ?? element.iconName, 'Icon', 80);
-  if ((type === 'divider' || type === 'spacer' || type === 'image') && !common.label) common.label = type === 'image' ? 'Image / Logo' : type === 'spacer' ? 'Spacer' : 'Divider';
-  if (type === 'text' && !common.text) common.text = cleanText(element.title, 'Text block', 160);
+  if (type === 'table' && !common.title && !invoiceElement) common.title = 'Table';
+  if (type === 'icon' && !common.label && !invoiceElement) common.label = cleanText(source.iconName ?? element.iconName, 'Icon', 80);
+  if ((type === 'divider' || type === 'spacer' || type === 'image') && !common.label && !invoiceElement) common.label = type === 'image' ? 'Image / Logo' : type === 'spacer' ? 'Spacer' : 'Divider';
+  if (type === 'text' && !common.text && !invoiceElement) common.text = cleanText(element.title, 'Text block', 160);
   return common;
 }
 
 function sanitizeDesignStyle(style = {}, element = {}) {
   const source = isPlainObject(style) ? style : {};
+  const invoiceElement = isInvoiceDesignElement(element);
   return {
-    accentColor: sanitizeColor(source.accentColor || element.accentColor, '#0284c7'),
-    backgroundColor: sanitizeColor(source.backgroundColor || element.backgroundColor, '#ffffff'),
-    textColor: sanitizeColor(source.textColor || element.textColor, '#0f172a'),
-    borderColor: sanitizeColor(source.borderColor || element.borderColor, '#cbd5e1'),
+    accentColor: sanitizeDesignColor(source.accentColor || element.accentColor, '#0284c7'),
+    backgroundColor: sanitizeDesignColor(source.backgroundColor || element.backgroundColor, '#ffffff'),
+    textColor: sanitizeDesignColor(source.textColor || element.textColor, '#0f172a'),
+    borderColor: sanitizeDesignColor(source.borderColor || element.borderColor, '#cbd5e1'),
     borderRadius: clampNumber(source.borderRadius, 10, 0, 32),
     borderWidth: clampNumber(source.borderWidth, 1, 0, 8),
     shadow: boolValue(source.shadow, false),
-    fontSize: clampNumber(source.fontSize, 13, 8, 32),
+    opacity: clampNumber(source.opacity, 1, 0, 1),
+    fontSize: clampNumber(source.fontSize, 13, invoiceElement ? 4 : 8, 32),
     fontWeight: clampNumber(source.fontWeight, 700, 300, 950),
     alignment: ['left', 'center', 'right'].includes(source.alignment || element.alignment) ? (source.alignment || element.alignment) : 'left',
     rowHeight: clampNumber(source.rowHeight, 18, 12, 34),
-    dividerThickness: clampNumber(source.dividerThickness, 2, 1, 8),
-    dividerStyle: ['solid', 'dashed', 'dotted'].includes(source.dividerStyle) ? source.dividerStyle : 'solid'
+    padding: clampNumber(source.padding, 0, 0, 80),
+    paddingX: clampNumber(source.paddingX, 0, 0, 80),
+    paddingY: clampNumber(source.paddingY, 0, 0, 80),
+    lineHeight: clampNumber(source.lineHeight, 1.16, 0.85, 2.4),
+    dividerThickness: clampNumber(source.dividerThickness, 2, invoiceElement ? 0.1 : 1, 8),
+    dividerStyle: ['solid', 'dashed', 'dotted'].includes(source.dividerStyle) ? source.dividerStyle : 'solid',
+    headerBackgroundColor: sanitizeDesignColor(source.headerBackgroundColor, source.accentColor || '#0f2a52'),
+    headerTextColor: sanitizeDesignColor(source.headerTextColor, '#ffffff'),
+    rowBackgroundColor: sanitizeDesignColor(source.rowBackgroundColor, '#ffffff'),
+    alternateRowBackgroundColor: sanitizeDesignColor(source.alternateRowBackgroundColor, '#f8fafc')
   };
 }
 
@@ -707,7 +748,7 @@ function sanitizeDesignPage(page = {}, index = 0) {
   return {
     id,
     name: cleanText(page.name, `Page ${index + 1}`, 120),
-    elements: Array.isArray(page.elements) ? page.elements.map((item) => cleanText(item, '', 80)).filter(Boolean).slice(0, 120) : [],
+    elements: Array.isArray(page.elements) ? page.elements.map((item) => cleanText(item, '', 80)).filter(Boolean).slice(0, 180) : [],
     manual: boolValue(page.manual ?? page.userAdded, false)
   };
 }
@@ -752,6 +793,7 @@ function sanitizeDesignSection(section = {}, index = 0) {
 
 function sanitizeDesignElement(element = {}, index = 0) {
   const type = normalizeDesignElementType(element.type);
+  const invoiceElement = isInvoiceDesignElement(element);
   const fallbackName = type === 'qr'
     ? 'QR Code'
     : type === 'signature'
@@ -771,6 +813,8 @@ function sanitizeDesignElement(element = {}, index = 0) {
               : 'Text';
   const pageId = clean(element.pageId || 'page-1').replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || 'page-1';
   const content = sanitizeDesignContent(type, element.content, element);
+  const minWidth = invoiceElement ? 0.1 : 24;
+  const minHeight = invoiceElement ? 0.1 : 8;
   return {
     id: clean(element.id || `design-element-${index + 1}`).replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || `design-element-${index + 1}`,
     type,
@@ -779,8 +823,8 @@ function sanitizeDesignElement(element = {}, index = 0) {
     pageId,
     x: clampNumber(element.x, 48, 0, 595),
     y: clampNumber(element.y, 118, 0, 842),
-    width: clampNumber(element.width, type === 'divider' ? 260 : 220, 24, 595),
-    height: clampNumber(element.height, type === 'divider' ? 22 : 76, 8, 842),
+    width: clampNumber(element.width, type === 'divider' ? 260 : 220, minWidth, 595),
+    height: clampNumber(element.height, type === 'divider' ? 22 : 76, minHeight, 842),
     widthMode: ['full', 'half', 'custom'].includes(element.widthMode) ? element.widthMode : 'custom',
     visible: boolValue(element.visible ?? element.enabled, true),
     enabled: boolValue(element.enabled ?? element.visible, true),
@@ -791,18 +835,21 @@ function sanitizeDesignElement(element = {}, index = 0) {
     twoColumn: boolValue(element.twoColumn ?? content.twoColumn, false),
     pageBreakBefore: boolValue(element.pageBreakBefore, false),
     avoidSplit: boolValue(element.avoidSplit, true),
-    printSafe: boolValue(element.printSafe, true),
+    printSafe: invoiceElement ? boolValue(element.printSafe, false) : boolValue(element.printSafe, true),
     zIndex: clampNumber(element.zIndex, index + 20, 1, 999),
     sourceSectionId: cleanText(element.sourceSectionId, '', 120),
     sourceKey: cleanText(element.sourceKey, '', 120),
+    manifestSemanticId: cleanText(element.manifestSemanticId || element.manifest?.semanticId, '', 160),
+    manifestSource: cleanText(element.manifestSource || element.manifest?.source, '', 160),
+    backgroundElement: boolValue(element.backgroundElement ?? element.content?.backgroundElement, false),
     designGenerated: boolValue(element.designGenerated, false),
     qrType: content.qrType,
     alignment: ['left', 'center', 'right'].includes(element.alignment) ? element.alignment : content.alignment || 'left',
     content,
     style: sanitizeDesignStyle(element.style || {}, element),
-    backgroundColor: sanitizeColor(element.backgroundColor || element.style?.backgroundColor, '#ffffff'),
-    textColor: sanitizeColor(element.textColor || element.style?.textColor, '#0f172a'),
-    borderColor: sanitizeColor(element.borderColor || element.style?.borderColor, '#d8e5f7')
+    backgroundColor: sanitizeDesignColor(element.backgroundColor || element.style?.backgroundColor, '#ffffff'),
+    textColor: sanitizeDesignColor(element.textColor || element.style?.textColor, '#0f172a'),
+    borderColor: sanitizeDesignColor(element.borderColor || element.style?.borderColor, '#d8e5f7')
   };
 }
 
@@ -928,8 +975,9 @@ function sanitizeConfig(payload = {}, key = '') {
   const designElementSource = Array.isArray(sanitized.design.customElements) && sanitized.design.customElements.length
     ? sanitized.design.customElements
     : sanitized.design.elements;
+  const designElementLimit = key === 'invoice' && sanitized.design.mode === 'manifest' ? 180 : 80;
   sanitized.design.elements = Array.isArray(designElementSource)
-    ? designElementSource.slice(0, 80).map((element, index) => sanitizeDesignElement(element, index))
+    ? designElementSource.slice(0, designElementLimit).map((element, index) => sanitizeDesignElement(element, index))
     : [];
   sanitized.design.customElements = sanitized.design.elements;
   sanitized.design.sections = Array.isArray(sanitized.design.sections)

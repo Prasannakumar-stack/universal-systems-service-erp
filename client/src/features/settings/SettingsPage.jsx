@@ -4802,7 +4802,7 @@ function SettingsOverviewSection({ onManage }) {
   return (
     <div className="settings-overview-shell grid gap-6">
       <div className="surface admin-filter-bar settings-overview-toolbar p-4">
-        <SearchBox value={search} onChange={setSearch} placeholder="Search settings" />
+        <SearchBox value={search} onChange={setSearch} placeholder="Search settings only..." />
         <span className="settings-overview-count">{visibleCount} of {totalCount} settings</span>
       </div>
 
@@ -4817,10 +4817,11 @@ function SettingsOverviewSection({ onManage }) {
           <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {group.cards.map((module) => {
               const Icon = module.icon;
+              const isComingSoon = module.status === 'Coming Soon';
               return (
-                <button key={module.id} type="button" className="surface admin-control-card settings-overview-card w-full p-5 text-left" onClick={() => onManage(module)}>
+                <button key={module.id} type="button" className={`surface admin-control-card settings-overview-card w-full p-5 text-left ${isComingSoon ? 'settings-overview-card-coming-soon' : ''}`} onClick={() => onManage(module)}>
                   <div className="flex items-start justify-between gap-3">
-                    <div className="admin-control-icon"><Icon className="h-5 w-5" /></div>
+                    <div className="admin-control-icon">{isComingSoon ? <LockKeyhole className="h-5 w-5" /> : <Icon className="h-5 w-5" />}</div>
                     <span className={`settings-status-badge ${settingsStatusToneClass[module.status] || ''}`}>{module.status}</span>
                   </div>
                   <div className="mt-4 min-w-0">
@@ -4848,6 +4849,38 @@ function SettingsOverviewSection({ onManage }) {
         />
       )}
     </div>
+  );
+}
+
+function SettingsAttentionBanner({ onManage }) {
+  const attentionItems = [
+    { label: 'System Health & Backup', tabId: 'systemHealthBackup' },
+    { label: 'Notification Templates', tabId: 'notificationTemplates' },
+    { label: 'Status Workflow', tabId: 'statusWorkflow' }
+  ];
+
+  return (
+    <section className="settings-attention-banner" aria-label="Settings needing attention">
+      <div className="settings-attention-copy">
+        <span className="settings-attention-dot" aria-hidden="true" />
+        <div>
+          <p className="settings-attention-kicker">Needs your attention</p>
+          <h2>Review operational readiness before handoff</h2>
+        </div>
+      </div>
+      <div className="settings-attention-items">
+        {attentionItems.map((item) => (
+          <button key={item.tabId} type="button" className="settings-attention-item" onClick={() => onManage({ tabId: item.tabId })}>
+            <span aria-hidden="true" />
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <button type="button" className="settings-attention-view-all" onClick={() => onManage({ tabId: 'systemHealthBackup' })}>
+        View all
+        <ChevronRight className="h-3.5 w-3.5" />
+      </button>
+    </section>
   );
 }
 
@@ -5078,12 +5111,12 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
       <section className="admin-control-hero mb-5">
         <div className="settings-hero-content">
           <div className="relative z-[1] min-w-0">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">SYSTEM</p>
+            <div className="settings-hero-breadcrumb">
+              <p>System</p>
               <span className="admin-premium-badge">ADMIN CONTROL CENTER</span>
             </div>
-            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Settings</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage workspace identity, team access, security, and operational defaults.</p>
+            <h1>Settings</h1>
+            <p>Manage workspace identity, team access, security, and operational defaults.</p>
           </div>
           <div className="settings-hero-actions">
             <div className="settings-last-updated">
@@ -5102,6 +5135,8 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
         </div>
       </section>
 
+      <SettingsAttentionBanner onManage={handleOverviewManage} />
+
       <div className="surface settings-tabs-card p-2">
         <div className="tabs-list amc-tabs settings-tabs border-b-0">
           {settingsTabs.map((tab) => (
@@ -5117,7 +5152,7 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
         </div>
       </div>
 
-      <div className="mt-5">
+      <div className="settings-tab-panel">
         {activeTab === 'overview' ? (
           <SettingsOverviewSection onManage={handleOverviewManage} />
         ) : null}

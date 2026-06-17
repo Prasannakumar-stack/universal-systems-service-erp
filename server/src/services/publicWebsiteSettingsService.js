@@ -244,11 +244,6 @@ function applyCompanyProfile(settings, company) {
       email: company.email || settings.contact?.email,
       address: company.address || settings.contact?.address,
       googleMapsLink: company.googleMapsLink || settings.contact?.googleMapsLink
-    },
-    branding: {
-      ...settings.branding,
-      logoUrl: company.logoUrl || settings.branding?.logoUrl,
-      useCompanyLogo: company.useCompanyLogoOnPublicWebsite !== false
     }
   };
 }

@@ -50,6 +50,10 @@ function element(id, type, label, frame, patch = {}) {
       fontSize: patch.fontSize || 11,
       fontWeight: patch.fontWeight || 600,
       alignment: patch.alignment || 'left',
+      padding: patch.padding ?? 0,
+      paddingX: patch.paddingX ?? 0,
+      paddingY: patch.paddingY ?? 0,
+      lineHeight: patch.lineHeight ?? 1.16,
       ...(patch.style || {})
     },
     manifest: {
@@ -114,6 +118,13 @@ function listLines(value = '', fallback = []) {
     .slice(0, 4);
 }
 
+function invoiceTermsLines(config = {}) {
+  const configured = String(config.sections?.terms?.text || config.termsAndConditions || '').trim();
+  const oldDefault = /Payment is due before product delivery\.\s*Warranty is subject/i;
+  if (!configured || oldDefault.test(configured)) return DEFAULT_INVOICE_TERMS;
+  return listLines(configured, DEFAULT_INVOICE_TERMS);
+}
+
 function sectionFlag(config = {}, sectionName = '', flagName = '', fallback = true) {
   const section = config.sections?.[sectionName] || {};
   return section[flagName] ?? fallback;
@@ -126,6 +137,8 @@ function canvasText(id, label, frame, text, patch = {}) {
     borderWidth: patch.borderWidth ?? 0,
     style: {
       padding: 0,
+      paddingX: 0,
+      paddingY: 0,
       backgroundColor: patch.backgroundColor || 'transparent',
       borderWidth: patch.borderWidth ?? 0,
       borderRadius: 0,
@@ -133,6 +146,7 @@ function canvasText(id, label, frame, text, patch = {}) {
       fontWeight: patch.fontWeight || 700,
       textColor: patch.textColor || patch.style?.textColor || TEXT,
       alignment: patch.alignment || patch.style?.alignment || 'left',
+      lineHeight: patch.lineHeight ?? patch.style?.lineHeight ?? 1.16,
       ...(patch.style || {})
     }
   });
@@ -144,8 +158,11 @@ function canvasBox(id, label, frame, patch = {}) {
     content: { boxOnly: true, ...(patch.content || {}) },
     style: {
       padding: 0,
+      paddingX: 0,
+      paddingY: 0,
       fontSize: 1,
       fontWeight: 400,
+      lineHeight: patch.lineHeight ?? patch.style?.lineHeight ?? 1.16,
       ...(patch.style || {})
     }
   });
@@ -159,11 +176,14 @@ function canvasLine(id, label, frame, patch = {}) {
     borderWidth: 0,
     style: {
       padding: 0,
+      paddingX: 0,
+      paddingY: 0,
       backgroundColor: 'transparent',
       borderWidth: 0,
       dividerThickness: patch.thickness || 1,
       dividerStyle: patch.dividerStyle || 'solid',
       accentColor: patch.accentColor || NAVY,
+      lineHeight: patch.lineHeight ?? patch.style?.lineHeight ?? 1.16,
       ...(patch.style || {})
     }
   });
@@ -178,12 +198,15 @@ function canvasIcon(id, label, frame, variant, patch = {}) {
     fontSize: patch.fontSize || 12,
     style: {
       padding: 0,
+      paddingX: 0,
+      paddingY: 0,
       backgroundColor: 'transparent',
       borderWidth: 0,
       borderRadius: 0,
       accentColor: patch.accentColor || NAVY,
       textColor: patch.textColor || patch.accentColor || NAVY,
       fontSize: patch.fontSize || 12,
+      lineHeight: patch.lineHeight ?? patch.style?.lineHeight ?? 1.16,
       ...(patch.style || {})
     }
   });
@@ -232,7 +255,7 @@ function invoiceManifest(config = {}, company = COMPANY) {
   const termsVisible = config.sections?.terms?.show !== false;
   const noticeVisible = config.sections?.workCompletionNotice?.show !== false;
   const amountWordsVisible = sectionFlag(config, 'amountSummary', 'showAmountInWords', true) !== false;
-  const termsLines = listLines(config.sections?.terms?.text || config.termsAndConditions, DEFAULT_INVOICE_TERMS);
+  const termsLines = invoiceTermsLines(config);
   const noticeLines = Array.isArray(config.sections?.workCompletionNotice?.messageLines)
     ? config.sections.workCompletionNotice.messageLines
     : DEFAULT_NOTICE_LINES;

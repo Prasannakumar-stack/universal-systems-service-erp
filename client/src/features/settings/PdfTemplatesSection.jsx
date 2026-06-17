@@ -1186,6 +1186,45 @@ function contentDefaultsForElement(type = 'text') {
   return { text: 'New text block' };
 }
 
+function isInvoiceManifestElement(element = {}) {
+  return [
+    element.id,
+    element.sourceKey,
+    element.manifestSemanticId,
+    element.manifest?.semanticId
+  ].some((value) => {
+    const text = String(value || '');
+    return text.startsWith('invoice.') || text.replace(/[^a-z0-9]/gi, '').toLowerCase().startsWith('invoice');
+  });
+}
+
+function contentDefaultsForInvoiceElement(type = 'text') {
+  if (type === 'table') return { ...contentDefaultsForElement('table'), title: '' };
+  if (type === 'icon') return { label: '', iconName: '', variant: '' };
+  if (type === 'card') return { boxOnly: false, twoColumn: false, title: '', body: '' };
+  if (type === 'divider' || type === 'spacer') return { label: '' };
+  if (type === 'image') return { label: '', imageMode: '', assetPath: '', fitToFrame: true };
+  if (type === 'qr') return { label: '', qrType: 'payment', helperText: '' };
+  if (type === 'signature') return { label: '', name: '', designation: '' };
+  return { text: '' };
+}
+
+function styleDefaultsForInvoiceElement(type = 'text') {
+  const isTable = type === 'table';
+  return {
+    ...defaultElementStyles,
+    backgroundColor: ['text', 'icon', 'divider', 'image'].includes(type) ? 'transparent' : defaultElementStyles.backgroundColor,
+    borderColor: 'transparent',
+    borderRadius: type === 'card' ? 0 : defaultElementStyles.borderRadius,
+    borderWidth: 0,
+    shadow: false,
+    padding: 0,
+    paddingX: isTable ? defaultElementStyles.paddingX : 0,
+    paddingY: isTable ? defaultElementStyles.paddingY : 0,
+    lineHeight: 1.16
+  };
+}
+
 function isBackgroundElement(element = {}) {
   const content = element.content || {};
   return content.backgroundElement === true
@@ -1317,17 +1356,20 @@ function makeBuilderElement(type = 'text', pageId = 'page-1', index = 0) {
 function normalizeBuilderElement(element = {}, index = 0) {
   const type = normalizeElementType(element.type);
   const size = defaultSizeForElement(type);
+  const invoiceManifestElement = isInvoiceManifestElement(element);
+  const contentDefaults = invoiceManifestElement ? contentDefaultsForInvoiceElement(type) : contentDefaultsForElement(type);
   const rawContent = typeof element.content === 'object' && element.content !== null
     ? element.content
-    : { ...contentDefaultsForElement(type), text: String(element.content || '') };
-  const content = { ...contentDefaultsForElement(type), ...rawContent };
+    : { ...contentDefaults, text: String(element.content || '') };
+  const content = { ...contentDefaults, ...rawContent };
+  const styleDefaults = invoiceManifestElement ? styleDefaultsForInvoiceElement(type) : defaultElementStyles;
   const style = {
-    ...defaultElementStyles,
+    ...styleDefaults,
     ...(element.style || {}),
-    accentColor: element.style?.accentColor || element.accentColor || defaultElementStyles.accentColor,
-    backgroundColor: element.style?.backgroundColor || element.backgroundColor || defaultElementStyles.backgroundColor,
-    textColor: element.style?.textColor || element.textColor || defaultElementStyles.textColor,
-    borderColor: element.style?.borderColor || element.borderColor || defaultElementStyles.borderColor
+    accentColor: element.style?.accentColor || element.accentColor || styleDefaults.accentColor,
+    backgroundColor: element.style?.backgroundColor || element.backgroundColor || styleDefaults.backgroundColor,
+    textColor: element.style?.textColor || element.textColor || styleDefaults.textColor,
+    borderColor: element.style?.borderColor || element.borderColor || styleDefaults.borderColor
   };
   const name = cleanLayerTitle(element.name || element.title || elementNameForType(type));
   return {
@@ -1351,7 +1393,7 @@ function normalizeBuilderElement(element = {}, index = 0) {
     twoColumn: Boolean(element.twoColumn || content.twoColumn),
     pageBreakBefore: Boolean(element.pageBreakBefore),
     avoidSplit: element.avoidSplit !== false,
-    printSafe: element.printSafe !== false,
+    printSafe: invoiceManifestElement ? element.printSafe === true : element.printSafe !== false,
     zIndex: clampBuilderNumber(element.zIndex, index + 20, 1, 999),
     qrType: element.qrType || content.qrType || 'payment',
     alignment: element.alignment || style.alignment || 'left',
@@ -2163,6 +2205,7 @@ function DesignModeWorkspace({
     : selectedSection
       ? selectedSection.locked === true || !freeLayoutMode
       : false;
+  const selectedLayerBackground = selectedElement ? isBackgroundElement(selectedElement) : false;
   const selectedCanEditFrame = selectedElement
     ? !disabled && selectedElement.locked !== true
     : selectedSection
@@ -2198,7 +2241,7 @@ function DesignModeWorkspace({
     const toolbarRect = document.querySelector(`[data-pdf-floating-toolbar-id="${pdfLayerSelectorValue(selectedLayerId)}"]`)?.getBoundingClientRect();
     const margin = 12;
     const gap = 10;
-    const toolbarWidth = Math.min(toolbarRect?.width || (selectedElement?.type === 'table' ? 620 : 520), window.innerWidth - margin * 2);
+    const toolbarWidth = Math.min(toolbarRect?.width || (selectedElement?.type === 'table' ? 560 : 480), window.innerWidth - margin * 2);
     const toolbarHeight = toolbarRect?.height || 42;
     const visibleTop = Math.max(margin, scrollRect?.top ?? margin);
     const visibleBottom = Math.min(window.innerHeight - margin, scrollRect?.bottom ?? window.innerHeight - margin);
@@ -2211,8 +2254,19 @@ function DesignModeWorkspace({
       placement = 'below';
     }
     if (top + toolbarHeight > visibleBottom) {
-      top = Math.max(visibleTop, visibleBottom - toolbarHeight);
+      const aboveTop = anchorRect.top - toolbarHeight - gap;
+      const belowTop = anchorRect.bottom + gap;
+      const roomAbove = anchorRect.top - visibleTop;
+      const roomBelow = visibleBottom - anchorRect.bottom;
+      if (roomAbove >= roomBelow) {
+        top = Math.max(visibleTop, aboveTop);
+        placement = 'above';
+      } else {
+        top = Math.min(belowTop, Math.max(visibleTop, visibleBottom - toolbarHeight));
+        placement = 'below';
+      }
     }
+    top = clampBuilderNumber(top, visibleTop, visibleTop, Math.max(visibleTop, visibleBottom - toolbarHeight));
     const centeredLeft = anchorRect.left + anchorRect.width / 2 - toolbarWidth / 2;
     const left = clampBuilderNumber(centeredLeft, visibleLeft, visibleLeft, Math.max(visibleLeft, visibleRight - toolbarWidth));
     setFloatingToolbarPosition({ ready: true, left: Math.round(left), top: Math.round(top), placement });
@@ -2450,7 +2504,10 @@ function DesignModeWorkspace({
   function applyDefaultTemplateLayout() {
     if (disabled) return;
     if (manifestState.data?.elements?.length) {
-      const manifestDesign = designStateFromManifest(manifestState.data, canvasDesign);
+      const manifestDesign = designStateFromManifest(manifestState.data, {
+        savedTemplates: canvasDesign.savedTemplates || [],
+        canvas: canvasDesign.canvas || {}
+      });
       commitDesign((current) => ({
         ...manifestDesign,
         savedTemplates: current.savedTemplates || []
@@ -2479,7 +2536,12 @@ function DesignModeWorkspace({
 
   function revertDraftDesign() {
     const sourceDesign = designStateFromConfig(draft);
-    if (sourceDesign.published === true && sourceDesign.mode === 'manifest' && sourceDesign.elements.length) {
+    if (template.key === 'invoice' && manifestState.data?.elements?.length) {
+      setDesignDraft(designStateFromManifest(manifestState.data, {
+        savedTemplates: sourceDesign.savedTemplates || [],
+        canvas: sourceDesign.canvas || {}
+      }));
+    } else if (sourceDesign.published === true && sourceDesign.mode === 'manifest' && sourceDesign.elements.length) {
       setDesignDraft(sourceDesign);
     } else if (manifestState.data?.elements?.length) {
       setDesignDraft(designStateFromManifest(manifestState.data, sourceDesign));
@@ -3084,6 +3146,22 @@ function DesignModeWorkspace({
     }
     const content = selectedElement.content || {};
     if (cursor?.kind === 'element' && cursor.id === selectedElement.id && cursor.target) {
+      if (selectedElement.type === 'table' && String(cursor.target).startsWith('rowTemplate.')) {
+        const templateIndex = Number(String(cursor.target).split('.')[1]);
+        const currentTemplate = Array.isArray(content.rowTemplate) && content.rowTemplate.length
+          ? content.rowTemplate.slice()
+          : contentDefaultsForElement('table').rowTemplate.slice();
+        if (Number.isFinite(templateIndex) && templateIndex >= 0) {
+          const currentValue = String(currentTemplate[templateIndex] || '');
+          const start = clampBuilderNumber(cursor.start, currentValue.length, 0, currentValue.length);
+          const end = clampBuilderNumber(cursor.end, start, start, currentValue.length);
+          const nextValue = `${currentValue.slice(0, start)}${variable}${currentValue.slice(end)}`;
+          currentTemplate[templateIndex] = nextValue;
+          variableCursorRef.current = { ...cursor, value: nextValue, start: start + variable.length, end: start + variable.length };
+          patchElement(selectedElement.id, { content: { rowTemplate: currentTemplate } });
+          return;
+        }
+      }
       const currentValue = String(content[cursor.target] || '');
       const start = clampBuilderNumber(cursor.start, currentValue.length, 0, currentValue.length);
       const end = clampBuilderNumber(cursor.end, start, start, currentValue.length);
@@ -3821,6 +3899,25 @@ function DesignModeWorkspace({
                     />
                   );
                 })}
+                {selectBackgroundElements ? visiblePageElements.filter((element) => isBackgroundElement(element)).map((element) => (
+                  <BackgroundElementHitTarget
+                    key={`background-hit-${element.id}`}
+                    element={element}
+                    selected={selectedLayerId === element.id}
+                    disabled={disabled}
+                    onSelect={() => {
+                      setSelectedLayerId(element.id);
+                      setEditingElementId('');
+                    }}
+                    onEditStart={() => {
+                      setSelectedLayerId(element.id);
+                      setEditingElementId('');
+                      setRightInspectorOpen(true);
+                      setInspectorCollapsed(false);
+                      setActiveInspectorTab('content');
+                    }}
+                  />
+                )) : null}
                 {selectedLayer && selectedFrame ? (
                   <FloatingLayerToolbar
                     frame={selectedFrame}
@@ -3828,6 +3925,7 @@ function DesignModeWorkspace({
                     element={selectedElement}
                     position={floatingToolbarPosition}
                     locked={selectedLayerLocked}
+                    backgroundSelected={selectedLayerBackground}
                     canEditFrame={selectedCanEditFrame}
                     canDelete={!selectedLayerLocked && (Boolean(selectedElement) || selectedSection?.system === false)}
                     canToggleLock={Boolean(selectedElement) || (Boolean(selectedSection) && freeLayoutMode)}
@@ -4175,11 +4273,41 @@ function BuilderCanvasElement({
   );
 }
 
+function BackgroundElementHitTarget({ element, selected, disabled, onSelect, onEditStart }) {
+  const style = {
+    left: element.x,
+    top: element.y,
+    width: element.width,
+    height: element.height,
+    zIndex: Math.max(1, Number(element.zIndex || 0) + 1)
+  };
+  return (
+    <button
+      type="button"
+      className={`pdf-background-hit-target ${selected ? 'is-selected' : ''}`}
+      style={style}
+      disabled={disabled}
+      aria-label={`Select ${element.name || element.title || 'background element'}`}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        onSelect?.();
+      }}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onEditStart?.();
+      }}
+      title={`${element.name || element.title || 'Background element'} - double-click to edit`}
+    />
+  );
+}
+
 function FloatingLayerToolbar({
   layer,
   element,
   position,
   locked,
+  backgroundSelected = false,
   canEditFrame,
   canDelete,
   canToggleLock,
@@ -4212,11 +4340,12 @@ function FloatingLayerToolbar({
   const alignmentIcon = style.alignment === 'right' ? <AlignRight className="h-3.5 w-3.5" /> : style.alignment === 'center' ? <AlignCenter className="h-3.5 w-3.5" /> : <AlignLeft className="h-3.5 w-3.5" />;
   return createPortal(
     <div
-      className={`pdf-floating-toolbar is-${position?.placement || 'above'} ${position?.ready ? 'is-ready' : 'is-measuring'} ${isTable ? 'is-table-toolbar' : ''}`}
+      className={`pdf-floating-toolbar is-${position?.placement || 'above'} ${position?.ready ? 'is-ready' : 'is-measuring'} ${isTable ? 'is-table-toolbar' : ''} ${isBackground ? 'is-background-toolbar' : ''}`}
       data-pdf-floating-toolbar-id={layer?.id || ''}
       style={{ left: position?.left ?? 12, top: position?.top ?? 12 }}
       onPointerDown={(event) => event.stopPropagation()}
     >
+      {isBackground ? <span className="pdf-floating-status"><Lock className="h-3 w-3" />{backgroundSelected ? 'Background selected' : 'Watermark'}</span> : null}
       <button type="button" className="pdf-floating-tool is-primary" disabled={locked && !isBackground} onClick={onEdit} title={toolbarLabel}>
         <Edit3 className="h-3.5 w-3.5" />
         <span>{toolbarLabel}</span>
@@ -4452,6 +4581,10 @@ function BuilderTextarea({ label, value, disabled, rows = 4, onChange, onCursor 
   );
 }
 
+function BuilderHint({ children, tone = 'neutral' }) {
+  return <p className={`pdf-control-hint is-${tone}`}>{children}</p>;
+}
+
 function BuilderNumberInput({ label, value, min = 0, max = 999, step = 1, disabled, onChange }) {
   return (
     <label className="pdf-control-field">
@@ -4475,6 +4608,54 @@ function BuilderSelect({ label, value, options, disabled, onChange }) {
 function ElementContentControls({ element, disabled, onPatch, onOpenVariables, onRememberCursor = null }) {
   const content = element.content || {};
   const remember = (target, value) => (event) => onRememberCursor?.(target, value, event);
+  const tableDefaults = contentDefaultsForElement('table');
+  const tableColumns = Array.isArray(content.columns) && content.columns.length ? content.columns : tableDefaults.columns;
+  const tableWidths = parseTableColumnWidths(formatTableColumnWidths(content.columnWidths), tableColumns.length);
+  const tableTemplate = Array.isArray(content.rowTemplate) && content.rowTemplate.length ? content.rowTemplate : tableDefaults.rowTemplate;
+  const tablePreviewRows = Array.isArray(content.rows) && content.rows.length ? content.rows : tableDefaults.rows;
+
+  function patchTableContent(patch) {
+    onPatch({ content: patch });
+  }
+
+  function updateTableColumn(index, value) {
+    const columns = tableColumns.map((column, columnIndex) => (columnIndex === index ? value : column));
+    patchTableContent({ columns });
+  }
+
+  function updateTableWidth(index, value) {
+    const widths = tableWidths.map((width, widthIndex) => (widthIndex === index ? Math.max(0.1, Number(value) || 1) : width));
+    patchTableContent({ columnWidths: widths });
+  }
+
+  function updateRowTemplate(index, value) {
+    const template = tableColumns.map((_column, columnIndex) => tableTemplate[columnIndex] || '');
+    template[index] = value;
+    patchTableContent({ rowTemplate: template });
+  }
+
+  function addTableColumn() {
+    if (tableColumns.length >= 8) return;
+    const nextIndex = tableColumns.length + 1;
+    patchTableContent({
+      columns: [...tableColumns, `Column ${nextIndex}`],
+      columnWidths: [...tableWidths, 1],
+      rowTemplate: [...tableColumns.map((_column, index) => tableTemplate[index] || ''), `{{custom_${nextIndex}}}`],
+      rows: tablePreviewRows.map((row) => [...(Array.isArray(row) ? row : [row]), ''])
+    });
+  }
+
+  function removeTableColumn(index) {
+    if (tableColumns.length <= 1) return;
+    const columns = tableColumns.filter((_column, columnIndex) => columnIndex !== index);
+    patchTableContent({
+      columns,
+      columnWidths: tableWidths.filter((_width, widthIndex) => widthIndex !== index),
+      rowTemplate: tableTemplate.filter((_cell, cellIndex) => cellIndex !== index),
+      rows: tablePreviewRows.map((row) => (Array.isArray(row) ? row : [row]).filter((_cell, cellIndex) => cellIndex !== index))
+    });
+  }
+
   return (
     <div className="pdf-inspector-grid">
       <BuilderTextInput label="Element name" value={element.name} disabled={disabled} onChange={(value) => onPatch({ name: value, title: value })} />
@@ -4486,37 +4667,81 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
       ) : element.type === 'table' ? (
         <>
           <BuilderTextInput label="Table title" value={content.title} disabled={disabled} onChange={(value) => onPatch({ content: { title: value } })} onCursor={remember('title', content.title)} />
-          <BuilderTextarea
-            label="Columns, separated with |"
-            value={formatTableColumns(content.columns)}
-            disabled={disabled}
-            rows={2}
-            onChange={(value) => {
-              const columns = parseTableColumns(value);
-              onPatch({ content: { columns, rows: parseTableRows(formatTableRows(content.rows), columns.length), columnWidths: parseTableColumnWidths(formatTableColumnWidths(content.columnWidths), columns.length) } });
-            }}
-          />
-          <BuilderTextarea
-            label="Column widths, separated with |"
-            value={formatTableColumnWidths(content.columnWidths)}
-            disabled={disabled}
-            rows={2}
-            onChange={(value) => onPatch({ content: { columnWidths: parseTableColumnWidths(value, (content.columns || []).length || 5) } })}
-          />
+          <div className="pdf-table-editor pdf-field-full">
+            <div className="pdf-table-editor-head">
+              <div>
+                <p>Invoice table structure</p>
+                <span>{tableColumns.length} columns - {content.dynamicRows !== false ? 'uses live invoice items' : 'uses design preview rows'}</span>
+              </div>
+              <button type="button" className="btn btn-secondary admin-compact-button" disabled={disabled || tableColumns.length >= 8} onClick={addTableColumn}>
+                <Plus className="h-4 w-4" />
+                Add Column
+              </button>
+            </div>
+            <div className="pdf-table-column-list">
+              {tableColumns.map((column, index) => (
+                <div className="pdf-table-column-row" key={`table-column-${index}`}>
+                  <span className="pdf-table-column-index">{index + 1}</span>
+                  <label>
+                    <span>Column</span>
+                    <input className="input" value={column} disabled={disabled} onChange={(event) => updateTableColumn(index, event.target.value)} />
+                  </label>
+                  <label>
+                    <span>Width</span>
+                    <input className="input" type="number" min="0.1" step="0.1" value={tableWidths[index] ?? 1} disabled={disabled} onChange={(event) => updateTableWidth(index, event.target.value)} />
+                  </label>
+                  <button type="button" className="icon-button pdf-danger-icon" disabled={disabled || tableColumns.length <= 1} onClick={() => removeTableColumn(index)} title="Remove column">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <BuilderToggle label="Dynamic invoice rows" checked={content.dynamicRows !== false} disabled={disabled} onChange={(checked) => patchTableContent({ dynamicRows: checked })} />
+          <BuilderHint tone="info">
+            Dynamic rows use real invoice items in Draft Preview and published PDFs. Preview rows below remain design-only fallback content.
+          </BuilderHint>
+          {content.dynamicRows !== false ? (
+            <div className="pdf-table-template-editor pdf-field-full">
+              <div className="pdf-table-editor-head">
+                <div>
+                  <p>Live row template</p>
+                  <span>Map each invoice column to an existing variable.</span>
+                </div>
+              </div>
+              <div className="pdf-table-template-grid">
+                {tableColumns.map((column, index) => (
+                  <label key={`table-template-${index}`} className="pdf-control-field">
+                    <span className="label">{column}</span>
+                    <input
+                      className="input"
+                      value={tableTemplate[index] || ''}
+                      disabled={disabled}
+                      onChange={(event) => updateRowTemplate(index, event.target.value)}
+                      onFocus={remember(`rowTemplate.${index}`, tableTemplate[index] || '')}
+                      onSelect={remember(`rowTemplate.${index}`, tableTemplate[index] || '')}
+                      onClick={remember(`rowTemplate.${index}`, tableTemplate[index] || '')}
+                      onKeyUp={remember(`rowTemplate.${index}`, tableTemplate[index] || '')}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <BuilderNumberInput
             label="Preview row count"
             value={content.previewRowCount ?? 5}
             min={1}
             max={12}
             disabled={disabled}
-            onChange={(value) => onPatch({ content: { previewRowCount: value } })}
+            onChange={(value) => patchTableContent({ previewRowCount: value })}
           />
           <BuilderTextarea
             label="Preview rows (design only), one row per line"
             value={formatTableRows(content.rows)}
             disabled={disabled}
             rows={5}
-            onChange={(value) => onPatch({ content: { rows: parseTableRows(value, (content.columns || []).length || 4) } })}
+            onChange={(value) => patchTableContent({ rows: parseTableRows(value, tableColumns.length || 4) })}
           />
         </>
       ) : element.type === 'icon' ? (
@@ -4536,7 +4761,35 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
           <BuilderTextInput label="Name" value={content.name} disabled={disabled} onChange={(value) => onPatch({ content: { name: value } })} onCursor={remember('name', content.name)} />
           <BuilderTextInput label="Designation" value={content.designation} disabled={disabled} onChange={(value) => onPatch({ content: { designation: value } })} onCursor={remember('designation', content.designation)} />
         </>
-      ) : element.type === 'divider' || element.type === 'spacer' || element.type === 'image' ? (
+      ) : element.type === 'image' ? (
+        <>
+          <BuilderTextInput label="Label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} onCursor={remember('label', content.label)} />
+          <BuilderSelect
+            label="Image role"
+            value={content.imageMode || (isBackgroundElement(element) ? 'watermark' : 'logo')}
+            options={[['logo', 'Company logo'], ['watermark', 'Watermark'], ['custom', 'Custom image']]}
+            disabled={disabled}
+            onChange={(value) => onPatch({
+              content: {
+                imageMode: value,
+                assetPath: value === 'watermark' ? '/logo-icon.png' : value === 'logo' ? '/logo-full.png' : content.assetPath || '',
+                backgroundElement: value === 'watermark'
+              },
+              backgroundElement: value === 'watermark',
+              groupId: value === 'watermark' ? 'watermark' : element.groupId
+            })}
+          />
+          <BuilderTextInput
+            label="Asset path"
+            value={content.assetPath || content.imageUrl || content.src || (content.imageMode === 'watermark' ? '/logo-icon.png' : '/logo-full.png')}
+            disabled={disabled || content.imageMode === 'watermark'}
+            onChange={(value) => onPatch({ content: { assetPath: value } })}
+            onCursor={remember('assetPath', content.assetPath || '')}
+          />
+          <BuilderToggle label="Fit image to frame" checked={content.fitToFrame !== false} disabled={disabled} onChange={(checked) => onPatch({ content: { fitToFrame: checked } })} />
+          {isBackgroundElement(element) ? <BuilderHint tone="info">Watermarks use the real `/logo-icon.png` asset and stay behind the invoice until background selection is enabled.</BuilderHint> : null}
+        </>
+      ) : element.type === 'divider' || element.type === 'spacer' ? (
         <BuilderTextInput label="Label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} onCursor={remember('label', content.label)} />
       ) : (
         <BuilderTextarea label="Body/content text" value={content.text || elementPrimaryText(element)} disabled={disabled} onChange={(value) => onPatch({ content: { text: value } })} onCursor={remember('text', content.text || elementPrimaryText(element))} />

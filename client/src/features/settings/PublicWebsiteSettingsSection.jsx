@@ -9,6 +9,7 @@ import {
   ImageUp,
   Loader2,
   MapPin,
+  MoreHorizontal,
   Palette,
   Plus,
   Copy,
@@ -37,6 +38,15 @@ import { defaultPublicWebsiteSettings, mergePublicWebsiteSettings, publicAssetUr
 
 const imageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const maxImageSize = 5 * 1024 * 1024;
+const publicWebsiteSections = [
+  { id: 'hero', label: 'Hero', title: 'Hero Section', description: 'Control the public homepage hero, primary actions, imagery, and website availability.' },
+  { id: 'services', label: 'Services', title: 'Services Section', description: 'Manage service cards, ordering, visibility, categories, and public service imagery.' },
+  { id: 'contact', label: 'Contact', title: 'Contact Section', description: 'Tune public phone, WhatsApp, email, hours, address, and map links.' },
+  { id: 'booking', label: 'Booking', title: 'Booking Settings', description: 'Control public booking visibility, intake fields, and the default booking status.' },
+  { id: 'branding', label: 'Branding', title: 'Logo & Branding', description: 'Set public website logo behavior and accent color independently from the admin theme.' },
+  { id: 'seo', label: 'SEO', title: 'SEO Settings', description: 'Prepare search titles, metadata, keywords, and social sharing imagery.' },
+  { id: 'footer', label: 'Footer', title: 'Footer Settings', description: 'Review footer identity and theme separation behavior.' }
+];
 
 function cloneSettings(settings) {
   return JSON.parse(JSON.stringify(mergePublicWebsiteSettings(settings || defaultPublicWebsiteSettings)));
@@ -58,9 +68,52 @@ function displayUser(user) {
   return user?.name || user?.username || 'System default';
 }
 
+function cleanAssetLabel(value = '') {
+  if (!value) return 'No image selected';
+  const path = String(value).split('?')[0].split('#')[0];
+  const filename = path.split('/').filter(Boolean).pop() || path;
+  try {
+    return decodeURIComponent(filename).replace(/\s+/g, '-').toLowerCase();
+  } catch {
+    return filename.replace(/%20/g, '-').replace(/\s+/g, '-').toLowerCase();
+  }
+}
+
+function isValidEmail(value = '') {
+  const trimmed = String(value || '').trim();
+  return trimmed ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) : true;
+}
+
+function numberHint(value = '') {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return 'Use digits with optional country code.';
+  if (digits.length < 10) return `${digits.length} digits entered. Check the number before saving.`;
+  return `${digits.length} digits entered. Looks ready.`;
+}
+
+function sectionStatus(sectionId, draft, savedSettings) {
+  const heroDirty = JSON.stringify(draft.hero || {}) !== JSON.stringify(savedSettings.hero || {});
+  const services = draft.services || [];
+  const activeServices = services.filter((service) => service.visible !== false).length;
+  const hiddenServices = Math.max(0, services.length - activeServices);
+  const titleLength = String(draft.seo?.websiteTitle || '').length;
+  const metaLength = String(draft.seo?.metaDescription || '').length;
+  const contactComplete = Boolean(draft.contact?.phoneNumber && draft.contact?.whatsappNumber && isValidEmail(draft.contact?.email));
+  const statusBySection = {
+    hero: !draft.hero?.imageUrl ? 'Needs image' : heroDirty ? 'Updated' : 'Complete',
+    services: `${activeServices} active / ${hiddenServices} hidden`,
+    contact: draft.contact?.googleMapsLink ? (contactComplete ? 'Complete' : 'Check contact') : 'Check map link',
+    booking: draft.booking?.publicBookingEnabled ? 'Enabled' : 'Disabled',
+    branding: draft.branding?.logoUrl ? 'Logo set' : 'Needs logo',
+    seo: `${titleLength}/60 title / ${metaLength}/160 meta`,
+    footer: 'Synced from company profile'
+  };
+  return statusBySection[sectionId] || '';
+}
+
 function ToggleField({ label, checked, disabled, onChange, helper }) {
   return (
-    <label className="flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
+    <label className="public-website-toggle flex items-center justify-between gap-3 rounded-card border border-white/10 bg-white/[0.035] px-3 py-3">
       <span className="min-w-0">
         <span className="block font-bold text-slate-100">{label}</span>
         {helper ? <span className="mt-1 block text-xs muted">{helper}</span> : null}
@@ -76,41 +129,59 @@ function ToggleField({ label, checked, disabled, onChange, helper }) {
   );
 }
 
-function TextField({ label, value, onChange, disabled, type = 'text', multiline = false, rows = 3, placeholder = '' }) {
+function TextField({ label, value, onChange, disabled, type = 'text', multiline = false, rows = 3, placeholder = '', helper = '', meta = null, tone = '' }) {
   return (
-    <label>
-      <span className="label">{label}</span>
+    <label className={`public-website-field ${tone ? `is-${tone}` : ''}`}>
+      <span className="public-website-field-label">
+        <span className="label">{label}</span>
+        {meta ? <span className="public-website-field-meta">{meta}</span> : null}
+      </span>
       {multiline ? (
         <textarea className="input min-h-24" rows={rows} value={value || ''} placeholder={placeholder} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
       ) : (
         <input className="input" type={type} value={value || ''} placeholder={placeholder} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
       )}
+      {helper ? <span className="public-website-field-helper">{helper}</span> : null}
     </label>
   );
 }
 
 function ImageField({ label, value, disabled, uploading, onUpload, onChange }) {
   const inputId = `public-website-image-${label.replace(/\W+/g, '-').toLowerCase()}`;
+  const cleanLabel = cleanAssetLabel(value);
   return (
-    <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
+    <div className="public-website-image-field rounded-card border border-white/10 bg-white/[0.035] p-3">
+      <div className="public-website-image-row">
+        <div className="public-website-image-preview">
+          {value ? (
+            <img src={publicAssetUrl(value)} alt="" />
+          ) : (
+            <ImageUp className="h-5 w-5 text-slate-400" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
           <span className="label">{label}</span>
-          <input className="input mt-2" value={value || ''} disabled={disabled} onChange={(event) => onChange(event.target.value)} placeholder="/image.png or uploaded URL" />
+          <div className="public-website-file-display" title={cleanLabel}>{cleanLabel}</div>
+          <input className="sr-only" value={value || ''} disabled={disabled} onChange={(event) => onChange(event.target.value)} aria-label={`${label} asset path`} tabIndex={-1} />
           <p className="mt-2 text-xs muted">JPG, PNG, or WEBP up to 5 MB.</p>
         </div>
-        <div className="flex items-center gap-3">
-          {value ? (
-            <img className="h-16 w-24 rounded-card border border-white/10 object-cover" src={publicAssetUrl(value)} alt="" />
-          ) : (
-            <div className="grid h-16 w-24 place-items-center rounded-card border border-dashed border-white/15 bg-slate-950/30">
-              <ImageUp className="h-5 w-5 text-slate-400" />
-            </div>
-          )}
+        <div className="public-website-image-actions">
           <label className={`btn btn-secondary min-h-11 ${disabled || uploading ? 'pointer-events-none opacity-60' : ''}`} htmlFor={inputId}>
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-            Upload
+            {value ? 'Replace' : 'Upload'}
           </label>
+          {value ? (
+            <a className="btn btn-secondary min-h-11" href={publicAssetUrl(value)} target="_blank" rel="noreferrer">
+              <Eye className="h-4 w-4" />
+              Preview
+            </a>
+          ) : null}
+          {value ? (
+            <button type="button" className="btn btn-secondary min-h-11" disabled={disabled || uploading} onClick={() => onChange('')}>
+              <X className="h-4 w-4" />
+              Remove
+            </button>
+          ) : null}
           <input
             id={inputId}
             type="file"
@@ -129,15 +200,21 @@ function ImageField({ label, value, disabled, uploading, onUpload, onChange }) {
   );
 }
 
-function SectionCard({ title, icon: Icon, children, action = null }) {
+function SectionCard({ title, description = '', status = '', icon: Icon, children, action = null }) {
   return (
-    <section className="surface admin-control-card p-5">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <section className="surface admin-control-card public-website-section-card p-5">
+      <div className="public-website-section-head mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <div className="admin-control-icon">
             <Icon className="h-5 w-5" />
           </div>
-          <h2 className="text-xl font-black">{title}</h2>
+          <div className="min-w-0">
+            <div className="public-website-section-title-row">
+              <h2 className="text-xl font-black">{title}</h2>
+              {status ? <span className="public-website-status-chip">{status}</span> : null}
+            </div>
+            {description ? <p>{description}</p> : null}
+          </div>
         </div>
         {action}
       </div>
@@ -208,6 +285,7 @@ function ServiceEditor({ services, disabled, uploadingKey, onChange, onUpload })
   const [expanded, setExpanded] = useState(() => new Set());
   const [editingIndex, setEditingIndex] = useState(null);
   const [deleteIndex, setDeleteIndex] = useState(null);
+  const [menuIndex, setMenuIndex] = useState(null);
 
   function normalize(nextServices) {
     onChange(nextServices.map((service, index) => ({ ...service, order: index })));
@@ -329,35 +407,47 @@ function ServiceEditor({ services, disabled, uploadingKey, onChange, onUpload })
       </div>
 
       <div className="grid gap-3">
-        {filteredServices.map(({ service, index }) => (
-          <article key={`${service.title}-${index}`} className="rounded-card border border-white/10 bg-white/[0.035] p-3">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => toggleExpanded(index)}>
-                <GripVertical className="h-5 w-5 shrink-0 text-slate-500" />
-                {service.imageUrl ? <img className="h-12 w-16 rounded-card border border-white/10 object-cover" src={publicAssetUrl(service.imageUrl)} alt="" /> : null}
-                <span className="min-w-0">
+        {filteredServices.map(({ service, index }, rowIndex) => {
+          const menuOpen = menuIndex === index;
+          const menuOpensUp = rowIndex >= filteredServices.length - 2;
+          return (
+          <article key={`${service.title}-${index}`} className={`public-website-service-row ${service.visible === false ? 'is-hidden' : ''} ${menuOpen ? 'is-menu-open' : ''} ${menuOpensUp ? 'is-menu-up' : ''}`}>
+            <div className="public-website-service-main">
+              <button type="button" className="public-website-service-summary" onClick={() => toggleExpanded(index)}>
+                <span className="public-website-service-handle"><GripVertical className="h-4 w-4" />{index + 1}</span>
+                {service.imageUrl ? <img className="public-website-service-thumb" src={publicAssetUrl(service.imageUrl)} alt="" /> : null}
+                <span className="public-website-service-copy">
                   <span className="block truncate font-black text-slate-100">{service.title || `Service ${index + 1}`}</span>
                   <span className="mt-1 block truncate text-xs muted">Order {index + 1} - {(service.categories || []).join(', ') || 'No category'}</span>
                 </span>
               </button>
-              <div className="flex flex-wrap gap-2">
+              <div className="public-website-service-actions">
                 <button type="button" className="btn btn-secondary py-2 text-xs" disabled={disabled || index === 0} onClick={() => move(index, -1)}>Up</button>
                 <button type="button" className="btn btn-secondary py-2 text-xs" disabled={disabled || index === services.length - 1} onClick={() => move(index, 1)}>Down</button>
-                <button type="button" className="btn btn-secondary py-2 text-xs" disabled={disabled} onClick={() => update(index, 'visible', !service.visible)}>
+                <button type="button" className="btn btn-secondary py-2 text-xs" disabled={disabled} onClick={() => update(index, 'visible', service.visible === false)}>
                   {service.visible === false ? 'Show' : 'Hide'}
                 </button>
                 <button type="button" className="btn btn-secondary py-2 text-xs" disabled={disabled} onClick={() => setEditingIndex(index)}>
                   <Edit3 className="h-3.5 w-3.5" />
                   Edit
                 </button>
-                <button type="button" className="btn btn-secondary py-2 text-xs" disabled={disabled} onClick={() => duplicateService(index)}>
-                  <Copy className="h-3.5 w-3.5" />
-                  Duplicate
-                </button>
-                <button type="button" className="btn btn-secondary py-2 text-xs text-rose-100" disabled={disabled} onClick={() => setDeleteIndex(index)}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Delete
-                </button>
+                <div className="public-website-row-menu-wrap">
+                  <button type="button" className="icon-button h-9 w-9" disabled={disabled} aria-label={`More actions for ${service.title || `Service ${index + 1}`}`} onClick={() => setMenuIndex(menuIndex === index ? null : index)}>
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                  {menuOpen ? (
+                    <div className="public-website-row-menu" role="menu">
+                      <button type="button" role="menuitem" onClick={() => { duplicateService(index); setMenuIndex(null); }}>
+                        <Copy className="h-4 w-4" />
+                        Duplicate
+                      </button>
+                      <button type="button" role="menuitem" className="is-danger" onClick={() => { setDeleteIndex(index); setMenuIndex(null); }}>
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
             {expanded.has(index) ? (
@@ -366,7 +456,8 @@ function ServiceEditor({ services, disabled, uploadingKey, onChange, onUpload })
               </div>
             ) : null}
           </article>
-        ))}
+          );
+        })}
         {!filteredServices.length ? <p className="rounded-card border border-white/10 bg-white/[0.035] p-4 text-sm muted">No services match the current search or category.</p> : null}
       </div>
       <button type="button" className="btn btn-secondary justify-center" disabled={disabled} onClick={addService}>
@@ -406,6 +497,7 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
   const [resetting, setResetting] = useState(false);
   const [uploadingKey, setUploadingKey] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
+  const [activeSection, setActiveSection] = useState(publicWebsiteSections[0].id);
   const { data, loading, error, reload } = useResource(() => request('/settings/public-website'), [request]);
   const savedSettings = useMemo(() => mergePublicWebsiteSettings(data?.settings || defaultPublicWebsiteSettings), [data?.settings]);
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(savedSettings), [draft, savedSettings]);
@@ -417,6 +509,13 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
+
+  const activeSectionMeta = publicWebsiteSections.find((section) => section.id === activeSection) || publicWebsiteSections[0];
+  const activeSectionStatus = sectionStatus(activeSection, draft, savedSettings);
+
+  function selectSection(sectionId) {
+    setActiveSection(sectionId);
+  }
 
   function setPath(path, value) {
     setDraft((current) => updateNested(current, path, value));
@@ -447,7 +546,7 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
   }
 
   async function saveSettings(event) {
-    event.preventDefault();
+    event?.preventDefault?.();
     if (!canEdit) {
       push('Only admin users can edit public website settings', 'error');
       return;
@@ -488,9 +587,9 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
   if (error) return <ErrorBlock message={error} />;
 
   return (
-    <form className="grid gap-5" onSubmit={saveSettings}>
-      <section className="surface admin-control-card p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+    <form className="public-website-settings grid gap-5" onSubmit={saveSettings}>
+      <section className="surface admin-control-card public-website-settings-hero p-5">
+        <div className="public-website-hero-row flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">PUBLIC WEBSITE</p>
@@ -499,7 +598,7 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
             <h2 className="text-2xl font-black">Public Website Settings</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">Manage public website content, booking visibility, branding, services, contact information, and SEO without editing code.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="public-website-hero-actions flex flex-wrap gap-2">
             <a className="btn btn-secondary admin-compact-button" href="/" target="_blank" rel="noreferrer">
               <Eye className="h-4 w-4" />
               Preview Website
@@ -531,33 +630,33 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
           </div>
         </div>
         {!canEdit ? <p className="mt-4 rounded-card border border-amber-300/25 bg-amber-500/10 p-3 text-sm font-semibold text-amber-100">Only admin users can save, upload, or reset public website settings.</p> : null}
-        <div className="mt-5 flex flex-wrap gap-2">
-          {[
-            ['Hero', '#public-hero'],
-            ['Services', '#public-services'],
-            ['Contact', '#public-contact'],
-            ['Booking', '#public-booking'],
-            ['Branding', '#public-branding'],
-            ['SEO', '#public-seo'],
-            ['Footer', '#public-footer']
-          ].map(([label, href]) => (
-            <a key={label} className="btn btn-secondary admin-compact-button" href={href}>{label}</a>
-          ))}
-        </div>
       </section>
 
-      <SectionCard title="Website Status" icon={Globe2}>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ToggleField label="Public website enabled" checked={draft.status.websiteEnabled} disabled={!canEdit} onChange={(value) => setPath('status.websiteEnabled', value)} />
-          <ToggleField label="Maintenance mode" checked={draft.status.maintenanceMode} disabled={!canEdit} onChange={(value) => setPath('status.maintenanceMode', value)} />
-          <div className="lg:col-span-2">
-            <TextField label="Maintenance message" value={draft.status.maintenanceMessage} disabled={!canEdit} multiline rows={3} onChange={(value) => setPath('status.maintenanceMessage', value)} />
+      <nav className="public-website-section-nav" aria-label="Public website settings sections">
+        {publicWebsiteSections.map((section) => (
+          <button key={section.id} type="button" className={activeSection === section.id ? 'is-active' : ''} onClick={() => selectSection(section.id)}>
+            <span>{section.label}</span>
+            <small>{sectionStatus(section.id, draft, savedSettings)}</small>
+          </button>
+        ))}
+      </nav>
+
+      <div className="public-website-active-panel" data-active-section={activeSection}>
+      {activeSection === 'hero' ? (
+      <SectionCard title={activeSectionMeta.title} description={activeSectionMeta.description} status={activeSectionStatus} icon={ImageUp}>
+        <div className="public-website-subsection">
+          <div>
+            <h3>Website Status</h3>
+            <p>Availability controls stay here so the public page can be paused without leaving the hero editor.</p>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ToggleField label="Public website enabled" checked={draft.status.websiteEnabled} disabled={!canEdit} onChange={(value) => setPath('status.websiteEnabled', value)} />
+            <ToggleField label="Maintenance mode" checked={draft.status.maintenanceMode} disabled={!canEdit} onChange={(value) => setPath('status.maintenanceMode', value)} />
+            <div className="lg:col-span-2">
+              <TextField label="Maintenance message" value={draft.status.maintenanceMessage} disabled={!canEdit} multiline rows={3} onChange={(value) => setPath('status.maintenanceMessage', value)} />
+            </div>
           </div>
         </div>
-      </SectionCard>
-
-      <div id="public-hero">
-      <SectionCard title="Hero Section" icon={ImageUp}>
         <div className="grid gap-4 lg:grid-cols-2">
           <TextField label="Hero title" value={draft.hero.title} disabled={!canEdit} onChange={(value) => setPath('hero.title', value)} />
           <TextField label="Hero subtitle" value={draft.hero.subtitle} disabled={!canEdit} multiline rows={4} onChange={(value) => setPath('hero.subtitle', value)} />
@@ -571,33 +670,41 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
           </div>
         </div>
       </SectionCard>
-      </div>
+      ) : null}
 
-      <div id="public-services">
-      <SectionCard title="Services Section" icon={GripVertical}>
+      {activeSection === 'services' ? (
+      <SectionCard title={activeSectionMeta.title} description={activeSectionMeta.description} status={activeSectionStatus} icon={GripVertical}>
         <ServiceEditor services={draft.services || []} disabled={!canEdit} uploadingKey={uploadingKey} onChange={(services) => setDraft((current) => ({ ...current, services }))} onUpload={uploadImage} />
       </SectionCard>
-      </div>
+      ) : null}
 
-      <div id="public-contact">
-      <SectionCard title="Contact Section" icon={MapPin}>
+      {activeSection === 'contact' ? (
+      <SectionCard title={activeSectionMeta.title} description={activeSectionMeta.description} status={activeSectionStatus} icon={MapPin}>
         <div className="grid gap-4 lg:grid-cols-2">
-          <TextField label="Phone number" value={draft.contact.phoneNumber} disabled={!canEdit} onChange={(value) => setPath('contact.phoneNumber', value)} />
-          <TextField label="WhatsApp number" value={draft.contact.whatsappNumber} disabled={!canEdit} onChange={(value) => setPath('contact.whatsappNumber', value)} />
-          <TextField label="Email" value={draft.contact.email} disabled={!canEdit} onChange={(value) => setPath('contact.email', value)} />
+          <TextField label="Phone number" value={draft.contact.phoneNumber} disabled={!canEdit} helper={numberHint(draft.contact.phoneNumber)} onChange={(value) => setPath('contact.phoneNumber', value)} />
+          <TextField label="WhatsApp number" value={draft.contact.whatsappNumber} disabled={!canEdit} helper={numberHint(draft.contact.whatsappNumber)} onChange={(value) => setPath('contact.whatsappNumber', value)} />
+          <TextField label="Email" value={draft.contact.email} disabled={!canEdit} tone={isValidEmail(draft.contact.email) ? 'valid' : 'invalid'} helper={isValidEmail(draft.contact.email) ? 'Used for public contact links.' : 'Check the email format before saving.'} onChange={(value) => setPath('contact.email', value)} />
           <TextField label="Business hours" value={draft.contact.businessHours} disabled={!canEdit} onChange={(value) => setPath('contact.businessHours', value)} />
           <div className="lg:col-span-2">
             <TextField label="Address" value={draft.contact.address} disabled={!canEdit} multiline rows={3} onChange={(value) => setPath('contact.address', value)} />
           </div>
           <div className="lg:col-span-2">
-            <TextField label="Google Maps link" value={draft.contact.googleMapsLink} disabled={!canEdit} onChange={(value) => setPath('contact.googleMapsLink', value)} />
+            <div className="public-website-map-field">
+              <TextField label="Google Maps link" value={draft.contact.googleMapsLink} disabled={!canEdit} helper="Paste a public Google Maps URL for the contact section." onChange={(value) => setPath('contact.googleMapsLink', value)} />
+              {draft.contact.googleMapsLink ? (
+                <a className="btn btn-secondary admin-compact-button" href={draft.contact.googleMapsLink} target="_blank" rel="noreferrer">
+                  <MapPin className="h-4 w-4" />
+                  Test Link
+                </a>
+              ) : null}
+            </div>
           </div>
         </div>
       </SectionCard>
-      </div>
+      ) : null}
 
-      <div id="public-booking">
-      <SectionCard title="Booking Settings" icon={CalendarClock}>
+      {activeSection === 'booking' ? (
+      <SectionCard title={activeSectionMeta.title} description={activeSectionMeta.description} status={activeSectionStatus} icon={CalendarClock}>
         <div className="grid gap-4 lg:grid-cols-2">
           <ToggleField label="Enable public booking" checked={draft.booking.publicBookingEnabled} disabled={!canEdit} onChange={(value) => setPath('booking.publicBookingEnabled', value)} />
           <ToggleField label="Show service selection" checked={draft.booking.showServiceSelection} disabled={!canEdit} onChange={(value) => setPath('booking.showServiceSelection', value)} />
@@ -612,10 +719,10 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
           </label>
         </div>
       </SectionCard>
-      </div>
+      ) : null}
 
-      <div id="public-branding">
-      <SectionCard title="Logo & Branding" icon={Palette}>
+      {activeSection === 'branding' ? (
+      <SectionCard title={activeSectionMeta.title} description={activeSectionMeta.description} status={activeSectionStatus} icon={Palette}>
         <div className="grid gap-4 lg:grid-cols-2">
           <ToggleField label="Use company logo on public website" checked={draft.branding.useCompanyLogo} disabled={!canEdit} onChange={(value) => setPath('branding.useCompanyLogo', value)} />
           <label>
@@ -630,39 +737,40 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
           </div>
         </div>
       </SectionCard>
-      </div>
+      ) : null}
 
-      <div id="public-seo">
-      <SectionCard title="SEO Settings" icon={Search}>
+      {activeSection === 'seo' ? (
+      <SectionCard title={activeSectionMeta.title} description={activeSectionMeta.description} status={activeSectionStatus} icon={Search}>
         <div className="grid gap-4 lg:grid-cols-2">
-          <TextField label="Website title" value={draft.seo.websiteTitle} disabled={!canEdit} onChange={(value) => setPath('seo.websiteTitle', value)} />
+          <TextField label="Website title" value={draft.seo.websiteTitle} disabled={!canEdit} meta={`${String(draft.seo.websiteTitle || '').length}/60`} onChange={(value) => setPath('seo.websiteTitle', value)} />
           <TextField label="Keywords" value={draft.seo.keywords} disabled={!canEdit} onChange={(value) => setPath('seo.keywords', value)} />
           <div className="lg:col-span-2">
-            <TextField label="Meta description" value={draft.seo.metaDescription} disabled={!canEdit} multiline rows={3} onChange={(value) => setPath('seo.metaDescription', value)} />
+            <TextField label="Meta description" value={draft.seo.metaDescription} disabled={!canEdit} multiline rows={3} meta={`${String(draft.seo.metaDescription || '').length}/160`} onChange={(value) => setPath('seo.metaDescription', value)} />
           </div>
           <div className="lg:col-span-2">
             <ImageField label="Social sharing image" value={draft.seo.socialSharingImage} disabled={!canEdit} uploading={uploadingKey === 'seo'} onChange={(value) => setPath('seo.socialSharingImage', value)} onUpload={(file) => uploadImage(file, (url) => setPath('seo.socialSharingImage', url), 'seo')} />
           </div>
         </div>
       </SectionCard>
-      </div>
+      ) : null}
 
-      <div id="public-footer">
-        <SectionCard title="Footer Settings" icon={ShieldCheck}>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
+      {activeSection === 'footer' ? (
+        <SectionCard title={activeSectionMeta.title} description={activeSectionMeta.description} status={activeSectionStatus} icon={ShieldCheck}>
+          <div className="public-website-footer-grid grid gap-3 md:grid-cols-2">
+            <div className="public-website-footer-info rounded-card border border-white/10 bg-white/[0.035] p-3">
               <p className="font-black text-slate-100">Footer identity</p>
               <p className="mt-1 text-sm leading-6 muted">Company name, contact details, WhatsApp, and logo are sourced from Company Profile with safe static fallbacks.</p>
             </div>
-            <div className="rounded-card border border-white/10 bg-white/[0.035] p-3">
+            <div className="public-website-footer-info rounded-card border border-white/10 bg-white/[0.035] p-3">
               <p className="font-black text-slate-100">Public theme separation</p>
               <p className="mt-1 text-sm leading-6 muted">Public accent and branding stay separate from admin dark/light theme preferences.</p>
             </div>
           </div>
         </SectionCard>
+      ) : null}
       </div>
 
-      <div className="surface admin-control-card flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-end">
+      <div className="surface admin-control-card public-website-bottom-actions flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-end">
         <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => setDraft(cloneSettings(savedSettings))}>
           Cancel / Revert
         </button>
@@ -671,6 +779,23 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
           {saving ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
+      {dirty ? (
+        <div className="public-website-save-bar" role="status" aria-live="polite">
+          <div>
+            <p>Unsaved changes in Public Website Settings</p>
+            <span>Your public website draft has changes ready to save.</span>
+          </div>
+          <div className="public-website-save-bar-actions">
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={() => setDraft(cloneSettings(savedSettings))}>
+              Cancel / Revert
+            </button>
+            <button type="button" className="btn btn-primary admin-compact-button" disabled={!canEdit || saving} onClick={saveSettings}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save Changes
+            </button>
+          </div>
+        </div>
+      ) : null}
       {confirmReset ? (
         <ConfirmModal
           title="Reset public website settings?"
