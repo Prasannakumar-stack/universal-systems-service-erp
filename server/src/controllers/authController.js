@@ -46,7 +46,11 @@ export async function login(req, res) {
 }
 
 export async function me(req, res) {
-  res.json({ user: publicUser(req.user) });
+  const user = await User.findById(req.user._id);
+  if (!user || !user.active) throw appError('User not found', 404);
+  await attachEffectivePermissions(user);
+  res.set('Cache-Control', 'no-store');
+  res.json({ user: publicUser(user) });
 }
 
 export async function updateProfile(req, res) {
@@ -131,7 +135,8 @@ export async function uploadAvatar(req, res) {
     before,
     after
   });
-  res.json({ success: true, user: after, message: 'Profile photo updated' });
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, user: after, avatarUrl: after.avatarUrl, message: 'Profile photo updated' });
 }
 
 export async function removeAvatar(req, res) {
@@ -152,7 +157,8 @@ export async function removeAvatar(req, res) {
     before,
     after
   });
-  res.json({ success: true, user: after, message: 'Profile photo removed' });
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, user: after, avatarUrl: after.avatarUrl, message: 'Profile photo removed' });
 }
 
 export async function profileActivity(req, res) {

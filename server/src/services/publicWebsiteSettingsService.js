@@ -122,6 +122,8 @@ export const defaultPublicWebsiteSettings = {
   branding: {
     logoUrl: '/logo-icon.png',
     useCompanyLogo: true,
+    navbarLogoWidth: 180,
+    footerLogoWidth: 280,
     accentColor: '#75c4ff'
   },
   seo: {
@@ -144,6 +146,12 @@ function sanitizeColor(value, fallback = '#75c4ff') {
 
 function booleanValue(value, fallback = false) {
   return typeof value === 'boolean' ? value : fallback;
+}
+
+function numberInRange(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(numeric)));
 }
 
 function sanitizeServices(services = []) {
@@ -212,6 +220,8 @@ export function sanitizePublicWebsiteSettings(payload = {}) {
     branding: {
       logoUrl: cleanText(base.branding.logoUrl, defaultBranding.logoUrl, 400),
       useCompanyLogo: booleanValue(base.branding.useCompanyLogo, defaultBranding.useCompanyLogo),
+      navbarLogoWidth: numberInRange(base.branding.navbarLogoWidth, defaultBranding.navbarLogoWidth, 80, 320),
+      footerLogoWidth: numberInRange(base.branding.footerLogoWidth, defaultBranding.footerLogoWidth, 120, 480),
       accentColor: sanitizeColor(base.branding.accentColor, defaultBranding.accentColor)
     },
     seo: {

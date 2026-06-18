@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   ArrowRight,
@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { PublicWebsiteSettingsProvider, usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
-import { phoneHref, publicAssetUrl, publicPhoneList, whatsappHref } from '../utils/publicWebsiteDefaults.js';
+import { phoneHref, publicLogoSources, publicPhoneList, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const baseLinks = [
   { to: '/', label: 'Home' },
@@ -40,6 +40,12 @@ const footerServiceLinks = [
   'Networking Support'
 ];
 
+function logoWidth(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(numeric)));
+}
+
 function NavItems({ onClick, links }) {
   return (
     <>
@@ -48,7 +54,7 @@ function NavItems({ onClick, links }) {
           key={link.to}
           to={link.to}
           onClick={onClick}
-          className={({ isActive }) => `public-nav-link ${isActive ? 'is-active' : ''}`}
+          className={({ isActive }) => ['public-nav-link', link.booking ? 'public-nav-cta' : '', isActive ? 'is-active' : ''].filter(Boolean).join(' ')}
         >
           {link.label}
         </NavLink>
@@ -65,29 +71,49 @@ function WhatsAppIcon(props) {
   );
 }
 
-function PublicNavbarLogo({ branding }) {
-  const logoUrl = branding?.useCompanyLogo === false ? '' : publicAssetUrl(branding?.logoUrl || '/logo-icon.png');
+function ResilientPublicLogo({ branding, variant, className, alt, fallback = null }) {
+  const sources = useMemo(
+    () => publicLogoSources(branding, variant),
+    [branding?.logoUrl, branding?.useCompanyLogo, variant]
+  );
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const src = sources[sourceIndex] || '';
+
+  useEffect(() => {
+    setSourceIndex(0);
+  }, [sources.join('|')]);
+
+  if (!src) return fallback;
+
   return (
-    <span className="public-navbar-brand" aria-hidden="true">
-      <span className="public-navbar-icon-crop">
-        {logoUrl ? (
-          <img src={logoUrl} alt="" className="public-navbar-logo-icon" />
-        ) : (
-          <Wrench className="h-6 w-6 text-white" />
-        )}
-      </span>
-      <span className="public-navbar-logo-text">
-        <span>Universal</span>
-        <span>Systems</span>
-      </span>
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      draggable="false"
+      onError={() => setSourceIndex((current) => current + 1)}
+    />
+  );
+}
+
+function PublicNavbarLogo({ branding, className = 'public-header-wordmark-image' }) {
+  return (
+    <span className="public-navbar-brand">
+      <ResilientPublicLogo
+        branding={branding}
+        variant="header"
+        className={className}
+        alt="Universal Systems logo"
+        fallback={null}
+      />
     </span>
   );
 }
 
-function PublicHeaderLogo() {
+function PublicHeaderLogo({ branding }) {
   return (
-    <span className="public-header-wordmark" aria-hidden="true">
-      <img src="/logo-full.png" alt="" className="public-header-wordmark-image" draggable="false" />
+    <span className="public-header-wordmark">
+      <PublicNavbarLogo branding={branding} className="public-header-wordmark-image" />
     </span>
   );
 }
@@ -133,28 +159,47 @@ function PublicLayoutShell() {
     () => baseLinks.filter((link) => !link.booking || booking.publicBookingEnabled),
     [booking.publicBookingEnabled]
   );
+  const centerLinks = useMemo(() => baseLinks.filter((link) => !link.booking), []);
+  const bookingLink = useMemo(
+    () => (booking.publicBookingEnabled ? baseLinks.find((link) => link.booking) : null),
+    [booking.publicBookingEnabled]
+  );
   const phones = publicPhoneList(contact);
   const primaryPhone = phones[0] || '';
   const accentColor = branding?.accentColor || '#75c4ff';
+  const navbarLogoWidth = logoWidth(branding?.navbarLogoWidth, 180, 80, 320);
+  const footerLogoWidth = logoWidth(branding?.footerLogoWidth, 280, 120, 480);
+  const publicBrandStyle = {
+    '--public-accent': accentColor,
+    '--brand': accentColor,
+    '--brand-2': accentColor,
+    '--public-navbar-logo-width': `${navbarLogoWidth}px`,
+    '--public-footer-logo-width': `${footerLogoWidth}px`
+  };
 
   if (!settings.status?.websiteEnabled || settings.status?.maintenanceMode) {
     return (
-      <div className="public-site-shell" style={{ '--public-accent': accentColor, '--brand': accentColor, '--brand-2': accentColor }}>
+      <div className="public-site-shell" style={publicBrandStyle}>
         <PublicMaintenancePage settings={settings} />
       </div>
     );
   }
 
   return (
-    <div className="public-site-shell min-h-screen" style={{ '--public-accent': accentColor, '--brand': accentColor, '--brand-2': accentColor }}>
+    <div className="public-site-shell min-h-screen" style={publicBrandStyle}>
       <header className="public-header sticky top-0 z-50 border-b border-[var(--line)] backdrop-blur-xl">
-        <div className="container-page flex h-18 items-center justify-between py-3">
-          <NavLink to="/" className="public-header-logo-link flex items-center" aria-label="Universal Systems home">
-            <PublicHeaderLogo />
-          </NavLink>
-          <nav className="public-nav hidden items-center gap-1 lg:flex">
-            <NavItems links={links} />
+        <div className="container-page public-header-inner">
+          <div className="public-header-zone public-header-zone-logo">
+            <NavLink to="/" className="public-header-logo-link flex items-center" aria-label="Universal Systems home">
+              <PublicHeaderLogo branding={branding} />
+            </NavLink>
+          </div>
+          <nav className="public-nav public-nav-center hidden items-center gap-1 lg:flex" aria-label="Primary navigation">
+            <NavItems links={centerLinks} />
           </nav>
+          <div className="public-header-zone public-header-zone-actions hidden lg:flex">
+            {bookingLink ? <NavItems links={[bookingLink]} /> : null}
+          </div>
           <button className="icon-button h-10 w-10 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </button>
@@ -166,7 +211,7 @@ function PublicLayoutShell() {
           <div className="public-mobile-drawer ml-auto h-full w-80 max-w-[88vw] p-5 shadow-soft" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6 flex items-center justify-between">
               <span className="public-header-logo-link inline-flex items-center">
-                <PublicHeaderLogo />
+                <PublicHeaderLogo branding={branding} />
               </span>
               <button className="icon-button h-9 w-9" onClick={() => setOpen(false)} aria-label="Close menu">
                 <X className="h-5 w-5" />
@@ -197,7 +242,7 @@ function PublicLayoutShell() {
       <footer className="public-footer border-t border-[var(--line)] bg-[var(--surface)]">
         <div className="container-page grid gap-8 py-10 md:grid-cols-2 lg:grid-cols-[1.45fr_0.78fr_1fr_1fr]">
           <div className="footer-brand-block">
-            <PublicNavbarLogo branding={branding} />
+            <PublicNavbarLogo branding={branding} className="public-footer-logo-image" />
             <p className="footer-brand-description muted max-w-md text-sm leading-6">
               Computer repair, OS installation, printer service, software support, data recovery, and maintenance solutions in Mettur Dam.
             </p>

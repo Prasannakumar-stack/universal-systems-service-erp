@@ -306,14 +306,14 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
     const bookings = filterByRange(raw.bookings || [], bounds);
     const workOrders = filterByRange(raw.workOrders || [], bounds);
     const invoices = filterByRange(raw.invoices || [], bounds);
-    const payments = filterByRange(raw.payments || [], bounds);
+    const payments = filterByRange(raw.payments || [], bounds).filter(isActivePayment);
     const movements = filterByRange(raw.movements || [], bounds);
     const customers = filterByRange(raw.customers || [], bounds);
     const amcContracts = (raw.amcContracts || []).filter((contract) => dateInRange(contract.createdAt || contract.startDate || contract.endDate, bounds));
     const amcSchedule = (raw.amcSchedule || []).filter((visit) => dateInRange(visit.scheduledDate || visit.createdAt, bounds));
     const allWorkOrders = raw.workOrders || [];
     const allInvoices = raw.invoices || [];
-    const allPayments = raw.payments || [];
+    const allPayments = (raw.payments || []).filter(isActivePayment);
     const allCustomers = raw.customers || [];
     const allContracts = raw.amcContracts || [];
     const allSchedule = raw.amcSchedule || [];
@@ -321,7 +321,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
     const priorBounds = previousPeriodBounds(bounds);
     const previousWorkOrders = priorBounds ? filterByRange(raw.workOrders || [], priorBounds) : [];
     const previousInvoices = priorBounds ? filterByRange(raw.invoices || [], priorBounds) : [];
-    const previousPayments = priorBounds ? filterByRange(raw.payments || [], priorBounds) : [];
+    const previousPayments = priorBounds ? filterByRange(raw.payments || [], priorBounds).filter(isActivePayment) : [];
 
     const completedJobs = workOrders.filter((job) => ['Completed', 'Delivered'].includes(job.status));
     const previousCompletedJobs = previousWorkOrders.filter((job) => ['Completed', 'Delivered'].includes(job.status));
@@ -1222,67 +1222,132 @@ function InsightActionCard({ insight }) {
   );
 }
 
+function financeRowsSummary(rows = []) {
+  return rows.reduce((summary, row) => ({
+    billed: summary.billed + Number(row?.billed || 0),
+    collected: summary.collected + Number(row?.collected || 0)
+  }), { billed: 0, collected: 0 });
+}
+
+function FinanceTrendTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const billed = Number(payload.find((item) => item.dataKey === 'billed')?.value || 0);
+  const collected = Number(payload.find((item) => item.dataKey === 'collected')?.value || 0);
+  const balance = billed - collected;
+
+  return (
+    <div
+      style={{
+        background: '#071827',
+        border: '1px solid rgba(125, 211, 252, 0.25)',
+        borderRadius: 8,
+        boxShadow: '0 16px 40px rgba(0, 8, 22, 0.3)',
+        color: '#f8fbff',
+        padding: '0.75rem 0.85rem'
+      }}
+    >
+      <p style={{ margin: 0, color: '#bae6fd', fontWeight: 900, fontSize: '0.8rem' }}>{label}</p>
+      <div style={{ marginTop: '0.45rem', display: 'grid', gap: '0.28rem' }}>
+        <p style={{ margin: 0, color: '#bfdbfe', fontWeight: 800, fontSize: '0.8rem' }}>Billed: {formatReportCurrency(billed)}</p>
+        <p style={{ margin: 0, color: '#a7f3d0', fontWeight: 800, fontSize: '0.8rem' }}>Collected: {formatReportCurrency(collected)}</p>
+        <p style={{ margin: 0, color: '#fcd34d', fontWeight: 800, fontSize: '0.8rem' }}>Balance: {formatReportCurrency(balance)}</p>
+      </div>
+    </div>
+  );
+}
+
 function FinanceTrendChart({ rows = [], hasData }) {
   const realPointCount = rows.filter((row) => Number(row?.billed || 0) > 0 || Number(row?.collected || 0) > 0).length;
+  const summary = financeRowsSummary(rows);
+  const balance = summary.billed - summary.collected;
   return (
-    <div className="reports-chart-frame">
+    <div className="grid gap-3">
       {hasData ? (
         <>
-          <div className="reports-chart-body">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={rows}>
-                <defs>
-                  <linearGradient id="reportsBilledGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#93c5fd" stopOpacity={0.9} />
-                    <stop offset="100%" stopColor="#2563eb" stopOpacity={0.62} />
-                  </linearGradient>
-                  <linearGradient id="reportsCollectedGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#67e8f9" stopOpacity={0.88} />
-                    <stop offset="58%" stopColor="#2dd4bf" stopOpacity={0.76} />
-                    <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.62} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="rgba(117,196,255,0.12)" vertical={false} />
-                <XAxis dataKey="month" stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} tickFormatter={formatCompactReportCurrency} width={62} allowDecimals={false} />
-                <Tooltip
-                  cursor={{ fill: 'rgba(56, 189, 248, 0.08)' }}
-                  formatter={(value) => formatReportCurrency(value)}
-                  contentStyle={{
-                    background: '#071827',
-                    border: '1px solid rgba(125, 211, 252, 0.25)',
-                    borderRadius: 8,
-                    boxShadow: '0 16px 40px rgba(0, 8, 22, 0.3)',
-                    color: '#f8fbff'
-                  }}
-                  itemStyle={{ color: '#e0f2fe', fontWeight: 800 }}
-                  labelStyle={{ color: '#bae6fd', fontWeight: 900 }}
-                  wrapperStyle={{ outline: 'none' }}
-                />
-                <Bar
-                  dataKey="billed"
-                  name="Billed"
-                  fill="url(#reportsBilledGradient)"
-                  radius={[8, 8, 0, 0]}
-                  maxBarSize={52}
-                  activeBar={{ fill: 'url(#reportsBilledGradient)', stroke: 'rgba(147, 197, 253, 0.48)', strokeWidth: 1 }}
-                />
-                <Bar
-                  dataKey="collected"
-                  name="Collected"
-                  fill="url(#reportsCollectedGradient)"
-                  radius={[8, 8, 0, 0]}
-                  maxBarSize={52}
-                  activeBar={{ fill: 'url(#reportsCollectedGradient)', stroke: 'rgba(125, 211, 252, 0.48)', strokeWidth: 1 }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div className="flex min-h-[78px] items-center justify-between gap-3 rounded-xl border border-sky-400/15 bg-sky-400/8 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Billed</p>
+                <p className="mt-1 truncate text-sm font-black text-sky-100 sm:text-[0.95rem]">{formatReportCurrency(summary.billed)}</p>
+              </div>
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-sky-300" />
+            </div>
+            <div className="flex min-h-[78px] items-center justify-between gap-3 rounded-xl border border-emerald-400/15 bg-emerald-400/8 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Collected</p>
+                <p className="mt-1 truncate text-sm font-black text-emerald-100 sm:text-[0.95rem]">{formatReportCurrency(summary.collected)}</p>
+              </div>
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-300" />
+            </div>
+            <div className="flex min-h-[78px] items-center justify-between gap-3 rounded-xl border border-amber-400/15 bg-amber-400/8 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Balance</p>
+                <p className="mt-1 truncate text-sm font-black text-amber-100 sm:text-[0.95rem]">{formatReportCurrency(balance)}</p>
+              </div>
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300" />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
+            <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/18 bg-sky-400/10 px-3 py-1 text-sky-100">
+              <span className="h-2.5 w-2.5 rounded-full bg-sky-300" />
+              Billed
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/18 bg-emerald-400/10 px-3 py-1 text-emerald-100">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
+              Collected
+            </span>
+          </div>
+          <p className="text-xs font-semibold leading-5 text-slate-400">
+            Blue = Billed invoice value, Green = Collected payments
+          </p>
+          <div className="reports-chart-frame h-[17.5rem] min-h-[17.5rem] sm:h-[18.5rem] sm:min-h-[18.5rem]">
+            <div className="reports-chart-body">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={rows}>
+                  <defs>
+                    <linearGradient id="reportsBilledGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#93c5fd" stopOpacity={0.9} />
+                      <stop offset="100%" stopColor="#2563eb" stopOpacity={0.62} />
+                    </linearGradient>
+                    <linearGradient id="reportsCollectedGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#67e8f9" stopOpacity={0.88} />
+                      <stop offset="58%" stopColor="#2dd4bf" stopOpacity={0.76} />
+                      <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.62} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(117,196,255,0.12)" vertical={false} />
+                  <XAxis dataKey="month" stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#aebfd7" fontSize={12} tickLine={false} axisLine={false} tickFormatter={formatCompactReportCurrency} width={62} allowDecimals={false} />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(56, 189, 248, 0.08)' }}
+                    content={<FinanceTrendTooltip />}
+                    wrapperStyle={{ outline: 'none' }}
+                  />
+                  <Bar
+                    dataKey="billed"
+                    name="Billed"
+                    fill="url(#reportsBilledGradient)"
+                    radius={[8, 8, 0, 0]}
+                    maxBarSize={52}
+                    activeBar={{ fill: 'url(#reportsBilledGradient)', stroke: 'rgba(147, 197, 253, 0.48)', strokeWidth: 1 }}
+                  />
+                  <Bar
+                    dataKey="collected"
+                    name="Collected"
+                    fill="url(#reportsCollectedGradient)"
+                    radius={[8, 8, 0, 0]}
+                    maxBarSize={52}
+                    activeBar={{ fill: 'url(#reportsCollectedGradient)', stroke: 'rgba(125, 211, 252, 0.48)', strokeWidth: 1 }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
           {realPointCount === 1 ? (
             <p className="reports-chart-helper">More insights will appear as data grows.</p>
           ) : null}
         </>
-      ) : <CompactReportEmptyState icon={ClipboardList} />}
+      ) : <div className="reports-chart-frame"><CompactReportEmptyState icon={ClipboardList} /></div>}
     </div>
   );
 }
@@ -1510,6 +1575,10 @@ function InventoryReportCard({ part }) {
 
 function paymentCollectedAmount(payment = {}) {
   return Number(payment.paidAmount ?? payment.amount ?? payment.totalPaid ?? payment.value ?? 0) || 0;
+}
+
+function isActivePayment(payment = {}) {
+  return payment.status !== 'Reversed' && !payment.reversedAt;
 }
 
 function paymentCollectedDate(payment = {}) {

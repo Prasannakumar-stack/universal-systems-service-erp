@@ -44,13 +44,13 @@ import {
   useRef,
   useState,
   useToast,
-  uploadedAssetUrl,
   UserRound,
   Users,
   Wrench
 } from '../../shared/phase1Shared.jsx';
 import { Camera, Eye, EyeOff, Palette, Trash2, UploadCloud } from 'lucide-react';
 import { themePreferenceOptions, useThemePreference } from '../../utils/theme.js';
+import { resolveAvatarUrl, resolveUserAvatarUrl, userInitials } from '../../utils/avatar.js';
 
 function text(value) {
   return String(value || '').trim();
@@ -689,10 +689,6 @@ function stableJson(value) {
   return JSON.stringify(value || {});
 }
 
-function technicianInitial(user) {
-  return (text(user?.name || user?.username || 'T')[0] || 'T').toUpperCase();
-}
-
 function accountStatus(user) {
   if (user?.status) return user.status;
   if (user?.active === true || user?.isActive === true) return 'Active';
@@ -701,10 +697,7 @@ function accountStatus(user) {
 }
 
 function technicianSettingsAssetUrl(url = '') {
-  const value = text(url);
-  if (!value) return '';
-  if (value.startsWith('/uploads/')) return uploadedAssetUrl(value);
-  return value;
+  return resolveAvatarUrl(url);
 }
 
 function cleanContactNumber(value) {
@@ -850,7 +843,7 @@ function PremiumSwitch({ label, description, checked, onChange }) {
 }
 
 export function TechnicianSettingsPage() {
-  const { request, user, setUser } = useAuth();
+  const { request, user, setUser, refreshUser } = useAuth();
   const { push } = useToast();
   const { themePreference, resolvedTheme, setThemePreference } = useThemePreference();
   const photoInputRef = useRef(null);
@@ -878,8 +871,8 @@ export function TechnicianSettingsPage() {
   const username = settingsFallback(user?.username);
   const profileDirty = stableJson(profileForm) !== stableJson(profileBaseline);
   const preferencesDirty = stableJson(preferences) !== stableJson(savedPreferences);
-  const avatarSrc = photoPreviewUrl || technicianSettingsAssetUrl(user?.avatarUrl);
-  const hasCustomPhoto = Boolean(photoPreviewUrl || user?.avatarUrl);
+  const avatarSrc = photoPreviewUrl || resolveUserAvatarUrl(user);
+  const hasCustomPhoto = Boolean(photoPreviewUrl || resolveUserAvatarUrl(user));
   const profileErrors = useMemo(() => ({
     name: profileForm.name.trim() ? '' : 'Full Name is required.',
     phone: profileForm.phone.trim()
@@ -931,7 +924,6 @@ export function TechnicianSettingsPage() {
   function syncUser(result) {
     if (!result?.user) return;
     setUser(result.user);
-    localStorage.setItem('us_user', JSON.stringify(result.user));
   }
 
   function updateProfileField(field, value) {
@@ -1008,6 +1000,7 @@ export function TechnicianSettingsPage() {
     try {
       const result = await request('/auth/profile/avatar', { method: 'POST', body });
       syncUser(result);
+      await refreshUser();
       setPhotoPreviewUrl('');
       push(result.message || 'Profile photo updated');
     } catch (err) {
@@ -1026,6 +1019,7 @@ export function TechnicianSettingsPage() {
       if (user?.avatarUrl) {
         const result = await request('/auth/profile/avatar', { method: 'DELETE' });
         syncUser(result);
+        await refreshUser();
         push('Profile photo removed.');
       } else {
         push('Profile photo removed.');
@@ -1195,7 +1189,7 @@ export function TechnicianSettingsPage() {
         <SettingsCard icon={Camera} title="Profile Photo" description="Your technician identity shown across the panel." className="technician-photo-card">
           <div className="technician-photo-panel">
             <div className="technician-photo-avatar">
-              {avatarSrc ? <img src={avatarSrc} alt="Technician profile preview" /> : <span>{technicianInitial(user)}</span>}
+              {avatarSrc ? <img src={avatarSrc} alt="" /> : <span>{userInitials(user, 'T')}</span>}
             </div>
             <div className="technician-photo-copy">
               <h3>{displayName}</h3>

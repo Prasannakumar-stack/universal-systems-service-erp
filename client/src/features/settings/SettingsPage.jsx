@@ -115,7 +115,6 @@ import {
   timelineIcon,
   Tooltip,
   Trash2,
-  uploadedAssetUrl,
   useAuth,
   useCallback,
   useEffect,
@@ -140,6 +139,7 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 import { Fragment } from 'react';
+import { resolveAvatarUrl, resolveUserAvatarUrl, userInitials } from '../../utils/avatar.js';
 import {
   Activity,
   ArchiveRestore,
@@ -741,10 +741,7 @@ function PermissionMatrixCell({ state, locked, edited, disabled, onToggle }) {
 }
 
 function settingsAssetUrl(url = '') {
-  const value = String(url || '').trim();
-  if (!value) return '';
-  if (value.startsWith('/uploads/')) return uploadedAssetUrl(value);
-  return value;
+  return resolveAvatarUrl(url);
 }
 
 function stableJson(value) {
@@ -1863,8 +1860,9 @@ function CompanyProfileSection({ onDirtyChange = null }) {
 }
 
 function AdminProfileSection({ onDirtyChange = null }) {
-  const { request, user, setUser } = useAuth();
+  const { request, user, setUser, refreshUser } = useAuth();
   const { push } = useToast();
+  const avatarInputRef = useRef(null);
   const profileBaseline = useMemo(() => ({
     name: user?.name || '',
     username: user?.username || '',
@@ -1876,6 +1874,8 @@ function AdminProfileSection({ onDirtyChange = null }) {
   const [passwordVisible, setPasswordVisible] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState('');
+  const [avatarImageFailed, setAvatarImageFailed] = useState(false);
   const [confirmRemoveAvatar, setConfirmRemoveAvatar] = useState(false);
   const { data: activityData, loading: activityLoading, reload: reloadActivity } = useResource(() => request('/auth/profile/activity').catch(() => ({ activity: [] })), [request]);
   const dirty = stableJson(form) !== stableJson(profileBaseline);
@@ -1907,8 +1907,10 @@ function AdminProfileSection({ onDirtyChange = null }) {
           ? 'Confirm password must match the new password.'
           : '';
   const canUpdatePassword = passwordTouched && !passwordValidation && !saving;
-  const profileInitial = String(form.name || form.username || 'A').trim().slice(0, 1).toUpperCase() || 'A';
-  const currentAvatarUrl = user?.avatarUrl || '';
+  const profileInitial = userInitials({ name: form.name, username: form.username }, 'A');
+  const currentAvatarUrl = resolveUserAvatarUrl(user);
+  const previewAvatarUrl = avatarPreviewUrl || currentAvatarUrl;
+  const showAvatarImage = Boolean(previewAvatarUrl) && !avatarImageFailed;
   const roleText = roleLabel(user?.role || 'admin') || titleCase(user?.role || 'admin');
   const accountStatus = user?.active === false ? 'Inactive' : 'Active';
   const activityItems = useMemo(() => {
@@ -1946,13 +1948,20 @@ function AdminProfileSection({ onDirtyChange = null }) {
   }, [profileBaseline]);
 
   useEffect(() => {
+    setAvatarImageFailed(false);
+  }, [previewAvatarUrl]);
+
+  useEffect(() => () => {
+    if (avatarPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(avatarPreviewUrl);
+  }, [avatarPreviewUrl]);
+
+  useEffect(() => {
     onDirtyChange?.(dirty || Boolean(passwordForm.currentPassword || passwordForm.newPassword || passwordForm.confirmPassword));
   }, [dirty, passwordForm.currentPassword, passwordForm.newPassword, passwordForm.confirmPassword, onDirtyChange]);
 
   function syncUser(result) {
     if (!result?.user) return;
     setUser(result.user);
-    localStorage.setItem('us_user', JSON.stringify(result.user));
   }
 
   function updateProfileField(field, value) {
@@ -2041,15 +2050,29 @@ function AdminProfileSection({ onDirtyChange = null }) {
       push(validationMessage, 'error');
       return;
     }
+    const preview = URL.createObjectURL(file);
+    setAvatarPreviewUrl((current) => {
+      if (current.startsWith('blob:')) URL.revokeObjectURL(current);
+      return preview;
+    });
     const body = new FormData();
     body.append('avatar', file);
     setUploading(true);
     try {
       const result = await request('/auth/profile/avatar', { method: 'POST', body });
       syncUser(result);
+      await refreshUser();
+      setAvatarPreviewUrl((current) => {
+        if (current.startsWith('blob:')) URL.revokeObjectURL(current);
+        return '';
+      });
       push(result.message || 'Profile photo updated');
       await reloadActivity({ silent: true });
     } catch (err) {
+      setAvatarPreviewUrl((current) => {
+        if (current.startsWith('blob:')) URL.revokeObjectURL(current);
+        return '';
+      });
       push(err.message, 'error');
     } finally {
       setUploading(false);
@@ -2061,6 +2084,12 @@ function AdminProfileSection({ onDirtyChange = null }) {
     try {
       const result = await request('/auth/profile/avatar', { method: 'DELETE' });
       syncUser(result);
+      await refreshUser();
+      setAvatarPreviewUrl((current) => {
+        if (current.startsWith('blob:')) URL.revokeObjectURL(current);
+        return '';
+      });
+      setAvatarImageFailed(false);
       setConfirmRemoveAvatar(false);
       push(result.message || 'Profile photo removed');
       await reloadActivity({ silent: true });
@@ -2069,6 +2098,11 @@ function AdminProfileSection({ onDirtyChange = null }) {
     } finally {
       setUploading(false);
     }
+  }
+
+  function openAvatarPicker() {
+    if (uploading) return;
+    avatarInputRef.current?.click();
   }
 
   return (
@@ -2232,8 +2266,12 @@ function AdminProfileSection({ onDirtyChange = null }) {
         <section className="admin-profile-card admin-profile-photo-card">
           <div className="admin-profile-avatar-wrap">
             <div className="admin-profile-avatar">
-              {currentAvatarUrl ? (
-                <img src={settingsAssetUrl(currentAvatarUrl)} alt="Admin avatar" />
+              {showAvatarImage ? (
+                <img
+                  src={settingsAssetUrl(previewAvatarUrl)}
+                  alt=""
+                  onError={() => setAvatarImageFailed(true)}
+                />
               ) : (
                 <span>{profileInitial}</span>
               )}
@@ -2248,15 +2286,22 @@ function AdminProfileSection({ onDirtyChange = null }) {
             <p>JPG, PNG, or WEBP profile photo up to 5 MB.</p>
           </div>
           <div className="admin-profile-photo-actions">
-            <label className={`btn btn-secondary justify-center ${uploading ? 'pointer-events-none opacity-60' : ''}`}>
+            <button type="button" className="btn btn-secondary justify-center" disabled={uploading} onClick={openAvatarPicker}>
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
               Upload Photo
-              <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={uploading} onChange={(event) => {
-                const file = event.target.files?.[0];
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              className="hidden"
+              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+              disabled={uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0] || null;
                 event.target.value = '';
                 uploadAvatar(file);
-              }} />
-            </label>
+              }}
+            />
             <button type="button" className="btn btn-secondary justify-center text-rose-100" disabled={uploading || !currentAvatarUrl} onClick={() => setConfirmRemoveAvatar(true)}>
               <Trash2 className="h-4 w-4" />
               Remove Photo

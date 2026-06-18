@@ -1,6 +1,17 @@
 import { apiBase, company } from './constants.js';
 
-const apiOrigin = apiBase.replace(/\/api$/, '');
+function publicAssetOrigin() {
+  if (/^https?:\/\//i.test(apiBase)) return apiBase.replace(/\/api\/?$/, '');
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname, port } = window.location;
+    if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '5050') {
+      return `${protocol}//${hostname}:5050`;
+    }
+  }
+  return '';
+}
+
+const apiOrigin = publicAssetOrigin();
 
 export const defaultPublicWebsiteSettings = {
   status: {
@@ -132,6 +143,8 @@ export const defaultPublicWebsiteSettings = {
   branding: {
     logoUrl: '/logo-icon.png',
     useCompanyLogo: true,
+    navbarLogoWidth: 180,
+    footerLogoWidth: 280,
     accentColor: '#75c4ff'
   },
   seo: {
@@ -177,6 +190,7 @@ export function publicAssetUrl(value) {
   if (!url) return '';
   if (/^https?:\/\//i.test(url) || url.startsWith('data:') || url.startsWith('blob:')) return url;
   if (url.startsWith('/uploads/')) return `${apiOrigin}${url}`;
+  if (/^[^/?#]+\.(?:jpe?g|png|webp|svg)$/i.test(url)) return `${apiOrigin}/uploads/${encodeURIComponent(url)}`;
   return url;
 }
 

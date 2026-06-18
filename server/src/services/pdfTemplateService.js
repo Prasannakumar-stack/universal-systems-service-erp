@@ -684,9 +684,12 @@ function sanitizeDesignContent(type = 'text', content = {}, element = {}) {
     name: cleanText(source.name ?? element.personName, '', 160),
     designation: cleanText(source.designation, '', 160),
     iconName: cleanText(source.iconName ?? element.iconName, '', 80),
+    iconMode: ['vector', 'emoji'].includes(source.iconMode || element.iconMode) ? (source.iconMode || element.iconMode) : 'vector',
+    emoji: cleanText(source.emoji ?? element.emoji, '✅', 16),
     variant: cleanText(source.variant ?? element.variant, '', 80),
     qrType: ['payment', 'contact', 'company', 'custom'].includes(source.qrType || element.qrType) ? (source.qrType || element.qrType) : 'payment',
     imageMode: ['logo', 'placeholder', 'custom', 'watermark'].includes(source.imageMode || element.imageMode) ? (source.imageMode || element.imageMode) : 'logo',
+    objectFit: ['contain', 'cover', 'fill'].includes(source.objectFit || element.objectFit) ? (source.objectFit || element.objectFit) : 'contain',
     assetPath: cleanText(source.assetPath ?? element.assetPath, '', 500),
     imageUrl: cleanText(source.imageUrl ?? element.imageUrl, '', 500),
     src: cleanText(source.src ?? element.src, '', 500),
@@ -717,6 +720,8 @@ function sanitizeDesignContent(type = 'text', content = {}, element = {}) {
 function sanitizeDesignStyle(style = {}, element = {}) {
   const source = isPlainObject(style) ? style : {};
   const invoiceElement = isInvoiceDesignElement(element);
+  const inferredOrientation = source.orientation
+    || (invoiceElement && element.type === 'divider' && Number(element.height || 0) > Number(element.width || 0) ? 'vertical' : 'horizontal');
   return {
     accentColor: sanitizeDesignColor(source.accentColor || element.accentColor, '#0284c7'),
     backgroundColor: sanitizeDesignColor(source.backgroundColor || element.backgroundColor, '#ffffff'),
@@ -736,6 +741,8 @@ function sanitizeDesignStyle(style = {}, element = {}) {
     lineHeight: clampNumber(source.lineHeight, 1.16, 0.85, 2.4),
     dividerThickness: clampNumber(source.dividerThickness, 2, invoiceElement ? 0.1 : 1, 8),
     dividerStyle: ['solid', 'dashed', 'dotted'].includes(source.dividerStyle) ? source.dividerStyle : 'solid',
+    orientation: ['horizontal', 'vertical'].includes(inferredOrientation) ? inferredOrientation : 'horizontal',
+    rotate: clampNumber(source.rotate, 0, -360, 360),
     headerBackgroundColor: sanitizeDesignColor(source.headerBackgroundColor, source.accentColor || '#0f2a52'),
     headerTextColor: sanitizeDesignColor(source.headerTextColor, '#ffffff'),
     rowBackgroundColor: sanitizeDesignColor(source.rowBackgroundColor, '#ffffff'),
@@ -743,12 +750,12 @@ function sanitizeDesignStyle(style = {}, element = {}) {
   };
 }
 
-function sanitizeDesignPage(page = {}, index = 0) {
+function sanitizeDesignPage(page = {}, index = 0, elementLimit = 180) {
   const id = clean(page.id || `page-${index + 1}`).replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || `page-${index + 1}`;
   return {
     id,
     name: cleanText(page.name, `Page ${index + 1}`, 120),
-    elements: Array.isArray(page.elements) ? page.elements.map((item) => cleanText(item, '', 80)).filter(Boolean).slice(0, 180) : [],
+    elements: Array.isArray(page.elements) ? page.elements.map((item) => cleanText(item, '', 80)).filter(Boolean).slice(0, elementLimit) : [],
     manual: boolValue(page.manual ?? page.userAdded, false)
   };
 }
@@ -975,7 +982,8 @@ function sanitizeConfig(payload = {}, key = '') {
   const designElementSource = Array.isArray(sanitized.design.customElements) && sanitized.design.customElements.length
     ? sanitized.design.customElements
     : sanitized.design.elements;
-  const designElementLimit = key === 'invoice' && sanitized.design.mode === 'manifest' ? 180 : 80;
+  const invoiceManifestDesign = key === 'invoice' && sanitized.design.mode === 'manifest';
+  const designElementLimit = invoiceManifestDesign ? Number.POSITIVE_INFINITY : 80;
   sanitized.design.elements = Array.isArray(designElementSource)
     ? designElementSource.slice(0, designElementLimit).map((element, index) => sanitizeDesignElement(element, index))
     : [];
@@ -999,7 +1007,7 @@ function sanitizeConfig(payload = {}, key = '') {
         ...sanitized.design.sections.filter((section) => section.pageId === pageId).map((section) => section.id),
         ...sanitized.design.elements.filter((element) => element.pageId === pageId).map((element) => element.id)
       ]
-    }, index);
+    }, index, invoiceManifestDesign ? Number.POSITIVE_INFINITY : 180);
   });
   sanitized.design.sectionOptions = isPlainObject(sanitized.design.sectionOptions) ? sanitized.design.sectionOptions : {};
   if (!sanitized.design.enabled) sanitized.editMode = 'structured';

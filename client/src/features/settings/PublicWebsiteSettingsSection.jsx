@@ -34,7 +34,7 @@ import {
   useToast
 } from '../../shared/phase1Shared.jsx';
 import { can, hasRole } from '../../utils/roles.js';
-import { defaultPublicWebsiteSettings, mergePublicWebsiteSettings, publicAssetUrl } from '../../utils/publicWebsiteDefaults.js';
+import { defaultPublicWebsiteSettings, mergePublicWebsiteSettings, publicAssetUrl, publicLogoUrl } from '../../utils/publicWebsiteDefaults.js';
 
 const imageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const maxImageSize = 5 * 1024 * 1024;
@@ -89,6 +89,12 @@ function numberHint(value = '') {
   if (!digits) return 'Use digits with optional country code.';
   if (digits.length < 10) return `${digits.length} digits entered. Check the number before saving.`;
   return `${digits.length} digits entered. Looks ready.`;
+}
+
+function clampNumber(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(numeric)));
 }
 
 function sectionStatus(sectionId, draft, savedSettings) {
@@ -146,15 +152,103 @@ function TextField({ label, value, onChange, disabled, type = 'text', multiline 
   );
 }
 
-function ImageField({ label, value, disabled, uploading, onUpload, onChange }) {
+function LogoSizeField({ label, value, min, max, disabled, onChange }) {
+  const width = clampNumber(value, min, min, max);
+
+  function commit(nextValue) {
+    onChange(clampNumber(nextValue, width, min, max));
+  }
+
+  return (
+    <label className="public-logo-size-field">
+      <span className="public-website-field-label">
+        <span className="label">{label}</span>
+        <span className="public-website-field-meta">{width}px</span>
+      </span>
+      <div className="public-logo-size-controls">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step="1"
+          value={width}
+          disabled={disabled}
+          onChange={(event) => commit(event.target.value)}
+        />
+        <input
+          className="input"
+          type="number"
+          min={min}
+          max={max}
+          step="1"
+          value={width}
+          disabled={disabled}
+          onChange={(event) => commit(event.target.value)}
+        />
+      </div>
+    </label>
+  );
+}
+
+function LogoSizeControls({ branding, disabled, onChange, onReset }) {
+  const navbarWidth = clampNumber(branding?.navbarLogoWidth, 180, 80, 320);
+  const footerWidth = clampNumber(branding?.footerLogoWidth, 280, 120, 480);
+  const previewUrl = publicLogoUrl(branding, 'header');
+
+  return (
+    <div className="public-logo-size-panel rounded-card border border-white/10 bg-white/[0.035] p-3">
+      <div className="public-logo-size-panel-head">
+        <div>
+          <p className="font-black text-slate-100">Logo display size</p>
+          <p className="mt-1 text-xs muted">Adjust how large the same public logo appears in the navbar and footer.</p>
+        </div>
+        <button type="button" className="btn btn-secondary admin-compact-button" disabled={disabled} onClick={onReset}>
+          <RotateCcw className="h-4 w-4" />
+          Reset size
+        </button>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <LogoSizeField label="Navbar logo width" value={navbarWidth} min={80} max={320} disabled={disabled} onChange={(value) => onChange('navbarLogoWidth', value)} />
+        <LogoSizeField label="Footer logo width" value={footerWidth} min={120} max={480} disabled={disabled} onChange={(value) => onChange('footerLogoWidth', value)} />
+      </div>
+      <div className="public-logo-size-preview mt-4">
+        <div className="public-logo-preview-card">
+          <span>Navbar preview</span>
+          {previewUrl ? <img src={previewUrl} alt="Universal Systems logo navbar preview" style={{ width: `${navbarWidth}px`, maxHeight: 48 }} /> : null}
+        </div>
+        <div className="public-logo-preview-card is-footer">
+          <span>Footer preview</span>
+          {previewUrl ? <img src={previewUrl} alt="Universal Systems logo footer preview" style={{ width: `${footerWidth}px`, maxHeight: 100 }} /> : null}
+        </div>
+      </div>
+      <p className="mt-3 text-xs font-semibold muted">For best result, upload a tightly cropped transparent PNG logo.</p>
+    </div>
+  );
+}
+
+function ImageField({ label, value, disabled, uploading, onUpload, onChange, previewValue = value, fallbackValue = '' }) {
   const inputId = `public-website-image-${label.replace(/\W+/g, '-').toLowerCase()}`;
   const cleanLabel = cleanAssetLabel(value);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const previewSource = previewFailed && fallbackValue ? fallbackValue : previewValue;
+  const previewUrl = publicAssetUrl(previewSource);
+
+  useEffect(() => {
+    setPreviewFailed(false);
+  }, [previewValue, fallbackValue]);
+
   return (
     <div className="public-website-image-field rounded-card border border-white/10 bg-white/[0.035] p-3">
       <div className="public-website-image-row">
         <div className="public-website-image-preview">
-          {value ? (
-            <img src={publicAssetUrl(value)} alt="" />
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt=""
+              onError={() => {
+                if (fallbackValue && previewSource !== fallbackValue) setPreviewFailed(true);
+              }}
+            />
           ) : (
             <ImageUp className="h-5 w-5 text-slate-400" />
           )}
@@ -170,8 +264,8 @@ function ImageField({ label, value, disabled, uploading, onUpload, onChange }) {
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
             {value ? 'Replace' : 'Upload'}
           </label>
-          {value ? (
-            <a className="btn btn-secondary min-h-11" href={publicAssetUrl(value)} target="_blank" rel="noreferrer">
+          {previewUrl ? (
+            <a className="btn btn-secondary min-h-11" href={previewUrl} target="_blank" rel="noreferrer">
               <Eye className="h-4 w-4" />
               Preview
             </a>
@@ -724,7 +818,14 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
       {activeSection === 'branding' ? (
       <SectionCard title={activeSectionMeta.title} description={activeSectionMeta.description} status={activeSectionStatus} icon={Palette}>
         <div className="grid gap-4 lg:grid-cols-2">
-          <ToggleField label="Use company logo on public website" checked={draft.branding.useCompanyLogo} disabled={!canEdit} onChange={(value) => setPath('branding.useCompanyLogo', value)} />
+          <div className="grid gap-2">
+            <ToggleField label="Use company logo on public website" checked={draft.branding.useCompanyLogo} disabled={!canEdit} onChange={(value) => setPath('branding.useCompanyLogo', value)} />
+            <p className="rounded-card border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-semibold muted">
+              {draft.branding.useCompanyLogo
+                ? 'Company logo is active. Custom logo is saved but not used.'
+                : 'Custom public website logo is active.'}
+            </p>
+          </div>
           <label>
             <span className="label">Accent color for public website</span>
             <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-2">
@@ -733,7 +834,27 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
             </div>
           </label>
           <div className="lg:col-span-2">
-            <ImageField label="Public website logo" value={draft.branding.logoUrl} disabled={!canEdit} uploading={uploadingKey === 'logo'} onChange={(value) => setPath('branding.logoUrl', value)} onUpload={(file) => uploadImage(file, (url) => setPath('branding.logoUrl', url), 'logo')} />
+            <ImageField
+              label="Public website logo"
+              value={draft.branding.logoUrl}
+              previewValue={publicLogoUrl(draft.branding, 'header')}
+              fallbackValue="/logo-icon.png"
+              disabled={!canEdit}
+              uploading={uploadingKey === 'logo'}
+              onChange={(value) => setPath('branding.logoUrl', value)}
+              onUpload={(file) => uploadImage(file, (url) => setPath('branding.logoUrl', url), 'logo')}
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <LogoSizeControls
+              branding={draft.branding}
+              disabled={!canEdit}
+              onChange={(field, value) => setPath(`branding.${field}`, value)}
+              onReset={() => {
+                setPath('branding.navbarLogoWidth', 180);
+                setPath('branding.footerLogoWidth', 280);
+              }}
+            />
           </div>
         </div>
       </SectionCard>

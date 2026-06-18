@@ -13,13 +13,10 @@ import {
   LayoutDashboard,
   Loader2,
   LogOut,
-  MapPin,
   Menu,
-  Phone,
   ReceiptText,
   Search,
   Settings,
-  ShieldCheck,
   UserRound,
   Users,
   Wrench,
@@ -27,7 +24,7 @@ import {
 } from 'lucide-react';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { apiBase, company } from '../utils/constants.js';
+import { resolveUserAvatarUrl, userInitials } from '../utils/avatar.js';
 import { currency } from '../utils/format.js';
 import { getCustomerDisplayId, getInvoiceDisplayId, getPaymentDisplayId, getWorkOrderDisplayId } from '../shared/idHelpers.js';
 import { adminWorkspaceRoles, can, canAny, canAccessRoles, normalizeRole, roleLabel } from '../utils/roles.js';
@@ -46,8 +43,6 @@ import { SIDEBAR_BADGES_UPDATED_EVENT } from '../utils/sidebarBadges.js';
 const TopbarBookingModal = lazy(() => import('../features/bookings/BookingsPage.jsx').then((module) => ({ default: module.BookingModal })));
 
 const fullAccessRoles = ['admin', 'super_admin'];
-const assetBase = apiBase.replace(/\/api\/?$/, '');
-
 const adminGroups = [
   {
     title: '',
@@ -196,27 +191,6 @@ function roleFromSubject(subject) {
   return typeof subject === 'string' ? subject : subject?.role;
 }
 
-function currentUserAvatarUrl(user) {
-  const value = String(user?.avatarUrl || '').trim();
-  if (!value) return '';
-  if (/^https?:\/\//i.test(value)) return value;
-  return `${assetBase}${value.startsWith('/') ? value : `/${value}`}`;
-}
-
-function currentUserInitial(user, fallback = 'A') {
-  const source = String(user?.name || user?.username || fallback).trim();
-  if (!source) return fallback.toUpperCase();
-
-  const words = source.split(/\s+/).filter(Boolean);
-  if (words.length >= 2) {
-    return `${words[0]?.[0] || ''}${words[1]?.[0] || ''}`.toUpperCase();
-  }
-
-  const compact = source.replace(/[^a-z0-9]/gi, '');
-  if (!compact) return fallback.toUpperCase();
-  return compact.slice(0, compact.length > 1 ? 2 : 1).toUpperCase();
-}
-
 const sidebarCollapsedStoragePrefix = 'us:dashboard-sidebar-collapsed:';
 const sidebarCollapsedCompactWidth = '88px';
 const sidebarExpandedWidth = '292px';
@@ -244,8 +218,8 @@ function persistSidebarCollapsedState(role, collapsed) {
 }
 
 function CurrentUserAvatar({ user, fallback = 'A', className = '' }) {
-  const avatarUrl = currentUserAvatarUrl(user);
-  const initial = currentUserInitial(user, fallback);
+  const avatarUrl = resolveUserAvatarUrl(user);
+  const initial = userInitials(user, fallback);
   const [imageState, setImageState] = useState(avatarUrl ? 'loading' : 'idle');
 
   useEffect(() => {
@@ -265,7 +239,7 @@ function CurrentUserAvatar({ user, fallback = 'A', className = '' }) {
       {shouldRenderImage ? (
         <img
           src={avatarUrl}
-          alt={avatarLabel}
+          alt=""
           className={hasLoadedImage ? 'is-loaded' : 'is-loading'}
           onLoad={() => setImageState('loaded')}
           onError={() => setImageState('error')}
@@ -275,25 +249,19 @@ function CurrentUserAvatar({ user, fallback = 'A', className = '' }) {
   );
 }
 
-function SidebarBrandMark({ collapsed = false, companyName = 'Universal Systems' }) {
-  const boxClass = collapsed ? 'h-12 w-12' : 'h-12 w-12';
-  const iconClass = collapsed ? 'h-11 w-11' : 'h-11 w-11';
+function SidebarBrandMark({ collapsed = false }) {
+  if (collapsed) {
+    return null;
+  }
+
   return (
-    <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
-      <span className={`grid shrink-0 place-items-center overflow-hidden rounded-card border border-sky-300/25 bg-sky-400/15 ${boxClass}`}>
-        <img
-          src="/logo-icon-sidebar.png"
-          alt=""
-          className={`${iconClass} object-contain object-center`}
-          draggable="false"
-        />
-      </span>
-      {collapsed ? null : (
-        <div className="min-w-0">
-          <h2 className="text-lg font-black leading-tight">{companyName}</h2>
-          <p className="text-sm font-bold text-sky-100">Service ERP</p>
-        </div>
-      )}
+    <div className="flex min-w-0 items-center">
+      <img
+        src="/logo-full.png"
+        alt=""
+        className="h-auto max-h-[72px] w-[190px] max-w-full shrink object-contain object-left"
+        draggable="false"
+      />
     </div>
   );
 }
@@ -609,7 +577,7 @@ function SidebarItem({ link, close, badge, collapsed = false }) {
   const Icon = link.icon;
   const location = useLocation();
   const itemLabelClass = collapsed ? 'sr-only' : 'min-w-0 truncate';
-  const itemClass = `${collapsed ? 'enterprise-sidebar-item-collapsed justify-center px-2.5' : ''} ${badge && collapsed ? 'gap-2' : ''}`.trim();
+  const itemClass = `${collapsed ? 'enterprise-sidebar-item-collapsed' : ''}`.trim();
   const ariaLabel = collapsed ? link.label : undefined;
 
   if (link.disabled) {
@@ -653,12 +621,8 @@ function AdminSidebar({ close, collapsed = false, onToggleCollapse = null }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [dashboardData, setDashboardData] = useState(null);
-  const [companyProfile, setCompanyProfile] = useState(null);
   const groups = visibleAdminGroups(user);
   const badges = buildSidebarBadges(dashboardData);
-  const displayCompany = companyProfile?.name || company.name;
-  const displayPhone = companyProfile?.phone || company.phones.join(' / ');
-  const displayLocation = companyProfile?.address ? companyProfile.address.split(',').slice(-2).join(',').trim() || companyProfile.address : 'Mettur Dam';
 
   useEffect(() => {
     let mounted = true;
@@ -693,32 +657,20 @@ function AdminSidebar({ close, collapsed = false, onToggleCollapse = null }) {
     };
   }, [location.pathname, location.search, request]);
 
-  useEffect(() => {
-    let mounted = true;
-    request('/settings/company-profile')
-      .then((result) => {
-        if (mounted) setCompanyProfile(result.company || null);
-      })
-      .catch(() => { });
-    return () => {
-      mounted = false;
-    };
-  }, [request]);
-
   function handleLogout() {
     logout();
     navigate('/app');
   }
 
   return (
-    <aside className="enterprise-sidebar">
-      <div className={`border-b border-white/10 ${collapsed ? 'relative p-3 pb-4' : 'p-5'}`}>
+    <aside className={`enterprise-sidebar ${collapsed ? 'enterprise-sidebar-collapsed' : ''}`}>
+      <div className={`border-b border-white/10 ${collapsed ? 'enterprise-sidebar-header-collapsed' : 'p-4 pb-3'}`}>
         {collapsed ? (
           <>
             {onToggleCollapse ? (
               <button
                 type="button"
-                className="icon-button absolute right-2 top-3 z-20 h-10 w-10 bg-white/5 shadow-[0_10px_24px_rgba(2,8,23,0.3)]"
+                className="icon-button enterprise-sidebar-toggle-collapsed z-20 bg-white/5 shadow-[0_10px_24px_rgba(2,8,23,0.3)]"
                 onClick={onToggleCollapse}
                 aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -726,13 +678,10 @@ function AdminSidebar({ close, collapsed = false, onToggleCollapse = null }) {
                 {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
               </button>
             ) : null}
-            <div className="pr-12">
-              <SidebarBrandMark collapsed={collapsed} companyName={displayCompany} />
-            </div>
           </>
         ) : (
           <div className="flex items-center gap-3">
-            <SidebarBrandMark collapsed={collapsed} companyName={displayCompany} />
+            <SidebarBrandMark collapsed={collapsed} />
             {onToggleCollapse ? (
               <button
                 type="button"
@@ -746,14 +695,9 @@ function AdminSidebar({ close, collapsed = false, onToggleCollapse = null }) {
             ) : null}
           </div>
         )}
-        <div className={`mt-4 grid gap-2 rounded-card border border-white/10 bg-white/[0.045] p-3 text-xs text-slate-300 ${collapsed ? 'hidden' : ''}`}>
-          <span className="inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-[var(--brand)]" />{displayLocation}</span>
-          <span className="inline-flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-[var(--brand)]" />{displayPhone}</span>
-          <span className="inline-flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 text-[var(--brand)]" />Sales, service, AMC & billing</span>
-        </div>
       </div>
 
-      <nav className={`enterprise-sidebar-nav flex-1 overflow-y-auto ${collapsed ? 'px-2 py-3' : 'px-3 py-4'}`}>
+      <nav className={`enterprise-sidebar-nav flex-1 overflow-y-auto ${collapsed ? 'enterprise-sidebar-nav-collapsed' : 'px-3 py-3'}`}>
         {groups.map((group) => (
           <div className={`enterprise-sidebar-group ${collapsed ? 'enterprise-sidebar-group-collapsed' : ''}`} key={group.title || 'dashboard'}>
             {group.title && !collapsed ? (
@@ -768,8 +712,8 @@ function AdminSidebar({ close, collapsed = false, onToggleCollapse = null }) {
         ))}
       </nav>
 
-      <div className={`enterprise-sidebar-footer border-t border-white/10 ${collapsed ? 'p-2' : 'p-3'}`}>
-        <div className={`mb-3 rounded-card border border-white/10 bg-white/[0.045] ${collapsed ? 'flex justify-center p-2' : 'flex items-center gap-3 p-3'}`}>
+      <div className={`enterprise-sidebar-footer border-t border-white/10 ${collapsed ? 'enterprise-sidebar-footer-collapsed' : 'p-3'}`}>
+        <div className={`mb-3 rounded-card border border-white/10 bg-white/[0.045] ${collapsed ? 'enterprise-sidebar-profile-collapsed' : 'flex items-center gap-3 p-3'}`}>
           <CurrentUserAvatar user={user} fallback="A" className={`${collapsed ? 'h-11 w-11 text-sm' : 'h-12 w-12 text-base'}`} />
           {collapsed ? null : (
             <div className="min-w-0">
@@ -778,7 +722,7 @@ function AdminSidebar({ close, collapsed = false, onToggleCollapse = null }) {
             </div>
           )}
         </div>
-        <button className={`btn btn-secondary ${collapsed ? 'w-full justify-center px-0' : 'w-full justify-start'}`} onClick={handleLogout} title="Logout" aria-label="Logout">
+        <button className={`btn btn-secondary ${collapsed ? 'enterprise-sidebar-logout-collapsed' : 'w-full justify-start'}`} onClick={handleLogout} title="Logout" aria-label="Logout">
           <LogOut className="h-4 w-4 shrink-0" />
           {collapsed ? null : <span>Logout</span>}
         </button>
@@ -833,14 +777,14 @@ function TechnicianSidebar({ close, collapsed = false, onToggleCollapse = null }
   }
 
   return (
-    <aside className="enterprise-sidebar">
-      <div className={`border-b border-white/10 ${collapsed ? 'relative p-3 pb-4' : 'p-5'}`}>
+    <aside className={`enterprise-sidebar ${collapsed ? 'enterprise-sidebar-collapsed' : ''}`}>
+      <div className={`border-b border-white/10 ${collapsed ? 'enterprise-sidebar-header-collapsed' : 'p-4 pb-3'}`}>
         {collapsed ? (
           <>
             {onToggleCollapse ? (
               <button
                 type="button"
-                className="icon-button absolute right-2 top-3 z-20 h-10 w-10 bg-white/5 shadow-[0_10px_24px_rgba(2,8,23,0.3)]"
+                className="icon-button enterprise-sidebar-toggle-collapsed z-20 bg-white/5 shadow-[0_10px_24px_rgba(2,8,23,0.3)]"
                 onClick={onToggleCollapse}
                 aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -848,9 +792,6 @@ function TechnicianSidebar({ close, collapsed = false, onToggleCollapse = null }
                 {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
               </button>
             ) : null}
-            <div className="pr-12">
-              <SidebarBrandMark collapsed={collapsed} />
-            </div>
           </>
         ) : (
           <div className="flex items-center gap-3">
@@ -868,14 +809,9 @@ function TechnicianSidebar({ close, collapsed = false, onToggleCollapse = null }
             ) : null}
           </div>
         )}
-        <div className={`mt-4 grid gap-2 rounded-card border border-white/10 bg-white/[0.045] p-3 text-xs text-slate-300 ${collapsed ? 'hidden' : ''}`}>
-          <span className="inline-flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-[var(--brand)]" />Mettur Dam</span>
-          <span className="inline-flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-[var(--brand)]" />{company.phones.join(' / ')}</span>
-          <span className="inline-flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 text-[var(--brand)]" />Sales, service, AMC & billing</span>
-        </div>
       </div>
 
-      <nav className={`enterprise-sidebar-nav flex-1 overflow-y-auto ${collapsed ? 'px-2 py-3' : 'px-3 py-4'}`}>
+      <nav className={`enterprise-sidebar-nav flex-1 overflow-y-auto ${collapsed ? 'enterprise-sidebar-nav-collapsed' : 'px-3 py-3'}`}>
         {groups.map((group) => (
           <div className={`enterprise-sidebar-group ${collapsed ? 'enterprise-sidebar-group-collapsed' : ''}`} key={group.title || 'dashboard'}>
             {group.title && !collapsed ? (
@@ -898,8 +834,8 @@ function TechnicianSidebar({ close, collapsed = false, onToggleCollapse = null }
         ))}
       </nav>
 
-      <div className={`enterprise-sidebar-footer border-t border-white/10 ${collapsed ? 'p-2' : 'p-3'}`}>
-        <div className={`mb-3 rounded-card border border-white/10 bg-white/[0.045] ${collapsed ? 'flex justify-center p-2' : 'flex items-center gap-3 p-3'}`}>
+      <div className={`enterprise-sidebar-footer border-t border-white/10 ${collapsed ? 'enterprise-sidebar-footer-collapsed' : 'p-3'}`}>
+        <div className={`mb-3 rounded-card border border-white/10 bg-white/[0.045] ${collapsed ? 'enterprise-sidebar-profile-collapsed' : 'flex items-center gap-3 p-3'}`}>
           <CurrentUserAvatar user={user} fallback="T" className={`${collapsed ? 'h-11 w-11 text-sm' : 'h-12 w-12 text-base'}`} />
           {collapsed ? null : (
             <div className="min-w-0">
@@ -908,7 +844,7 @@ function TechnicianSidebar({ close, collapsed = false, onToggleCollapse = null }
             </div>
           )}
         </div>
-        <button className={`btn btn-secondary ${collapsed ? 'w-full justify-center px-0' : 'w-full justify-start'}`} onClick={handleLogout} title="Logout" aria-label="Logout">
+        <button className={`btn btn-secondary ${collapsed ? 'enterprise-sidebar-logout-collapsed' : 'w-full justify-start'}`} onClick={handleLogout} title="Logout" aria-label="Logout">
           <LogOut className="h-4 w-4 shrink-0" />
           {collapsed ? null : <span>Logout</span>}
         </button>

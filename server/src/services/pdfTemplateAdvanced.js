@@ -355,7 +355,9 @@ function drawElementShell(doc, element, frame) {
     doc.opacity(0.08).roundedRect(frame.x + 4, frame.y + 5, frame.width, frame.height, radius).fill('#0f172a');
     doc.restore();
   }
-  doc.roundedRect(frame.x, frame.y, frame.width, frame.height, radius).fill(background);
+  if (!transparentBackground) {
+    doc.roundedRect(frame.x, frame.y, frame.width, frame.height, radius).fill(background);
+  }
   if (borderWidth > 0) {
     doc.roundedRect(frame.x, frame.y, frame.width, frame.height, radius)
       .strokeColor(borderColor)
@@ -368,7 +370,9 @@ function drawDividerElement(doc, element, frame, context = {}) {
   const style = element.style || {};
   const invoiceElement = isInvoiceManifestElement(element);
   const color = style.accentColor || '#0284c7';
-  const vertical = style.orientation === 'vertical' || Number(style.rotate) === 90;
+  const vertical = style.orientation === 'vertical'
+    || Number(style.rotate) === 90
+    || (invoiceElement && !style.orientation && frame.height > frame.width);
   const lineWidth = invoiceElement ? clampNumber(style.dividerThickness, 1, 0.1, 8) : clampNumber(style.dividerThickness, 2, 1, 8);
   doc.save();
   doc.strokeColor(color).lineWidth(lineWidth);
@@ -578,7 +582,10 @@ function resolveDesignImagePath(content = {}, company = {}) {
   if (mode === 'watermark' || assetPath.endsWith('/logo-icon.png') || assetPath.endsWith('\\logo-icon.png')) {
     return fs.existsSync(LOGO_ICON_PATH) ? LOGO_ICON_PATH : '';
   }
-  if (mode === 'logo' || !mode || assetPath.endsWith('/logo-full.png') || assetPath.endsWith('\\logo-full.png')) {
+  if (assetPath.endsWith('/logo-full.png') || assetPath.endsWith('\\logo-full.png')) {
+    return fs.existsSync(LOGO_FULL_PATH) ? LOGO_FULL_PATH : '';
+  }
+  if (mode === 'logo' || !mode) {
     const logoPath = company.logoFilePath || LOGO_FULL_PATH;
     if (logoPath && fs.existsSync(logoPath)) return logoPath;
     return fs.existsSync(LOGO_FULL_PATH) ? LOGO_FULL_PATH : '';
@@ -595,11 +602,22 @@ function drawImageElement(doc, element, frame, company = {}) {
   const imagePath = resolveDesignImagePath(content, company);
   if (imagePath) {
     const padding = content.fitToFrame ? 0 : clampNumber(style.padding ?? 12, 12, 0, 48);
-    doc.image(imagePath, frame.x + padding, frame.y + padding, {
-      fit: [Math.max(20, frame.width - padding * 2), Math.max(20, frame.height - padding * 2)],
+    const minFit = invoiceElement ? 0.1 : 20;
+    const imageWidth = Math.max(minFit, frame.width - padding * 2);
+    const imageHeight = Math.max(minFit, frame.height - padding * 2);
+    const objectFit = ['cover', 'fill'].includes(content.objectFit) ? content.objectFit : 'contain';
+    const imageOptions = {
       align: 'center',
       valign: 'center'
-    });
+    };
+    if (objectFit === 'cover') imageOptions.cover = [imageWidth, imageHeight];
+    else if (objectFit === 'fill') {
+      imageOptions.width = imageWidth;
+      imageOptions.height = imageHeight;
+    } else {
+      imageOptions.fit = [imageWidth, imageHeight];
+    }
+    doc.image(imagePath, frame.x + padding, frame.y + padding, imageOptions);
     return;
   }
   if (invoiceElement) return;
@@ -774,6 +792,87 @@ function drawSmallVariantIcon(doc, type, frame, color) {
   });
 }
 
+function drawCheckDotIcon(doc, frame, color) {
+  const scale = Math.max(0.1, Math.min(frame.width / 8, frame.height / 8));
+  const x = frame.x + Math.max(0, (frame.width - 8 * scale) / 2);
+  const y = frame.y + Math.max(0, (frame.height - 8 * scale) / 2);
+  doc.save();
+  doc.translate(x, y);
+  doc.scale(scale);
+  doc.circle(4, 4, 4).fillColor(color).fill();
+  doc.strokeColor('#ffffff').lineWidth(1.05).lineCap('round').lineJoin('round')
+    .moveTo(2.2, 4)
+    .lineTo(3.8, 5.8)
+    .lineTo(6.4, 2.4)
+    .stroke();
+  doc.restore();
+}
+
+function drawCompletionBadgeIcon(doc, frame, color) {
+  const scale = Math.max(0.1, Math.min(frame.width / 34, frame.height / 48));
+  const x = frame.x + Math.max(0, (frame.width - 34 * scale) / 2);
+  const y = frame.y + Math.max(0, (frame.height - 48 * scale) / 2);
+  doc.save();
+  doc.translate(x, y);
+  doc.scale(scale);
+  doc.circle(17, 17, 17).fillColor(color).fill();
+  doc.strokeColor('#ffffff').lineWidth(2.1).lineCap('round').lineJoin('round')
+    .moveTo(9.4, 17.2)
+    .lineTo(14.8, 22.5)
+    .lineTo(25.5, 11.6)
+    .stroke();
+  doc.polygon([7, 30], [1, 48], [12, 43]).fillColor(color).fill();
+  doc.polygon([26.5, 30], [34, 48], [21.5, 43]).fillColor(color).fill();
+  doc.restore();
+}
+
+function iconVariantForEmoji(value = '') {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.includes('📍')) return 'address';
+  if (text.includes('☎') || text.includes('📞')) return 'phone';
+  if (text.includes('✉') || text.includes('📧')) return 'email';
+  if (text.includes('🌐') || text.includes('🌍') || text.includes('🌎')) return 'website';
+  if (text.includes('✅') || text.includes('✔') || text.includes('✓')) return 'check';
+  if (text.includes('₹')) return 'rupee';
+  return '';
+}
+
+function drawRupeeIcon(doc, frame, color) {
+  const size = Math.min(frame.width, frame.height);
+  const x = frame.x + Math.max(0, (frame.width - size) / 2);
+  const y = frame.y + Math.max(0, (frame.height - size) / 2);
+  doc.circle(x + size / 2, y + size / 2, Math.max(0.1, size / 2 - 1)).strokeColor(color).lineWidth(1.7).stroke();
+  useFont(doc, 'BodyBold', 'Helvetica-Bold');
+  doc.fontSize(Math.max(12, size * 0.62)).fillColor(color).text('Rs', x, y + size * 0.24, { width: size, align: 'center' });
+}
+
+function drawGenericEmojiFallbackIcon(doc, frame, color) {
+  drawScaledIcon(doc, frame, 18, () => {
+    doc.lineWidth(1.1).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
+    doc.circle(9, 9, 6.2).stroke();
+    doc.moveTo(5.6, 9).lineTo(8, 11.4).lineTo(12.6, 6.6).stroke();
+  });
+}
+
+function drawEmojiModeIcon(doc, content, frame, color) {
+  // PDFKit cannot consistently embed color emoji, so emoji mode uses stable vector equivalents in generated PDFs.
+  const variant = iconVariantForEmoji(content.emoji) || String(content.variant || content.iconName || '').toLowerCase();
+  if (['address', 'phone', 'email', 'website'].includes(variant)) {
+    drawContactVariantIcon(doc, variant, frame, color);
+    return;
+  }
+  if (variant === 'check') {
+    drawCheckDotIcon(doc, frame, color);
+    return;
+  }
+  if (variant === 'rupee') {
+    drawRupeeIcon(doc, frame, color);
+    return;
+  }
+  drawGenericEmojiFallbackIcon(doc, frame, color);
+}
+
 function drawIconElement(doc, element, frame, context) {
   const style = element.style || {};
   const content = contentForElement(element);
@@ -787,6 +886,10 @@ function drawIconElement(doc, element, frame, context) {
     context
   );
   drawElementShell(doc, element, frame);
+  if (content.iconMode === 'emoji') {
+    drawEmojiModeIcon(doc, content, frame, accent);
+    return;
+  }
   if (invoiceElement && !variant && !label) return;
   if (['address', 'phone', 'email', 'website'].includes(variant)) {
     drawContactVariantIcon(doc, variant, frame, accent);
@@ -801,22 +904,11 @@ function drawIconElement(doc, element, frame, context) {
     return;
   }
   if (variant === 'check') {
-    const radius = Math.min(frame.width, frame.height) / 2;
-    const cx = frame.x + frame.width / 2;
-    const cy = frame.y + frame.height / 2;
-    doc.circle(cx, cy, radius).fillColor(accent).fill();
-    doc.strokeColor('#ffffff').lineWidth(Math.max(0.7, radius * 0.26)).lineCap('round').lineJoin('round')
-      .moveTo(cx - radius * 0.45, cy)
-      .lineTo(cx - radius * 0.12, cy + radius * 0.35)
-      .lineTo(cx + radius * 0.45, cy - radius * 0.42)
-      .stroke();
+    drawCheckDotIcon(doc, frame, accent);
     return;
   }
   if (variant === 'rupee') {
-    const size = Math.min(frame.width, frame.height);
-    doc.circle(frame.x + size / 2, frame.y + size / 2, size / 2 - 1).strokeColor(accent).lineWidth(1.7).stroke();
-    useFont(doc, 'BodyBold', 'Helvetica-Bold');
-    doc.fontSize(Math.max(12, size * 0.62)).fillColor(accent).text('Rs', frame.x, frame.y + size * 0.24, { width: size, align: 'center' });
+    drawRupeeIcon(doc, frame, accent);
     return;
   }
   if (variant === 'document') {
@@ -831,17 +923,17 @@ function drawIconElement(doc, element, frame, context) {
     return;
   }
   if (variant === 'completion' || variant === 'handshake') {
+    if (variant === 'completion') {
+      drawCompletionBadgeIcon(doc, frame, accent);
+      return;
+    }
     const size = Math.min(frame.width, frame.height);
     const cx = frame.x + frame.width / 2;
     const cy = frame.y + Math.min(frame.height / 2, size / 2 + 1);
-    doc.circle(cx, cy, size * 0.42).fillColor(variant === 'completion' ? accent : '#0d3b91').fill();
+    doc.circle(cx, cy, size * 0.42).fillColor('#0d3b91').fill();
     doc.strokeColor('#ffffff').lineWidth(Math.max(1, size * 0.06)).lineCap('round').lineJoin('round');
-    if (variant === 'completion') {
-      doc.moveTo(cx - size * 0.18, cy).lineTo(cx - size * 0.04, cy + size * 0.14).lineTo(cx + size * 0.25, cy - size * 0.18).stroke();
-    } else {
-      doc.moveTo(cx - size * 0.22, cy).lineTo(cx - size * 0.05, cy - size * 0.12).lineTo(cx + size * 0.2, cy + size * 0.14).stroke();
-      doc.moveTo(cx - size * 0.12, cy + size * 0.18).lineTo(cx + size * 0.12, cy + size * 0.18).stroke();
-    }
+    doc.moveTo(cx - size * 0.22, cy).lineTo(cx - size * 0.05, cy - size * 0.12).lineTo(cx + size * 0.2, cy + size * 0.14).stroke();
+    doc.moveTo(cx - size * 0.12, cy + size * 0.18).lineTo(cx + size * 0.12, cy + size * 0.18).stroke();
     return;
   }
   const iconSize = Math.min(22, Math.max(12, frame.height - 14), Math.max(12, frame.width * 0.32));

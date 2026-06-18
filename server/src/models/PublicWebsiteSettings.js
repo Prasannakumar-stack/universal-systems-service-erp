@@ -47,6 +47,8 @@ const publicWebsiteSettingsSchema = new mongoose.Schema(
     branding: {
       logoUrl: { type: String, trim: true, default: '' },
       useCompanyLogo: { type: Boolean, default: true },
+      navbarLogoWidth: { type: Number, min: 80, max: 320, default: 180 },
+      footerLogoWidth: { type: Number, min: 120, max: 480, default: 280 },
       accentColor: { type: String, trim: true, default: '#75c4ff' }
     },
     seo: {

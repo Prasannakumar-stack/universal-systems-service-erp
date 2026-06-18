@@ -49,9 +49,9 @@ function dashboardAxisCurrency(value) {
   return String(Math.round(amount));
 }
 
-function dashboardRevenueTotal(rows) {
+function dashboardSeriesTotal(rows, key) {
   return (rows || []).reduce((sum, row) => {
-    const value = Number(row?.revenue || 0);
+    const value = Number(row?.[key] || 0);
     return sum + (Number.isFinite(value) ? value : 0);
   }, 0);
 }
@@ -430,30 +430,37 @@ function QuickActionsCard() {
 
 function normalizeRevenueRows(rows = []) {
   return rows.map((item, index) => {
-    const revenue = Number(item?.revenue || 0);
+    const billed = Number(item?.billed || 0);
+    const collected = Number(item?.collected || item?.revenue || 0);
     const key = item?.key || item?.date || item?.createdAt || `revenue-${index}`;
     return {
       ...item,
       key,
       label: item?.label || key || `Day ${index + 1}`,
-      revenue: Number.isFinite(revenue) ? revenue : 0
+      billed: Number.isFinite(billed) ? billed : 0,
+      collected: Number.isFinite(collected) ? collected : 0,
+      revenue: Number.isFinite(collected) ? collected : 0,
+      balance: (Number.isFinite(billed) ? billed : 0) - (Number.isFinite(collected) ? collected : 0)
     };
   });
 }
 
-function revenueTrendPercent(rows = []) {
-  const comparableRows = rows.filter((item) => Number(item.revenue || 0) > 0);
+function revenueTrendPercent(rows = [], key = 'collected') {
+  const comparableRows = rows.filter((item) => Number(item?.[key] || 0) > 0);
   if (comparableRows.length < 2) return null;
-  const first = Number(comparableRows[0].revenue || 0);
-  const last = Number(comparableRows[comparableRows.length - 1].revenue || 0);
+  const first = Number(comparableRows[0]?.[key] || 0);
+  const last = Number(comparableRows[comparableRows.length - 1]?.[key] || 0);
   if (!first || !Number.isFinite(first) || !Number.isFinite(last)) return null;
   return ((last - first) / first) * 100;
 }
 
 function RevenueTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
-  const revenueItem = payload.find((item) => item.dataKey === 'revenue') || payload[0];
-  const revenue = Number(revenueItem?.value || 0);
+  const billedItem = payload.find((item) => item.dataKey === 'billed');
+  const collectedItem = payload.find((item) => item.dataKey === 'collected');
+  const billed = Number(billedItem?.value || 0);
+  const collected = Number(collectedItem?.value || 0);
+  const balance = billed - collected;
 
   return (
     <div
@@ -467,23 +474,23 @@ function RevenueTooltip({ active, payload, label }) {
       }}
     >
       <p style={{ margin: 0, color: '#e2e8f0', fontSize: '0.78rem', fontWeight: 900 }}>{label}</p>
-      <p style={{ margin: '0.35rem 0 0', color: '#67e8f9', fontSize: '0.82rem', fontWeight: 900 }}>
-        Revenue: {dashboardCurrency(revenue)}
-      </p>
+      <div style={{ marginTop: '0.45rem', display: 'grid', gap: '0.28rem' }}>
+        <p style={{ margin: 0, color: '#93c5fd', fontSize: '0.8rem', fontWeight: 900 }}>Billed: {dashboardCurrency(billed)}</p>
+        <p style={{ margin: 0, color: '#67e8f9', fontSize: '0.8rem', fontWeight: 900 }}>Collected: {dashboardCurrency(collected)}</p>
+        <p style={{ margin: 0, color: '#cbd5e1', fontSize: '0.78rem', fontWeight: 800 }}>Balance: {dashboardCurrency(balance)}</p>
+      </div>
     </div>
   );
 }
 
-function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0, dashboardPeriod = '7d' }) {
+function RevenueOverviewCard({ chartData = [], monthlyCollection = 0, dashboardPeriod = '7d' }) {
   const safeChartData = Array.isArray(chartData) ? chartData : [];
-  const totalRevenue = dashboardRevenueTotal(safeChartData);
-  const hasRevenue = safeChartData.length > 0 && totalRevenue > 0;
-  const maxRevenue = Math.max(1, ...safeChartData.map((item) => Number(item.revenue || 0)));
-  const bestDay = safeChartData.reduce(
-    (best, item) => Number(item.revenue || 0) > Number(best.revenue || 0) ? item : best,
-    safeChartData[0] || { label: '-', revenue: 0 }
-  );
-  const trend = revenueTrendPercent(safeChartData);
+  const totalBilled = dashboardSeriesTotal(safeChartData, 'billed');
+  const totalCollected = dashboardSeriesTotal(safeChartData, 'collected');
+  const balance = totalBilled - totalCollected;
+  const hasRevenue = safeChartData.length > 0 && (totalBilled > 0 || totalCollected > 0);
+  const maxRevenue = Math.max(1, ...safeChartData.map((item) => Math.max(Number(item.billed || 0), Number(item.collected || 0))));
+  const trend = revenueTrendPercent(safeChartData, 'collected');
   const hasTrend = Number.isFinite(trend);
   const trendTone = !hasTrend ? 'neutral' : trend >= 0 ? 'positive' : 'negative';
   const trendLabel = hasTrend ? `${trend >= 0 ? '+' : ''}${trend.toFixed(Math.abs(trend) >= 10 ? 0 : 1)}%` : 'Trend pending';
@@ -503,7 +510,7 @@ function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0, dashboardPeri
                 <h2 className="mt-1 text-2xl font-black tracking-tight text-white">Revenue Overview</h2>
               </div>
             </div>
-            <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-slate-400">Collected revenue trend from recorded payments in the selected dashboard period.</p>
+            <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-slate-400">Billed invoice value and collected payments for the selected dashboard period.</p>
           </div>
           <Link className={`dashboard-revenue-report-link ${focusRing}`} to="/app/admin/reports/finance">
             Report
@@ -511,26 +518,42 @@ function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0, dashboardPeri
           </Link>
         </div>
 
+        <div className="flex flex-wrap items-center gap-3 text-xs font-bold">
+          <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-sky-200">
+            <span className="h-2.5 w-2.5 rounded-full bg-sky-300" />
+            Billed
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-cyan-200">
+            <span className="h-2.5 w-2.5 rounded-full bg-cyan-300" />
+            Collected
+          </span>
+        </div>
+
         <div className="dashboard-revenue-summary-grid">
           <div className="dashboard-revenue-summary-item dashboard-revenue-summary-primary">
-            <p>This Month</p>
-            <strong title={dashboardCurrency(monthlyRevenue)}>{dashboardCurrency(monthlyRevenue)}</strong>
-            <span>calendar month revenue</span>
+            <p>Collected This Month</p>
+            <strong title={dashboardCurrency(monthlyCollection)}>{dashboardCurrency(monthlyCollection)}</strong>
+            <span>real payments this calendar month</span>
           </div>
           <div className="dashboard-revenue-summary-item">
-            <p>{selectedPeriodMeta.label}</p>
-            <strong title={dashboardCurrency(totalRevenue)}>{dashboardCurrency(totalRevenue)}</strong>
+            <p>Billed</p>
+            <strong title={dashboardCurrency(totalBilled)}>{dashboardCurrency(totalBilled)}</strong>
             <span>{selectedPeriodMeta.detail}</span>
           </div>
           <div className="dashboard-revenue-summary-item">
-            <p>Best Day</p>
-            <strong title={`${bestDay.label}: ${dashboardCurrency(bestDay.revenue)}`}>{dashboardCurrency(bestDay.revenue)}</strong>
-            <span>{bestDay.label}</span>
+            <p>Collected</p>
+            <strong title={dashboardCurrency(totalCollected)}>{dashboardCurrency(totalCollected)}</strong>
+            <span>{selectedPeriodMeta.detail}</span>
           </div>
           <div className="dashboard-revenue-summary-item">
-            <p>Trend</p>
+            <p>Balance</p>
+            <strong className={balance > 0 ? 'text-amber-200' : balance < 0 ? 'text-cyan-200' : ''}>{dashboardCurrency(balance)}</strong>
+            <span>{selectedPeriodMeta.detail}</span>
+          </div>
+          <div className="dashboard-revenue-summary-item">
+            <p>Collection Trend</p>
             <strong className={`dashboard-revenue-trend dashboard-revenue-trend-${trendTone}`}>{trendLabel}</strong>
-            <span>{hasTrend ? 'first to latest revenue day' : 'needs two revenue days'}</span>
+            <span>{hasTrend ? 'first to latest collected day' : 'needs two collection days'}</span>
           </div>
         </div>
 
@@ -539,8 +562,8 @@ function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0, dashboardPeri
             <div className="dashboard-revenue-chart-inner">
               <div className="dashboard-revenue-css-bars" aria-hidden="true">
                 {safeChartData.map((item) => {
-                  const revenue = Number(item.revenue || 0);
-                  const height = revenue > 0 ? Math.max(8, Math.round((revenue / maxRevenue) * 100)) : 0;
+                  const peakValue = Math.max(Number(item.billed || 0), Number(item.collected || 0));
+                  const height = peakValue > 0 ? Math.max(8, Math.round((peakValue / maxRevenue) * 100)) : 0;
                   return (
                     <span key={item.key || item.label} className="dashboard-revenue-css-bar-track">
                       <span className="dashboard-revenue-css-bar" style={{ '--revenue-height': `${height}%` }} />
@@ -557,14 +580,14 @@ function RevenueOverviewCard({ chartData = [], monthlyRevenue = 0, dashboardPeri
                     content={<RevenueTooltip />}
                     cursor={{ fill: 'rgba(103,232,249,0.07)' }}
                   />
-                  <Area type="monotone" dataKey="revenue" fill="#34d399" fillOpacity={0.14} stroke="#34d399" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#67e8f9', stroke: '#022c22', strokeWidth: 2 }} isAnimationActive={false} />
-                  <Bar dataKey="revenue" fill="#22d3ee" stroke="#67e8f9" strokeWidth={1} radius={[10, 10, 4, 4]} barSize={26} maxBarSize={42} minPointSize={2} isAnimationActive={false} />
+                  <Bar dataKey="billed" name="Billed" fill="#60a5fa" stroke="#93c5fd" strokeWidth={1} radius={[10, 10, 4, 4]} barSize={22} maxBarSize={36} minPointSize={2} isAnimationActive={false} />
+                  <Area type="monotone" dataKey="collected" name="Collected" fill="#22d3ee" fillOpacity={0.16} stroke="#67e8f9" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#67e8f9', stroke: '#083344', strokeWidth: 2 }} isAnimationActive={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
           ) : (
             <div className="dashboard-revenue-empty-shell">
-              <DashboardEmpty title="No revenue in the selected period." message="Revenue trends will appear here after payments are recorded for this period." compact />
+              <DashboardEmpty title="No billed or collected activity in the selected period." message="Revenue trends will appear here after invoices or payments are recorded for this period." compact />
             </div>
           )}
         </div>
@@ -710,7 +733,7 @@ export function AdminDashboard() {
   const { data, loading, error, reload } = useResource(loadDashboard, [loadDashboard]);
   const dashboardData = data || emptyDashboardData;
   const completedToday = Number(dashboardData.metrics?.completedToday || 0);
-  const monthlyRevenue = Number(dashboardData.metrics?.monthlyRevenue || 0);
+  const monthlyCollection = Number(dashboardData.metrics?.monthlyRevenue || 0);
   const revenueRows = useMemo(
     () => normalizeRevenueRows(dashboardData.revenueOverview || []),
     [dashboardData.revenueOverview]
@@ -816,7 +839,7 @@ export function AdminDashboard() {
         <SmartMetricCard icon={CreditCard} label="Pending Payments" value={dashboardData.stats.pendingPayments || dashboardData.metrics.pendingPayments || 0} helper={`${dashboardData.stats.paymentsOverdue || 0} overdue`} tone="yellow" glow to="/app/admin/payments" />
         <SmartMetricCard icon={AlertTriangle} label="Low Stock Items" value={dashboardData.metrics.lowStockItems || 0} helper={`${dashboardData.alerts.outOfStockItems || 0} out of stock`} tone="red" glow to="/app/admin/parts" />
         <SmartMetricCard icon={FileText} label="Active AMC Contracts" value={dashboardData.stats.activeAmcContracts || 0} helper={`${amcRenewalsDue} renewals due`} tone="green" to="/app/admin/amc-contracts" />
-        <SmartMetricCard icon={ReceiptText} label="Monthly Revenue" value={dashboardCurrency(monthlyRevenue)} helper="Collected this month" tone="green" to="/app/admin/reports/finance" />
+        <SmartMetricCard icon={ReceiptText} label="Monthly Collection" value={dashboardCurrency(monthlyCollection)} helper="Collected this calendar month" tone="green" to="/app/admin/reports/finance" />
       </div>
 
       {/* Priority Alerts */}
@@ -889,7 +912,7 @@ export function AdminDashboard() {
           </div>
         </DashboardPanel>
 
-        <RevenueOverviewCard chartData={filteredRevenueRows} monthlyRevenue={monthlyRevenue} dashboardPeriod={dashboardPeriod} />
+        <RevenueOverviewCard chartData={filteredRevenueRows} monthlyCollection={monthlyCollection} dashboardPeriod={dashboardPeriod} />
 
         <TechnicianWorkloadBars technicians={dashboardData.technicianWorkload || []} />
         <ActivityFeedPanel notifications={periodNotifications} reminders={periodReminders} className="xl:col-span-2" />

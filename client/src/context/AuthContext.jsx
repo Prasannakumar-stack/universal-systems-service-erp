@@ -16,6 +16,20 @@ async function parseResponse(response) {
   return data;
 }
 
+function hasAvatarField(value) {
+  if (!value || typeof value !== 'object') return false;
+  return ['avatarUrl', 'photoUrl', 'profilePhoto', 'avatar'].some((field) => Object.prototype.hasOwnProperty.call(value, field));
+}
+
+function normalizeAuthUser(nextUser, currentUser = null) {
+  if (!nextUser) return nextUser;
+  const avatarValue = nextUser.avatarUrl ?? nextUser.photoUrl ?? nextUser.profilePhoto ?? nextUser.avatar;
+  return {
+    ...nextUser,
+    avatarUrl: hasAvatarField(nextUser) ? String(avatarValue || '') : String(currentUser?.avatarUrl || '')
+  };
+}
+
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('us_token') || '');
   const [user, setUserState] = useState(() => {
@@ -27,9 +41,10 @@ export function AuthProvider({ children }) {
   const setUser = useCallback((nextUser) => {
     setUserState((current) => {
       const resolved = typeof nextUser === 'function' ? nextUser(current) : nextUser;
-      if (resolved) localStorage.setItem('us_user', JSON.stringify(resolved));
+      const normalized = normalizeAuthUser(resolved, current);
+      if (normalized) localStorage.setItem('us_user', JSON.stringify(normalized));
       else localStorage.removeItem('us_user');
-      return resolved;
+      return normalized;
     });
   }, []);
 
@@ -39,6 +54,24 @@ export function AuthProvider({ children }) {
     setToken('');
     setUserState(null);
   }, []);
+
+  const refreshUser = useCallback(async (authToken = token) => {
+    if (!authToken) return null;
+    try {
+      const data = await parseResponse(
+        await fetch(`${apiBase}/auth/me`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+          cache: 'no-store'
+        })
+      );
+      if (data?.user) {
+        setUser(data.user);
+      }
+      return data?.user || null;
+    } catch (error) {
+      throw new Error(toNetworkMessage(error));
+    }
+  }, [setUser, token]);
 
   const request = useCallback(
     async (path, options = {}) => {
@@ -75,12 +108,11 @@ export function AuthProvider({ children }) {
     if (data.success !== true) {
       throw new Error(data.message || 'Invalid credentials');
     }
-    const user = data.user ? { ...data.user, role: data.user.role || data.role } : null;
+    const user = data.user ? normalizeAuthUser({ ...data.user, role: data.user.role || data.role }) : null;
     if (!user) {
       throw new Error('Invalid credentials');
     }
     localStorage.setItem('us_token', data.token);
-    localStorage.setItem('us_user', JSON.stringify(user));
     setToken(data.token);
     setUser(user);
     return user;
@@ -92,21 +124,18 @@ export function AuthProvider({ children }) {
       return undefined;
     }
     let mounted = true;
-    fetch(`${apiBase}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(parseResponse)
-      .then((data) => {
+    refreshUser(token)
+      .then(() => {
         if (!mounted) return;
-        setUser(data.user);
-        localStorage.setItem('us_user', JSON.stringify(data.user));
       })
       .catch(logout)
       .finally(() => mounted && setLoading(false));
     return () => {
       mounted = false;
     };
-  }, [logout, token]);
+  }, [logout, refreshUser, token]);
 
-  const value = useMemo(() => ({ token, user, loading, login, logout, request, setUser }), [token, user, loading, login, logout, request]);
+  const value = useMemo(() => ({ token, user, loading, login, logout, request, setUser, refreshUser }), [token, user, loading, login, logout, request, setUser, refreshUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -6,7 +6,6 @@ import {
   ArrowUp,
   Box,
   CalendarDays,
-  Check,
   ChevronDown,
   ChevronUp,
   ClipboardCheck,
@@ -178,6 +177,38 @@ const builderElementTypes = [
   { type: 'divider', label: 'Add Divider', icon: Minus },
   { type: 'spacer', label: 'Add Spacer', icon: Maximize2 },
   { type: 'image', label: 'Add Image / Logo', icon: ImageIcon }
+];
+
+const iconVariantOptions = [
+  ['generic', 'Generic'],
+  ['check', 'Check'],
+  ['dot', 'Dot'],
+  ['completion', 'Completion badge'],
+  ['rupee', 'Rupee'],
+  ['document', 'Document'],
+  ['address', 'Address'],
+  ['phone', 'Phone'],
+  ['email', 'Email'],
+  ['website', 'Website'],
+  ['invoice', 'Invoice'],
+  ['work', 'Work'],
+  ['date', 'Date'],
+  ['status', 'Status'],
+  ['handshake', 'Handshake']
+];
+
+const iconModeOptions = [
+  ['vector', 'Vector icon'],
+  ['emoji', 'Emoji']
+];
+
+const emojiIconOptions = [
+  ['📍', '📍 Location'],
+  ['☎️', '☎️ Phone'],
+  ['✉️', '✉️ Email'],
+  ['🌐', '🌐 Website'],
+  ['✅', '✅ Check'],
+  ['₹', '₹ Rupee']
 ];
 
 const builderRailItems = [
@@ -1176,7 +1207,7 @@ function contentDefaultsForElement(type = 'text') {
     rowTemplate: ['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}'],
     rows: [['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}']]
   };
-  if (type === 'icon') return { label: 'Icon', iconName: 'star' };
+  if (type === 'icon') return { label: 'Icon', iconName: 'star', iconMode: 'vector', emoji: '✅' };
   if (type === 'card') return { title: 'Card title', body: 'Add details here', twoColumn: false };
   if (type === 'qr') return { label: 'QR CODE', qrType: 'payment', helperText: 'Payment / contact QR placeholder' };
   if (type === 'signature') return { label: 'Authorized Signature', name: '', designation: '' };
@@ -1200,7 +1231,7 @@ function isInvoiceManifestElement(element = {}) {
 
 function contentDefaultsForInvoiceElement(type = 'text') {
   if (type === 'table') return { ...contentDefaultsForElement('table'), title: '' };
-  if (type === 'icon') return { label: '', iconName: '', variant: '' };
+  if (type === 'icon') return { label: '', iconName: '', variant: '', iconMode: 'vector', emoji: '✅' };
   if (type === 'card') return { boxOnly: false, twoColumn: false, title: '', body: '' };
   if (type === 'divider' || type === 'spacer') return { label: '' };
   if (type === 'image') return { label: '', imageMode: '', assetPath: '', fitToFrame: true };
@@ -1234,6 +1265,27 @@ function isBackgroundElement(element = {}) {
     || content.imageMode === 'watermark';
 }
 
+function isTinyCanvasElement(element = {}) {
+  const width = Number(element.width || 0);
+  const height = Number(element.height || 0);
+  return width > 0 && height > 0 && (width <= 18 || height <= 18 || (element.type === 'icon' && Math.max(width, height) <= 24));
+}
+
+function duplicateZIndexForElement(element = {}, elements = []) {
+  if (!isBackgroundElement(element)) {
+    return Math.min(999, Math.max(...elements.map((item) => Number(item.zIndex || 1)), 1) + 1);
+  }
+  const backgroundMax = Math.max(
+    ...elements.filter((item) => isBackgroundElement(item)).map((item) => Number(item.zIndex || 1)),
+    Number(element.zIndex || 1)
+  );
+  const foregroundMin = Math.min(
+    ...elements.filter((item) => !isBackgroundElement(item)).map((item) => Number(item.zIndex || 999)),
+    999
+  );
+  return Math.max(1, Math.min(foregroundMin - 1, backgroundMax + 1));
+}
+
 function imagePreviewSource(content = {}) {
   const assetPath = String(content.assetPath || content.imageUrl || content.src || '').trim();
   if (assetPath) return assetPath;
@@ -1242,11 +1294,31 @@ function imagePreviewSource(content = {}) {
   return '';
 }
 
-function CanvasIconPreview({ variant = '' }) {
+function CanvasIconPreview({ variant = '', mode = 'vector', emoji = '' }) {
+  if (mode === 'emoji') {
+    return <span className="pdf-canvas-emoji-icon" aria-hidden="true">{emoji || '✅'}</span>;
+  }
   const normalized = String(variant || '').toLowerCase();
   if (normalized === 'dot') return <span className="pdf-canvas-dot" />;
-  if (normalized === 'check') return <span className="pdf-canvas-check"><Check className="h-3 w-3" /></span>;
+  if (normalized === 'check') {
+    return (
+      <svg className="pdf-canvas-check-dot" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+        <circle cx="4" cy="4" r="4" fill="currentColor" />
+        <path d="M2.2 4 3.8 5.8 6.4 2.4" fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.05" />
+      </svg>
+    );
+  }
   if (normalized === 'rupee') return <span className="pdf-canvas-rupee">Rs</span>;
+  if (normalized === 'completion') {
+    return (
+      <svg className="pdf-canvas-completion-badge" viewBox="0 0 34 48" aria-hidden="true" focusable="false">
+        <circle cx="17" cy="17" r="17" fill="currentColor" />
+        <path d="M9.4 17.2 14.8 22.5 25.5 11.6" fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" />
+        <path d="M7 30 1 48 12 43Z" fill="currentColor" />
+        <path d="M26.5 30 34 48 21.5 43Z" fill="currentColor" />
+      </svg>
+    );
+  }
 
   const iconMap = {
     address: MapPin,
@@ -1258,7 +1330,6 @@ function CanvasIconPreview({ variant = '' }) {
     date: CalendarDays,
     status: CreditCard,
     document: FileText,
-    completion: Check,
     handshake: Handshake
   };
   const Icon = iconMap[normalized] || Box;
@@ -1357,6 +1428,8 @@ function normalizeBuilderElement(element = {}, index = 0) {
   const type = normalizeElementType(element.type);
   const size = defaultSizeForElement(type);
   const invoiceManifestElement = isInvoiceManifestElement(element);
+  const minWidth = invoiceManifestElement ? 0.1 : 24;
+  const minHeight = invoiceManifestElement ? 0.1 : 8;
   const contentDefaults = invoiceManifestElement ? contentDefaultsForInvoiceElement(type) : contentDefaultsForElement(type);
   const rawContent = typeof element.content === 'object' && element.content !== null
     ? element.content
@@ -1371,6 +1444,9 @@ function normalizeBuilderElement(element = {}, index = 0) {
     textColor: element.style?.textColor || element.textColor || styleDefaults.textColor,
     borderColor: element.style?.borderColor || element.borderColor || styleDefaults.borderColor
   };
+  if (invoiceManifestElement && type === 'divider' && !style.orientation && Number(element.height || 0) > Number(element.width || 0)) {
+    style.orientation = 'vertical';
+  }
   const name = cleanLayerTitle(element.name || element.title || elementNameForType(type));
   return {
     ...element,
@@ -1381,8 +1457,8 @@ function normalizeBuilderElement(element = {}, index = 0) {
     pageId: element.pageId || 'page-1',
     x: clampBuilderNumber(element.x, 48, 0, builderCanvas.width - 24),
     y: clampBuilderNumber(element.y, 118, 0, builderCanvas.height - 12),
-    width: clampBuilderNumber(element.width, size.width, 24, builderCanvas.width),
-    height: clampBuilderNumber(element.height, size.height, 8, builderCanvas.height),
+    width: clampBuilderNumber(element.width, size.width, minWidth, builderCanvas.width),
+    height: clampBuilderNumber(element.height, size.height, minHeight, builderCanvas.height),
     widthMode: ['full', 'half', 'custom'].includes(element.widthMode) ? element.widthMode : 'custom',
     visible: element.visible ?? element.enabled ?? true,
     enabled: element.enabled ?? element.visible ?? true,
@@ -1580,22 +1656,27 @@ function frameForSectionLayer(layer, index) {
 
 function styleForBuilderElement(element = {}, selected = false) {
   const style = element.style || defaultElementStyles;
+  const invoiceManifestElement = isInvoiceManifestElement(element);
   const borderWidth = clampBuilderNumber(style.borderWidth, 1, 0, 8);
+  const elementColor = element.type === 'icon'
+    ? (style.accentColor || style.textColor || '#0284c7')
+    : (style.textColor || '#0f172a');
   return {
     left: element.x,
     top: element.y,
     width: element.width,
     height: element.height,
     zIndex: element.zIndex || 20,
-    color: style.textColor || '#0f172a',
+    color: elementColor,
     background: element.type === 'divider' ? 'transparent' : style.backgroundColor || '#ffffff',
     borderColor: selected ? '#0284c7' : style.borderColor || '#cbd5e1',
     borderRadius: element.type === 'divider' ? 0 : clampBuilderNumber(style.borderRadius, 10, 0, 32),
     borderWidth: element.type === 'divider' ? 0 : borderWidth,
     boxShadow: style.shadow ? '0 14px 28px rgba(15, 23, 42, 0.16)' : 'none',
     textAlign: style.alignment || element.alignment || 'left',
-    fontSize: clampBuilderNumber(style.fontSize, 13, 8, 32),
+    fontSize: clampBuilderNumber(style.fontSize, 13, invoiceManifestElement ? 4 : 8, 32),
     fontWeight: style.fontWeight || 700,
+    lineHeight: clampBuilderNumber(style.lineHeight, 1.16, 0.85, 2.4),
     padding: element.type === 'divider' ? 0 : (style.padding ?? '0.5rem'),
     opacity: clampBuilderNumber(style.opacity, 1, 0, 1)
   };
@@ -1606,8 +1687,8 @@ function TemplateStatusPill({ status = 'Active' }) {
 }
 
 function TemplateCard({ template, canEdit, busyKey, onEdit, onPreview, onDownload, onReset }) {
-  const previewBusy = busyKey === `preview-${template.key}`;
-  const downloadBusy = busyKey === `download-${template.key}`;
+  const previewBusy = String(busyKey || '').startsWith(`preview-${template.key}`);
+  const downloadBusy = String(busyKey || '').startsWith(`download-${template.key}`);
   const resetBusy = busyKey === `reset-${template.key}`;
   const busy = Boolean(busyKey);
   return (
@@ -2218,12 +2299,29 @@ function DesignModeWorkspace({
   const zoomScale = zoom === '125' ? 1.25 : zoom === '100' ? 1 : zoom === '75' ? 0.75 : zoom === 'fit-width' ? 1.1 : 0.88;
   const previewConfig = useMemo(() => mergeDesignStateForSave(draft, canvasDesign, { previewDraft: true }), [draft, canvasDesign]);
   const defaultPreviewConfig = useMemo(() => configForDefaultPdfPreview(draft), [draft]);
+  const defaultPreviewBusy = busyKey === `preview-${template.key}-default`;
+  const draftPreviewBusy = busyKey === `preview-${template.key}-draft`;
+  const draftDownloadBusy = busyKey === `download-${template.key}-draft`;
   const visiblePageSections = canvasSections
     .filter((section) => (section.pageId || 'page-1') === currentPage.id && section.visible !== false && section.enabled !== false)
     .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
   const visiblePageElements = elements
     .filter((element) => (element.pageId || 'page-1') === currentPage.id && element.visible !== false && element.enabled !== false)
     .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+
+  function previewDefaultPdf() {
+    // Default preview intentionally disables design flags so it stays on the structured invoice PDF path.
+    onPreview(template, defaultPreviewConfig, { intent: 'default' });
+  }
+
+  function previewDraftPdf() {
+    // Draft preview intentionally sets design.previewDraft without publishing the design.
+    onPreview(template, previewConfig, { intent: 'draft' });
+  }
+
+  function downloadDraftPdf() {
+    onDownload(template, previewConfig, { intent: 'draft' });
+  }
 
   function refreshFloatingToolbarPosition() {
     if (!selectedLayerId || !selectedFrame || typeof window === 'undefined') {
@@ -2621,7 +2719,7 @@ function DesignModeWorkspace({
       name: `${element.name || 'Element'} Copy`,
       x: Math.min(builderCanvas.width - 24, element.x + 18),
       y: Math.min(builderCanvas.height - 12, element.y + 18),
-      zIndex: (Math.max(...elements.map((item) => item.zIndex || 1), 1) + 1)
+      zIndex: duplicateZIndexForElement(element, elements)
     }, elements.length);
     commitDesign((current) => {
       const nextElements = [...current.elements, copy];
@@ -2691,6 +2789,7 @@ function DesignModeWorkspace({
   }
 
   function duplicateSelectedLayer() {
+    if (selectedLayerLocked) return;
     if (selectedElement) duplicateElement(selectedElement);
     else if (selectedSection) duplicateSection(selectedSection);
   }
@@ -2721,7 +2820,7 @@ function DesignModeWorkspace({
         pageId: currentPage.id,
         x: Math.min(builderCanvas.width - 24, Number(clipboardLayerRef.current.item.x || 0) + 18),
         y: Math.min(builderCanvas.height - 12, Number(clipboardLayerRef.current.item.y || 0) + 18),
-        zIndex: Math.max(...elements.map((item) => item.zIndex || 1), 1) + 1
+        zIndex: duplicateZIndexForElement(clipboardLayerRef.current.item, elements)
       }, elements.length);
       commitDesign((current) => {
         const nextElements = [...current.elements, copy];
@@ -2770,6 +2869,7 @@ function DesignModeWorkspace({
 
   function bringSelectedLayerForward() {
     if (!selectedFrame || !selectedCanEditFrame) return;
+    if (selectedElement && isBackgroundElement(selectedElement)) return;
     const pool = selectedElement ? elements : canvasSections;
     const maxZ = Math.max(...pool.map((item) => Number(item.zIndex || 1)), Number(selectedFrame.zIndex || 1));
     patchSelectedLayerFrame({ zIndex: Math.min(999, maxZ + 1) });
@@ -2777,6 +2877,7 @@ function DesignModeWorkspace({
 
   function sendSelectedLayerBackward() {
     if (!selectedFrame || !selectedCanEditFrame) return;
+    if (selectedElement && isBackgroundElement(selectedElement)) return;
     const pool = selectedElement ? elements : canvasSections;
     const minZ = Math.min(...pool.map((item) => Number(item.zIndex || 1)), Number(selectedFrame.zIndex || 1));
     patchSelectedLayerFrame({ zIndex: Math.max(1, minZ - 1) });
@@ -2818,16 +2919,26 @@ function DesignModeWorkspace({
 
   function moveElementLayer(elementId, direction) {
     if (disabled) return;
+    const selected = elements.find((element) => element.id === elementId);
+    if (!selected || selected.locked || isBackgroundElement(selected)) return;
+    const foregroundIds = elements.filter((element) => !isBackgroundElement(element)).map((element) => element.id);
+    const foregroundIndex = foregroundIds.indexOf(elementId);
+    const targetForegroundId = foregroundIds[foregroundIndex + direction];
+    if (!targetForegroundId) return;
     commitDesign((current) => {
       const nextElements = current.elements.slice();
       const index = nextElements.findIndex((element) => element.id === elementId);
-      const target = index + direction;
-      if (index < 0 || target < 0 || target >= nextElements.length) return current;
-      [nextElements[index], nextElements[target]] = [nextElements[target], nextElements[index]];
+      const target = nextElements.findIndex((element) => element.id === targetForegroundId);
+      if (index < 0 || target < 0) return current;
+      const sourceElement = nextElements[index];
+      const targetElement = nextElements[target];
+      nextElements[index] = { ...targetElement, zIndex: sourceElement.zIndex };
+      nextElements[target] = { ...sourceElement, zIndex: targetElement.zIndex };
+      const normalizedElements = nextElements.map((element, itemIndex) => normalizeBuilderElement(element, itemIndex));
       return {
         ...current,
-        elements: nextElements.map((element, itemIndex) => ({ ...element, zIndex: itemIndex + 20 })),
-        customElements: nextElements.map((element, itemIndex) => ({ ...element, zIndex: itemIndex + 20 }))
+        elements: normalizedElements,
+        customElements: normalizedElements
       };
     });
   }
@@ -2973,6 +3084,7 @@ function DesignModeWorkspace({
       kind: 'element',
       id: element.id,
       type: element.type,
+      invoiceManifestElement: isInvoiceManifestElement(element),
       mode,
       handle,
       scale,
@@ -3039,14 +3151,18 @@ function DesignModeWorkspace({
       if (snapEnabled) {
         next.x = snapBuilderValue(next.x, gridSize);
         next.y = snapBuilderValue(next.y, gridSize);
-        next.width = snapBuilderValue(next.width, gridSize);
-        next.height = snapBuilderValue(next.height, gridSize);
+        if (interaction.mode === 'resize') {
+          next.width = snapBuilderValue(next.width, gridSize);
+          next.height = snapBuilderValue(next.height, gridSize);
+        }
       }
       const minSize = interaction.kind === 'section'
         ? { width: 80, height: 32 }
-        : defaultSizeForElement(interaction.type || selectedElement?.type || 'text');
-      next.width = clampBuilderNumber(next.width, minSize.width, 24, builderCanvas.width);
-      next.height = clampBuilderNumber(next.height, minSize.height, 8, builderCanvas.height);
+        : interaction.invoiceManifestElement === true
+          ? { width: 0.1, height: 0.1 }
+          : defaultSizeForElement(interaction.type || selectedElement?.type || 'text');
+      next.width = clampBuilderNumber(next.width, minSize.width, minSize.width, builderCanvas.width);
+      next.height = clampBuilderNumber(next.height, minSize.height, minSize.height, builderCanvas.height);
       next.x = clampBuilderNumber(next.x, 0, 0, builderCanvas.width - 12);
       next.y = clampBuilderNumber(next.y, 0, 0, builderCanvas.height - 8);
       if (interaction.kind === 'section') patchSectionDirect(interaction.id, next);
@@ -3292,11 +3408,15 @@ function DesignModeWorkspace({
                 selected={selectedLayerId === layer.id}
                 disabled={disabled}
                 onSelect={() => {
-                  if (layer.kind === 'element' && layer.backgroundElement && !selectBackgroundElements) return;
                   setSelectedLayerId(layer.id);
                   if (layer.pageId) setCurrentPageId(layer.pageId);
                 }}
                 onToggleVisibility={() => toggleLayerVisibility(layer)}
+                canToggleLock={layer.kind === 'element' || (layer.kind === 'section' && freeLayoutMode)}
+                onToggleLock={() => {
+                  if (layer.kind === 'element') patchElement(layer.id, { locked: !layer.locked });
+                  else if (freeLayoutMode) patchSection(layer.id, { locked: !layer.locked });
+                }}
                 onMoveUp={() => moveElementLayer(layer.id, -1)}
                 onMoveDown={() => moveElementLayer(layer.id, 1)}
                 onDuplicate={() => (layer.kind === 'element' ? duplicateElement(layer.element) : duplicateSection(layer.sectionDesign))}
@@ -3532,7 +3652,7 @@ function DesignModeWorkspace({
       <div className="pdf-inspector-grid">
         {selectedElement ? (
           <>
-            <BuilderNumberInput label="Layer z-index" value={selectedElement.zIndex} min={1} max={999} disabled={disabled} onChange={(value) => patchElement(selectedElement.id, { zIndex: value })} />
+            <BuilderNumberInput label="Layer z-index" value={selectedElement.zIndex} min={1} max={999} disabled={disabled || selectedLayerBackground} onChange={(value) => patchElement(selectedElement.id, { zIndex: value })} />
             <BuilderToggle label="Lock element" checked={selectedElement.locked === true} disabled={disabled} onChange={(checked) => patchElement(selectedElement.id, { locked: checked })} />
             <BuilderToggle label="Print safe" checked={selectedElement.printSafe !== false} disabled={disabled || selectedElement.locked} onChange={(checked) => patchElement(selectedElement.id, { printSafe: checked })} />
             <BuilderToggle label="Page break before" checked={selectedElement.pageBreakBefore === true} disabled={disabled || selectedElement.locked} onChange={(checked) => patchElement(selectedElement.id, { pageBreakBefore: checked })} />
@@ -3660,12 +3780,12 @@ function DesignModeWorkspace({
           <button type="button" className="icon-button" disabled={!redoStack.length || disabled} onClick={redoDesign} title="Redo">
             <Redo2 className="h-4 w-4" />
           </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onPreview(template, defaultPreviewConfig)}>
-            {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={previewDefaultPdf}>
+            {defaultPreviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
             Preview Default PDF
           </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={() => onPreview(template, previewConfig)}>
-            {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={previewDraftPdf}>
+            {draftPreviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
             Preview Draft PDF
           </button>
           <button type="submit" className="btn btn-primary admin-compact-button pdf-builder-save-button" disabled={!canEdit || saving || Boolean(busyKey)}>
@@ -3740,8 +3860,8 @@ function DesignModeWorkspace({
                   Free Layout Mode
                 </button>
                 <span className="pdf-more-menu-divider" />
-                <button type="button" disabled={saving || Boolean(busyKey)} onClick={() => { onDownload(template, previewConfig); setToolbarMoreOpen(false); }}>
-                  {busyKey === `download-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                <button type="button" disabled={saving || Boolean(busyKey)} onClick={() => { downloadDraftPdf(); setToolbarMoreOpen(false); }}>
+                  {draftDownloadBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                   Download Draft PDF
                 </button>
                 <button type="button" disabled={!canEdit || saving || Boolean(busyKey)} onClick={() => {
@@ -3916,6 +4036,8 @@ function DesignModeWorkspace({
                       setInspectorCollapsed(false);
                       setActiveInspectorTab('content');
                     }}
+                    onDragStart={(event) => beginElementInteraction(event, element, 'move')}
+                    onResizeStart={(event, handle) => beginElementInteraction(event, element, 'resize', handle)}
                   />
                 )) : null}
                 {selectedLayer && selectedFrame ? (
@@ -3927,6 +4049,7 @@ function DesignModeWorkspace({
                     locked={selectedLayerLocked}
                     backgroundSelected={selectedLayerBackground}
                     canEditFrame={selectedCanEditFrame}
+                    canReorder={!selectedLayerBackground && selectedCanEditFrame}
                     canDelete={!selectedLayerLocked && (Boolean(selectedElement) || selectedSection?.system === false)}
                     canToggleLock={Boolean(selectedElement) || (Boolean(selectedSection) && freeLayoutMode)}
                     onEdit={editSelectedLayer}
@@ -4120,8 +4243,10 @@ function BuilderCanvasElement({
   const inlineEditable = ['text', 'card', 'icon'].includes(element.type);
   const doubleClickEditable = inlineEditable || element.type === 'table' || element.type === 'divider' || element.type === 'image';
   const inlineTarget = element.type === 'card' ? 'body' : element.type === 'icon' ? 'label' : 'text';
+  const iconMode = content.iconMode === 'emoji' ? 'emoji' : 'vector';
   const iconVariant = content.variant || content.iconName || 'generic';
   const iconLabel = content.label || (content.variant ? '' : content.iconName) || '';
+  const iconEmoji = content.emoji || '✅';
   const imagePreviewSrc = element.type === 'image' ? imagePreviewSource(content) : '';
   const imageMode = content.imageMode || (imagePreviewSrc.includes('logo-icon') ? 'watermark' : 'logo');
   const tablePaddingX = clampBuilderNumber(element.style?.paddingX, 4, 0, 24);
@@ -4139,6 +4264,7 @@ function BuilderCanvasElement({
     ? tableColumns.map((_column, index) => `${Math.max(0.2, Number(content.columnWidths[index]) || 1)}fr`).join(' ')
     : `repeat(${Math.max(1, tableColumns.length || 4)}, minmax(0, 1fr))`;
   const tablePreviewCount = clampBuilderNumber(content.previewRowCount, 5, 1, 12);
+  const tinyHitTarget = isTinyCanvasElement(element);
 
   useEffect(() => {
     if (editing) setInlineValue(elementPrimaryText(element));
@@ -4160,7 +4286,7 @@ function BuilderCanvasElement({
 
   return (
     <div
-      className={`pdf-builder-element is-${element.type} ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''} ${backgroundElement ? 'is-background-element' : ''} ${backgroundElement && !backgroundSelectable ? 'is-background-passthrough' : ''}`}
+      className={`pdf-builder-element is-${element.type} ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''} ${backgroundElement ? 'is-background-element' : ''} ${backgroundElement && !backgroundSelectable ? 'is-background-passthrough' : ''} ${tinyHitTarget ? 'is-tiny-hit-target' : ''}`}
       data-pdf-layer-id={element.id}
       data-pdf-layer-kind={backgroundElement ? 'background' : 'element'}
       style={style}
@@ -4180,6 +4306,7 @@ function BuilderCanvasElement({
       role="button"
       tabIndex={0}
     >
+      {tinyHitTarget ? <span className="pdf-element-hit-area" aria-hidden="true" /> : null}
       <div className="pdf-element-grip"><GripVertical className="h-3.5 w-3.5" /></div>
       {editing && inlineEditable ? (
         <textarea
@@ -4216,8 +4343,8 @@ function BuilderCanvasElement({
           </div>
         </div>
       ) : element.type === 'icon' ? (
-        <div className={`pdf-canvas-icon is-${iconVariant} ${iconLabel ? 'has-label' : 'is-symbol-only'}`}>
-          <CanvasIconPreview variant={iconVariant} />
+        <div className={`pdf-canvas-icon is-${iconMode} is-${iconVariant} ${iconLabel ? 'has-label' : 'is-symbol-only'}`}>
+          <CanvasIconPreview variant={iconVariant} mode={iconMode} emoji={iconEmoji} />
           {iconLabel ? <span>{iconLabel}</span> : null}
         </div>
       ) : element.type === 'qr' ? (
@@ -4273,7 +4400,8 @@ function BuilderCanvasElement({
   );
 }
 
-function BackgroundElementHitTarget({ element, selected, disabled, onSelect, onEditStart }) {
+function BackgroundElementHitTarget({ element, selected, disabled, onSelect, onEditStart, onDragStart, onResizeStart }) {
+  const locked = disabled || element.locked === true;
   const style = {
     left: element.x,
     top: element.y,
@@ -4282,15 +4410,17 @@ function BackgroundElementHitTarget({ element, selected, disabled, onSelect, onE
     zIndex: Math.max(1, Number(element.zIndex || 0) + 1)
   };
   return (
-    <button
-      type="button"
-      className={`pdf-background-hit-target ${selected ? 'is-selected' : ''}`}
+    <div
+      className={`pdf-background-hit-target ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : 'is-unlocked'}`}
       style={style}
-      disabled={disabled}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled}
       aria-label={`Select ${element.name || element.title || 'background element'}`}
       onPointerDown={(event) => {
         event.stopPropagation();
         onSelect?.();
+        if (!locked) onDragStart?.(event);
       }}
       onDoubleClick={(event) => {
         event.preventDefault();
@@ -4298,7 +4428,17 @@ function BackgroundElementHitTarget({ element, selected, disabled, onSelect, onE
         onEditStart?.();
       }}
       title={`${element.name || element.title || 'Background element'} - double-click to edit`}
-    />
+    >
+      {selected && !locked ? ['nw', 'ne', 'sw', 'se'].map((handle) => (
+        <button
+          key={handle}
+          type="button"
+          className={`pdf-resize-handle is-${handle}`}
+          onPointerDown={(event) => onResizeStart?.(event, handle)}
+          aria-label={`Resize ${handle}`}
+        />
+      )) : null}
+    </div>
   );
 }
 
@@ -4309,6 +4449,7 @@ function FloatingLayerToolbar({
   locked,
   backgroundSelected = false,
   canEditFrame,
+  canReorder = canEditFrame,
   canDelete,
   canToggleLock,
   onEdit,
@@ -4377,10 +4518,10 @@ function FloatingLayerToolbar({
       <button type="button" className="pdf-floating-tool" disabled={!canToggleLock} onClick={onToggleLock} title={locked ? 'Unlock' : 'Lock'}>
         {locked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
       </button>
-      <button type="button" className="pdf-floating-tool" disabled={!canEditFrame} onClick={onBringForward} title="Bring forward">
+      <button type="button" className="pdf-floating-tool" disabled={!canReorder} onClick={onBringForward} title="Bring forward">
         <ArrowUp className="h-3.5 w-3.5" />
       </button>
-      <button type="button" className="pdf-floating-tool" disabled={!canEditFrame} onClick={onSendBackward} title="Send backward">
+      <button type="button" className="pdf-floating-tool" disabled={!canReorder} onClick={onSendBackward} title="Send backward">
         <ArrowDown className="h-3.5 w-3.5" />
       </button>
       <button type="button" className="pdf-floating-tool" disabled={!canEditFrame} onClick={onAlign} title="Align center on page">
@@ -4473,11 +4614,12 @@ function FloatingLayerToolbar({
   );
 }
 
-function BuilderLayerRow({ layer, selected, disabled, onSelect, onToggleVisibility, onMoveUp, onMoveDown, onDuplicate, onDelete }) {
+function BuilderLayerRow({ layer, selected, disabled, canToggleLock = false, onSelect, onToggleVisibility, onToggleLock, onMoveUp, onMoveDown, onDuplicate, onDelete }) {
   const Icon = layer.kind === 'section' ? (layer.section?.icon || FileText) : elementIconForType(layer.type);
   const elementLayer = layer.kind === 'element';
   const canDelete = elementLayer || layer.sectionDesign?.system === false;
   const lockedAction = layer.locked === true;
+  const reorderDisabled = lockedAction || layer.backgroundElement === true;
   return (
     <div className={`pdf-layer-row ${selected ? 'is-active' : ''}`}>
       <button type="button" className="pdf-layer-main" onClick={onSelect} title={layer.title}>
@@ -4486,7 +4628,7 @@ function BuilderLayerRow({ layer, selected, disabled, onSelect, onToggleVisibili
         <span className="pdf-layer-text">
           <span className="pdf-layer-name" title={layer.title}>{layer.title}</span>
           <span className="pdf-layer-badges">
-            <span className={`pdf-layer-badge ${layer.locked ? 'is-locked' : 'is-free'}`}>{layer.locked ? 'Locked' : 'Free'}</span>
+            <span className={`pdf-layer-badge ${layer.locked ? 'is-locked' : 'is-free'}`}>{layer.locked ? 'Locked' : 'Editable'}</span>
             {!layer.visible ? <span className="pdf-layer-badge is-hidden">Hidden</span> : null}
             <span className={`pdf-layer-badge ${layer.backgroundElement ? 'is-background' : ''}`}>{layer.kind === 'section' ? 'Section' : layer.badge}</span>
           </span>
@@ -4496,15 +4638,15 @@ function BuilderLayerRow({ layer, selected, disabled, onSelect, onToggleVisibili
         <button type="button" className="icon-button" disabled={disabled || !layer.supportsVisibility} onClick={onToggleVisibility} title={layer.visible ? 'Hide' : 'Show'}>
           {layer.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
         </button>
-        <button type="button" className="icon-button" disabled title={layer.locked ? 'Locked' : 'Unlocked'}>
+        <button type="button" className="icon-button" disabled={disabled || !canToggleLock} onClick={onToggleLock} title={layer.locked ? 'Unlock layer' : 'Lock layer'}>
           {layer.locked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
         </button>
         {elementLayer ? (
           <>
-            <button type="button" className="icon-button" disabled={disabled || lockedAction} onClick={onMoveUp} title="Move up">
+            <button type="button" className="icon-button" disabled={disabled || reorderDisabled} onClick={onMoveUp} title="Move up">
               <ArrowUp className="h-3.5 w-3.5" />
             </button>
-            <button type="button" className="icon-button" disabled={disabled || lockedAction} onClick={onMoveDown} title="Move down">
+            <button type="button" className="icon-button" disabled={disabled || reorderDisabled} onClick={onMoveDown} title="Move down">
               <ArrowDown className="h-3.5 w-3.5" />
             </button>
           </>
@@ -4613,6 +4755,10 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
   const tableWidths = parseTableColumnWidths(formatTableColumnWidths(content.columnWidths), tableColumns.length);
   const tableTemplate = Array.isArray(content.rowTemplate) && content.rowTemplate.length ? content.rowTemplate : tableDefaults.rowTemplate;
   const tablePreviewRows = Array.isArray(content.rows) && content.rows.length ? content.rows : tableDefaults.rows;
+  const iconVariantValue = content.variant || content.iconName || 'generic';
+  const iconOptions = iconVariantOptions.some(([value]) => value === iconVariantValue)
+    ? iconVariantOptions
+    : [[iconVariantValue, iconVariantValue], ...iconVariantOptions];
 
   function patchTableContent(patch) {
     onPatch({ content: patch });
@@ -4747,7 +4893,34 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
       ) : element.type === 'icon' ? (
         <>
           <BuilderTextInput label="Icon label" value={content.label} disabled={disabled} onChange={(value) => onPatch({ content: { label: value } })} onCursor={remember('label', content.label)} />
-          <BuilderTextInput label="Icon name" value={content.iconName} disabled={disabled} onChange={(value) => onPatch({ content: { iconName: value } })} onCursor={remember('iconName', content.iconName)} />
+          <BuilderSelect
+            label="Icon display"
+            value={content.iconMode === 'emoji' ? 'emoji' : 'vector'}
+            options={iconModeOptions}
+            disabled={disabled}
+            onChange={(value) => onPatch({ content: { iconMode: value } })}
+          />
+          {content.iconMode === 'emoji' ? (
+            <>
+              <BuilderSelect
+                label="Emoji preset"
+                value={content.emoji || '✅'}
+                options={emojiIconOptions}
+                disabled={disabled}
+                onChange={(value) => onPatch({ content: { emoji: value } })}
+              />
+              <BuilderTextInput label="Custom emoji" value={content.emoji || '✅'} disabled={disabled} onChange={(value) => onPatch({ content: { emoji: value } })} onCursor={remember('emoji', content.emoji || '✅')} />
+              <BuilderHint tone="info">Draft PDFs use a safe monochrome/vector fallback when color emoji glyphs are not available in PDFKit.</BuilderHint>
+            </>
+          ) : null}
+          <BuilderSelect
+            label="Icon variant"
+            value={iconVariantValue}
+            options={iconOptions}
+            disabled={disabled || content.iconMode === 'emoji'}
+            onChange={(value) => onPatch({ content: { variant: value === 'generic' ? '' : value, iconName: value === 'generic' ? '' : value } })}
+          />
+          <BuilderTextInput label="Icon name" value={content.iconName} disabled={disabled || content.iconMode === 'emoji'} onChange={(value) => onPatch({ content: { iconName: value } })} onCursor={remember('iconName', content.iconName)} />
         </>
       ) : element.type === 'qr' ? (
         <>
@@ -4786,7 +4959,13 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
             onChange={(value) => onPatch({ content: { assetPath: value } })}
             onCursor={remember('assetPath', content.assetPath || '')}
           />
-          <BuilderToggle label="Fit image to frame" checked={content.fitToFrame !== false} disabled={disabled} onChange={(checked) => onPatch({ content: { fitToFrame: checked } })} />
+          <BuilderSelect
+            label="Object fit"
+            value={content.fitToFrame === false ? 'contain-padded' : 'contain'}
+            options={[['contain', 'Contain'], ['contain-padded', 'Contain with padding']]}
+            disabled={disabled}
+            onChange={(value) => onPatch({ content: { fitToFrame: value === 'contain' } })}
+          />
           {isBackgroundElement(element) ? <BuilderHint tone="info">Watermarks use the real `/logo-icon.png` asset and stay behind the invoice until background selection is enabled.</BuilderHint> : null}
         </>
       ) : element.type === 'divider' || element.type === 'spacer' ? (
@@ -4804,17 +4983,21 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
 
 function ElementLayoutControls({ element, pages, disabled, onPatch }) {
   const pageOptions = pages.map((page, index) => [page.id, page.name || `Page ${index + 1}`]);
+  const invoiceManifestElement = isInvoiceManifestElement(element);
+  const minWidth = invoiceManifestElement ? 0.1 : 24;
+  const minHeight = invoiceManifestElement ? 0.1 : 8;
+  const displayNumber = (value) => invoiceManifestElement ? Number(value || 0) : Math.round(value || 0);
   return (
     <div className="pdf-inspector-grid">
-      <BuilderNumberInput label="X position" value={Math.round(element.x)} max={builderCanvas.width} disabled={disabled} onChange={(value) => onPatch({ x: value })} />
-      <BuilderNumberInput label="Y position" value={Math.round(element.y)} max={builderCanvas.height} disabled={disabled} onChange={(value) => onPatch({ y: value })} />
+      <BuilderNumberInput label="X position" value={displayNumber(element.x)} max={builderCanvas.width} step={invoiceManifestElement ? 0.1 : 1} disabled={disabled} onChange={(value) => onPatch({ x: value })} />
+      <BuilderNumberInput label="Y position" value={displayNumber(element.y)} max={builderCanvas.height} step={invoiceManifestElement ? 0.1 : 1} disabled={disabled} onChange={(value) => onPatch({ y: value })} />
       <BuilderSelect label="Width" value={element.widthMode || 'custom'} options={[['full', 'Full width'], ['half', 'Half width'], ['custom', 'Custom']]} disabled={disabled} onChange={(value) => {
         if (value === 'full') onPatch({ widthMode: value, fullWidth: true, x: 32, width: builderCanvas.width - 64 });
         else if (value === 'half') onPatch({ widthMode: value, fullWidth: false, width: Math.round((builderCanvas.width - 80) / 2) });
         else onPatch({ widthMode: value, fullWidth: false });
       }} />
-      {element.widthMode === 'custom' || !element.widthMode ? <BuilderNumberInput label="Custom width" value={Math.round(element.width)} min={24} max={builderCanvas.width} disabled={disabled} onChange={(value) => onPatch({ width: value, widthMode: 'custom' })} /> : null}
-      <BuilderNumberInput label="Height" value={Math.round(element.height)} min={8} max={builderCanvas.height} disabled={disabled} onChange={(value) => onPatch({ height: value })} />
+      {element.widthMode === 'custom' || !element.widthMode ? <BuilderNumberInput label="Custom width" value={displayNumber(element.width)} min={minWidth} max={builderCanvas.width} step={invoiceManifestElement ? 0.1 : 1} disabled={disabled} onChange={(value) => onPatch({ width: value, widthMode: 'custom' })} /> : null}
+      <BuilderNumberInput label="Height" value={displayNumber(element.height)} min={minHeight} max={builderCanvas.height} step={invoiceManifestElement ? 0.1 : 1} disabled={disabled} onChange={(value) => onPatch({ height: value })} />
       <BuilderSelect label="Alignment" value={element.style?.alignment || element.alignment || 'left'} options={[['left', 'Left'], ['center', 'Center'], ['right', 'Right']]} disabled={disabled} onChange={(value) => onPatch({ alignment: value, style: { alignment: value } })} />
       <BuilderToggle label="Full width" checked={element.fullWidth === true} disabled={disabled} onChange={(checked) => onPatch(checked ? { fullWidth: true, widthMode: 'full', x: 32, width: builderCanvas.width - 64 } : { fullWidth: false, widthMode: 'custom' })} />
       <BuilderToggle label="Two-column card" checked={element.twoColumn === true} disabled={disabled || element.type !== 'card'} onChange={(checked) => onPatch({ twoColumn: checked, content: { twoColumn: checked } })} />
@@ -4836,17 +5019,26 @@ function LockedLayoutSummary({ frame }) {
 
 function ElementStyleControls({ element, disabled, onPatch }) {
   const style = element.style || defaultElementStyles;
+  const invoiceManifestElement = isInvoiceManifestElement(element);
+  const patchAccentColor = (value) => {
+    onPatch({ style: element.type === 'icon' ? { accentColor: value, textColor: value } : { accentColor: value } });
+  };
+  const patchTextColor = (value) => {
+    onPatch({ style: element.type === 'icon' ? { textColor: value, accentColor: value } : { textColor: value } });
+  };
   return (
     <div className="pdf-inspector-grid">
-      <ColorControl label="Accent color" value={style.accentColor} disabled={disabled} onChange={(value) => onPatch({ style: { accentColor: value } })} />
+      <ColorControl label="Accent color" value={style.accentColor} disabled={disabled} onChange={patchAccentColor} />
       <ColorControl label="Background color" value={style.backgroundColor} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { backgroundColor: value } })} />
-      <ColorControl label="Text color" value={style.textColor} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { textColor: value } })} />
+      <ColorControl label={element.type === 'icon' ? 'Icon color' : 'Text color'} value={style.textColor} disabled={disabled || element.type === 'divider'} onChange={patchTextColor} />
       <ColorControl label="Border color" value={style.borderColor} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { borderColor: value } })} />
       <BuilderNumberInput label="Border radius" value={style.borderRadius ?? 10} max={32} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { borderRadius: value } })} />
       <BuilderNumberInput label="Border" value={style.borderWidth ?? 1} max={8} step={element.type === 'table' ? 0.1 : 1} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { borderWidth: value } })} />
       <BuilderToggle label="Shadow" checked={style.shadow === true} disabled={disabled || element.type === 'divider'} onChange={(checked) => onPatch({ style: { shadow: checked } })} />
-      <BuilderNumberInput label="Font size" value={style.fontSize ?? 13} min={8} max={32} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontSize: value } })} />
+      <BuilderNumberInput label="Opacity" value={style.opacity ?? 1} min={0} max={1} step={0.01} disabled={disabled} onChange={(value) => onPatch({ style: { opacity: value } })} />
+      <BuilderNumberInput label={element.type === 'icon' ? 'Icon size' : 'Font size'} value={style.fontSize ?? 13} min={invoiceManifestElement ? 4 : 8} max={32} step={invoiceManifestElement ? 0.1 : 1} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontSize: value } })} />
       <BuilderSelect label="Font weight" value={String(style.fontWeight || 700)} options={[['400', 'Regular'], ['600', 'Semi bold'], ['700', 'Bold'], ['800', 'Extra bold']]} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontWeight: Number(value) } })} />
+      <BuilderNumberInput label="Line height" value={style.lineHeight ?? 1.16} min={0.85} max={2.4} step={0.01} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { lineHeight: value } })} />
       {element.type === 'table' ? (
         <>
           <ColorControl label="Header background" value={style.headerBackgroundColor || style.accentColor || '#0f2a52'} disabled={disabled} onChange={(value) => onPatch({ style: { headerBackgroundColor: value, accentColor: value } })} />
@@ -4861,7 +5053,8 @@ function ElementStyleControls({ element, disabled, onPatch }) {
       ) : null}
       {element.type === 'divider' ? (
         <>
-          <BuilderNumberInput label="Thickness" value={style.dividerThickness ?? 2} min={1} max={8} disabled={disabled} onChange={(value) => onPatch({ style: { dividerThickness: value } })} />
+          <BuilderSelect label="Orientation" value={style.orientation || (Number(element.height || 0) > Number(element.width || 0) ? 'vertical' : 'horizontal')} options={[['horizontal', 'Horizontal'], ['vertical', 'Vertical']]} disabled={disabled} onChange={(value) => onPatch({ style: { orientation: value, rotate: value === 'vertical' ? 90 : 0 } })} />
+          <BuilderNumberInput label="Thickness" value={style.dividerThickness ?? 2} min={invoiceManifestElement ? 0.1 : 1} max={8} step={invoiceManifestElement ? 0.1 : 1} disabled={disabled} onChange={(value) => onPatch({ style: { dividerThickness: value } })} />
           <BuilderSelect label="Divider style" value={style.dividerStyle || 'solid'} options={[['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]} disabled={disabled} onChange={(value) => onPatch({ style: { dividerStyle: value } })} />
         </>
       ) : null}
@@ -5763,12 +5956,12 @@ function StructuredTemplateEditor({
                 <ShieldCheck className="h-4 w-4" />
                 Template Variables
               </button>
-              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onPreview(template, designMode ? null : draft)}>
-                {busyKey === `preview-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onPreview(template, designMode ? null : draft, { intent: 'structured' })}>
+                {String(busyKey || '').startsWith(`preview-${template.key}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
                 Preview PDF
               </button>
-              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onDownload(template, designMode ? null : draft)}>
-                {busyKey === `download-${template.key}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onDownload(template, designMode ? null : draft, { intent: 'structured' })}>
+                {String(busyKey || '').startsWith(`download-${template.key}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 Download Sample PDF
               </button>
               <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || busy} onClick={() => onReset(template)}>
@@ -5881,9 +6074,18 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     setDraft(JSON.parse(JSON.stringify(template.config || {})));
   }
 
-  async function fetchTemplatePdf(template, config = null) {
+  function previewIntentForConfig(config = null, fallback = 'saved') {
+    if (fallback) return fallback;
+    if (config?.design?.previewDraft === true) return 'draft';
+    if (config?.design?.enabled === false) return 'default';
+    return 'saved';
+  }
+
+  async function fetchTemplatePdf(template, config = null, options = {}) {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const body = config ? JSON.stringify({ config }) : undefined;
+    const intent = previewIntentForConfig(config, options.intent || '');
+    // Keep the preview intent explicit so draft and default previews never share the same client request path.
+    const body = config ? JSON.stringify({ config, previewIntent: intent }) : undefined;
     if (config) headers['Content-Type'] = 'application/json';
     const response = await fetch(`${apiBase}/pdf-templates/${template.key}/preview`, {
       method: 'POST',
@@ -5895,10 +6097,11 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     return new Blob([blob], { type: 'application/pdf' });
   }
 
-  async function previewTemplate(template, config = null) {
-    setBusyKey(`preview-${template.key}`);
+  async function previewTemplate(template, config = null, options = {}) {
+    const intent = previewIntentForConfig(config, options.intent || '');
+    setBusyKey(`preview-${template.key}-${intent}`);
     try {
-      const blob = await fetchTemplatePdf(template, config);
+      const blob = await fetchTemplatePdf(template, config, { intent });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank', 'noopener,noreferrer');
       setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -5909,10 +6112,11 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     }
   }
 
-  async function downloadTemplate(template, config = null) {
-    setBusyKey(`download-${template.key}`);
+  async function downloadTemplate(template, config = null, options = {}) {
+    const intent = previewIntentForConfig(config, options.intent || '');
+    setBusyKey(`download-${template.key}-${intent}`);
     try {
-      const blob = await fetchTemplatePdf(template, config);
+      const blob = await fetchTemplatePdf(template, config, { intent });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;

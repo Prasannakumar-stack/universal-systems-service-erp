@@ -153,6 +153,43 @@ function sevenDayRevenueRows(aggregates, windowStart) {
   });
 }
 
+function paymentAmountExpression() {
+  return { $ifNull: ['$paidAmount', '$amount'] };
+}
+
+function activePaymentMatch(extra = {}) {
+  return {
+    status: { $ne: 'Reversed' },
+    $or: [{ reversedAt: null }, { reversedAt: { $exists: false } }],
+    ...extra
+  };
+}
+
+function buildDailyRevenueRows(windowStart, windowEnd, billedAggregates = [], collectedAggregates = []) {
+  const billedByKey = new Map(billedAggregates.map((item) => [item._id, Number(item.billed || item.revenue || 0)]));
+  const collectedByKey = new Map(collectedAggregates.map((item) => [item._id, Number(item.collected || item.revenue || 0)]));
+  const cursor = new Date(windowStart);
+  const rows = [];
+
+  while (cursor < windowEnd) {
+    const key = cursor.toISOString().slice(0, 10);
+    const billed = billedByKey.get(key) || 0;
+    const collected = collectedByKey.get(key) || 0;
+    rows.push({
+      key,
+      date: key,
+      label: cursor.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+      billed,
+      collected,
+      revenue: collected,
+      balance: billed - collected
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return rows;
+}
+
 export async function getAdminDashboardMetrics(user) {
   const today = startOfToday();
   const tomorrow = startOfTomorrow(today);
@@ -181,8 +218,9 @@ export async function getAdminDashboardMetrics(user) {
     amcRenewalsDue,
     amcVisitsThisWeek,
     expiredAmcContracts,
-    monthlyRevenueRows,
-    revenueRows,
+    monthlyCollectionRows,
+    billedRevenueRows,
+    collectedRevenueRows,
     recentBookings,
     repairQueue,
     pendingPaymentsList,
@@ -209,12 +247,17 @@ export async function getAdminDashboardMetrics(user) {
     AMCContract.countDocuments({ 'visits.scheduledDate': { $gte: today, $lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) }, 'visits.status': 'Upcoming' }),
     AMCContract.countDocuments({ status: 'Active', endDate: { $lt: today } }),
     Payment.aggregate([
-      { $match: { createdAt: { $gte: monthStart, $lt: nextMonth } } },
-      { $group: { _id: null, revenue: { $sum: { $ifNull: ['$paidAmount', '$amount'] } } } }
+      { $match: activePaymentMatch({ createdAt: { $gte: monthStart, $lt: nextMonth } }) },
+      { $group: { _id: null, revenue: { $sum: paymentAmountExpression() } } }
+    ]),
+    Invoice.aggregate([
+      { $match: { createdAt: { $gte: monthStart, $lt: tomorrow } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, billed: { $sum: { $ifNull: ['$total', '$totalAmount'] } } } },
+      { $sort: { _id: 1 } }
     ]),
     Payment.aggregate([
-      { $match: { createdAt: { $gte: sevenDayStart, $lt: tomorrow } } },
-      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, revenue: { $sum: { $ifNull: ['$paidAmount', '$amount'] } } } },
+      { $match: activePaymentMatch({ createdAt: { $gte: monthStart, $lt: tomorrow } }) },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, collected: { $sum: paymentAmountExpression() } } },
       { $sort: { _id: 1 } }
     ]),
     Booking.find()
@@ -270,7 +313,7 @@ export async function getAdminDashboardMetrics(user) {
       pendingPayments,
       lowStockItems: lowStockItems + outOfStockItems,
       activeAmcContracts,
-      monthlyRevenue: Number(monthlyRevenueRows[0]?.revenue || 0)
+      monthlyRevenue: Number(monthlyCollectionRows[0]?.revenue || 0)
     },
     alerts: {
       outOfStockItems,
@@ -300,6 +343,6 @@ export async function getAdminDashboardMetrics(user) {
     pendingPaymentsList: pendingPaymentsList.map(serializeInvoice),
     technicianWorkload,
     activityFeed,
-    revenueOverview: sevenDayRevenueRows(revenueRows, sevenDayStart)
+    revenueOverview: buildDailyRevenueRows(monthStart, tomorrow, billedRevenueRows, collectedRevenueRows)
   };
 }

@@ -19,7 +19,7 @@ async function networkOnlyNavigation(request) {
     return await fetch(new Request(request, { cache: 'no-store' }));
   } catch {
     return new Response(
-      '<!doctype html><title>Universal Systems App</title><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#061426;color:#eaf6ff;font-family:system-ui,sans-serif;display:grid;min-height:100vh;place-items:center;text-align:center"><main><h1>Universal Systems App</h1><p>Please reconnect to load the latest staff workspace.</p></main></body>',
+      '<!doctype html><title>Universal Systems ERP</title><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#061426;color:#eaf6ff;font-family:system-ui,sans-serif;display:grid;min-height:100vh;place-items:center;text-align:center"><main><h1>Universal Systems ERP</h1><p>Please reconnect to load the latest staff workspace.</p></main></body>',
       { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 503 }
     );
   }

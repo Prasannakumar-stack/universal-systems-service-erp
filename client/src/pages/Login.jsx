@@ -10,7 +10,7 @@ function BrandLogo({ appMode = false }) {
   return (
     <span className={`login-brand-lockup ${appMode ? 'login-brand-lockup-wordmark' : ''}`} aria-hidden="true">
       {appMode ? (
-        <img src="/logo-full.png" alt="" className="login-brand-wordmark" draggable="false" />
+        <img src="/logo-full.png" alt="" className="login-brand-wordmark" draggable="false" decoding="async" />
       ) : (
         <>
           <svg className="login-brand-icon" viewBox="0 0 92 92">
@@ -35,7 +35,7 @@ function BrandLogo({ appMode = false }) {
 function LoginSideImage({ side, src }) {
   return (
     <div className={`login-side-image login-side-image-${side}`} aria-hidden="true">
-      <img src={src} alt="" aria-hidden="true" draggable="false" />
+      <img src={src} alt="" aria-hidden="true" draggable="false" decoding="async" />
     </div>
   );
 }
@@ -48,7 +48,7 @@ export default function Login({ role, appMode = false }) {
   const { login, loading: authLoading, user } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
-  const title = appMode ? 'Universal Systems App' : 'Welcome Back';
+  const title = appMode ? 'Universal Systems ERP' : 'Welcome Back';
   const subtitle = appMode ? 'Secure staff workspace' : 'Secure access to your workspace';
   const loginRoleLabel = appMode ? 'Staff app' : role === 'admin' ? 'Admin' : 'Technician';
 
