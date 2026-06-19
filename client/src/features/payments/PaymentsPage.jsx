@@ -149,6 +149,7 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { ArrowUpRight } from 'lucide-react';
 import { can, normalizeRole } from '../../utils/roles.js';
 
 function invoiceDocumentKind(invoice) {
@@ -318,6 +319,7 @@ export function PaymentsPage({ role = 'admin' }) {
   const selectedDocumentLabel = invoiceDocumentLabel(selectedInvoice);
   const selectedIsCreditNote = selectedDocumentKind === 'credit_note';
   const selectedWorkOrderId = recordId(selectedInvoice?.workOrderId);
+  const paymentsReturnPath = `${location.pathname}${location.search}`;
   const selectedParentInvoiceId = recordId(selectedInvoice?.parentInvoiceId || selectedInvoice?.adjustmentForInvoiceId);
   const selectedParentInvoiceLabel = selectedParentInvoiceId
     ? getInvoiceDisplayId(selectedInvoice?.parentInvoiceId || selectedInvoice?.adjustmentForInvoiceId) || selectedParentInvoiceId
@@ -427,7 +429,14 @@ export function PaymentsPage({ role = 'admin' }) {
 
   function invoiceSourceCell(invoice) {
     if (recordId(invoice?.workOrderId)) {
-      return <Link className="billing-link" to={`${base}/work-orders/${recordId(invoice.workOrderId)}`}>{getWorkOrderDisplayId(invoice.workOrderId)}</Link>;
+      return (
+        <WorkOrderSourceLink
+          to={`${base}/work-orders/${recordId(invoice.workOrderId)}`}
+          label={getWorkOrderDisplayId(invoice.workOrderId)}
+          returnPath={paymentsReturnPath}
+          compact
+        />
+      );
     }
     if (recordId(invoice?.amcContractId)) {
       return (
@@ -437,7 +446,7 @@ export function PaymentsPage({ role = 'admin' }) {
         </Link>
       );
     }
-    return <span className="muted">-</span>;
+      return <span className="muted">{'\u2014'}</span>;
   }
 
   async function openLinkedWorkOrder() {
@@ -451,7 +460,7 @@ export function PaymentsPage({ role = 'admin' }) {
     }
     try {
       await request(`/work-orders/${selectedWorkOrderId}`);
-      navigate(`${base}/work-orders/${selectedWorkOrderId}`);
+      navigate(`${base}/work-orders/${selectedWorkOrderId}`, { state: { from: paymentsReturnPath } });
     } catch {
       push('Linked work order not found.', 'error');
     }
@@ -567,15 +576,13 @@ export function PaymentsPage({ role = 'admin' }) {
                     label="Linked Source"
                     value={invoiceSourceLabel(selectedInvoice)}
                     valueNode={selectedWorkOrderId ? (
-                      <button
-                        type="button"
-                        className={`billing-inline-link mt-1 ${canViewWorkOrders ? '' : 'billing-inline-link-disabled'}`.trim()}
+                      <WorkOrderSourceLink
+                        as="button"
+                        label={invoiceSourceLabel(selectedInvoice)}
                         onClick={openLinkedWorkOrder}
                         disabled={!canViewWorkOrders}
-                        title={canViewWorkOrders ? 'View full service process' : 'You do not have permission to view Work Orders'}
-                      >
-                        {invoiceSourceLabel(selectedInvoice)}
-                      </button>
+                        helper
+                      />
                     ) : null}
                   />
                   <BillingInfo label="Parent Invoice / Work Order" value={selectedParentInvoiceLabel} />
@@ -698,6 +705,39 @@ export function PaymentsPage({ role = 'admin' }) {
         />
       ) : null}
     </div>
+  );
+}
+
+function WorkOrderSourceLink({ as = 'link', to = '', label, onClick, disabled = false, returnPath = '', helper = false, compact = false }) {
+  const className = `billing-workorder-source-link ${compact ? 'billing-workorder-source-link-compact' : ''} ${disabled ? 'billing-workorder-source-link-disabled' : ''}`.trim();
+  const content = (
+    <>
+      <span className="billing-workorder-source-main">
+        <span className="billing-workorder-source-id">{label}</span>
+        <ArrowUpRight className="billing-workorder-source-icon" aria-hidden="true" />
+      </span>
+      {helper ? <span className="billing-workorder-source-helper">Open Work Order {'\u2192'}</span> : null}
+    </>
+  );
+
+  if (as === 'button') {
+    return (
+      <button
+        type="button"
+        className={className}
+        onClick={onClick}
+        disabled={disabled}
+        title={disabled ? 'You do not have permission to view Work Orders' : 'Open linked work order'}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <Link className={className} to={to} state={returnPath ? { from: returnPath } : undefined} title="Open linked work order">
+      {content}
+    </Link>
   );
 }
 

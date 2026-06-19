@@ -219,7 +219,7 @@ const builderRailItems = [
   { id: 'variables', label: 'Variables', icon: ShieldCheck },
   { id: 'pages', label: 'Pages', icon: FilePlus2 },
   { id: 'layers', label: 'Layers', icon: Layers },
-  { id: 'history', label: 'History', icon: History }
+  { id: 'history', label: 'Saved Versions', icon: History }
 ];
 
 const builderInspectorTabs = [
@@ -325,6 +325,10 @@ function stableJson(value) {
 
 function cloneValue(value) {
   return JSON.parse(JSON.stringify(value || {}));
+}
+
+function editorConfigForTemplate(template = {}) {
+  return cloneValue(template.draftConfig || template.config || {});
 }
 
 function designStateFromConfig(config = {}) {
@@ -1682,6 +1686,206 @@ function styleForBuilderElement(element = {}, selected = false) {
   };
 }
 
+const draftPreviewRemoveSelectors = [
+  '.pdf-element-grip',
+  '.pdf-resize-handle',
+  '.pdf-element-hit-area',
+  '.pdf-element-lock',
+  '.pdf-page-break-guide',
+  '.pdf-canvas-reference',
+  '.pdf-canvas-reference-shield',
+  '.pdf-canvas-reference-empty',
+  '.pdf-background-hit-target',
+  '.pdf-canvas-empty',
+  '.pdf-section-lock',
+  '.pdf-section-overflow-warning'
+];
+
+const draftPreviewStateClasses = [
+  'is-selected',
+  'is-locked',
+  'is-background-passthrough',
+  'is-tiny-hit-target',
+  'has-reference-layer',
+  'has-grid',
+  'show-layout-guides'
+];
+
+const draftPreviewHelperText = new Set([
+  'Divider',
+  'Spacer',
+  'Add details here',
+  'Image / Logo',
+  'Text block',
+  'New text block',
+  'Card title',
+  'Card',
+  'Table',
+  'Icon',
+  'Click Start from Current Template to load the editable PDF canvas.'
+]);
+
+const draftPreviewStyleProperties = [
+  'position',
+  'inset',
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'z-index',
+  'display',
+  'grid-template-columns',
+  'align-items',
+  'justify-content',
+  'place-items',
+  'flex-direction',
+  'flex-wrap',
+  'flex',
+  'gap',
+  'width',
+  'height',
+  'min-width',
+  'min-height',
+  'max-width',
+  'max-height',
+  'margin',
+  'padding',
+  'box-sizing',
+  'overflow',
+  'opacity',
+  'transform',
+  'transform-origin',
+  'color',
+  'background',
+  'background-color',
+  'border',
+  'border-top',
+  'border-right',
+  'border-bottom',
+  'border-left',
+  'border-color',
+  'border-style',
+  'border-width',
+  'border-radius',
+  'box-shadow',
+  'font',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'font-style',
+  'line-height',
+  'letter-spacing',
+  'text-align',
+  'text-transform',
+  'text-decoration',
+  'white-space',
+  'word-break',
+  'overflow-wrap',
+  'object-fit',
+  'object-position',
+  'vertical-align',
+  'list-style',
+  'fill',
+  'stroke',
+  'stroke-width'
+];
+
+function clearDraftHelperText(clone) {
+  clone.querySelectorAll('*').forEach((node) => {
+    if (node.children.length) return;
+    const text = String(node.textContent || '').trim();
+    if (draftPreviewHelperText.has(text)) node.textContent = '';
+  });
+}
+
+function inlineDraftPreviewStyles(root) {
+  const nodes = [root, ...root.querySelectorAll('*')];
+  nodes.forEach((node) => {
+    const computed = window.getComputedStyle(node);
+    draftPreviewStyleProperties.forEach((property) => {
+      const value = computed.getPropertyValue(property);
+      if (value) node.style.setProperty(property, value, computed.getPropertyPriority(property));
+    });
+    node.style.setProperty('cursor', 'default');
+    node.style.setProperty('user-select', 'none');
+  });
+}
+
+function applyDraftElementPrintOverrides(clone, design = {}) {
+  const byId = new Map([
+    ...(Array.isArray(design.sections) ? design.sections : []),
+    ...(Array.isArray(design.elements) ? design.elements : [])
+  ].map((item) => [String(item.id || ''), item]).filter(([id]) => id));
+  byId.forEach((item, id) => {
+    const node = clone.querySelector(`[data-pdf-layer-id="${pdfLayerSelectorValue(id)}"]`);
+    if (!node) return;
+    const style = item.style || {};
+    node.style.outline = 'none';
+    node.style.boxShadow = style.shadow ? node.style.boxShadow : 'none';
+    node.style.borderColor = item.type === 'divider' ? 'transparent' : (style.borderColor || node.style.borderColor);
+    if (item.type === 'image') {
+      const img = node.querySelector('img');
+      if (img) {
+        const content = item.content || {};
+        img.style.objectFit = ['contain', 'cover', 'fill'].includes(content.objectFit) ? content.objectFit : 'contain';
+        img.style.objectPosition = content.objectPosition || 'center center';
+      }
+    }
+  });
+}
+
+function buildDraftCanvasSnapshot(paper, design = {}) {
+  const meta = {
+    width: builderCanvas.width,
+    height: builderCanvas.height,
+    templateKey: 'invoice',
+    elementCount: (Array.isArray(design.elements) ? design.elements.length : 0) + (Array.isArray(design.sections) ? design.sections.length : 0)
+  };
+  if (!paper || typeof document === 'undefined') {
+    return { draftCanvasHtml: '', draftMeta: meta };
+  }
+  const clone = paper.cloneNode(true);
+  draftPreviewRemoveSelectors.forEach((selector) => clone.querySelectorAll(selector).forEach((node) => node.remove()));
+  clone.classList.remove(...draftPreviewStateClasses);
+  clone.querySelectorAll('*').forEach((node) => {
+    node.classList?.remove?.(...draftPreviewStateClasses);
+    node.removeAttribute('role');
+    node.removeAttribute('tabindex');
+    node.removeAttribute('aria-disabled');
+  });
+  clone.style.width = `${builderCanvas.width}px`;
+  clone.style.height = `${builderCanvas.height}px`;
+  clone.style.transform = 'none';
+  clone.style.margin = '0';
+  clone.style.overflow = 'hidden';
+  applyDraftElementPrintOverrides(clone, design);
+  clearDraftHelperText(clone);
+
+  const sandbox = document.createElement('div');
+  sandbox.setAttribute('aria-hidden', 'true');
+  sandbox.style.position = 'fixed';
+  sandbox.style.left = '-10000px';
+  sandbox.style.top = '0';
+  sandbox.style.width = `${builderCanvas.width}px`;
+  sandbox.style.height = `${builderCanvas.height}px`;
+  sandbox.style.opacity = '0';
+  sandbox.style.pointerEvents = 'none';
+  sandbox.appendChild(clone);
+  document.body.appendChild(sandbox);
+  try {
+    inlineDraftPreviewStyles(clone);
+    clone.style.width = `${builderCanvas.width}px`;
+    clone.style.height = `${builderCanvas.height}px`;
+    clone.style.transform = 'none';
+    clone.style.margin = '0';
+    clone.style.overflow = 'hidden';
+    applyDraftElementPrintOverrides(clone, design);
+    return { draftCanvasHtml: clone.outerHTML, draftMeta: meta };
+  } finally {
+    sandbox.remove();
+  }
+}
+
 function TemplateStatusPill({ status = 'Active' }) {
   return <span className="inline-flex rounded-full border border-emerald-400/25 bg-emerald-500/15 px-2.5 py-1 text-xs font-black text-emerald-100">{status}</span>;
 }
@@ -1764,21 +1968,43 @@ function TemplateVariablesModal({ onClose }) {
   );
 }
 
+function versionActionLabel(action = '') {
+  switch (action) {
+    case 'before_publish_backup':
+      return 'Before Publish Backup';
+    case 'draft_saved':
+      return 'Draft Saved';
+    case 'restore_as_draft':
+      return 'Restored as Draft';
+    case 'restored':
+      return 'Restored';
+    case 'reset':
+      return 'Reset';
+    case 'updated':
+      return 'Updated';
+    default:
+      return action ? action.replace(/_/g, ' ') : 'Saved Version';
+  }
+}
+
 function VersionHistoryPanel({ versions, restoring, onRestore }) {
   return (
     <section className="surface admin-control-card pdf-version-history-panel p-4">
       <div className="flex items-center gap-3">
         <div className="admin-control-icon"><History className="h-5 w-5" /></div>
         <div>
-          <h3 className="font-black">Version History</h3>
-          <p className="mt-1 text-xs muted">Recent saved template versions.</p>
+          <h3 className="font-black">Saved Versions</h3>
+          <p className="mt-1 text-xs muted">Restore old designs as editable drafts.</p>
         </div>
       </div>
       <div className="mt-4 grid gap-2">
         {versions.length ? versions.slice(0, 4).map((version) => (
           <div key={version.id || version.version} className="rounded-card border border-white/10 bg-white/[0.035] p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="font-black text-slate-100">v{version.version}</p>
+              <div>
+                <p className="font-black text-slate-100">v{version.version}</p>
+                <p className="text-[11px] font-black uppercase tracking-wide text-sky-200/80">{versionActionLabel(version.action)}</p>
+              </div>
               <button type="button" className="btn btn-secondary py-1.5 text-xs" disabled={restoring} onClick={() => onRestore(version)}>
                 <RotateCcw className="h-3.5 w-3.5" />
                 Restore
@@ -2316,11 +2542,13 @@ function DesignModeWorkspace({
 
   function previewDraftPdf() {
     // Draft preview intentionally sets design.previewDraft without publishing the design.
-    onPreview(template, previewConfig, { intent: 'draft' });
+    const snapshot = buildDraftCanvasSnapshot(paperRef.current, canvasDesign);
+    onPreview(template, previewConfig, { intent: 'draft', ...snapshot });
   }
 
   function downloadDraftPdf() {
-    onDownload(template, previewConfig, { intent: 'draft' });
+    const snapshot = buildDraftCanvasSnapshot(paperRef.current, canvasDesign);
+    onDownload(template, previewConfig, { intent: 'draft', ...snapshot });
   }
 
   function refreshFloatingToolbarPosition() {
@@ -3495,16 +3723,20 @@ function DesignModeWorkspace({
     if (activeRail === 'history') {
       return (
         <div className="pdf-builder-panel-body">
+          <div className="pdf-builder-note">
+            <p className="font-black text-slate-100">Published Design</p>
+            <p className="mt-1 text-xs muted">Currently live for future invoice PDFs. Saved versions restore as draft until you publish again.</p>
+          </div>
           <div className="grid gap-2">
             {versions.length ? versions.slice(0, 8).map((version) => (
               <div key={version.id || version.version} className="pdf-builder-history-row">
                 <div className="min-w-0">
                   <p>v{version.version}</p>
-                  <span>{version.editedAt ? formatDate(version.editedAt) : 'No date'} - {version.editedBy?.name || version.editedBy?.username || 'System'}</span>
+                  <span>{versionActionLabel(version.action)} - {version.editedAt ? formatDate(version.editedAt) : 'No date'} - {version.editedBy?.name || version.editedBy?.username || 'System'}</span>
                 </div>
                 <button type="button" className="btn btn-secondary py-1.5 text-xs" disabled={restoring} onClick={() => onRestore(version)}>
                   <RotateCcw className="h-3.5 w-3.5" />
-                  Restore
+                  Restore Draft
                 </button>
               </div>
             )) : <p className="pdf-builder-empty">Saved versions will appear after the first edit.</p>}
@@ -3780,7 +4012,7 @@ function DesignModeWorkspace({
           <button type="button" className="icon-button" disabled={!redoStack.length || disabled} onClick={redoDesign} title="Redo">
             <Redo2 className="h-4 w-4" />
           </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={previewDefaultPdf}>
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={previewDefaultPdf} title="Structured default comparison preview">
             {defaultPreviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
             Preview Default PDF
           </button>
@@ -3828,7 +4060,7 @@ function DesignModeWorkspace({
                 </button>
                 <button type="button" className={activeRail === 'history' ? 'is-active' : ''} onClick={() => { toggleRailDrawer('history'); setToolbarMoreOpen(false); }}>
                   <History className="h-4 w-4" />
-                  History
+                  Saved Versions
                 </button>
                 <span className="pdf-more-menu-divider" />
                 <button type="button" onClick={() => { setFullScreenEditor((value) => !value); setToolbarMoreOpen(false); }}>
@@ -4040,7 +4272,7 @@ function DesignModeWorkspace({
                     onResizeStart={(event, handle) => beginElementInteraction(event, element, 'resize', handle)}
                   />
                 )) : null}
-                {selectedLayer && selectedFrame ? (
+                {selectedLayer && selectedFrame && !publishConfirmOpen ? (
                   <FloatingLayerToolbar
                     frame={selectedFrame}
                     layer={selectedLayer}
@@ -4368,7 +4600,15 @@ function BuilderCanvasElement({
       ) : element.type === 'image' ? (
         <div className={`pdf-canvas-image ${imagePreviewSrc ? 'has-image' : ''} is-${imageMode}`}>
           {imagePreviewSrc ? (
-            <img src={imagePreviewSrc} alt={content.label || element.name || 'PDF image'} draggable="false" />
+            <img
+              src={imagePreviewSrc}
+              alt={content.label || element.name || 'PDF image'}
+              draggable="false"
+              style={{
+                objectFit: ['contain', 'cover', 'fill'].includes(content.objectFit) ? content.objectFit : 'contain',
+                objectPosition: content.objectPosition || 'center center'
+              }}
+            />
           ) : (
             <>
               <ImageIcon className="h-5 w-5" />
@@ -4910,7 +5150,7 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
                 onChange={(value) => onPatch({ content: { emoji: value } })}
               />
               <BuilderTextInput label="Custom emoji" value={content.emoji || '✅'} disabled={disabled} onChange={(value) => onPatch({ content: { emoji: value } })} onCursor={remember('emoji', content.emoji || '✅')} />
-              <BuilderHint tone="info">Draft PDFs use a safe monochrome/vector fallback when color emoji glyphs are not available in PDFKit.</BuilderHint>
+              <BuilderHint tone="info">Draft preview PDFs render these emoji through Chromium; the browser may use a monochrome fallback if color emoji glyphs are unavailable.</BuilderHint>
             </>
           ) : null}
           <BuilderSelect
@@ -5816,6 +6056,8 @@ function StructuredTemplateEditor({
   busyKey,
   token,
   onSave,
+  onSaveDraft,
+  onPublishDesign: onPublishDesignCommit,
   onCancel,
   onPreview,
   onDownload,
@@ -5839,7 +6081,8 @@ function StructuredTemplateEditor({
   const busy = Boolean(busyKey) || saving;
   const designMode = uiMode === 'design';
   const draftDesignSignature = stableJson(draft.design || {});
-  const designDraftDirty = stableJson(designDraft) !== draftDesignSignature;
+  const savedDesignState = useMemo(() => designStateFromConfig(draft), [draftDesignSignature]);
+  const designDraftDirty = stableJson(normalizeDesignState(designDraft)) !== stableJson(savedDesignState);
 
   useEffect(() => () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
@@ -5852,8 +6095,8 @@ function StructuredTemplateEditor({
   }, [template.key]);
 
   useEffect(() => {
-    if (!designMode && !designDraftDirty) setDesignDraft(designStateFromConfig(draft));
-  }, [draftDesignSignature, designMode, designDraftDirty, draft]);
+    setDesignDraft(savedDesignState);
+  }, [savedDesignState]);
 
   useEffect(() => {
     onDesignDirtyChange?.(designDraftDirty);
@@ -5899,12 +6142,20 @@ function StructuredTemplateEditor({
   function submit(event) {
     event.preventDefault();
     const designForSave = designStateWithTemplateSections(designDraft, sections, draft, template);
-    onSave(event, designMode || designDraftDirty ? mergeDesignStateForSave(draft, designForSave) : draft);
+    if (designMode || designDraftDirty) {
+      const draftConfig = mergeDesignStateForSave(draft, designForSave);
+      setDesignDraft(designStateFromConfig(draftConfig));
+      (onSaveDraft || onSave)(event, draftConfig);
+      return;
+    }
+    onSave(event, draft);
   }
 
   function publishDesign(designForPublish = designDraft) {
     const nextDesign = designStateWithTemplateSections(designForPublish, sections, draft, template);
-    onSave(null, mergeDesignStateForSave(draft, nextDesign, { publish: true }));
+    const publishConfig = mergeDesignStateForSave(draft, nextDesign, { publish: true });
+    setDesignDraft(designStateFromConfig(publishConfig));
+    onPublishDesignCommit?.(publishConfig);
   }
 
   function switchToStructuredMode() {
@@ -5989,7 +6240,7 @@ function StructuredTemplateEditor({
           busyKey={busyKey}
           versions={versions}
           restoring={restoring}
-          onRestore={onRestore}
+          onRestore={(version) => onRestore(version, { asDraft: true })}
           hasUnsavedDesignChanges={designDraftDirty}
           previewUrl={previewUrl}
           previewLoading={previewLoading}
@@ -6050,7 +6301,8 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
   const { data, loading, error, reload } = useResource(() => request('/pdf-templates'), [request]);
   const templates = data?.templates || [];
   const activeTemplate = templates.find((template) => template.key === editingKey) || null;
-  const editorDirty = Boolean(activeTemplate && stableJson(draft) !== stableJson(activeTemplate.config || {})) || designEditorDirty;
+  const activeEditorConfig = activeTemplate ? editorConfigForTemplate(activeTemplate) : {};
+  const editorDirty = Boolean(activeTemplate && stableJson(draft) !== stableJson(activeEditorConfig)) || designEditorDirty;
   const grouped = useMemo(() => ({
     service: templates.filter((template) => template.category === 'service'),
     amc: templates.filter((template) => template.category === 'amc')
@@ -6071,7 +6323,7 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     }
     setEditingKey(template.key);
     setDesignEditorDirty(false);
-    setDraft(JSON.parse(JSON.stringify(template.config || {})));
+    setDraft(editorConfigForTemplate(template));
   }
 
   function previewIntentForConfig(config = null, fallback = 'saved') {
@@ -6085,15 +6337,40 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const intent = previewIntentForConfig(config, options.intent || '');
     // Keep the preview intent explicit so draft and default previews never share the same client request path.
-    const body = config ? JSON.stringify({ config, previewIntent: intent }) : undefined;
-    if (config) headers['Content-Type'] = 'application/json';
+    const payload = config || intent || options.draftCanvasHtml
+      ? {
+        ...(config ? { config } : {}),
+        previewIntent: intent
+      }
+      : null;
+    if (payload && intent === 'draft') {
+      payload.draftCanvasHtml = options.draftCanvasHtml || '';
+      payload.draftMeta = options.draftMeta || null;
+    }
+    const body = payload ? JSON.stringify(payload) : undefined;
+    if (body) headers['Content-Type'] = 'application/json';
     const response = await fetch(`${apiBase}/pdf-templates/${template.key}/preview`, {
       method: 'POST',
       headers,
       body
     });
+    if (!response.ok) {
+      let message = 'PDF preview failed';
+      const contentType = response.headers.get('content-type') || '';
+      try {
+        if (contentType.includes('application/json')) {
+          const errorPayload = await response.json();
+          message = errorPayload.message || errorPayload.error || message;
+        } else {
+          const errorText = await response.text();
+          if (errorText) message = errorText;
+        }
+      } catch {
+        // Keep the generic message if the server response body cannot be parsed.
+      }
+      throw new Error(message);
+    }
     const blob = await response.blob();
-    if (!response.ok) throw new Error('PDF preview failed');
     return new Blob([blob], { type: 'application/pdf' });
   }
 
@@ -6101,7 +6378,7 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     const intent = previewIntentForConfig(config, options.intent || '');
     setBusyKey(`preview-${template.key}-${intent}`);
     try {
-      const blob = await fetchTemplatePdf(template, config, { intent });
+      const blob = await fetchTemplatePdf(template, config, { ...options, intent });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank', 'noopener,noreferrer');
       setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -6116,7 +6393,7 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     const intent = previewIntentForConfig(config, options.intent || '');
     setBusyKey(`download-${template.key}-${intent}`);
     try {
-      const blob = await fetchTemplatePdf(template, config, { intent });
+      const blob = await fetchTemplatePdf(template, config, { ...options, intent });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -6139,7 +6416,13 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
       push('Only admin users can save PDF templates', 'error');
       return;
     }
-    const configToSave = configOverride || draft;
+    const configToSave = activeTemplate.key === 'invoice'
+      ? {
+        ...(configOverride || draft),
+        design: activeTemplate.config?.design || (configOverride || draft).design,
+        designDraft: activeTemplate.config?.designDraft || (configOverride || draft).designDraft
+      }
+      : (configOverride || draft);
     setSaving(true);
     try {
       const result = await request(`/pdf-templates/${activeTemplate.key}`, {
@@ -6149,7 +6432,58 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
       push(result.message || 'PDF template saved');
       await reload({ silent: true });
       setEditingKey(result.template?.key || activeTemplate.key);
-      setDraft(JSON.parse(JSON.stringify(result.template?.config || configToSave)));
+      setDraft(result.template ? editorConfigForTemplate(result.template) : cloneValue(configToSave));
+      setDesignEditorDirty(false);
+    } catch (err) {
+      push(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveDesignDraft(event, configOverride = null) {
+    event?.preventDefault?.();
+    if (!activeTemplate) return;
+    if (!canEdit) {
+      push('Only admin users can save PDF templates', 'error');
+      return;
+    }
+    const configToSave = configOverride || draft;
+    setSaving(true);
+    try {
+      const result = await request(`/pdf-templates/${activeTemplate.key}/design-draft`, {
+        method: 'POST',
+        body: JSON.stringify({ config: configToSave })
+      });
+      push(result.message || 'PDF design draft saved');
+      await reload({ silent: true });
+      setEditingKey(result.template?.key || activeTemplate.key);
+      setDraft(result.template ? editorConfigForTemplate(result.template) : cloneValue(configToSave));
+      setDesignEditorDirty(false);
+    } catch (err) {
+      push(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function publishDesign(configOverride = null) {
+    if (!activeTemplate) return;
+    if (!canEdit) {
+      push('Only admin users can publish PDF templates', 'error');
+      return;
+    }
+    const configToPublish = configOverride || draft;
+    setSaving(true);
+    try {
+      const result = await request(`/pdf-templates/${activeTemplate.key}/publish-design`, {
+        method: 'POST',
+        body: JSON.stringify({ config: configToPublish })
+      });
+      push(result.message || 'Invoice design published successfully.');
+      await reload({ silent: true });
+      setEditingKey(result.template?.key || activeTemplate.key);
+      setDraft(result.template ? editorConfigForTemplate(result.template) : cloneValue(configToPublish));
       setDesignEditorDirty(false);
     } catch (err) {
       push(err.message, 'error');
@@ -6168,7 +6502,7 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
       const result = await request(`/pdf-templates/${template.key}/reset`, { method: 'POST' });
       push(result.message || 'PDF template reset');
       await reload({ silent: true });
-      if (editingKey === template.key) setDraft(JSON.parse(JSON.stringify(result.template?.config || {})));
+      if (editingKey === template.key) setDraft(result.template ? editorConfigForTemplate(result.template) : {});
       if (editingKey === template.key) setDesignEditorDirty(false);
     } catch (err) {
       push(err.message, 'error');
@@ -6177,15 +6511,20 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     }
   }
 
-  async function restoreVersion(version) {
+  async function restoreVersion(candidate) {
     if (!activeTemplate || !canEdit) return;
+    const version = candidate?.version || candidate;
+    const restoreAsDraft = activeTemplate.key === 'invoice' && candidate?.asDraft === true;
     setRestoring(true);
     try {
       const versionId = version.id || version.version;
-      const result = await request(`/pdf-templates/${activeTemplate.key}/restore/${versionId}`, { method: 'POST' });
-      push(result.message || 'PDF template version restored');
+      const endpoint = restoreAsDraft
+        ? `/pdf-templates/${activeTemplate.key}/restore-draft/${versionId}`
+        : `/pdf-templates/${activeTemplate.key}/restore/${versionId}`;
+      const result = await request(endpoint, { method: 'POST' });
+      push(result.message || (restoreAsDraft ? 'Version restored as draft. Preview and publish to make it live.' : 'PDF template version restored'));
       await reload({ silent: true });
-      setDraft(JSON.parse(JSON.stringify(result.template?.config || {})));
+      setDraft(result.template ? editorConfigForTemplate(result.template) : {});
       setDesignEditorDirty(false);
     } catch (err) {
       push(err.message, 'error');
@@ -6209,6 +6548,8 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
           busyKey={busyKey}
           token={token}
           onSave={saveTemplate}
+          onSaveDraft={saveDesignDraft}
+          onPublishDesign={publishDesign}
           onCancel={() => {
             if (editorDirty && !window.confirm('Discard unsaved template changes?')) return;
             setDesignEditorDirty(false);
@@ -6219,7 +6560,7 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
           onReset={(template) => setResetCandidate(template)}
           versions={activeTemplate.versions || []}
           restoring={restoring}
-          onRestore={(version) => setRestoreCandidate(version)}
+          onRestore={(version, options = {}) => setRestoreCandidate({ version, ...options })}
           onShowVariables={() => setVariablesOpen(true)}
           onDesignDirtyChange={setDesignEditorDirty}
           onDesignModeChange={onDesignModeChange}
@@ -6240,9 +6581,11 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
         ) : null}
         {restoreCandidate ? (
           <ConfirmModal
-            title="Restore template version?"
-            message={`Restore version v${restoreCandidate.version}. Existing generated PDFs will not be changed.`}
-            confirmLabel="Restore Version"
+            title={restoreCandidate.asDraft ? 'Restore saved version as draft?' : 'Restore template version?'}
+            message={restoreCandidate.asDraft
+              ? `Restore version v${restoreCandidate.version.version} as a draft. The current published invoice design stays live until you publish again.`
+              : `Restore version v${restoreCandidate.version.version}. Existing generated PDFs will not be changed.`}
+            confirmLabel={restoreCandidate.asDraft ? 'Restore as Draft' : 'Restore Version'}
             onCancel={() => setRestoreCandidate(null)}
             onConfirm={async () => {
               const version = restoreCandidate;

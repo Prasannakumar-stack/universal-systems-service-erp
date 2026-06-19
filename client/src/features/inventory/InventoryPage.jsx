@@ -143,6 +143,7 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { createPortal } from 'react-dom';
 import { MoreHorizontal } from 'lucide-react';
 import { can } from '../../utils/roles.js';
 import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
@@ -150,6 +151,7 @@ import { AddStockChoiceModal, InventoryModuleTabs, PurchaseImportModal, Purchase
 import { StockMovementsPage } from './StockMovementsPage.jsx';
 
 const inventoryUnitTypes = ['Piece', 'Box', 'Meter', 'Pack'];
+const missingInventoryValue = '\u2014';
 
 export function InventoryPage({ role = 'admin' }) {
   const { request, user } = useAuth();
@@ -171,16 +173,18 @@ export function InventoryPage({ role = 'admin' }) {
   const [purchasePart, setPurchasePart] = useState(null);
   const [deletePart, setDeletePart] = useState(null);
   const [actionMenuId, setActionMenuId] = useState('');
+  const [actionMenuPosition, setActionMenuPosition] = useState(null);
   const actionMenuRef = useRef(null);
+  const actionTriggerRefs = useRef(new Map());
   const limit = 10;
   const isTechnician = role === 'technician';
   const requestedTab = useMemo(() => new URLSearchParams(location.search).get('tab') || '', [location.search]);
   const activeTab = useMemo(() => {
-    if (isTechnician) return 'parts';
+    if (isTechnician) return canViewStockMovements && requestedTab === 'stock-movements' ? 'stock-movements' : 'parts';
     if (location.pathname.includes('/stock-movements')) return 'stock-movements';
     if (['stock-movements', 'purchases', 'suppliers'].includes(requestedTab)) return requestedTab;
     return 'parts';
-  }, [isTechnician, location.pathname, requestedTab]);
+  }, [canViewStockMovements, isTechnician, location.pathname, requestedTab]);
   const debouncedSearch = useDebouncedValue(search);
   const query = useMemo(() => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
@@ -200,18 +204,68 @@ export function InventoryPage({ role = 'admin' }) {
     if (!actionMenuId) return undefined;
     function closeActionMenu(event) {
       if (actionMenuRef.current?.contains(event.target)) return;
+      if (actionTriggerRefs.current.get(actionMenuId)?.contains(event.target)) return;
       setActionMenuId('');
+      setActionMenuPosition(null);
     }
     function closeOnEscape(event) {
-      if (event.key === 'Escape') setActionMenuId('');
+      if (event.key === 'Escape') {
+        setActionMenuId('');
+        setActionMenuPosition(null);
+      }
+    }
+    function closeOnViewportChange() {
+      setActionMenuId('');
+      setActionMenuPosition(null);
     }
     document.addEventListener('mousedown', closeActionMenu);
     document.addEventListener('keydown', closeOnEscape);
+    window.addEventListener('scroll', closeOnViewportChange, true);
+    window.addEventListener('resize', closeOnViewportChange);
     return () => {
       document.removeEventListener('mousedown', closeActionMenu);
       document.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener('scroll', closeOnViewportChange, true);
+      window.removeEventListener('resize', closeOnViewportChange);
     };
   }, [actionMenuId]);
+
+  function setActionTriggerRef(partId, node) {
+    if (!node) {
+      actionTriggerRefs.current.delete(partId);
+      return;
+    }
+    actionTriggerRefs.current.set(partId, node);
+  }
+
+  function actionMenuCoords(partId) {
+    const trigger = actionTriggerRefs.current.get(partId);
+    if (!trigger || typeof window === 'undefined') return null;
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 216;
+    const estimatedMenuHeight = 196;
+    const gap = 10;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const fitsBelow = rect.bottom + gap + estimatedMenuHeight <= viewportHeight - 12;
+    return {
+      top: fitsBelow ? rect.bottom + gap : Math.max(12, rect.top - estimatedMenuHeight - gap),
+      left: Math.min(Math.max(12, rect.right - menuWidth), Math.max(12, viewportWidth - menuWidth - 12)),
+      width: menuWidth,
+      placement: fitsBelow ? 'bottom' : 'top'
+    };
+  }
+
+  function toggleActionMenu(partId) {
+    setActionMenuId((current) => {
+      if (current === partId) {
+        setActionMenuPosition(null);
+        return '';
+      }
+      setActionMenuPosition(actionMenuCoords(partId));
+      return partId;
+    });
+  }
 
   const parts = data?.parts || data?.data || [];
   const categories = useMemo(() => (data?.categories?.length ? data.categories : Array.from(new Set(parts.map((part) => part.category || 'General'))).sort()), [data?.categories, parts]);
@@ -245,7 +299,7 @@ export function InventoryPage({ role = 'admin' }) {
     { label: 'Out of Stock Items', value: totals.outOfStock, helper: 'Requires immediate attention', icon: AlertTriangle, tone: totals.outOfStock > 0 ? 'red' : 'green' },
     { label: 'Total Stock Value', value: wholeCurrency(totals.stockValue), helper: 'On-hand stock valuation', icon: CreditCard, tone: 'blue', nowrap: true },
     { label: 'Reserved Stock', value: totals.reserved, helper: 'Held for active service jobs', icon: ClipboardList, tone: 'blue' }
-  ];
+  ].filter((item) => !isTechnician || item.label !== 'Total Stock Value');
 
   async function savePart(partForm) {
     const editing = Boolean(partForm.id);
@@ -347,9 +401,9 @@ export function InventoryPage({ role = 'admin' }) {
       <section className="erp-page-header inventory-erp-header mb-5">
         <div className="relative z-[1] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">Stock Control</p>
-            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Inventory / Stock Management</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Track stock availability, reserved quantity, low stock, value, and movement history.</p>
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-[var(--brand)]">{isTechnician ? 'Parts Availability' : 'Stock Control'}</p>
+            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{isTechnician ? 'Products / Parts' : 'Inventory / Stock Management'}</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">{isTechnician ? 'Check part availability, reserved stock, and movement history for service work.' : 'Track stock availability, reserved quantity, low stock, value, and movement history.'}</p>
           </div>
           {canCreatePart && activeTab === 'parts' ? <button type="button" className="btn btn-primary h-10 px-4" onClick={() => setEditor({})}><Plus className="h-4 w-4" />Add Part</button> : null}
         </div>
@@ -386,7 +440,7 @@ export function InventoryPage({ role = 'admin' }) {
         <select className="input" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
           <option value="name">Sort: Name</option>
           <option value="stock">Sort: Stock Low to High</option>
-          <option value="value">Sort: Stock Value</option>
+          {!isTechnician ? <option value="value">Sort: Stock Value</option> : null}
         </select>
         <button
           type="button"
@@ -412,27 +466,28 @@ export function InventoryPage({ role = 'admin' }) {
         />
       ) : (
         <>
+        {isTechnician ? <p className="inventory-tech-action-note">Parts are view-only here. Request parts from the related Work Order.</p> : null}
         <p className="mb-3 text-xs font-semibold muted">Available = On Hand - Reserved. Reserved means stock assigned to active service jobs but not yet billed.</p>
         <div className="table-wrap inventory-products-table-wrap surface bg-[var(--surface)]">
-          <table className="data-table inventory-products-table">
+          <table className={`data-table inventory-products-table ${isTechnician ? 'is-technician-table' : ''}`}>
             <colgroup>
               <col className="inventory-col-part" />
               <col className="inventory-col-category" />
               <col className="inventory-col-brand-model" />
               <col className="inventory-col-stock" />
-              <col className="inventory-col-price" />
-              <col className="inventory-col-stock-value" />
+              {!isTechnician ? <col className="inventory-col-price" /> : null}
+              {!isTechnician ? <col className="inventory-col-stock-value" /> : null}
               <col className="inventory-col-status" />
               <col className="inventory-col-actions" />
             </colgroup>
-            <thead><tr><th>Item</th><th>Category</th><th>Brand / Model</th><th>Stock</th><th>Price</th><th>Stock Value</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Item</th><th>Category</th><th>Brand / Model</th><th>Stock</th>{!isTechnician ? <th>Price</th> : null}{!isTechnician ? <th>Stock Value</th> : null}<th>Status</th><th>{isTechnician ? 'Action' : 'Actions'}</th></tr></thead>
             <tbody className="divide-y divide-[var(--line)]">
               {filteredParts.map((part) => {
                 const partId = part.id || part._id;
                 const stockValue = Number(part.onHand || 0) * Number(part.costPrice || 0);
                 const reservedQuantity = Number(part.reserved || 0);
-                const brandLabel = part.brand || 'Ã¢â‚¬â€';
-                const deviceModelLabel = part.deviceModel || 'Ã¢â‚¬â€';
+                const availableQuantity = Number(part.available || 0);
+                const technicianCanViewMovements = isTechnician && canViewStockMovements;
                 return (
                   <tr key={partId}>
                     <td className="font-bold inventory-product-cell">
@@ -442,24 +497,24 @@ export function InventoryPage({ role = 'admin' }) {
                     <td><span className="inventory-category-badge" title={part.category || 'General'}>{part.category || 'General'}</span></td>
                     <td>
                       <div className="inventory-detail-stack">
-                        <span><b>Brand:</b> <em className={!part.brand ? 'inventory-not-specified' : ''}>{part.brand || '-'}</em></span>
-                        <span><b>Model:</b> <em className={!part.deviceModel ? 'inventory-not-specified' : ''}>{part.deviceModel || '-'}</em></span>
+                        <span><b>Brand:</b> <em className={!part.brand ? 'inventory-not-specified' : ''}>{part.brand || missingInventoryValue}</em></span>
+                        <span><b>Model:</b> <em className={!part.deviceModel ? 'inventory-not-specified' : ''}>{part.deviceModel || missingInventoryValue}</em></span>
                       </div>
                     </td>
                     <td>
                       <div className="inventory-detail-stack inventory-stock-stack">
                         <span><b>On Hand:</b> <strong>{part.onHand || 0}</strong></span>
                         <span><b>Reserved:</b> <strong>{part.reserved || 0}</strong></span>
-                        <span><b>Available:</b> <strong className="inventory-available-value">{part.available || 0}</strong></span>
+                        <span><b>Available:</b> <strong className="inventory-available-value">{availableQuantity}</strong></span>
                       </div>
                     </td>
-                    <td>
+                    {!isTechnician ? <td>
                       <div className="inventory-detail-stack inventory-price-stack">
                         <span><b>Sell:</b> <strong>{wholeCurrency(part.sellingPrice)}</strong></span>
                         <span><b>Cost:</b> <strong>{wholeCurrency(part.costPrice)}</strong></span>
                       </div>
-                    </td>
-                    <td className="inventory-stock-value-cell"><span>{wholeCurrency(stockValue)}</span></td>
+                    </td> : null}
+                    {!isTechnician ? <td className="inventory-stock-value-cell"><span>{wholeCurrency(stockValue)}</span></td> : null}
                     <td className="inventory-status-cell">
                       <div className="grid justify-items-center gap-1.5">
                         <InventoryStatusBadge part={part} />
@@ -467,26 +522,62 @@ export function InventoryPage({ role = 'admin' }) {
                       </div>
                     </td>
                     <td className="inventory-action-cell">
-                      {canEditStock || canViewStockMovements || canDeletePart ? <div className="inventory-action-menu-wrap" ref={actionMenuId === partId ? actionMenuRef : null}>
+                      {isTechnician ? (
+                        <div className="inventory-technician-actions">
+                          {availableQuantity > 0 ? (
+                            <span
+                              className="inventory-workorder-guidance-chip"
+                              title="Request this part from the related Work Order."
+                            >
+                              <PackagePlus className="h-4 w-4" />
+                              Use in WO
+                            </span>
+                          ) : null}
+                          {availableQuantity <= 0 ? (
+                            <span className="inventory-restock-note">
+                              <b>Out of stock</b>
+                              <small>Ask admin to restock</small>
+                            </span>
+                          ) : null}
+                          {technicianCanViewMovements ? (
+                            <Link className="btn btn-secondary inventory-request-part-button" to={`/app/tech/parts?tab=stock-movements&partId=${partId}`}>
+                              <ClipboardList className="h-4 w-4" />
+                              View Movements
+                            </Link>
+                          ) : null}
+                        </div>
+                      ) : canEditStock || canViewStockMovements || canDeletePart ? <div className="inventory-action-menu-wrap">
                         <button
                           type="button"
+                          ref={(node) => setActionTriggerRef(partId, node)}
                           className="inventory-row-menu-trigger"
-                          onClick={() => setActionMenuId((current) => (current === partId ? '' : partId))}
+                          onClick={() => toggleActionMenu(partId)}
                           aria-haspopup="menu"
                           aria-expanded={actionMenuId === partId}
                           aria-label={`Open actions for ${part.partName}`}
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
-                        {actionMenuId === partId ? (
-                          <div className="inventory-row-action-menu" role="menu">
-                            {canEditStock ? <button type="button" role="menuitem" onClick={() => { setStockChoicePart(part); setActionMenuId(''); }}><PackagePlus className="h-4 w-4" />Add Stock</button> : null}
-                            {canEditStock ? <button type="button" role="menuitem" onClick={() => { setEditor(part); setActionMenuId(''); }}><Edit3 className="h-4 w-4" />Edit Part</button> : null}
-                            {canViewStockMovements ? <Link role="menuitem" to={`/app/admin/parts?tab=stock-movements&partId=${partId}`} onClick={() => setActionMenuId('')}><ClipboardList className="h-4 w-4" />View Movements</Link> : null}
-                            {canDeletePart ? <button type="button" role="menuitem" className="inventory-row-menu-danger" onClick={() => { setDeletePart(part); setActionMenuId(''); }}><Trash2 className="h-4 w-4" />Delete</button> : null}
-                          </div>
+                        {actionMenuId === partId && actionMenuPosition ? createPortal(
+                          <div
+                            ref={actionMenuRef}
+                            className={`inventory-row-action-menu is-portal is-${actionMenuPosition.placement}`}
+                            role="menu"
+                            style={{
+                              position: 'fixed',
+                              top: `${actionMenuPosition.top}px`,
+                              left: `${actionMenuPosition.left}px`,
+                              width: `${actionMenuPosition.width}px`
+                            }}
+                          >
+                            {canEditStock ? <button type="button" role="menuitem" onClick={() => { setStockChoicePart(part); setActionMenuId(''); setActionMenuPosition(null); }}><PackagePlus className="h-4 w-4" />Add Stock</button> : null}
+                            {canEditStock ? <button type="button" role="menuitem" onClick={() => { setEditor(part); setActionMenuId(''); setActionMenuPosition(null); }}><Edit3 className="h-4 w-4" />Edit Part</button> : null}
+                            {canViewStockMovements ? <Link role="menuitem" to={`/app/admin/parts?tab=stock-movements&partId=${partId}`} onClick={() => { setActionMenuId(''); setActionMenuPosition(null); }}><ClipboardList className="h-4 w-4" />View Movements</Link> : null}
+                            {canDeletePart ? <button type="button" role="menuitem" className="inventory-row-menu-danger" onClick={() => { setDeletePart(part); setActionMenuId(''); setActionMenuPosition(null); }}><Trash2 className="h-4 w-4" />Delete</button> : null}
+                          </div>,
+                          document.body
                         ) : null}
-                      </div> : <span className="inventory-not-specified">Ã¢â‚¬â€</span>}
+                      </div> : <span className="inventory-not-specified">{missingInventoryValue}</span>}
                     </td>
                   </tr>
                 );
