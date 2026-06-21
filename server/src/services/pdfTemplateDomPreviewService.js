@@ -126,6 +126,7 @@ function previewHtmlDocument(canvasHtml = '', context = {}) {
       break-after: page;
       page-break-after: always;
       background: #ffffff;
+      isolation: isolate;
     }
     .design-print-page:last-child {
       break-after: auto;
@@ -139,7 +140,32 @@ function previewHtmlDocument(canvasHtml = '', context = {}) {
       transform: none !important;
       overflow: hidden !important;
       margin: 0 !important;
-      background: #ffffff;
+      background: transparent !important;
+      z-index: 2;
+    }
+    .pdf-page-watermark {
+      position: absolute !important;
+      inset: 0 !important;
+      z-index: 1;
+      display: grid !important;
+      place-items: center !important;
+      overflow: hidden !important;
+      pointer-events: none !important;
+      user-select: none !important;
+      -webkit-user-select: none !important;
+    }
+    .pdf-page-watermark img {
+      display: block !important;
+      width: 68% !important;
+      height: auto !important;
+      max-width: 75% !important;
+      max-height: 75% !important;
+      object-fit: contain !important;
+      opacity: 0.08 !important;
+      filter: grayscale(1) saturate(0.18) contrast(0.86) !important;
+      pointer-events: none !important;
+      user-select: none !important;
+      -webkit-user-drag: none !important;
     }
     .design-print-document img,
     .design-print-document svg {
@@ -184,14 +210,64 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       return String(node?.getAttribute?.('class') || node?.className || '');
     }
 
+    function isPageWatermarkLayer(node) {
+      const classText = nodeClassText(node).toLowerCase();
+      return node?.getAttribute?.('data-pdf-page-watermark') === 'true' || classText.includes('pdf-page-watermark');
+    }
+
+    function isWatermarkNode(node) {
+      if (!node || isPageWatermarkLayer(node)) return false;
+      const layerId = String(node?.getAttribute?.('data-pdf-layer-id') || '').toLowerCase();
+      const classText = nodeClassText(node).toLowerCase();
+      return layerId.includes('watermark')
+        || classText.includes('is-watermark')
+        || classText.includes('watermark')
+        || Boolean(node?.matches?.('.pdf-canvas-image.is-watermark'))
+        || Boolean(node?.querySelector?.('.pdf-canvas-image.is-watermark'));
+    }
+
     function isSafeRepeatedNode(node) {
       const layerKind = String(node?.getAttribute?.('data-pdf-layer-kind') || '').toLowerCase();
       const layerId = String(node?.getAttribute?.('data-pdf-layer-id') || '').toLowerCase();
       const classText = nodeClassText(node).toLowerCase();
-      return layerKind === 'background'
+      return !isPageWatermarkLayer(node) && (layerKind === 'background'
         || classText.includes('is-background-element')
         || layerId.includes('watermark')
-        || Boolean(node?.querySelector?.('.pdf-canvas-image.is-watermark'));
+        || Boolean(node?.querySelector?.('.pdf-canvas-image.is-watermark')));
+    }
+
+    function watermarkImageNode(sourceNode) {
+      if (!sourceNode) return null;
+      if (sourceNode.matches?.('img')) return sourceNode;
+      return sourceNode.querySelector?.('.pdf-canvas-image.is-watermark img')
+        || sourceNode.querySelector?.('img')
+        || null;
+    }
+
+    function ensurePageWatermark(pageNode, sourceNode) {
+      if (!pageNode || !sourceNode || pageNode.querySelector(':scope > .pdf-page-watermark')) return;
+      const sourceImage = watermarkImageNode(sourceNode);
+      const source = sourceImage?.getAttribute?.('src') || sourceImage?.src || '';
+      if (!source) return;
+      const layer = document.createElement('div');
+      layer.className = 'pdf-page-watermark';
+      layer.setAttribute('data-pdf-page-watermark', 'true');
+      layer.setAttribute('aria-hidden', 'true');
+      const image = document.createElement('img');
+      image.src = source;
+      image.alt = '';
+      image.setAttribute('draggable', 'false');
+      layer.appendChild(image);
+      const pageContent = pageNode.querySelector(':scope > .pdf-a4-page');
+      pageNode.insertBefore(layer, pageContent || pageNode.firstChild);
+    }
+
+    function normalizePageWatermark(pageNode, pageContent, sourceNode) {
+      if (!pageNode || !pageContent || !sourceNode) return null;
+      const clone = sourceNode.cloneNode(true);
+      ensurePageWatermark(pageNode, clone);
+      [...pageContent.children].filter(isWatermarkNode).forEach((node) => node.remove());
+      return clone;
     }
 
     function isPositionedFrame(node) {
@@ -225,17 +301,139 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       return true;
     }
 
-    function firstTailIndexForHeight(rowHeights, startIndex, availableHeight) {
-      let usedHeight = 0;
-      for (let index = rowHeights.length - 1; index >= startIndex; index -= 1) {
-        const nextHeight = usedHeight + Math.max(1, Math.ceil(rowHeights[index] || 0));
-        if (nextHeight > availableHeight) return index + 1;
-        usedHeight = nextHeight;
+    function rowHeightSum(rowHeights, startIndex, count) {
+      let total = 0;
+      for (let index = startIndex; index < startIndex + count; index += 1) {
+        total += Math.max(1, Math.ceil(rowHeights[index] || 0));
       }
-      return startIndex;
+      return total;
     }
 
-    function replaceRows(frame, rows, offset = 0) {
+    function normalizeRowForPrint(row) {
+      row.style.position = 'static';
+      row.style.display = 'grid';
+      row.style.visibility = 'visible';
+      row.style.overflow = 'visible';
+      row.style.opacity = row.style.opacity || '1';
+      row.style.maxHeight = 'none';
+      row.style.gridArea = 'auto';
+      row.style.gridRow = 'auto';
+      row.style.gridColumn = 'auto';
+      [...row.children].forEach((cell) => {
+        cell.style.position = 'static';
+        cell.style.visibility = 'visible';
+        cell.style.overflow = 'visible';
+        cell.style.maxHeight = 'none';
+        cell.style.gridArea = 'auto';
+        cell.style.gridRow = 'auto';
+        cell.style.gridColumn = 'auto';
+      });
+    }
+
+    function tableCellAlignment(cellIndex, cellCount) {
+      if (cellIndex === 0) return 'center';
+      if (cellCount >= 5 && cellIndex === 2) return 'center';
+      if (cellCount >= 4 && cellIndex >= cellCount - 2) return 'right';
+      return 'left';
+    }
+
+    function stylePrintTable(frame) {
+      const table = frame?.querySelector?.('.pdf-canvas-table');
+      const grid = frame?.querySelector?.('.pdf-canvas-table-grid');
+      if (!table || !grid) return;
+      const head = grid.querySelector('.pdf-canvas-table-head');
+      table.style.alignContent = 'start';
+      table.style.gap = table.style.gap || '0.32rem';
+      grid.style.border = '1px solid rgba(15, 42, 82, 0.18)';
+      grid.style.borderRadius = '8px';
+      grid.style.background = '#ffffff';
+      grid.style.boxShadow = '0 0 0 1px rgba(255, 255, 255, 0.72) inset';
+      grid.style.overflow = 'hidden';
+      if (head) {
+        head.style.background = '#0f2a52';
+        head.style.color = '#ffffff';
+        head.style.boxShadow = 'inset 0 -1px 0 rgba(255, 255, 255, 0.16)';
+        [...head.children].forEach((cell, cellIndex, cells) => {
+          cell.style.color = '#ffffff';
+          cell.style.fontWeight = '900';
+          cell.style.letterSpacing = '0';
+          cell.style.textAlign = tableCellAlignment(cellIndex, cells.length);
+          cell.style.padding = cell.style.padding || '0.24rem 0.3rem';
+          cell.style.borderRight = cellIndex === cells.length - 1 ? '0' : '1px solid rgba(255, 255, 255, 0.16)';
+        });
+      }
+      [...grid.querySelectorAll('.pdf-canvas-table-row')].forEach((row, rowIndex, rows) => {
+        row.style.background = rowIndex % 2 === 0 ? '#ffffff' : 'rgba(248, 250, 252, 0.96)';
+        row.style.boxShadow = rowIndex === rows.length - 1 ? 'none' : 'inset 0 -1px 0 rgba(148, 163, 184, 0.16)';
+        [...row.children].forEach((cell, cellIndex, cells) => {
+          cell.style.color = '#0f172a';
+          cell.style.fontWeight = '760';
+          cell.style.textAlign = tableCellAlignment(cellIndex, cells.length);
+          cell.style.padding = cell.style.padding || '0.24rem 0.3rem';
+          cell.style.borderRight = cellIndex === cells.length - 1 ? '0' : '1px solid rgba(148, 163, 184, 0.14)';
+          cell.style.whiteSpace = 'normal';
+          cell.style.overflowWrap = 'anywhere';
+        });
+      });
+    }
+
+    function actualRowsHeight(grid) {
+      return [...(grid?.querySelectorAll?.('.pdf-canvas-table-row') || [])].reduce((sum, row) => {
+        return sum + Math.max(1, Math.ceil(row.getBoundingClientRect?.().height || Number.parseFloat(row.style.height) || Number.parseFloat(row.style.minHeight) || 0));
+      }, 0);
+    }
+
+    function setPrintTableBodySize(frame, rowsHeight = null) {
+      const table = frame?.querySelector?.('.pdf-canvas-table');
+      const grid = frame?.querySelector?.('.pdf-canvas-table-grid');
+      if (!table || !grid) return;
+      stylePrintTable(frame);
+      const titleNode = table.querySelector(':scope > p');
+      const headNode = grid.querySelector('.pdf-canvas-table-head');
+      const titleNodeHeight = titleNode?.getBoundingClientRect?.().height || Number.parseFloat(titleNode?.style?.height) || 0;
+      const headNodeHeight = headNode?.getBoundingClientRect?.().height || Number.parseFloat(headNode?.style?.height) || Number.parseFloat(headNode?.style?.minHeight) || 0;
+      const resolvedRowsHeight = Number.isFinite(rowsHeight) ? Math.max(0, rowsHeight) : actualRowsHeight(grid);
+      const bottomPadding = resolvedRowsHeight > 0 ? 3 : 0;
+      const gridHeight = headNodeHeight + resolvedRowsHeight + bottomPadding;
+      const tableHeight = titleNodeHeight + gridHeight;
+      table.style.display = 'block';
+      table.style.height = `${Math.ceil(tableHeight)}px`;
+      table.style.minHeight = `${Math.ceil(tableHeight)}px`;
+      table.style.maxHeight = `${Math.ceil(tableHeight)}px`;
+      table.style.overflow = 'visible';
+      grid.style.display = 'block';
+      grid.style.height = `${Math.ceil(gridHeight)}px`;
+      grid.style.minHeight = `${Math.ceil(gridHeight)}px`;
+      grid.style.maxHeight = `${Math.ceil(gridHeight)}px`;
+      grid.style.overflow = 'hidden';
+    }
+
+    function tableDebugForPage(pageNode) {
+      const rows = [...(pageNode?.querySelectorAll?.('.pdf-canvas-table-row') || [])];
+      const pageRect = pageNode?.getBoundingClientRect?.();
+      const visibleRows = rows.filter((row) => {
+        const rect = row.getBoundingClientRect();
+        const style = window.getComputedStyle(row);
+        return style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && Number(style.opacity || 1) !== 0
+          && rect.width > 0
+          && rect.height > 0
+          && (!pageRect || (rect.bottom > pageRect.top && rect.top < pageRect.bottom));
+      });
+      const rowSummary = (row) => [...(row?.children || [])].map((cell) => String(cell.textContent || '').trim()).filter(Boolean).join(' | ');
+      const gridNode = pageNode?.querySelector?.('.pdf-canvas-table-grid');
+      return {
+        rowElementCount: rows.length,
+        visibleRowCount: visibleRows.length,
+        gridHeight: gridNode?.getBoundingClientRect?.().height || 0,
+        gridOverflow: gridNode ? window.getComputedStyle(gridNode).overflow : '',
+        firstRow: rowSummary(rows[0]),
+        lastRow: rowSummary(rows[rows.length - 1])
+      };
+    }
+
+    function replaceRows(frame, rows, offset = 0, expectedRowsHeight = 0) {
       const grid = frame?.querySelector?.('.pdf-canvas-table-grid');
       if (!grid) return;
       const currentRows = [...grid.querySelectorAll('.pdf-canvas-table-row')];
@@ -246,6 +444,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
         const template = rowTemplates[(rowIndex + offset) % Math.max(1, rowTemplates.length)] || document.createElement('div');
         const row = template.cloneNode(false);
         if (!row.classList.contains('pdf-canvas-table-row')) row.classList.add('pdf-canvas-table-row');
+        normalizeRowForPrint(row);
         const cellTemplates = [...template.children];
         cells.forEach((cellText, cellIndex) => {
           const cellTemplate = cellTemplates[cellIndex] || cellTemplates[0] || headerCells[cellIndex] || headerCells[0] || document.createElement('span');
@@ -255,9 +454,10 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
         });
         grid.appendChild(row);
       });
+      setPrintTableBodySize(frame, expectedRowsHeight);
     }
 
-    function makeContinuationPage(sourcePage, sourceContent, repeatedNodes) {
+    function makeContinuationPage(sourcePage, sourceContent, repeatedNodes, watermarkSource) {
       const nextPage = sourcePage.cloneNode(false);
       nextPage.innerHTML = '';
       nextPage.setAttribute('data-pdf-continuation-page', 'true');
@@ -267,6 +467,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       nextContent.setAttribute('data-pdf-continuation-content', 'true');
       repeatedNodes.forEach((node) => nextContent.appendChild(node.cloneNode(true)));
       if (nextContent !== nextPage) nextPage.appendChild(nextContent);
+      ensurePageWatermark(nextPage, watermarkSource);
       return { nextPage, nextContent };
     }
 
@@ -291,10 +492,188 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       frameNode.style.overflow = 'hidden';
     }
 
+    function nodeTopWithinParent(node) {
+      const styleTop = Number.parseFloat(node?.style?.top);
+      if (Number.isFinite(styleTop)) return styleTop;
+      const parentRect = node?.parentElement?.getBoundingClientRect?.();
+      const rect = node?.getBoundingClientRect?.();
+      if (!parentRect || !rect) return 0;
+      return rect.top - parentRect.top;
+    }
+
+    function nodeVisualHeight(node) {
+      const rectHeight = node?.getBoundingClientRect?.().height;
+      const styleHeight = Number.parseFloat(node?.style?.height);
+      return Math.max(0, rectHeight || styleHeight || 0);
+    }
+
+    function parseCssRgb(value = '') {
+      const color = String(value || '').trim().toLowerCase();
+      const rgba = color.match(/^rgba?\(([^)]+)\)$/);
+      if (!rgba) return null;
+      const parts = rgba[1].split(',').map((part) => Number.parseFloat(part.trim()));
+      if (parts.length < 3 || parts.slice(0, 3).some((part) => !Number.isFinite(part))) return null;
+      return {
+        r: parts[0],
+        g: parts[1],
+        b: parts[2],
+        a: parts.length >= 4 && Number.isFinite(parts[3]) ? parts[3] : 1
+      };
+    }
+
+    function colorHasPaint(value = '', { ignoreWhite = false } = {}) {
+      const color = String(value || '').trim().toLowerCase();
+      if (!color || color === 'transparent' || color === 'none') return false;
+      const rgba = color.match(/^rgba?\(([^)]+)\)$/);
+      if (!rgba) return true;
+      const parsed = parseCssRgb(color);
+      if (!parsed || parsed.a <= 0) return false;
+      if (ignoreWhite && parsed.r >= 248 && parsed.g >= 248 && parsed.b >= 248) return false;
+      return true;
+    }
+
+    function borderHasPaint(style, side, options = {}) {
+      const width = Number.parseFloat(style.getPropertyValue(`border-${side}-width`) || '0');
+      const borderStyle = style.getPropertyValue(`border-${side}-style`);
+      const color = style.getPropertyValue(`border-${side}-color`);
+      return width > 0 && borderStyle !== 'none' && colorHasPaint(color, options);
+    }
+
+    function hasDirectText(node) {
+      return [...(node?.childNodes || [])].some((child) => {
+        return child.nodeType === Node.TEXT_NODE && String(child.textContent || '').trim();
+      });
+    }
+
+    function hasPaintedSurface(node, style) {
+      const tag = String(node?.tagName || '').toLowerCase();
+      const classText = nodeClassText(node).toLowerCase();
+      if ((classText.includes('pdf-builder-element') || classText.includes('pdf-builder-section')) && node.querySelector?.('*')) return false;
+      if (['img', 'svg', 'canvas', 'path', 'rect', 'circle', 'line', 'polyline', 'polygon'].includes(tag)) return true;
+      if (hasDirectText(node) && colorHasPaint(style.color)) return true;
+      if (colorHasPaint(style.backgroundColor, { ignoreWhite: true })) return true;
+      if (style.boxShadow && style.boxShadow !== 'none') return true;
+      return ['top', 'right', 'bottom', 'left'].some((side) => borderHasPaint(style, side, { ignoreWhite: true }));
+    }
+
+    function paintedBoundsForNodes(nodes) {
+      const bounds = [];
+      nodes.forEach((node) => {
+        [node, ...(node?.querySelectorAll?.('*') || [])].forEach((candidate) => {
+          if (!candidate?.getBoundingClientRect) return;
+          const style = window.getComputedStyle(candidate);
+          if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || 1) === 0) return;
+          if (!hasPaintedSurface(candidate, style)) return;
+          const rect = candidate.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return;
+          bounds.push(rect);
+        });
+      });
+      if (!bounds.length) return null;
+      const top = Math.min(...bounds.map((rect) => rect.top));
+      const bottom = Math.max(...bounds.map((rect) => rect.bottom));
+      const left = Math.min(...bounds.map((rect) => rect.left));
+      const right = Math.max(...bounds.map((rect) => rect.right));
+      return { top, right, bottom, left, height: bottom - top, width: right - left };
+    }
+
+    function finalGroupMetrics(nodes) {
+      const positionedNodes = nodes.filter(isPositionedFrame);
+      if (!positionedNodes.length) return null;
+      const metrics = positionedNodes.map((node) => {
+        const top = nodeTopWithinParent(node);
+        return { node, top, height: nodeVisualHeight(node) };
+      });
+      const parentRect = positionedNodes[0]?.parentElement?.getBoundingClientRect?.();
+      const painted = paintedBoundsForNodes(positionedNodes);
+      const fallbackTop = Math.min(...metrics.map((metric) => metric.top));
+      const fallbackBottom = Math.max(...metrics.map((metric) => metric.top + metric.height));
+      const originalTop = painted && parentRect ? painted.top - parentRect.top : fallbackTop;
+      const originalBottom = painted && parentRect ? painted.bottom - parentRect.top : fallbackBottom;
+      const groupHeight = Math.max(0, Math.floor(originalBottom - originalTop));
+      return {
+        metrics,
+        originalTop,
+        originalBottom,
+        groupHeight,
+        painted: Boolean(painted)
+      };
+    }
+
+    function moveNodeGroupToTop(nodes, targetTop) {
+      const group = finalGroupMetrics(nodes);
+      if (!group || !Number.isFinite(targetTop)) return group;
+      const delta = targetTop - group.originalTop;
+      group.metrics.forEach(({ node, top }) => {
+        node.style.top = `${Math.max(0, Math.round(top + delta))}px`;
+      });
+      return { ...group, targetTop, delta };
+    }
+
+    function tableBottomForFrame(frameNode) {
+      const parentRect = frameNode?.parentElement?.getBoundingClientRect?.();
+      const rect = frameNode?.getBoundingClientRect?.();
+      if (!parentRect || !rect) return 0;
+      return rect.bottom - parentRect.top;
+    }
+
+    function placeFinalNodesBelowTable(nodes, tableFrame, gap, pageHeight, bottomMargin) {
+      if (!nodes?.length) return { fits: true, placed: false, groupHeight: 0 };
+      const group = finalGroupMetrics(nodes);
+      if (!group) return { fits: true, placed: false, groupHeight: 0 };
+      const pageLimit = pageHeight - bottomMargin;
+      const tableBottom = tableBottomForFrame(tableFrame);
+      const afterTableTop = tableBottom + gap;
+      if (afterTableTop + group.groupHeight > pageLimit + 0.5) {
+        return { fits: false, placed: false, tableBottom, targetTop: afterTableTop, ...group };
+      }
+      return { fits: true, placed: true, tableBottom, ...moveNodeGroupToTop(nodes, afterTableTop) };
+    }
+
+    function finalPlacementDebugFor(placement) {
+      if (!placement) return null;
+      return {
+        fits: Boolean(placement.fits),
+        placed: Boolean(placement.placed),
+        painted: Boolean(placement.painted),
+        tableBottom: Math.round(Number(placement.tableBottom || 0)),
+        targetTop: Math.round(Number(placement.targetTop ?? placement.originalTop ?? 0)),
+        originalTop: Math.round(Number(placement.originalTop || 0)),
+        originalBottom: Math.round(Number(placement.originalBottom || 0)),
+        groupHeight: Math.round(Number(placement.groupHeight || 0)),
+        pageLimit: 842 - finalPlacementBottomMargin
+      };
+    }
+
+    function finalOnlyTopForGroup(group, preferredTop, pageHeight, bottomMargin, minTop) {
+      if (!group) return minTop;
+      const pageLimit = pageHeight - bottomMargin;
+      const highestTop = Math.max(minTop, pageLimit - group.groupHeight);
+      return Math.max(minTop, Math.min(preferredTop, highestTop));
+    }
+
+    function makeFinalOnlyPage(sourcePage, sourceContent, repeatedNodes, watermarkSource, finalNodes, preferredTop, pageHeight, bottomMargin, minTop) {
+      const { nextPage, nextContent } = makeContinuationPage(sourcePage, sourceContent, repeatedNodes, watermarkSource);
+      finalNodes.forEach((node) => nextContent.appendChild(node));
+      const group = finalGroupMetrics(finalNodes);
+      const targetTop = finalOnlyTopForGroup(group, preferredTop, pageHeight, bottomMargin, minTop);
+      moveNodeGroupToTop(finalNodes, targetTop);
+      nextPage.setAttribute('data-pdf-final-sections-page', 'true');
+      return { nextPage, nextContent, targetTop };
+    }
+
+    const renderedTablePadding = 3;
+    function frameHeightForRows(rowsHeight) {
+      return Math.max(
+        rowHeight + titleHeight + headerHeight + renderedTablePadding,
+        titleHeight + headerHeight + rowsHeight + renderedTablePadding
+      );
+    }
+
     const tableShells = [...document.querySelectorAll('.pdf-canvas-table[data-pdf-invoice-table="true"]')];
     const tableShell = tableShells.find((table) => table.getAttribute('data-pdf-table-dynamic-rows') !== 'false') || tableShells[0];
     if (!tableShell) {
-      return { itemRowCount: items.length, rowsPerPage: 0, continuationPageCount: 0, finalPageCount: document.querySelectorAll('.design-print-page').length };
+      return { reason: 'no-invoice-table', itemRowCount: items.length, rowsPerPage: 0, continuationPageCount: 0, finalPageCount: document.querySelectorAll('.design-print-page').length };
     }
 
     const frame = tableShell.closest('.pdf-builder-element');
@@ -304,7 +683,19 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
     const head = grid?.querySelector('.pdf-canvas-table-head');
     const existingRows = [...(grid?.querySelectorAll('.pdf-canvas-table-row') || [])];
     if (!frame || !pageNode || !pageContent || !grid || !head || !existingRows.length) {
-      return { itemRowCount: items.length, rowsPerPage: 0, continuationPageCount: 0, finalPageCount: document.querySelectorAll('.design-print-page').length };
+      return {
+        reason: 'invalid-table-structure',
+        itemRowCount: items.length,
+        rowsPerPage: 0,
+        continuationPageCount: 0,
+        finalPageCount: document.querySelectorAll('.design-print-page').length,
+        hasFrame: Boolean(frame),
+        hasPage: Boolean(pageNode),
+        hasPageContent: Boolean(pageContent),
+        hasGrid: Boolean(grid),
+        hasHead: Boolean(head),
+        existingRowCount: existingRows.length
+      };
     }
 
     const dynamicRows = tableShell.getAttribute('data-pdf-table-dynamic-rows') !== 'false';
@@ -314,7 +705,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       : rowsFromDom(existingRows);
 
     if (!sourceRows.length) {
-      return { itemRowCount: 0, rowsPerPage: 0, continuationPageCount: 0, finalPageCount: document.querySelectorAll('.design-print-page').length };
+      return { reason: 'no-source-rows', itemRowCount: 0, rowsPerPage: 0, continuationPageCount: 0, finalPageCount: document.querySelectorAll('.design-print-page').length };
     }
 
     const frameRect = frame.getBoundingClientRect();
@@ -322,18 +713,17 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
     const titleRect = tableShell.querySelector(':scope > p')?.getBoundingClientRect();
     const headRect = head.getBoundingClientRect();
     const rowRect = existingRows[0].getBoundingClientRect();
-    const frameHeight = Math.max(1, frameRect.height || Number.parseFloat(frame.style.height) || 120);
     const tableTop = frameRect.top - pageRect.top;
-    const availableFrameHeight = Math.max(1, Math.min(frameHeight, 842 - tableTop));
     const titleHeight = titleRect?.height || 0;
     const headerHeight = headRect.height || Number.parseFloat(head.style.minHeight) || 18;
     const rowHeight = Math.max(1, rowRect.height || Number.parseFloat(tableShell.getAttribute('data-pdf-table-row-height')) || 18);
-    const firstPageRowsHeight = Math.max(rowHeight, availableFrameHeight - titleHeight - headerHeight - 4);
     const tableTemplateFrame = frame.cloneNode(true);
     const rowHeights = measureRowHeights(pageContent, tableTemplateFrame, sourceRows).map((height) => height || rowHeight);
 
+    const sourceWatermark = [...pageContent.children].find(isWatermarkNode);
+    const watermarkSource = normalizePageWatermark(pageNode, pageContent, sourceWatermark);
     const pageChildren = [...pageContent.children];
-    const repeatedNodes = pageChildren.filter((node) => node !== frame && isSafeRepeatedNode(node));
+    const repeatedNodes = pageChildren.filter((node) => node !== frame && !isWatermarkNode(node) && isSafeRepeatedNode(node));
     const tableBottom = frameRect.bottom - pageRect.top;
     const finalNodes = pageChildren.filter((node) => {
       if (node === frame || !isPositionedFrame(node) || isSafeRepeatedNode(node)) return false;
@@ -341,7 +731,13 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       return nodeTop >= tableBottom - 1;
     });
     const safeBottomMargin = 36;
-    const finalSectionGap = 12;
+    const finalPlacementBottomMargin = 16;
+    const finalSectionGap = 20;
+    const firstPageFrameHeight = Math.max(
+      rowHeight + titleHeight + headerHeight + 4,
+      842 - tableTop - safeBottomMargin
+    );
+    const firstPageRowsHeight = Math.max(rowHeight, firstPageFrameHeight - titleHeight - headerHeight - 4);
     const minContinuationTop = 64;
     const maxContinuationTop = 108;
     const continuationTop = Math.max(minContinuationTop, Math.min(tableTop, maxContinuationTop));
@@ -353,18 +749,62 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
     const firstFinalTop = finalNodes.length
       ? Math.min(...finalNodes.map((node) => node.getBoundingClientRect().top - pageRect.top))
       : 842 - safeBottomMargin;
+    const firstPageFinalFrameHeight = Math.max(
+      rowHeight + titleHeight + headerHeight + 4,
+      Math.min(firstPageFrameHeight, firstFinalTop - tableTop - finalSectionGap)
+    );
+    const firstPageFinalRowsHeight = Math.max(rowHeight, firstPageFinalFrameHeight - titleHeight - headerHeight - 4);
     const finalFrameHeight = Math.max(
       rowHeight + titleHeight + headerHeight + 4,
       Math.min(continuationFrameHeight, firstFinalTop - continuationTop - finalSectionGap)
     );
     const finalRowsHeight = Math.max(rowHeight, finalFrameHeight - titleHeight - headerHeight - 4);
+    const initialFinalGroupHeight = finalGroupMetrics(finalNodes)?.groupHeight || 0;
+
+    function finalSectionsFitAfterRows(top, rowsHeight) {
+      return top + frameHeightForRows(rowsHeight) + finalSectionGap + initialFinalGroupHeight <= 842 - finalPlacementBottomMargin + 0.5;
+    }
+
+    if (rowsFitHeight(rowHeights, 0, firstPageFinalRowsHeight)) {
+      const neededRowsHeight = rowHeights.reduce((sum, height) => sum + Math.max(1, Math.ceil(height || 0)), 0);
+      if (dynamicRows && items.length) replaceRows(frame, sourceRows, 0, neededRowsHeight);
+      else setPrintTableBodySize(frame, neededRowsHeight);
+      const neededFrameHeight = Math.min(firstPageFinalFrameHeight, frameHeightForRows(neededRowsHeight));
+      setContinuationFrameBounds(frame, tableTop, neededFrameHeight);
+      let finalSectionsPlacement = 'same-page';
+      const finalPlacement = placeFinalNodesBelowTable(finalNodes, frame, finalSectionGap, 842, finalPlacementBottomMargin);
+      const finalPlacementDebug = finalPlacementDebugFor(finalPlacement);
+      if (finalNodes.length && !finalPlacement.fits) {
+        const finalClones = finalNodes.map((node) => node.cloneNode(true));
+        finalNodes.forEach((node) => node.remove());
+        const { nextPage: finalOnlyPage } = makeFinalOnlyPage(pageNode, pageContent, repeatedNodes, watermarkSource, finalClones, firstFinalTop, 842, finalPlacementBottomMargin, continuationTop);
+        pageNode.after(finalOnlyPage);
+        finalSectionsPlacement = 'separate-page';
+      }
+      return {
+        itemRowCount: sourceRows.length,
+        rowsPerPage: sourceRows.length,
+        chunkRowCounts: [sourceRows.length],
+        totalRowsRendered: sourceRows.length,
+        rowHeight,
+        availableRowsHeight: firstPageFinalRowsHeight,
+        continuationRowsPerPage: 0,
+        continuationRowsHeight,
+        finalRowsHeight,
+        continuationPageCount: 0,
+        finalPageCount: document.querySelectorAll('.design-print-page').length,
+        finalSectionsPlacement,
+        finalPlacementDebug,
+        pageTableDebug: [tableDebugForPage(pageNode)]
+      };
+    }
 
     const chunks = [];
-    const firstChunk = takeRowsForHeight(sourceRows, rowHeights, 0, firstPageRowsHeight);
+    let firstChunk = takeRowsForHeight(sourceRows, rowHeights, 0, firstPageRowsHeight);
     chunks.push({
       rows: firstChunk.rows,
       top: tableTop,
-      frameHeight,
+      frameHeight: firstPageFrameHeight,
       rowsHeight: firstPageRowsHeight,
       isFinal: firstChunk.nextIndex >= sourceRows.length
     });
@@ -381,11 +821,14 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
         rowCursor = sourceRows.length;
       } else {
         const continuationChunk = takeRowsForHeight(sourceRows, rowHeights, rowCursor, continuationRowsHeight);
-        const finalTailStart = firstTailIndexForHeight(rowHeights, rowCursor, finalRowsHeight);
-        const nextIndex = Math.max(
-          rowCursor + 1,
-          Math.min(continuationChunk.nextIndex, finalTailStart)
-        );
+        let nextIndex = continuationChunk.nextIndex;
+        const consumesRemainingRows = nextIndex >= sourceRows.length;
+        if (finalNodes.length && consumesRemainingRows && sourceRows.length - rowCursor > 1) {
+          const remainingRowsHeight = rowHeightSum(rowHeights, rowCursor, sourceRows.length - rowCursor);
+          if (!finalSectionsFitAfterRows(continuationTop, remainingRowsHeight)) {
+            nextIndex = sourceRows.length - 1;
+          }
+        }
         chunks.push({
           rows: sourceRows.slice(rowCursor, nextIndex),
           top: continuationTop,
@@ -400,48 +843,91 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
     const rowsPerPage = Math.max(1, firstChunk.rows.length);
 
     if (chunks.length <= 1) {
-      if (dynamicRows && items.length) replaceRows(frame, sourceRows, 0);
+      const neededRowsHeight = rowHeights.reduce((sum, height) => sum + Math.max(1, Math.ceil(height || 0)), 0);
+      if (dynamicRows && items.length) replaceRows(frame, sourceRows, 0, neededRowsHeight);
+      else setPrintTableBodySize(frame, neededRowsHeight);
+      const neededFrameHeight = Math.min(firstPageFrameHeight, frameHeightForRows(neededRowsHeight));
+      setContinuationFrameBounds(frame, tableTop, neededFrameHeight);
+      let finalSectionsPlacement = 'same-page';
+      const finalPlacement = placeFinalNodesBelowTable(finalNodes, frame, finalSectionGap, 842, finalPlacementBottomMargin);
+      const finalPlacementDebug = finalPlacementDebugFor(finalPlacement);
+      if (finalNodes.length && !finalPlacement.fits) {
+        const finalClones = finalNodes.map((node) => node.cloneNode(true));
+        finalNodes.forEach((node) => node.remove());
+        const { nextPage: finalOnlyPage } = makeFinalOnlyPage(pageNode, pageContent, repeatedNodes, watermarkSource, finalClones, firstFinalTop, 842, finalPlacementBottomMargin, continuationTop);
+        pageNode.after(finalOnlyPage);
+        finalSectionsPlacement = 'separate-page';
+      }
       return {
         itemRowCount: sourceRows.length,
         rowsPerPage,
+        chunkRowCounts: [sourceRows.length],
+        totalRowsRendered: sourceRows.length,
         continuationRowsPerPage: 0,
         rowHeight,
         availableRowsHeight: firstPageRowsHeight,
         continuationPageCount: 0,
-        finalPageCount: document.querySelectorAll('.design-print-page').length
+        finalPageCount: document.querySelectorAll('.design-print-page').length,
+        finalSectionsPlacement,
+        finalPlacementDebug,
+        pageTableDebug: [tableDebugForPage(pageNode)]
       };
     }
     const finalClones = finalNodes.map((node) => node.cloneNode(true));
 
     finalNodes.forEach((node) => node.remove());
-    replaceRows(frame, chunks[0].rows, 0);
+    const firstRowsHeight = rowHeightSum(rowHeights, 0, chunks[0].rows.length);
+    const firstVisualFrameHeight = Math.min(chunks[0].frameHeight, frameHeightForRows(firstRowsHeight));
+    replaceRows(frame, chunks[0].rows, 0, firstRowsHeight);
+    setContinuationFrameBounds(frame, chunks[0].top, firstVisualFrameHeight);
 
     let insertAfter = pageNode;
     let rowOffset = chunks[0].rows.length;
+    let finalSectionsPlacement = 'same-page';
+    let finalPlacementDebug = null;
     chunks.slice(1).forEach((chunk, chunkIndex) => {
-      const { nextPage, nextContent } = makeContinuationPage(pageNode, pageContent, repeatedNodes);
+      const { nextPage, nextContent } = makeContinuationPage(pageNode, pageContent, repeatedNodes, watermarkSource);
       const tableClone = tableTemplateFrame.cloneNode(true);
-      setContinuationFrameBounds(tableClone, chunk.top, chunk.frameHeight);
-      replaceRows(tableClone, chunk.rows, rowOffset);
+      const renderedRowsHeight = rowHeightSum(rowHeights, rowOffset, chunk.rows.length);
+      const visualFrameHeight = Math.min(chunk.frameHeight, frameHeightForRows(renderedRowsHeight));
+      replaceRows(tableClone, chunk.rows, rowOffset, renderedRowsHeight);
+      setContinuationFrameBounds(tableClone, chunk.top, visualFrameHeight);
       nextContent.appendChild(tableClone);
       rowOffset += chunk.rows.length;
-      if (chunkIndex === chunks.length - 2) {
+      const isFinalRenderedChunk = chunkIndex === chunks.length - 2;
+      if (isFinalRenderedChunk) {
         finalClones.forEach((node) => nextContent.appendChild(node));
       }
       insertAfter.after(nextPage);
+      if (isFinalRenderedChunk) {
+        const finalPlacement = placeFinalNodesBelowTable(finalClones, tableClone, finalSectionGap, 842, finalPlacementBottomMargin);
+        finalPlacementDebug = finalPlacementDebugFor(finalPlacement);
+        if (finalClones.length && !finalPlacement.fits) {
+          const { nextPage: finalOnlyPage } = makeFinalOnlyPage(pageNode, pageContent, repeatedNodes, watermarkSource, finalClones, firstFinalTop, 842, finalPlacementBottomMargin, continuationTop);
+          nextPage.after(finalOnlyPage);
+          insertAfter = finalOnlyPage;
+          finalSectionsPlacement = 'separate-page';
+          return;
+        }
+      }
       insertAfter = nextPage;
     });
 
     return {
       itemRowCount: sourceRows.length,
       rowsPerPage,
+      chunkRowCounts: chunks.map((chunk) => chunk.rows.length),
+      totalRowsRendered: chunks.reduce((sum, chunk) => sum + chunk.rows.length, 0),
       rowHeight,
       availableRowsHeight: firstPageRowsHeight,
       continuationRowsPerPage: Math.max(0, ...chunks.slice(1).map((chunk) => chunk.rows.length)),
       continuationRowsHeight,
       finalRowsHeight,
       continuationPageCount: chunks.length - 1,
-      finalPageCount: document.querySelectorAll('.design-print-page').length
+      finalPageCount: document.querySelectorAll('.design-print-page').length,
+      finalSectionsPlacement,
+      finalPlacementDebug,
+      pageTableDebug: [...document.querySelectorAll('.design-print-page')].map((node) => tableDebugForPage(node))
     };
   }, { invoiceItems, templateContext: context });
 }
@@ -463,7 +949,21 @@ async function renderInvoiceCanvasDomPdf({ key, canvasHtml, meta, context = {}, 
       javaScriptEnabled: false
     });
     await page.setContent(previewHtmlDocument(html, context), { waitUntil: 'networkidle' });
-    await paginateInvoiceTablesForPrint(page, { key, context });
+    const paginationMetrics = await paginateInvoiceTablesForPrint(page, { key, context });
+    if (process.env.PDF_DOM_PAGINATION_DEBUG === '1' && paginationMetrics) {
+      console.info('[pdf-dom-pagination]', JSON.stringify({
+        key,
+        filenamePrefix: cleanPrefix,
+        reason: paginationMetrics.reason,
+        itemRowCount: paginationMetrics.itemRowCount,
+        chunkRowCounts: paginationMetrics.chunkRowCounts || [],
+        totalRowsRendered: paginationMetrics.totalRowsRendered,
+        continuationPageCount: paginationMetrics.continuationPageCount,
+        finalPageCount: paginationMetrics.finalPageCount,
+        finalPlacementDebug: paginationMetrics.finalPlacementDebug || null,
+        pageTableDebug: paginationMetrics.pageTableDebug || []
+      }));
+    }
     await page.emulateMedia({ media: 'print' });
     const pdf = await page.pdf({
       width: `${DRAFT_CANVAS_WIDTH}px`,

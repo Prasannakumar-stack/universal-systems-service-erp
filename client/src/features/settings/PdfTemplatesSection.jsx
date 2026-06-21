@@ -2123,56 +2123,197 @@ function formatVersionDateTime(value) {
   }).format(date).replace(/\b(am|pm)\b/gi, (match) => match.toUpperCase());
 }
 
+function formatVersionDate(value) {
+  if (!value) return 'No date';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'No date';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  }).format(date);
+}
+
 function versionEditedBy(version = {}) {
-  return version.editedBy?.name || version.editedBy?.username || 'System';
+  return version.editedBy?.name || version.editedBy?.username || 'System default';
 }
 
 function versionSummary(version = {}) {
   return `${versionActionLabel(version.action)} - ${formatVersionDateTime(version.editedAt)} - ${versionEditedBy(version)}`;
 }
 
-function VersionHistoryPanel({ versions, restoring, onRestore, onDeleteVersion, deletingVersionId = '' }) {
+function versionLifecycleLabel(version = {}) {
+  const action = String(version.action || '').toLowerCase();
+  if (action.includes('draft')) return 'Draft';
+  if (action.includes('publish') || action.includes('published')) return 'Published';
+  if (action.includes('restore')) return 'Draft';
+  return 'Saved';
+}
+
+function versionDisplayName(version = {}) {
+  const customName = String(version.displayName || '').trim();
+  if (customName) return customName;
+  const lifecycle = versionLifecycleLabel(version);
+  if (lifecycle === 'Draft') return 'Draft';
+  if (lifecycle === 'Published') return 'Published Design';
+  return versionActionLabel(version.action);
+}
+
+function versionMetaLine(version = {}) {
+  return `${formatVersionDate(version.editedAt)} \u2022 ${versionEditedBy(version)}`;
+}
+
+function versionKey(version = {}) {
+  return String(version.id || version.version || '');
+}
+
+function VersionHistoryHeader({ versions, onClose = null, compact = false }) {
+  const count = versions.length;
   return (
-    <section className="surface admin-control-card pdf-version-history-panel p-4">
-      <div className="flex items-center gap-3">
-        <div className="admin-control-icon"><History className="h-5 w-5" /></div>
-        <div>
-          <h3 className="font-black">Saved Versions</h3>
-          <p className="mt-1 text-xs muted">Restore opens a saved version as draft. Publish to make it live.</p>
+    <div className={`pdf-version-panel-header ${compact ? 'is-compact' : ''}`}>
+      <div className="admin-control-icon"><History className="h-5 w-5" /></div>
+      <div className="pdf-version-panel-title">
+        <div className="pdf-version-title-row">
+          <h3>Saved Versions</h3>
+          <span className="pdf-version-count-badge">{count} {count === 1 ? 'version' : 'versions'}</span>
+        </div>
+        <p>Restore opens a version as draft. Publish to make it live.</p>
+      </div>
+      {onClose ? (
+        <button type="button" className="icon-button pdf-version-close-button" onClick={onClose} title="Close saved versions" aria-label="Close saved versions">
+          <X className="h-4 w-4" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function VersionHistoryRow({
+  version,
+  isLatest = false,
+  restoring,
+  onRestore,
+  onRenameVersion,
+  onDeleteVersion,
+  deletingVersionId = ''
+}) {
+  const key = versionKey(version);
+  const displayName = versionDisplayName(version);
+  const deleting = deletingVersionId === key;
+  const disabled = restoring || deleting || Boolean(deletingVersionId);
+  return (
+    <div className={`pdf-version-card ${isLatest ? 'is-latest' : ''}`}>
+      <div className="pdf-version-card-main">
+        <div className="pdf-version-identity">
+          <span className="pdf-version-number-badge">v{version.version}</span>
+          <div className="pdf-version-copy">
+            <div className="pdf-version-name-row">
+              <p title={displayName} tabIndex={0}>{displayName}</p>
+              {isLatest ? <span className="pdf-version-latest-badge">Latest</span> : null}
+            </div>
+            <small>{versionMetaLine(version)}</small>
+          </div>
         </div>
       </div>
+      <div className="pdf-version-actions">
+        {onRenameVersion ? (
+          <button type="button" className="btn btn-secondary pdf-version-action-button" disabled={disabled} onClick={() => onRenameVersion(version)}>
+            <Edit3 className="h-3.5 w-3.5" />
+            Rename
+          </button>
+        ) : null}
+        <button type="button" className="btn btn-secondary pdf-version-action-button" disabled={disabled} onClick={() => onRestore(version)}>
+          <RotateCcw className="h-3.5 w-3.5" />
+          Restore
+        </button>
+        {onDeleteVersion ? (
+          <button
+            type="button"
+            className="icon-button pdf-version-delete-button"
+            disabled={restoring || deleting || Boolean(deletingVersionId)}
+            onClick={() => onDeleteVersion(version)}
+            title="Delete saved version"
+            aria-label={`Delete version v${version.version}`}
+          >
+            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function VersionHistoryPanel({ versions, restoring, onRestore, onRenameVersion, onDeleteVersion, deletingVersionId = '' }) {
+  return (
+    <section className="surface admin-control-card pdf-version-history-panel p-4">
+      <VersionHistoryHeader versions={versions} />
       <div className="mt-4 grid gap-2">
-        {versions.length ? versions.slice(0, 4).map((version) => (
-          <div key={version.id || version.version} className="pdf-version-card">
-            <div className="pdf-version-card-head">
-              <p>v{version.version}</p>
-              <span>{versionActionLabel(version.action)}</span>
-            </div>
-            <div className="pdf-version-card-body">
-              <small>{formatVersionDateTime(version.editedAt)} &middot; {versionEditedBy(version)}</small>
-              <div className="pdf-version-actions">
-                <button type="button" className="btn btn-secondary py-1.5 text-xs" disabled={restoring || Boolean(deletingVersionId)} onClick={() => onRestore(version)}>
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Restore Draft
-                </button>
-                {onDeleteVersion ? (
-                  <button
-                    type="button"
-                    className="icon-button pdf-version-delete-button"
-                    disabled={restoring || deletingVersionId === String(version.id || version.version)}
-                    onClick={() => onDeleteVersion(version)}
-                    title="Delete saved version"
-                    aria-label={`Delete version v${version.version}`}
-                  >
-                    {deletingVersionId === String(version.id || version.version) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
+        {versions.length ? versions.slice(0, 4).map((version, index) => (
+          <VersionHistoryRow
+            key={version.id || version.version}
+            version={version}
+            isLatest={index === 0}
+            restoring={restoring}
+            onRestore={onRestore}
+            onRenameVersion={onRenameVersion}
+            onDeleteVersion={onDeleteVersion}
+            deletingVersionId={deletingVersionId}
+          />
         )) : <p className="rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm muted">Previous versions will appear after the first edit.</p>}
       </div>
     </section>
+  );
+}
+
+function RenameVersionModal({ version, saving, onCancel, onConfirm }) {
+  const [name, setName] = useState(() => versionDisplayName(version));
+  const portalTarget = typeof document === 'undefined' ? null : document.body;
+  const trimmedName = name.trim();
+  function submitRename(event = null) {
+    event?.preventDefault?.();
+    if (!trimmedName || saving) return;
+    onConfirm(trimmedName);
+  }
+  if (!portalTarget) return null;
+  return createPortal(
+    <div className="pdf-modal-overlay" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && !saving) onCancel();
+    }}>
+      <form className="pdf-rename-version-modal" onSubmit={submitRename}>
+        <div className="pdf-advanced-modal-header">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Version v{version.version}</p>
+            <h3>Rename Version</h3>
+          </div>
+          <button type="button" className="icon-button" onClick={onCancel} disabled={saving} aria-label="Close rename version">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="pdf-rename-version-body">
+          <label className="pdf-control-field">
+            <span className="label">Version name</span>
+            <input
+              className="input"
+              value={name}
+              maxLength={120}
+              autoFocus
+              disabled={saving}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Final Invoice Layout"
+            />
+          </label>
+          {!trimmedName ? <p className="pdf-rename-version-error">Enter a version name to continue.</p> : null}
+        </div>
+        <div className="pdf-advanced-modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={saving}>Cancel</button>
+          <button type="button" className="btn btn-primary" disabled={saving || !trimmedName} onClick={submitRename}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Name
+          </button>
+        </div>
+      </form>
+    </div>,
+    portalTarget
   );
 }
 
@@ -2516,6 +2657,7 @@ function DesignModeWorkspace({
   versions,
   restoring,
   onRestore,
+  onRenameVersion,
   onDeleteVersion,
   deletingVersionId = '',
   hasUnsavedDesignChanges,
@@ -4056,39 +4198,19 @@ function DesignModeWorkspace({
     if (activeRail === 'history') {
       return (
         <div className="pdf-builder-panel-body">
-          <div className="pdf-builder-note">
-            <p className="font-black text-slate-100">Published Design</p>
-            <p className="mt-1 text-xs muted">Restore opens a saved version as draft. Publish to make it live.</p>
-          </div>
+          <VersionHistoryHeader versions={versions} onClose={() => setActiveRail('')} compact />
           <div className="grid gap-2">
-            {versions.length ? versions.slice(0, 8).map((version) => (
-              <div key={version.id || version.version} className="pdf-builder-history-row pdf-version-card">
-                <div className="pdf-version-card-main">
-                  <div className="pdf-version-card-head">
-                  <p>v{version.version}</p>
-                    <span>{versionActionLabel(version.action)}</span>
-                  </div>
-                  <small>{formatVersionDateTime(version.editedAt)} &middot; {versionEditedBy(version)}</small>
-                </div>
-                <div className="pdf-builder-history-actions">
-                  <button type="button" className="btn btn-secondary py-1.5 text-xs" disabled={restoring || Boolean(deletingVersionId)} onClick={() => onRestore(version)}>
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    Restore Draft
-                  </button>
-                  {onDeleteVersion ? (
-                    <button
-                      type="button"
-                      className="icon-button pdf-version-delete-button"
-                      disabled={restoring || deletingVersionId === String(version.id || version.version)}
-                      onClick={() => onDeleteVersion(version)}
-                      title="Delete saved version"
-                      aria-label={`Delete version v${version.version}`}
-                    >
-                      {deletingVersionId === String(version.id || version.version) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
+            {versions.length ? versions.slice(0, 8).map((version, index) => (
+              <VersionHistoryRow
+                key={version.id || version.version}
+                version={version}
+                isLatest={index === 0}
+                restoring={restoring}
+                onRestore={onRestore}
+                onRenameVersion={onRenameVersion}
+                onDeleteVersion={onDeleteVersion}
+                deletingVersionId={deletingVersionId}
+              />
             )) : <p className="pdf-builder-empty">Saved versions will appear after the first edit.</p>}
           </div>
         </div>
@@ -4409,47 +4531,40 @@ function DesignModeWorkspace({
           {hasUnsavedDesignChanges ? <span className="pdf-builder-unsaved">Unsaved Changes</span> : hasSavedDesignDraft ? <span className="pdf-builder-saved">Saved Draft</span> : null}
         </div>
         <div className="pdf-builder-toolbar-actions">
-          <button type="button" className="btn btn-primary admin-compact-button" disabled={disabled || manifestState.loading} onClick={confirmApplyDefaultTemplateLayout}>
-            {manifestState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LayoutGrid className="h-4 w-4" />}
-            Reset to Default Design
-          </button>
-          <button type="button" className={`btn admin-compact-button ${rightInspectorOpen ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setRightInspectorOpen((value) => !value)}>
-            <Settings2 className="h-4 w-4" />
-            Advanced Inspector
-          </button>
-          <button type="button" className="icon-button" disabled={!undoStack.length || disabled} onClick={undoDesign} title="Undo">
-            <Undo2 className="h-4 w-4" />
-          </button>
-          <button type="button" className="icon-button" disabled={!redoStack.length || disabled} onClick={redoDesign} title="Redo">
-            <Redo2 className="h-4 w-4" />
-          </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={previewDraftPdf}>
-            {draftPreviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-            Preview Draft PDF
-          </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={downloadDraftPdf}>
-            {draftDownloadBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Download Draft PDF
-          </button>
-          <button type="submit" className="btn btn-primary admin-compact-button pdf-builder-save-button" disabled={!canEdit || saving || Boolean(busyKey)}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? 'Saving...' : 'Save Draft'}
-          </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || saving || Boolean(busyKey)} onClick={() => {
-            setRevertConfirmOpen(false);
-            setPublishConfirmOpen(true);
-          }}>
-            <ShieldCheck className="h-4 w-4" />
-            Publish Design
-          </button>
-          <button type="button" className={`btn admin-compact-button ${activeRail === 'history' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => toggleRailDrawer('history')}>
-            <History className="h-4 w-4" />
-            Saved Versions
-          </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={onBack}>
-            <LayoutGrid className="h-4 w-4" />
-            Back to Templates
-          </button>
+          <div className="pdf-toolbar-action-group is-tools" aria-label="Canvas tools">
+            <button type="button" className="icon-button" disabled={!undoStack.length || disabled} onClick={undoDesign} title="Undo" aria-label="Undo">
+              <Undo2 className="h-4 w-4" />
+            </button>
+            <button type="button" className="icon-button" disabled={!redoStack.length || disabled} onClick={redoDesign} title="Redo" aria-label="Redo">
+              <Redo2 className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="pdf-toolbar-action-group is-primary" aria-label="Draft actions">
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={previewDraftPdf}>
+              {draftPreviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+              Preview Draft PDF
+            </button>
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={downloadDraftPdf}>
+              {draftDownloadBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Download Draft PDF
+            </button>
+            <button type="submit" className={`btn admin-compact-button pdf-builder-save-button ${hasUnsavedDesignChanges ? 'btn-primary' : 'btn-secondary'}`} disabled={!canEdit || saving || Boolean(busyKey)}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? 'Saving...' : 'Save Draft'}
+            </button>
+            <button type="button" className="btn btn-secondary admin-compact-button pdf-builder-publish-button" disabled={!canEdit || saving || Boolean(busyKey)} onClick={() => {
+              setRevertConfirmOpen(false);
+              setPublishConfirmOpen(true);
+            }}>
+              <ShieldCheck className="h-4 w-4" />
+              Publish Design
+            </button>
+          </div>
+          <div className="pdf-toolbar-action-group is-right" aria-label="History and navigation">
+            <button type="button" className={`btn admin-compact-button ${activeRail === 'history' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => toggleRailDrawer('history')}>
+              <History className="h-4 w-4" />
+              Saved Versions
+            </button>
           <div className="pdf-builder-more-menu-wrap">
             <button type="button" className={`btn admin-compact-button ${toolbarMoreOpen ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setToolbarMoreOpen((value) => !value)} aria-expanded={toolbarMoreOpen}>
               <SlidersHorizontal className="h-4 w-4" />
@@ -4457,6 +4572,15 @@ function DesignModeWorkspace({
             </button>
             {toolbarMoreOpen ? (
               <div className="pdf-builder-more-menu" onPointerDown={(event) => event.stopPropagation()}>
+                <button type="button" onClick={() => { confirmApplyDefaultTemplateLayout(); setToolbarMoreOpen(false); }} disabled={disabled || manifestState.loading}>
+                  {manifestState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LayoutGrid className="h-4 w-4" />}
+                  Reset to Default Design
+                </button>
+                <button type="button" className={rightInspectorOpen ? 'is-active' : ''} onClick={() => { setRightInspectorOpen((value) => !value); setToolbarMoreOpen(false); }}>
+                  <Settings2 className="h-4 w-4" />
+                  Advanced Inspector
+                </button>
+                <span className="pdf-more-menu-divider" />
                 <button type="button" className={activeRail === 'templates' ? 'is-active' : ''} onClick={() => { toggleRailDrawer('templates'); setToolbarMoreOpen(false); }}>
                   <LayoutGrid className="h-4 w-4" />
                   Templates
@@ -4521,6 +4645,11 @@ function DesignModeWorkspace({
                 </button>
               </div>
             ) : null}
+          </div>
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={onBack}>
+              <LayoutGrid className="h-4 w-4" />
+              Back to Templates
+            </button>
           </div>
         </div>
       </section>
@@ -6180,6 +6309,7 @@ function StructuredBuilderWorkspace({
   versions,
   restoring,
   onRestore,
+  onRenameVersion,
   onDeleteVersion,
   deletingVersionId = '',
   liveDesignModeActive = false
@@ -6286,6 +6416,7 @@ function StructuredBuilderWorkspace({
           versions={versions}
           restoring={restoring}
           onRestore={onRestore}
+          onRenameVersion={onRenameVersion}
           onDeleteVersion={onDeleteVersion}
           deletingVersionId={deletingVersionId}
         />
@@ -6594,6 +6725,7 @@ function StructuredTemplateEditor({
   versions,
   restoring,
   onRestore,
+  onRenameVersion,
   onDeleteVersion,
   deletingVersionId,
   onShowVariables,
@@ -6701,6 +6833,7 @@ function StructuredTemplateEditor({
           versions={versions}
           restoring={restoring}
           onRestore={(version) => onRestore(version, { asDraft: true })}
+          onRenameVersion={onRenameVersion}
           onDeleteVersion={onDeleteVersion}
           deletingVersionId={deletingVersionId}
           hasUnsavedDesignChanges={designDraftDirty}
@@ -6732,6 +6865,8 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
   const [restoreCandidate, setRestoreCandidate] = useState(null);
   const [deleteVersionCandidate, setDeleteVersionCandidate] = useState(null);
   const [deletingVersionId, setDeletingVersionId] = useState('');
+  const [renameVersionCandidate, setRenameVersionCandidate] = useState(null);
+  const [renamingVersion, setRenamingVersion] = useState(false);
   const [designEditorDirty, setDesignEditorDirty] = useState(false);
   const canEdit = hasRole(user, 'admin') && can(user, 'manage_pdf_templates');
   const { data, loading, error, reload } = useResource(() => request('/pdf-templates'), [request]);
@@ -6989,6 +7124,30 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     }
   }
 
+  async function renameSavedVersion(version, displayName) {
+    if (!activeTemplate || !canEdit) return;
+    const versionId = version.id || version.version;
+    const nextName = String(displayName || '').trim();
+    if (!nextName) {
+      push('Version name is required', 'error');
+      return;
+    }
+    setRenamingVersion(true);
+    try {
+      const result = await request(`/pdf-templates/${activeTemplate.key}/versions/${versionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ displayName: nextName })
+      });
+      push(result.message || 'Version renamed successfully.');
+      await reload({ silent: true });
+      setRenameVersionCandidate(null);
+    } catch (err) {
+      push(err.message || 'Version rename failed', 'error');
+    } finally {
+      setRenamingVersion(false);
+    }
+  }
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorBlock message={error} />;
 
@@ -7017,6 +7176,7 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
           versions={activeTemplate.versions || []}
           restoring={restoring}
           onRestore={(version, options = {}) => setRestoreCandidate({ version, ...options })}
+          onRenameVersion={(version) => setRenameVersionCandidate(version)}
           onDeleteVersion={(version) => setDeleteVersionCandidate(version)}
           deletingVersionId={deletingVersionId}
           onShowVariables={() => setVariablesOpen(true)}
@@ -7055,7 +7215,7 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
         {deleteVersionCandidate ? (
           <ConfirmModal
             title="Delete saved version?"
-            message="This removes this saved version from history. Current published design will not be changed."
+            message="Delete this saved version only. This will not affect the published design or current draft."
             confirmLabel="Delete Version"
             onCancel={() => setDeleteVersionCandidate(null)}
             onConfirm={async () => {
@@ -7063,6 +7223,14 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
               setDeleteVersionCandidate(null);
               await deleteSavedVersion(version);
             }}
+          />
+        ) : null}
+        {renameVersionCandidate ? (
+          <RenameVersionModal
+            version={renameVersionCandidate}
+            saving={renamingVersion}
+            onCancel={() => !renamingVersion && setRenameVersionCandidate(null)}
+            onConfirm={(name) => renameSavedVersion(renameVersionCandidate, name)}
           />
         ) : null}
       </>

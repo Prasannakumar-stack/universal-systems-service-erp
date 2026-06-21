@@ -6463,7 +6463,7 @@ button:disabled {
     border: 1px solid rgba(245, 158, 11, 0.28);
     border-radius: 12px;
     background: rgba(245, 158, 11, 0.1);
-    padding: 0.65rem 0.75rem;
+    padding: 0.68rem 0.78rem;
     color: #fde68a;
     font-size: 0.78rem;
     font-weight: 850;
@@ -10843,72 +10843,264 @@ button:disabled {
     scroll-margin-top: 1rem;
   }
 
-  .pdf-version-card {
+  .pdf-version-panel-header {
     display: grid;
-    gap: 0.55rem;
-    border-radius: 10px;
-    border: 1px solid rgba(125, 211, 252, 0.13);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .pdf-version-panel-header.is-compact {
+    margin-bottom: 1rem;
+    border: 1px solid rgba(125, 211, 252, 0.14);
+    border-radius: 12px;
     background:
-      linear-gradient(135deg, rgba(15, 23, 42, 0.62), rgba(15, 43, 78, 0.42)),
+      linear-gradient(145deg, rgba(15, 35, 66, 0.78), rgba(5, 17, 34, 0.82)),
       rgba(255, 255, 255, 0.035);
-    padding: 0.72rem;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    padding: 0.75rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
-  .pdf-version-card-head,
-  .pdf-version-card-body {
+  .pdf-version-panel-title {
+    min-width: 0;
+  }
+
+  .pdf-version-title-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.7rem;
-    min-width: 0;
+    gap: 0.45rem;
   }
 
-  .pdf-version-card-head p {
+  .pdf-version-title-row h3 {
     color: var(--app-text);
-    font-size: 0.9rem;
+    font-size: 1rem;
     font-weight: 950;
-    line-height: 1;
+    line-height: 1.1;
   }
 
-  .pdf-version-card-head span {
-    max-width: 12rem;
-    overflow: hidden;
-    border-radius: 999px;
-    border: 1px solid rgba(56, 189, 248, 0.2);
-    background: rgba(14, 165, 233, 0.12);
-    color: #bae6fd;
-    padding: 0.28rem 0.5rem;
-    font-size: 0.64rem;
-    font-weight: 950;
-    letter-spacing: 0.04em;
-    line-height: 1;
-    text-overflow: ellipsis;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-
-  .pdf-version-card-body small,
-  .pdf-version-card-main small {
-    min-width: 0;
-    overflow: hidden;
+  .pdf-version-panel-title p {
+    margin-top: 0.26rem;
     color: var(--app-text-muted);
     font-size: 0.72rem;
-    font-weight: 750;
-    text-overflow: ellipsis;
+    font-weight: 700;
+    line-height: 1.45;
+  }
+
+  .pdf-version-count-badge,
+  .pdf-version-latest-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.35rem;
+    border-radius: 999px;
+    border: 1px solid rgba(125, 211, 252, 0.22);
+    background: rgba(56, 189, 248, 0.11);
+    color: #bae6fd;
+    padding: 0.22rem 0.5rem;
+    font-size: 0.62rem;
+    font-weight: 950;
+    line-height: 1;
     white-space: nowrap;
+  }
+
+  .pdf-version-close-button {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .pdf-version-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0.58rem;
+    min-height: 5.1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(125, 211, 252, 0.12);
+    background:
+      linear-gradient(135deg, rgba(13, 28, 52, 0.76), rgba(8, 24, 45, 0.58)),
+      rgba(255, 255, 255, 0.035);
+    padding: 0.72rem;
+    box-shadow: 0 10px 24px rgba(0, 8, 22, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    transition: border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  }
+
+  .pdf-version-card:hover {
+    border-color: rgba(125, 211, 252, 0.24);
+    background:
+      linear-gradient(135deg, rgba(15, 39, 72, 0.86), rgba(9, 29, 54, 0.68)),
+      rgba(255, 255, 255, 0.05);
+    box-shadow: 0 14px 30px rgba(0, 8, 22, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transform: translateY(-1px);
+  }
+
+  .pdf-version-card.is-latest {
+    border-color: rgba(56, 189, 248, 0.42);
+    background:
+      linear-gradient(135deg, rgba(14, 57, 92, 0.74), rgba(8, 27, 50, 0.66)),
+      rgba(56, 189, 248, 0.045);
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.1), 0 14px 34px rgba(14, 165, 233, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   }
 
   .pdf-version-card-main {
+    min-width: 0;
+  }
+
+  .pdf-version-identity {
     display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 0.68rem;
+    min-width: 0;
+  }
+
+  .pdf-version-number-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.48rem;
+    height: 2.05rem;
+    border-radius: 9px;
+    border: 1px solid rgba(125, 211, 252, 0.26);
+    background: rgba(8, 18, 34, 0.72);
+    color: #e0f2fe;
+    font-size: 0.8rem;
+    font-weight: 950;
+    line-height: 1;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .pdf-version-copy {
+    display: grid;
+    gap: 0.28rem;
+    min-width: 0;
+    padding-top: 0.02rem;
+  }
+
+  .pdf-version-name-row {
+    display: flex;
+    align-items: center;
     gap: 0.45rem;
     min-width: 0;
+  }
+
+  .pdf-version-name-row p {
+    min-width: 0;
+    overflow: hidden;
+    border-radius: 4px;
+    color: var(--app-text);
+    font-size: 0.9rem;
+    font-weight: 950;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pdf-version-name-row p:focus-visible {
+    outline: 2px solid rgba(56, 189, 248, 0.52);
+    outline-offset: 2px;
+  }
+
+  .pdf-version-latest-badge {
+    border-color: rgba(52, 211, 153, 0.22);
+    background: rgba(16, 185, 129, 0.12);
+    color: #bbf7d0;
+  }
+
+  .pdf-version-copy small {
+    min-width: 0;
+    overflow: hidden;
+    color: rgba(203, 213, 225, 0.82);
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pdf-version-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    justify-self: end;
+    gap: 0.3rem;
+    border-top: 1px solid rgba(125, 211, 252, 0.1);
+    padding-top: 0.48rem;
+    min-width: 0;
+  }
+
+  .pdf-version-action-button {
+    min-height: 1.78rem;
+    border-radius: 8px;
+    padding: 0.28rem 0.46rem;
+    font-size: 0.64rem;
+    font-weight: 900;
+  }
+
+  .pdf-version-delete-button {
+    min-width: 1.78rem;
+    width: 1.78rem;
+    height: 1.78rem;
+    border-color: rgba(248, 113, 113, 0.14);
+    background: rgba(127, 29, 29, 0.08);
+    color: #fecaca;
+  }
+
+  .pdf-version-delete-button:hover:not(:disabled) {
+    border-color: rgba(248, 113, 113, 0.3);
+    background: rgba(239, 68, 68, 0.13);
+    color: #fee2e2;
+  }
+
+  .pdf-version-card:focus-within,
+  .pdf-version-panel-header .icon-button:focus-visible,
+  .pdf-rename-version-modal .btn:focus-visible,
+  .pdf-rename-version-modal .input:focus-visible {
+    outline: 2px solid rgba(56, 189, 248, 0.56);
+    outline-offset: 2px;
+  }
+
+  .pdf-rename-version-modal {
+    display: grid;
+    width: min(100%, 28rem);
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid rgba(125, 211, 252, 0.18);
+    background:
+      radial-gradient(circle at 100% 0%, rgba(56, 189, 248, 0.14), transparent 16rem),
+      linear-gradient(145deg, rgba(16, 47, 87, 0.97), rgba(7, 22, 42, 0.99));
+    box-shadow: 0 32px 90px rgba(0, 8, 22, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .pdf-rename-version-body {
+    display: grid;
+    gap: 0.6rem;
+    padding: 1rem;
+  }
+
+  .pdf-rename-version-error {
+    color: #fecaca;
+    font-size: 0.74rem;
+    font-weight: 800;
+  }
+
+  @media (max-width: 620px) {
+    .pdf-version-actions {
+      justify-self: stretch;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .pdf-version-action-button {
+      flex: 0 1 auto;
+      justify-content: center;
+    }
   }
 
   .pdf-modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 100;
+    z-index: 3000;
     display: grid;
     place-items: center;
     background: rgba(0, 8, 22, 0.68);
@@ -11216,7 +11408,7 @@ button:disabled {
     top: 0.75rem;
     z-index: 35;
     display: grid;
-    grid-template-columns: minmax(14rem, 0.75fr) minmax(0, 2.25fr);
+    grid-template-columns: minmax(18rem, 0.72fr) minmax(0, 2.28fr);
     align-items: center;
     gap: 0.75rem;
     width: 100%;
@@ -11259,7 +11451,39 @@ button:disabled {
     min-width: 0;
     flex-wrap: wrap;
     justify-content: flex-end;
+    gap: 0.5rem;
     overflow: visible;
+  }
+
+  .pdf-toolbar-action-group {
+    display: inline-flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.34rem;
+    min-width: 0;
+    border: 1px solid rgba(125, 211, 252, 0.1);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.035);
+    padding: 0.22rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .pdf-toolbar-action-group.is-primary {
+    justify-content: center;
+  }
+
+  .pdf-toolbar-action-group.is-right {
+    justify-content: flex-end;
+  }
+
+  .pdf-toolbar-action-group.is-tools {
+    flex-wrap: nowrap;
+  }
+
+  .pdf-toolbar-action-group.is-tools .icon-button {
+    width: 2rem;
+    height: 2rem;
   }
 
   .pdf-builder-more-menu-wrap {
@@ -11331,9 +11555,26 @@ button:disabled {
   }
 
   .pdf-builder-toolbar-actions .btn {
-    min-height: 2.1rem;
-    padding: 0.42rem 0.62rem;
+    min-height: 2rem;
+    border-radius: 10px;
+    padding: 0.4rem 0.62rem;
     font-size: 0.72rem;
+  }
+
+  .pdf-builder-toolbar-actions .btn svg,
+  .pdf-builder-toolbar-actions .icon-button svg {
+    flex: 0 0 auto;
+  }
+
+  .pdf-builder-publish-button {
+    border-color: rgba(125, 211, 252, 0.22) !important;
+    background: rgba(8, 18, 34, 0.32) !important;
+    color: #e0f2fe !important;
+  }
+
+  .pdf-builder-publish-button:hover:not(:disabled) {
+    border-color: rgba(56, 189, 248, 0.36) !important;
+    background: rgba(56, 189, 248, 0.12) !important;
   }
 
   .pdf-builder-warning,
@@ -11996,8 +12237,7 @@ button:disabled {
     font-weight: 950;
   }
 
-  .pdf-builder-history-actions,
-  .pdf-version-actions {
+  .pdf-builder-history-actions {
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
@@ -12005,9 +12245,9 @@ button:disabled {
   }
 
   .pdf-version-delete-button {
-    min-width: 2rem;
-    width: 2rem;
-    height: 2rem;
+    min-width: 1.78rem;
+    width: 1.78rem;
+    height: 1.78rem;
     border-color: rgba(248, 113, 113, 0.18);
     background: rgba(127, 29, 29, 0.16);
     color: rgba(254, 202, 202, 0.86);
@@ -17626,7 +17866,7 @@ button:disabled {
 
   .amc-details-grid {
     display: grid;
-    gap: 0.75rem;
+    gap: 0.85rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -30031,7 +30271,7 @@ footer a:hover {
   .booking-trust-pill {
     width: 100%;
     align-items: flex-start;
-    border-radius: 14px;
+    border-radius: 16px;
     font-size: 0.78rem;
     line-height: 1.35;
   }

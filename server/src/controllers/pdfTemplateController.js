@@ -5,6 +5,7 @@ import {
   getPdfTemplateManifest,
   listPdfTemplates,
   publishInvoiceDesign,
+  renameInvoiceDesignVersion,
   resetPdfTemplate,
   restoreInvoiceDesignVersionAsDraft,
   restorePdfTemplateVersion,
@@ -55,6 +56,11 @@ export async function restoreDesignDraft(req, res) {
 export async function deleteVersion(req, res) {
   const template = await deleteInvoiceDesignVersion(req.params.key, req.params.versionId, req.user);
   res.json({ success: true, template, message: 'Saved version deleted' });
+}
+
+export async function renameVersion(req, res) {
+  const template = await renameInvoiceDesignVersion(req.params.key, req.params.versionId, req.body, req.user);
+  res.json({ success: true, template, message: 'Version renamed successfully.' });
 }
 
 export async function preview(req, res) {

@@ -1159,6 +1159,7 @@ function serializeVersion(version, key = '') {
   return {
     id: String(version._id || ''),
     version: version.version,
+    displayName: version.displayName || '',
     editedAt: version.editedAt,
     editedBy: userSummary(version.editedBy),
     action: version.action || 'updated',
@@ -1466,6 +1467,35 @@ export async function deleteInvoiceDesignVersion(key, versionId, user = null) {
   return getPdfTemplate(normalized);
 }
 
+export async function renameInvoiceDesignVersion(key, versionId, payload = {}, user = null) {
+  assertAdmin(user);
+  const normalized = assertInvoiceDesignKey(key);
+  const template = await findTemplate(normalized);
+  if (!template) throw appError('PDF template not found', 404);
+  const version = template.versions.id(versionId) || template.versions.find((item) => String(item.version) === String(versionId));
+  if (!version) throw appError('Template version not found', 404);
+  const displayName = cleanText(payload.displayName ?? payload.name ?? '', '', 120);
+  if (!displayName) throw appError('Version name is required', 400);
+  const before = {
+    key: normalized,
+    version: template.version,
+    renamedVersion: version.version,
+    displayName: version.displayName || ''
+  };
+  version.displayName = displayName;
+  template.lastEditedBy = user?._id || null;
+  await template.save();
+  await logAudit({
+    userId: user?._id || null,
+    action: 'pdf_template_version_renamed',
+    module: 'pdf_template',
+    recordId: template._id,
+    before,
+    after: { key: normalized, version: template.version, renamedVersion: version.version, displayName }
+  });
+  return getPdfTemplate(normalized);
+}
+
 export async function resetPdfTemplate(key, user = null) {
   assertAdmin(user);
   const normalized = assertTemplateKey(key);
@@ -1561,6 +1591,61 @@ function formatDate(value) {
 
 function formatAmount(value) {
   return `Rs. ${Number(value || 0).toFixed(2)}`;
+}
+
+function parseAmountValue(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const text = String(value ?? '').trim();
+  if (!text || text === '-') return null;
+  const normalized = text.replace(/,/g, '').replace(/[^0-9.-]/g, '');
+  if (!normalized || normalized === '-' || normalized === '.') return null;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function wordsBelowThousand(number) {
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const n = Math.floor(number);
+  if (n < 20) return ones[n];
+  if (n < 100) return `${tens[Math.floor(n / 10)]} ${ones[n % 10]}`.trim();
+  return `${ones[Math.floor(n / 100)]} Hundred ${wordsBelowThousand(n % 100)}`.trim();
+}
+
+function indianNumberWords(value) {
+  let n = Math.floor(Number(value || 0));
+  if (n === 0) return 'Zero';
+  const crore = Math.floor(n / 10000000);
+  n %= 10000000;
+  const lakh = Math.floor(n / 100000);
+  n %= 100000;
+  const thousand = Math.floor(n / 1000);
+  n %= 1000;
+  const chunks = [];
+  if (crore) chunks.push(`${wordsBelowThousand(crore)} Crore`);
+  if (lakh) chunks.push(`${wordsBelowThousand(lakh)} Lakh`);
+  if (thousand) chunks.push(`${wordsBelowThousand(thousand)} Thousand`);
+  if (n) chunks.push(wordsBelowThousand(n));
+  return chunks.join(' ');
+}
+
+function amountInWords(value) {
+  const amount = parseAmountValue(value);
+  if (amount === null) return '-';
+  const prefix = amount < 0 ? 'Minus ' : '';
+  const totalPaise = Math.round(Math.abs(amount) * 100);
+  const rupees = Math.floor(totalPaise / 100);
+  const paise = totalPaise % 100;
+  const rupeeWords = `${prefix}Rupees ${indianNumberWords(rupees)}`;
+  if (!paise) return `${rupeeWords} Only`;
+  return `${rupeeWords} and Paise ${indianNumberWords(paise)} Only`;
+}
+
+function resolvedAmountInWords(source = {}, finalTotal) {
+  const explicit = source.amountInWords ?? source.amount_in_words;
+  const explicitText = String(explicit ?? '').trim();
+  if (explicitText && explicitText !== '-') return explicitText;
+  return amountInWords(finalTotal);
 }
 
 function safeTemplateValue(value) {
@@ -1700,7 +1785,7 @@ export function buildTemplateContext(source = {}, company = COMPANY) {
     final_total: formatAmount(finalTotal),
     amount_paid: formatAmount(amountPaid),
     balance_due: formatAmount(balanceDue),
-    amount_in_words: source.amountInWords || source.amount_in_words || '-',
+    amount_in_words: resolvedAmountInWords(source, finalTotal),
     item_index: invoiceItems[0]?.item_index || '1',
     item_description: invoiceItems[0]?.item_description || '-',
     item_quantity: invoiceItems[0]?.item_quantity || '1',

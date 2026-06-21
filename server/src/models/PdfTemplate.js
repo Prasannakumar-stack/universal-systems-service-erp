@@ -6,7 +6,8 @@ const pdfTemplateVersionSchema = new mongoose.Schema(
     config: { type: mongoose.Schema.Types.Mixed, default: {} },
     editedAt: { type: Date, default: Date.now },
     editedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    action: { type: String, trim: true, default: 'updated' }
+    action: { type: String, trim: true, default: 'updated' },
+    displayName: { type: String, trim: true, maxlength: 120, default: '' }
   },
   { _id: true }
 );
