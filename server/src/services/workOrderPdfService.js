@@ -13,7 +13,9 @@ import {
 } from './amcPdfTemplates.js';
 import { getBusinessSettings } from './businessSettingsService.js';
 import {
+  canRenderPublishedInvoiceDom,
   getTemplateByPdfType,
+  renderPublishedInvoiceDomTemplate,
   renderTemplateText,
   templateAccent,
   workOrderTemplateContext
@@ -438,41 +440,64 @@ function amcBaseData(workOrder = {}) {
   };
 }
 
-function buildInvoice(doc, workOrder, template, context, company) {
+function invoicePayloadForWorkOrder(workOrder, context) {
   const isAmcWorkOrder = Boolean(workOrder.amcContractId);
   const rows = buildRows(workOrder, { billingOnly: isAmcWorkOrder });
   const subtotal = rows.reduce((sum, row) => sum + Number(row.total || 0), 0);
   const invoice = workOrder.invoiceId;
   const total = Number(invoice?.total ?? subtotal);
   const customer = workOrder.customerId || {};
+  return {
+    invoiceNo: invoice?.invoiceNumber || context.invoice_number || '-',
+    jobReference: workOrderReference(workOrder),
+    invoiceDate: documentDate(invoice?.createdAt || new Date()),
+    paymentStatus: invoice?.status || 'Pending',
+    customerName: customer.name || '-',
+    customerPhone: customer.phone || '-',
+    customerAddress: customer.address || '-',
+    serviceType: workOrder.serviceType || workOrder.bookingId?.serviceType || serviceType(workOrder),
+    device: workOrder.device || '-',
+    brandModel: deviceBrandModel(workOrder),
+    problemComplaint: workOrder.issue || '-',
+    technician: workOrder.technicianId?.name || workOrder.technicianId?.username || '',
+    items: rows.map((row) => ({
+      description: row.description,
+      quantity: row.quantity,
+      unitPrice: row.price,
+      total: row.total
+    })),
+    subtotal,
+    finalTotal: total,
+    amountPaid: Number(invoice?.paidAmount || 0),
+    balance: Number(invoice?.balance ?? Math.max(0, total - Number(invoice?.paidAmount || 0)))
+  };
+}
+
+function invoiceDomContextForWorkOrder(context = {}, invoice = {}) {
+  const invoiceItems = (invoice.items || []).map((item, index) => ({
+    item_index: String(index + 1),
+    item_description: item.description || '-',
+    item_quantity: String(item.quantity ?? 1),
+    item_unit_price: money(item.unitPrice ?? item.price ?? item.rate ?? 0),
+    item_total: money(item.total ?? item.amount ?? 0)
+  }));
+  return {
+    ...context,
+    invoice_items: invoiceItems,
+    item_index: invoiceItems[0]?.item_index || context.item_index || '1',
+    item_description: invoiceItems[0]?.item_description || context.item_description || '-',
+    item_quantity: invoiceItems[0]?.item_quantity || context.item_quantity || '1',
+    item_unit_price: invoiceItems[0]?.item_unit_price || context.item_unit_price || money(0),
+    item_total: invoiceItems[0]?.item_total || context.item_total || money(0)
+  };
+}
+
+function buildInvoice(doc, workOrder, template, context, company) {
   renderInvoicePdf(doc, {
     company,
     template,
     context,
-    invoice: {
-      invoiceNo: invoice?.invoiceNumber || context.invoice_number || '-',
-      jobReference: workOrderReference(workOrder),
-      invoiceDate: documentDate(invoice?.createdAt || new Date()),
-      paymentStatus: invoice?.status || 'Pending',
-      customerName: customer.name || '-',
-      customerPhone: customer.phone || '-',
-      customerAddress: customer.address || '-',
-      serviceType: workOrder.serviceType || workOrder.bookingId?.serviceType || serviceType(workOrder),
-      device: workOrder.device || '-',
-      brandModel: deviceBrandModel(workOrder),
-      problemComplaint: workOrder.issue || '-',
-      technician: workOrder.technicianId?.name || workOrder.technicianId?.username || '',
-      items: rows.map((row) => ({
-        description: row.description,
-        quantity: row.quantity,
-        unitPrice: row.price,
-        total: row.total
-      })),
-      subtotal,
-      finalTotal: total,
-      amountPaid: Number(invoice?.paidAmount || 0),
-      balance: Number(invoice?.balance ?? Math.max(0, total - Number(invoice?.paidAmount || 0)))
-    }
+    invoice: invoicePayloadForWorkOrder(workOrder, context)
   });
 }
 
@@ -638,6 +663,16 @@ export async function generateWorkOrderPdf({ workOrderId, type, user }) {
     getCompanyIdentity(),
     getBusinessSettings().catch(() => null)
   ]);
+  if (type === 'work' && canRenderPublishedInvoiceDom(template)) {
+    const context = workOrderTemplateContext(workOrder, company);
+    const invoiceContext = invoiceDomContextForWorkOrder(context, invoicePayloadForWorkOrder(workOrder, context));
+    const pdf = await renderPublishedInvoiceDomTemplate(
+      template,
+      invoiceContext,
+      `${customerId(workOrder)}-${cleanFilePart(type)}-published-design`
+    );
+    return { ...pdf, workOrder, caption: pdfCaption(type, workOrder, company) };
+  }
 
   fs.mkdirSync(PDF_DIR, { recursive: true });
   const filename = `${customerId(workOrder)}-${cleanFilePart(type)}-${Date.now()}.pdf`;

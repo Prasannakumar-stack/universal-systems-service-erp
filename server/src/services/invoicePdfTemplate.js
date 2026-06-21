@@ -11,16 +11,18 @@ const PAGE_X = 28;
 const PAGE_RIGHT = 567;
 const CONTENT_WIDTH = PAGE_RIGHT - PAGE_X;
 
-const NAVY = '#082a73';
-const NAVY_DARK = '#061b4f';
-const TEXT = '#0f172a';
-const MUTED = '#334155';
-const LIGHT_BLUE = '#f1f7ff';
-const BORDER = '#103a8a';
-const SOFT_BORDER = '#d8e5f7';
-const GREEN = '#0a7a5f';
-const GREEN_LIGHT = '#f3fffb';
-const GREEN_BORDER = '#73bea8';
+const NAVY = '#063b88';
+const NAVY_DARK = '#041b49';
+const CYAN = '#0ea5e9';
+const TEXT = '#0b1220';
+const MUTED = '#475569';
+const LIGHT_BLUE = '#eef7ff';
+const BORDER = '#1d5fd1';
+const SOFT_BORDER = '#c7ddf8';
+const TABLE_LINE = '#d7e6f8';
+const GREEN = '#08745f';
+const GREEN_LIGHT = '#f0fdf9';
+const GREEN_BORDER = '#7dd3bd';
 
 const ONE_PAGE_AMOUNT_Y = 498;
 const BOTTOM_STRIP_Y = 813;
@@ -78,9 +80,10 @@ function cleanText(value, fallback = '-') {
 }
 
 function renderText(value = '', context = {}) {
-  return String(value || '').replace(/\{\{([a-z0-9_]+)\}\}/gi, (_match, key) => {
-    if (!Object.prototype.hasOwnProperty.call(context, key)) return '-';
-    const next = context[key];
+  return String(value || '').replace(/\{\{([a-z0-9_.]+)\}\}/gi, (_match, key) => {
+    const normalizedKey = String(key || '').replace(/\./g, '_');
+    if (!Object.prototype.hasOwnProperty.call(context, normalizedKey)) return '-';
+    const next = context[normalizedKey];
     return next === undefined || next === null || next === '' ? '-' : next;
   });
 }
@@ -167,13 +170,20 @@ function drawLine(doc, x1, y1, x2, y2, color = SOFT_BORDER, width = 0.7) {
 
 function drawCard(doc, x, y, width, height, options = {}) {
   doc.save();
-  doc.lineWidth(options.lineWidth || 0.7).strokeColor(options.stroke || BORDER);
+  doc.lineWidth(options.lineWidth || 0.7).strokeColor(options.stroke || SOFT_BORDER);
   if (options.fill) {
-    doc.roundedRect(x, y, width, height, options.radius || 7).fillAndStroke(options.fill, options.stroke || BORDER);
+    doc.roundedRect(x, y, width, height, options.radius || 8).fillAndStroke(options.fill, options.stroke || SOFT_BORDER);
   } else {
-    doc.roundedRect(x, y, width, height, options.radius || 7).stroke();
+    doc.roundedRect(x, y, width, height, options.radius || 8).stroke();
   }
   doc.restore();
+}
+
+function drawSectionLabel(doc, label, x, y, width, color = NAVY) {
+  doc.font(boldFont()).fontSize(8.2).fillColor(color).text(String(label || '').toUpperCase(), x, y, {
+    width,
+    characterSpacing: 0.35
+  });
 }
 
 function drawHeaderIcon(doc, type, x, y, color = NAVY) {
@@ -208,38 +218,44 @@ function drawContactLine(doc, type, text, x, y, width, options = {}) {
 function drawHeader(doc, company, config = {}) {
   const currentCompany = invoiceCompany(company);
   const logoPath = currentCompany.logoFilePath || LOGO_FULL_PATH;
-  const topY = 10;
+  const topY = 12;
+
+  drawCard(doc, PAGE_X, topY, CONTENT_WIDTH, 104, { fill: '#fbfdff', stroke: SOFT_BORDER, radius: 10, lineWidth: 0.75 });
+  doc.roundedRect(PAGE_X + 1, topY + 1, 10, 102, 8).fill(CYAN);
 
   if (config.showCompanyLogo !== false && logoPath && fs.existsSync(logoPath)) {
-    doc.image(logoPath, PAGE_X, topY, { width: 270 });
+    doc.image(logoPath, PAGE_X + 18, topY + 15, { fit: [238, 48], align: 'left', valign: 'center' });
   } else {
-    doc.circle(68, topY + 42, 42).strokeColor(NAVY).lineWidth(1.2).stroke();
-    doc.font(boldFont()).fontSize(36).fillColor(NAVY).text('US', 38, topY + 25, { width: 60, align: 'center' });
-    doc.font(boldFont()).fontSize(31).fillColor(NAVY).text(currentCompany.name.replace(/\s+Systems$/i, '\nSystems'), 120, topY + 14, { width: 176, lineGap: -4 });
+    doc.circle(75, topY + 42, 34).strokeColor(NAVY).lineWidth(1.2).stroke();
+    doc.font(boldFont()).fontSize(28).fillColor(NAVY).text('US', 51, topY + 27, { width: 48, align: 'center' });
+    doc.font(boldFont()).fontSize(24).fillColor(NAVY).text(currentCompany.name, 122, topY + 26, { width: 176, lineGap: -2 });
   }
 
-  doc.font(bodyFont()).fontSize(9.3).fillColor(TEXT)
-    .text(currentCompany.tagline, 128, 91, { width: 178, align: 'center' });
+  doc.font(boldFont()).fontSize(8.4).fillColor(MUTED)
+    .text(currentCompany.tagline, PAGE_X + 20, topY + 72, { width: 238, align: 'center' });
 
   if (config.showCompanyDetails !== false) {
-    const rightX = 342;
+    const rightX = 336;
     const rightWidth = PAGE_RIGHT - rightX;
-    drawContactLine(doc, 'address', currentCompany.addressLines.join('\n'), rightX, topY, rightWidth, { fontSize: 8.65 });
-    drawContactLine(doc, 'phone', currentCompany.phones.join(' / '), rightX, topY + 47, rightWidth);
-    drawContactLine(doc, 'email', currentCompany.email, rightX, topY + 66, rightWidth);
-    drawContactLine(doc, 'website', currentCompany.website, rightX, topY + 85, rightWidth);
+    drawCard(doc, rightX - 8, topY + 10, rightWidth + 2, 84, { fill: '#f4f9ff', stroke: '#d8e9fb', radius: 8, lineWidth: 0.55 });
+    drawContactLine(doc, 'address', currentCompany.addressLines.join('\n'), rightX, topY + 17, rightWidth, { fontSize: 7.75 });
+    drawContactLine(doc, 'phone', currentCompany.phones.join(' / '), rightX, topY + 53, rightWidth, { fontSize: 8.25 });
+    drawContactLine(doc, 'email', currentCompany.email, rightX, topY + 69, rightWidth, { fontSize: 8.25 });
+    drawContactLine(doc, 'website', currentCompany.website, rightX, topY + 84, rightWidth, { fontSize: 8.25 });
   }
 
-  drawLine(doc, PAGE_X, 119, PAGE_RIGHT, 119, NAVY, 0.8);
+  drawLine(doc, PAGE_X, 122, PAGE_RIGHT, 122, NAVY, 1.1);
+  drawLine(doc, PAGE_X, 125, PAGE_X + 156, 125, CYAN, 2.2);
 }
 
 function drawTitle(doc, title) {
   const y = 139;
-  drawLine(doc, 132, y, 224, y, NAVY, 1.2);
-  drawLine(doc, 371, y, 463, y, NAVY, 1.2);
-  doc.circle(224, y, 3.8).fillColor(NAVY).fill();
-  doc.circle(371, y, 3.8).fillColor(NAVY).fill();
-  doc.font(boldFont()).fontSize(25).fillColor(NAVY).text(title || 'INVOICE', 225, 125, {
+  drawLine(doc, 86, y, 220, y, SOFT_BORDER, 0.9);
+  drawLine(doc, 376, y, 510, y, SOFT_BORDER, 0.9);
+  doc.roundedRect(222, y - 17, 152, 34, 17).fillAndStroke('#f4f9ff', '#cfe3fb');
+  doc.circle(220, y, 3.4).fillColor(CYAN).fill();
+  doc.circle(376, y, 3.4).fillColor(CYAN).fill();
+  doc.font(boldFont()).fontSize(21).fillColor(NAVY).text(title || 'INVOICE', 224, y - 9, {
     width: 145,
     align: 'center'
   });
@@ -293,8 +309,12 @@ function drawInvoiceDetailsCard(doc, invoice, config = {}) {
   const y = 154;
   const invoiceDetails = cfgSection(config, 'invoiceDetails');
   const customerDetails = cfgSection(config, 'customerDetails');
-  drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 132);
-  drawLine(doc, 304, y + 12, 304, y + 121, '#9bb4df', 0.8);
+  drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 132, { fill: '#ffffff', stroke: SOFT_BORDER, radius: 10 });
+  doc.roundedRect(PAGE_X + 1, y + 1, CONTENT_WIDTH - 2, 28, 9).fill('#f3f8ff');
+  doc.rect(PAGE_X + 1, y + 18, CONTENT_WIDTH - 2, 11).fill('#f3f8ff');
+  drawSectionLabel(doc, 'Invoice Details', 45, y + 10, 170);
+  drawSectionLabel(doc, 'Bill To', 330, y + 10, 160);
+  drawLine(doc, 304, y + 20, 304, y + 121, '#bad2ef', 0.75);
 
   const leftRows = [
     visibleFlag(invoiceDetails, 'showInvoiceNumber') ? ['invoice', 'Invoice No', invoice.invoiceNo] : null,
@@ -302,26 +322,26 @@ function drawInvoiceDetailsCard(doc, invoice, config = {}) {
     visibleFlag(invoiceDetails, 'showInvoiceDate') ? ['date', 'Invoice Date', invoice.invoiceDate] : null,
     visibleFlag(invoiceDetails, 'showPaymentStatus') ? ['status', 'Payment Status', invoice.paymentStatus] : null
   ].filter(Boolean);
-  const rowY = leftRows.length > 3 ? [176, 203, 230, 257] : [180, 209, 238];
+  const rowY = leftRows.length > 3 ? [187, 211, 235, 259] : [190, 219, 248];
   leftRows.forEach(([icon, label, value], index) => {
-    drawSmallIcon(doc, icon, 42, rowY[index] - 5);
-    drawColonValue(doc, label, value, 78, rowY[index], { label: 128, value: 68 });
+    drawSmallIcon(doc, icon, 44, rowY[index] - 6, CYAN);
+    drawColonValue(doc, label, value, 79, rowY[index], { label: 122, value: 76, fontSize: 8.65 });
   });
 
-  let rightY = 176;
+  let rightY = 188;
   if (visibleFlag(customerDetails, 'showCustomerName')) {
-    drawColonValue(doc, 'Customer Name', invoice.customerName, 330, rightY, { label: 93, value: 103 });
-    rightY += 27;
+    drawColonValue(doc, 'Customer Name', invoice.customerName, 330, rightY, { label: 94, value: 101, fontSize: 8.65 });
+    rightY += 25;
   }
   if (visibleFlag(customerDetails, 'showPhoneNumber')) {
-    drawColonValue(doc, 'Phone Number', invoice.customerPhone, 330, rightY, { label: 93, value: 103 });
-    rightY += 27;
+    drawColonValue(doc, 'Phone Number', invoice.customerPhone, 330, rightY, { label: 94, value: 101, fontSize: 8.65 });
+    rightY += 25;
   }
   if (visibleFlag(customerDetails, 'showAddress')) {
-    doc.font(boldFont()).fontSize(8.8).fillColor(TEXT).text('Address', 330, rightY, { width: 93 });
+    doc.font(boldFont()).fontSize(8.65).fillColor(TEXT).text('Address', 330, rightY, { width: 94 });
     doc.text(':', 428, rightY, { width: 10, align: 'center' });
-    doc.font(bodyFont()).fontSize(8.8).fillColor(TEXT)
-      .text(cleanText(invoice.customerAddress), 448, rightY, { width: 94, lineGap: 2 });
+    doc.font(bodyFont()).fontSize(8.45).fillColor(TEXT)
+      .text(cleanText(invoice.customerAddress), 448, rightY, { width: 94, lineGap: 1.7 });
   }
 }
 
@@ -339,36 +359,37 @@ function drawKeyValue(doc, label, value, x, y, options = {}) {
 function drawServiceDetailsCard(doc, invoice, config = {}) {
   const y = 294;
   const serviceDetails = cfgSection(config, 'serviceDetails');
-  doc.roundedRect(PAGE_X + 0.5, y + 0.5, CONTENT_WIDTH - 1, 25, 6).fill(LIGHT_BLUE);
-  doc.rect(PAGE_X + 0.5, y + 14, CONTENT_WIDTH - 1, 11.5).fill(LIGHT_BLUE);
-  drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 108);
-  doc.font(boldFont()).fontSize(10.6).fillColor(NAVY).text('SERVICE DETAILS', 40, y + 10);
-  drawLine(doc, 304, y + 32, 304, y + 97, '#9bb4df', 0.8);
+  doc.roundedRect(PAGE_X + 0.5, y + 0.5, CONTENT_WIDTH - 1, 28, 8).fill(LIGHT_BLUE);
+  doc.rect(PAGE_X + 0.5, y + 16, CONTENT_WIDTH - 1, 12.5).fill(LIGHT_BLUE);
+  drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 108, { fill: '#ffffff', stroke: SOFT_BORDER, radius: 10 });
+  doc.roundedRect(PAGE_X + 12, y + 9, 5, 11, 2).fill(CYAN);
+  drawSectionLabel(doc, 'Service Details', 42, y + 10, 180);
+  drawLine(doc, 304, y + 35, 304, y + 96, '#bad2ef', 0.75);
 
-  let leftY = y + 41;
+  let leftY = y + 43;
   if (visibleFlag(serviceDetails, 'showServiceType')) {
-    drawKeyValue(doc, 'Service Type', invoice.serviceType, 45, leftY, { labelWidth: 99, valueWidth: 118 });
+    drawKeyValue(doc, 'Service Type', invoice.serviceType, 45, leftY, { labelWidth: 99, valueWidth: 118, fontSize: 8.65 });
     leftY += 23;
   }
   if (visibleFlag(serviceDetails, 'showDevice')) {
-    drawKeyValue(doc, 'Device', invoice.device, 45, leftY, { labelWidth: 99, valueWidth: 118 });
+    drawKeyValue(doc, 'Device', invoice.device, 45, leftY, { labelWidth: 99, valueWidth: 118, fontSize: 8.65 });
     leftY += 23;
   }
   if (visibleFlag(serviceDetails, 'showBrandModel')) {
-    drawKeyValue(doc, 'Brand / Model', invoice.brandModel, 45, leftY, { labelWidth: 99, valueWidth: 118 });
+    drawKeyValue(doc, 'Brand / Model', invoice.brandModel, 45, leftY, { labelWidth: 99, valueWidth: 118, fontSize: 8.65 });
   }
 
-  let rightY = y + 41;
+  let rightY = y + 43;
   if (visibleFlag(serviceDetails, 'showProblemComplaint')) {
-    doc.font(boldFont()).fontSize(8.8).fillColor(TEXT).text('Problem / Complaint', 330, rightY, { width: 105 });
+    doc.font(boldFont()).fontSize(8.65).fillColor(TEXT).text('Problem / Complaint', 330, rightY, { width: 105 });
     doc.text(':', 437, rightY, { width: 9, align: 'center' });
-    doc.font(bodyFont()).fontSize(8.8).fillColor(NAVY)
-      .text(cleanText(invoice.problemComplaint), 454, rightY, { width: 82, lineGap: 2 });
+    doc.font(bodyFont()).fontSize(8.45).fillColor(NAVY)
+      .text(cleanText(invoice.problemComplaint), 454, rightY, { width: 84, lineGap: 1.8 });
     rightY += 35;
   }
 
   if (visibleFlag(serviceDetails, 'showTechnician') && cleanText(invoice.technician, '') !== '') {
-    drawKeyValue(doc, 'Technician', invoice.technician, 330, rightY, { labelWidth: 92, valueWidth: 86 });
+    drawKeyValue(doc, 'Technician', invoice.technician, 330, rightY, { labelWidth: 92, valueWidth: 86, fontSize: 8.65 });
   }
 }
 
@@ -393,19 +414,20 @@ function tableColumns(config = {}) {
 
 function drawItemsHeader(doc, y, config = {}) {
   const columns = tableColumns(config);
-  const headerHeight = 24;
+  const headerHeight = 26;
   let x = PAGE_X;
-  doc.roundedRect(PAGE_X, y, CONTENT_WIDTH, headerHeight, 6).fill(NAVY);
-  doc.rect(PAGE_X, y + 12, CONTENT_WIDTH, 12).fill(NAVY);
-  doc.font(boldFont()).fontSize(9.5).fillColor('#ffffff');
+  doc.roundedRect(PAGE_X, y, CONTENT_WIDTH, headerHeight, 8).fill(NAVY_DARK);
+  doc.rect(PAGE_X, y + 13, CONTENT_WIDTH, 13).fill(NAVY_DARK);
+  doc.rect(PAGE_X, y + headerHeight - 3, CONTENT_WIDTH, 3).fill(CYAN);
+  doc.font(boldFont()).fontSize(9.25).fillColor('#ffffff');
   columns.forEach((column) => {
-    doc.text(column.label, x + 6, y + 7, { width: column.width - 12, align: column.align });
+    doc.text(column.label, x + 8, y + 7.3, { width: column.width - 16, align: column.align });
     x += column.width;
   });
   x = PAGE_X;
   columns.slice(0, -1).forEach((column) => {
     x += column.width;
-    drawLine(doc, x, y, x, y + headerHeight, '#ffffff', 0.45);
+    drawLine(doc, x, y + 4, x, y + headerHeight - 5, '#ffffff', 0.35);
   });
   return y + headerHeight;
 }
@@ -420,9 +442,9 @@ function rowHeight(doc, item, config = {}) {
 function drawItemRow(doc, item, index, y, height, config = {}) {
   const columns = tableColumns(config);
   let x = PAGE_X;
-  doc.rect(PAGE_X, y, CONTENT_WIDTH, height).fill(index % 2 ? '#f9fbff' : '#ffffff');
-  drawLine(doc, PAGE_X, y, PAGE_RIGHT, y, '#cad8f0', 0.55);
-  doc.font(bodyFont()).fontSize(8.8).fillColor(TEXT);
+  doc.rect(PAGE_X, y, CONTENT_WIDTH, height).fill(index % 2 ? '#f8fbff' : '#ffffff');
+  drawLine(doc, PAGE_X, y, PAGE_RIGHT, y, TABLE_LINE, 0.45);
+  doc.font(bodyFont()).fontSize(8.75).fillColor(TEXT);
   const values = {
     sno: String(index + 1),
     description: cleanText(item.description, 'Service'),
@@ -433,15 +455,17 @@ function drawItemRow(doc, item, index, y, height, config = {}) {
   };
   columns.forEach((column) => {
     const value = values[column.key] || '';
-    doc.text(value, x + 6, y + 8, { width: column.width - 12, align: column.align, lineGap: 1.2 });
+    const isAmountColumn = ['unitPrice', 'tax', 'total'].includes(column.key);
+    doc.font(isAmountColumn ? boldFont() : bodyFont()).fillColor(isAmountColumn ? NAVY : TEXT);
+    doc.text(value, x + 8, y + 8.3, { width: column.width - 16, align: column.align, lineGap: 1.2 });
     x += column.width;
   });
   x = PAGE_X;
   columns.slice(0, -1).forEach((column) => {
     x += column.width;
-    drawLine(doc, x, y, x, y + height, '#cad8f0', 0.55);
+    drawLine(doc, x, y, x, y + height, TABLE_LINE, 0.45);
   });
-  drawLine(doc, PAGE_X, y + height, PAGE_RIGHT, y + height, '#cad8f0', 0.55);
+  drawLine(doc, PAGE_X, y + height, PAGE_RIGHT, y + height, TABLE_LINE, 0.45);
 }
 
 function drawContinuationPage(doc, title, company, config) {
@@ -482,7 +506,7 @@ function drawItemsTable(doc, items, title, company, config) {
   let tableStartedY = y;
   let pageBreaks = 0;
   y = drawItemsHeader(doc, y, config);
-  doc.roundedRect(PAGE_X, tableStartedY, CONTENT_WIDTH, 24, 6).strokeColor(BORDER).lineWidth(0.7).stroke();
+  doc.roundedRect(PAGE_X, tableStartedY, CONTENT_WIDTH, 26, 8).strokeColor(SOFT_BORDER).lineWidth(0.7).stroke();
 
   while (index < rows.length) {
     const remainingHeight = rows.slice(index).reduce((sum, item) => sum + rowHeight(doc, item, config), 0);
@@ -493,7 +517,7 @@ function drawItemsTable(doc, items, title, company, config) {
       y = drawContinuationPage(doc, title, company, config);
       tableStartedY = y;
       y = drawItemsHeader(doc, y, config);
-      doc.roundedRect(PAGE_X, tableStartedY, CONTENT_WIDTH, 24, 6).strokeColor(BORDER).lineWidth(0.7).stroke();
+      doc.roundedRect(PAGE_X, tableStartedY, CONTENT_WIDTH, 26, 8).strokeColor(SOFT_BORDER).lineWidth(0.7).stroke();
       continue;
     }
 
@@ -507,17 +531,17 @@ function drawItemsTable(doc, items, title, company, config) {
       y = drawContinuationPage(doc, title, company, config);
       tableStartedY = y;
       y = drawItemsHeader(doc, y, config);
-      doc.roundedRect(PAGE_X, tableStartedY, CONTENT_WIDTH, 24, 6).strokeColor(BORDER).lineWidth(0.7).stroke();
+      doc.roundedRect(PAGE_X, tableStartedY, CONTENT_WIDTH, 26, 8).strokeColor(SOFT_BORDER).lineWidth(0.7).stroke();
     }
   }
 
-  drawLine(doc, PAGE_X, y, PAGE_RIGHT, y, BORDER, 0.7);
+  drawLine(doc, PAGE_X, y, PAGE_RIGHT, y, SOFT_BORDER, 0.75);
   return { y: y + 12, rows, pageBreaks };
 }
 
 function drawRupeeIcon(doc, x, y) {
   doc.save();
-  doc.circle(x + 18, y + 18, 18).strokeColor(NAVY).lineWidth(1.7).stroke();
+  doc.circle(x + 18, y + 18, 18).fillAndStroke('#e8f5ff', '#bae0fb');
   doc.font(boldFont()).fontSize(22).fillColor(NAVY).text('\u20b9', x + 10, y + 6, { width: 17, align: 'center' });
   doc.restore();
 }
@@ -530,38 +554,36 @@ function drawAmountSection(doc, y, totals) {
   const height = 104;
 
   if (visibleFlag(summary, 'showAmountInWords')) {
-    drawCard(doc, PAGE_X, y, leftWidth, height);
+    drawCard(doc, PAGE_X, y, leftWidth, height, { fill: '#fbfdff', stroke: SOFT_BORDER, radius: 10 });
+    doc.roundedRect(PAGE_X + 1, y + 1, 7, height - 2, 5).fill(CYAN);
     drawRupeeIcon(doc, 57, y + 31);
-    doc.font(boldFont()).fontSize(9.7).fillColor(NAVY).text('Amount in Words', 112, y + 41, { width: 126 });
-    doc.font(bodyFont()).fontSize(8.3).fillColor(TEXT).text(totals.words, 112, y + 61, { width: 144, lineGap: 2 });
+    doc.font(boldFont()).fontSize(9.6).fillColor(NAVY).text('Amount in Words', 112, y + 35, { width: 126 });
+    doc.font(bodyFont()).fontSize(8.35).fillColor(TEXT).text(totals.words, 112, y + 56, { width: 144, lineGap: 2 });
   }
 
-  drawCard(doc, rightX, y, rightWidth, height);
+  drawCard(doc, rightX, y, rightWidth, height, { fill: '#ffffff', stroke: SOFT_BORDER, radius: 10 });
+  doc.roundedRect(rightX + 1, y + 1, rightWidth - 2, 24, 9).fill('#f3f8ff');
+  doc.rect(rightX + 1, y + 14, rightWidth - 2, 11).fill('#f3f8ff');
+  drawSectionLabel(doc, 'Amount Summary', rightX + 14, y + 9, rightWidth - 28);
   const rows = [
     visibleFlag(summary, 'showSubtotal') ? ['Sub Total', money(totals.subtotal), false] : null,
     visibleFlag(summary, 'showFinalTotal') ? ['Final Total', money(totals.finalTotal), true] : null,
     visibleFlag(summary, 'showAmountPaid') ? ['Amount Paid', money(totals.amountPaid), false] : null
   ].filter(Boolean);
   rows.forEach(([label, value, bold], index) => {
-    const rowY = y + 14 + index * 26;
+    const rowY = y + 34 + index * 20;
     doc.font(bold ? boldFont() : boldFont()).fontSize(bold ? 10.4 : 8.9).fillColor(bold ? NAVY : TEXT)
       .text(label, rightX + 14, rowY, { width: 83 });
     doc.text(':', rightX + 98, rowY, { width: 10, align: 'center' });
     doc.font(boldFont()).fontSize(bold ? 11.2 : 8.9).fillColor(bold ? NAVY : TEXT)
       .text(value, rightX + 124, rowY, { width: rightWidth - 139, align: 'right' });
-    if (index === 0) drawLine(doc, rightX + 14, y + 38, rightX + rightWidth - 14, y + 38, NAVY, 0.7);
-    if (index === 2) {
-      doc.save();
-      doc.dash(2, { space: 2 });
-      drawLine(doc, rightX + 14, y + 77, rightX + rightWidth - 14, y + 77, NAVY, 0.7);
-      doc.undash();
-      doc.restore();
-    }
+    if (index < rows.length - 1) drawLine(doc, rightX + 14, rowY + 14.5, rightX + rightWidth - 14, rowY + 14.5, '#e0ebf7', 0.5);
   });
 
   if (visibleFlag(summary, 'showBalanceDue')) {
-    doc.roundedRect(rightX + 0.5, y + 77, rightWidth - 1, 26.5, 5).fill(NAVY);
-    doc.rect(rightX + 0.5, y + 77, rightWidth - 1, 9).fill(NAVY);
+    doc.roundedRect(rightX + 0.5, y + 77, rightWidth - 1, 26.5, 7).fill(NAVY_DARK);
+    doc.rect(rightX + 0.5, y + 77, rightWidth - 1, 9).fill(NAVY_DARK);
+    doc.rect(rightX + 0.5, y + 100, rightWidth - 1, 3).fill(CYAN);
     doc.font(boldFont()).fontSize(9.7).fillColor('#ffffff').text('Balance Due', rightX + 14, y + 84, { width: 83 });
     doc.text(':', rightX + 98, y + 84, { width: 10, align: 'center' });
     doc.text(money(totals.balance), rightX + 124, y + 84, { width: rightWidth - 139, align: 'right' });
@@ -570,17 +592,15 @@ function drawAmountSection(doc, y, totals) {
 
 function drawCheckDot(doc, x, y, color = GREEN) {
   doc.circle(x + 4, y + 4, 4).fillColor(color).fill();
-  doc.strokeColor('#ffffff').lineWidth(1.05).lineCap('round').lineJoin('round')
-    .moveTo(x + 2.2, y + 4).lineTo(x + 3.8, y + 5.8).lineTo(x + 6.4, y + 2.4).stroke();
+  doc.strokeColor('#ffffff').lineWidth(0.95).lineCap('round').lineJoin('round')
+    .moveTo(x + 2.2, y + 4.1).lineTo(x + 3.75, y + 5.7).lineTo(x + 6.35, y + 2.45).stroke();
 }
 
 function drawCompletionBadge(doc, x, y) {
   doc.save();
-  doc.circle(x + 17, y + 17, 17).fillColor(GREEN).fill();
-  doc.strokeColor('#ffffff').lineWidth(2.1).lineCap('round').lineJoin('round')
+  doc.circle(x + 17, y + 17, 17).fillAndStroke(GREEN, '#9de7d1');
+  doc.strokeColor('#ffffff').lineWidth(2).lineCap('round').lineJoin('round')
     .moveTo(x + 9.4, y + 17.2).lineTo(x + 14.8, y + 22.5).lineTo(x + 25.5, y + 11.6).stroke();
-  doc.polygon([x + 7, y + 30], [x + 1, y + 48], [x + 12, y + 43]).fillColor(GREEN).fill();
-  doc.polygon([x + 26.5, y + 30], [x + 34, y + 48], [x + 21.5, y + 43]).fillColor(GREEN).fill();
   doc.restore();
 }
 
@@ -588,10 +608,11 @@ function drawWorkNotice(doc, y, config = {}) {
   const notice = cfgSection(config, 'workCompletionNotice');
   if (notice.show === false) return 0;
   const lines = cfgList(notice.messageLines, DEFAULT_NOTICE);
-  drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 67, { fill: GREEN_LIGHT, stroke: GREEN_BORDER });
+  drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 67, { fill: GREEN_LIGHT, stroke: GREEN_BORDER, radius: 10 });
+  doc.roundedRect(PAGE_X + 1, y + 1, 7, 65, 5).fill(GREEN);
   drawCompletionBadge(doc, 58, y + 10);
-  drawLine(doc, 112, y + 12, 112, y + 56, GREEN_BORDER, 0.8);
-  doc.font(boldFont()).fontSize(10.3).fillColor(GREEN).text(cleanText(notice.title, 'WORK COMPLETION NOTICE'), 130, y + 13, { width: 310 });
+  drawLine(doc, 112, y + 12, 112, y + 56, GREEN_BORDER, 0.75);
+  doc.font(boldFont()).fontSize(10.1).fillColor(GREEN).text(cleanText(notice.title, 'WORK COMPLETION NOTICE'), 130, y + 13, { width: 310 });
   let lineY = y + 36;
   lines.slice(0, 3).forEach((line) => {
     drawCheckDot(doc, 130, lineY + 1, GREEN);
@@ -603,7 +624,7 @@ function drawWorkNotice(doc, y, config = {}) {
 
 function drawDocumentIcon(doc, x, y) {
   doc.save();
-  doc.circle(x + 21, y + 21, 21).strokeColor(NAVY).lineWidth(0.8).stroke();
+  doc.circle(x + 21, y + 21, 21).fillAndStroke('#eef7ff', '#c9def7');
   doc.roundedRect(x + 13, y + 10, 15, 22, 1.2).strokeColor(NAVY).lineWidth(1.5).stroke();
   doc.moveTo(x + 17, y + 17).lineTo(x + 25, y + 17).stroke();
   doc.moveTo(x + 17, y + 22).lineTo(x + 25, y + 22).stroke();
@@ -626,9 +647,10 @@ function invoiceTerms(config = {}, context = {}) {
 function drawTerms(doc, y, config = {}, context = {}) {
   const terms = cfgSection(config, 'terms');
   if (terms.show === false) return 0;
-  drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 73);
+  drawCard(doc, PAGE_X, y, CONTENT_WIDTH, 73, { fill: '#ffffff', stroke: SOFT_BORDER, radius: 10 });
+  doc.roundedRect(PAGE_X + 1, y + 1, 7, 71, 5).fill(NAVY);
   drawDocumentIcon(doc, 51, y + 15);
-  drawLine(doc, 105, y + 12, 105, y + 61, NAVY, 0.8);
+  drawLine(doc, 105, y + 12, 105, y + 61, SOFT_BORDER, 0.75);
   doc.font(boldFont()).fontSize(9.8).fillColor(NAVY).text(cleanText(terms.title, 'TERMS & CONDITIONS'), 128, y + 12, { width: 210 });
   let lineY = y + 31;
   invoiceTerms(config, context).forEach((term) => {
@@ -655,13 +677,21 @@ function drawFooterContacts(doc, y, company, config = {}) {
     footer.showAddress !== false ? ['address', 'Address', currentCompany.footerAddressLines.join('\n')] : null
   ].filter(Boolean);
   if (!columns.length) return;
+  const cardHeight = 56;
+  drawCard(doc, PAGE_X, y - 2, CONTENT_WIDTH, cardHeight, { fill: '#fbfdff', stroke: '#e0ebf7', radius: 8, lineWidth: 0.55 });
   const columnWidth = CONTENT_WIDTH / columns.length;
   columns.forEach(([icon, label, value], index) => {
     const x = PAGE_X + index * columnWidth;
-    if (index > 0) drawLine(doc, x, y + 2, x, y + 29, NAVY, 0.65);
-    drawFooterIcon(doc, icon, x + 10, y + 5);
-    doc.font(boldFont()).fontSize(7.6).fillColor(NAVY).text(label, x + 40, y + 2, { width: columnWidth - 44 });
-    doc.font(bodyFont()).fontSize(7.15).fillColor(TEXT).text(value, x + 40, y + 14, { width: columnWidth - 44, lineGap: 1 });
+    const valueWidth = Math.max(54, columnWidth - 47);
+    if (index > 0) drawLine(doc, x, y + 4, x, y + cardHeight - 8, SOFT_BORDER, 0.65);
+    drawFooterIcon(doc, icon, x + 10, y + 8);
+    doc.font(boldFont()).fontSize(7.35).fillColor(NAVY).text(label, x + 38, y + 6, { width: valueWidth, height: 10 });
+    doc.font(bodyFont()).fontSize(6.55).fillColor(TEXT).text(value, x + 38, y + 19, {
+      width: valueWidth,
+      height: 31,
+      lineGap: 1.15,
+      ellipsis: true
+    });
   });
 }
 
@@ -679,9 +709,17 @@ function drawHandshakeIcon(doc, x, y) {
   doc.restore();
 }
 
-function drawBottomStrip(doc, config = {}) {
-  const message = cleanText(config.footer?.thankYouMessage || config.footerText, 'Thank you for your business. We look forward to serving you again.');
-  doc.roundedRect(PAGE_X, BOTTOM_STRIP_Y, CONTENT_WIDTH, 24, 4).fill(NAVY);
+function drawBottomStrip(doc, config = {}, context = {}, company = {}) {
+  const currentCompany = invoiceCompany(company);
+  const footerContext = {
+    ...context,
+    company_name: cleanText(context.company_name || currentCompany.name, currentCompany.name),
+    company: cleanText(context.company || currentCompany.name, currentCompany.name)
+  };
+  const rawMessage = cleanText(config.footer?.thankYouMessage || config.footerText, 'Thank you for your business. We look forward to serving you again.');
+  const message = cleanText(renderText(rawMessage, footerContext), 'Thank you for your business. We look forward to serving you again.');
+  doc.roundedRect(PAGE_X, BOTTOM_STRIP_Y, CONTENT_WIDTH, 24, 6).fill(NAVY_DARK);
+  doc.rect(PAGE_X, BOTTOM_STRIP_Y + 21, CONTENT_WIDTH, 3).fill(CYAN);
   drawHandshakeIcon(doc, 78, BOTTOM_STRIP_Y + 1);
   drawLine(doc, 129, BOTTOM_STRIP_Y + 5, 129, BOTTOM_STRIP_Y + 20, '#ffffff', 0.6);
   doc.font(boldFont()).fontSize(9.5).fillColor('#ffffff')
@@ -701,8 +739,8 @@ function drawFinalSections(doc, startY, totals, config, context, company) {
   if (noticeHeight) y += noticeHeight + 7;
   const termsHeight = drawTerms(doc, y, config, context);
   if (termsHeight) y += termsHeight + 10;
-  drawFooterContacts(doc, Math.min(y, 770), company, config);
-  drawBottomStrip(doc, config);
+  drawFooterContacts(doc, Math.min(y, BOTTOM_STRIP_Y - 66), company, config);
+  drawBottomStrip(doc, config, context, company);
 }
 
 function finalSectionsDrawHeight(config = {}) {

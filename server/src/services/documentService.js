@@ -12,8 +12,10 @@ import { appError, clean, numberValue } from '../utils/http.js';
 import { addDateRange, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 import { logAudit } from './auditService.js';
 import {
+  canRenderPublishedInvoiceDom,
   documentTemplateContext,
   getTemplateByDocumentType,
+  renderPublishedInvoiceDomTemplate,
   renderTemplateText,
   templateAccent
 } from './pdfTemplateService.js';
@@ -185,6 +187,13 @@ export async function generateDocumentPdf(id, user = null) {
     getBusinessSettings().catch(() => null)
   ]);
   const context = documentTemplateContext(document, company);
+  if (document.type === 'invoice' && canRenderPublishedInvoiceDom(template)) {
+    return renderPublishedInvoiceDomTemplate(
+      template,
+      context,
+      `${document.type}-${document.id}-published-design`
+    );
+  }
   const accent = templateAccent(template);
   const pdf = new PDFDocument({ margin: 48, size: 'A4', bufferPages: true });
   const stream = fs.createWriteStream(filePath);

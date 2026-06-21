@@ -47,11 +47,126 @@ function renderText(value = '', context = {}) {
 function cardBodyText(card, context = {}) {
   if (card.type === 'qr') {
     return [
-      renderText(card.content || '', context),
-      renderText(card.variable || '', context)
-    ].map((value) => value.trim()).filter(Boolean).join('\n');
+      meaningfulText(card.content, context),
+      meaningfulText(card.body, context),
+      meaningfulText(card.note, context),
+      meaningfulText(card.upiText, context),
+      meaningfulText(card.paymentText, context),
+      meaningfulText(card.qrText, context),
+      meaningfulText(card.variable, context),
+      meaningfulText(card.qrValue, context),
+      meaningfulText(card.qrImage, context),
+      meaningfulText(card.qrImageUrl, context),
+      meaningfulText(card.imageUrl, context)
+    ].filter(Boolean).join('\n');
   }
-  return renderText(card.content || card.variable || '', context);
+  if (card.type === 'signature') {
+    return [
+      meaningfulText(card.content, context),
+      meaningfulText(card.body, context),
+      meaningfulText(card.personName, context),
+      meaningfulText(card.designation, context),
+      meaningfulText(card.name, context),
+      meaningfulText(card.signatureText, context),
+      meaningfulText(card.backupText, context),
+      meaningfulText(card.variable, context),
+      meaningfulText(card.imageUrl, context),
+      meaningfulText(card.signatureImageUrl, context)
+    ].filter(Boolean).join('\n');
+  }
+  return meaningfulText(card.content, context)
+    || meaningfulText(card.body, context)
+    || meaningfulText(card.variable, context);
+}
+
+function meaningfulText(value, context = {}) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const rendered = renderText(raw, context).trim();
+  if (!rendered || rendered === '-' || /^-+$/.test(rendered)) return '';
+  return rendered;
+}
+
+function defaultTitleLabels(type = '') {
+  const base = String(type || '').toLowerCase();
+  const label = String(CARD_LABELS[type] || '').toLowerCase();
+  const labels = new Set([
+    base,
+    label,
+    `${base} card`,
+    `${label} card`,
+    'custom section'
+  ].filter(Boolean));
+  if (base === 'qr') {
+    labels.add('qr / payment card');
+    labels.add('payment details');
+    labels.add('qr code');
+  }
+  if (base === 'signature') {
+    labels.add('signature card');
+    labels.add('authorized signature');
+  }
+  if (base === 'spacer' || base === 'divider') {
+    labels.add('divider');
+    labels.add('spacer');
+  }
+  return labels;
+}
+
+function hasMeaningfulTitle(card = {}, context = {}) {
+  const title = meaningfulText(card.title, context);
+  if (!title) return false;
+  return !defaultTitleLabels(card.type).has(title.toLowerCase());
+}
+
+function firstMeaningfulValue(card = {}, context = {}, fields = []) {
+  return fields.some((field) => meaningfulText(card[field], context));
+}
+
+function hasPrintableCardContent(card = {}, context = {}) {
+  if (card?.enabled === false) return false;
+  const type = card.type || 'text';
+  if (type === 'spacer' || type === 'divider') return true;
+
+  if (type === 'qr') {
+    return firstMeaningfulValue(card, context, [
+      'content',
+      'body',
+      'variable',
+      'note',
+      'upiText',
+      'paymentText',
+      'qrValue',
+      'qrText',
+      'qrImage',
+      'qrImageUrl',
+      'imageUrl'
+    ]);
+  }
+
+  if (type === 'signature') {
+    return firstMeaningfulValue(card, context, [
+      'content',
+      'body',
+      'variable',
+      'personName',
+      'designation',
+      'name',
+      'signatureText',
+      'backupText',
+      'imageUrl',
+      'signatureImageUrl'
+    ]);
+  }
+
+  return hasMeaningfulTitle(card, context) || Boolean(cardBodyText(card, context).trim());
+}
+
+function defaultCardHeight(card = {}) {
+  if (card.type === 'spacer') return 28;
+  if (card.type === 'qr') return 112;
+  if (card.type === 'signature') return 96;
+  return 84;
 }
 
 function useFont(doc, name, fallback) {
@@ -62,21 +177,22 @@ function useFont(doc, name, fallback) {
   }
 }
 
-function sectionCards(config = {}) {
+function sectionCards(config = {}, context = {}) {
   if (config.advancedEnabled !== true) return [];
   const customCards = config.structured?.customSectionsEnabled === true && Array.isArray(config.structured?.customSections)
-    ? config.structured.customSections.filter((section) => {
-      if (section?.enabled === false) return false;
-      if (section?.type === 'qr' && config.structured?.qrPaymentCardEnabled !== true) return false;
-      if (section?.type === 'signature' && config.structured?.signatureCardEnabled !== true) return false;
-      return true;
-    })
+    ? config.structured.customSections.filter((section) => hasPrintableCardContent(section, context))
     : [];
   const cards = [...customCards];
   const hasQrCard = cards.some((card) => card.type === 'qr');
   const hasSignatureCard = cards.some((card) => card.type === 'signature');
-  if (config.structured?.qrPaymentCardEnabled === true && !hasQrCard) cards.push(qrPaymentCard(config));
-  if (config.structured?.signatureCardEnabled === true && !hasSignatureCard) cards.push(signatureCard(config));
+  if (config.structured?.qrPaymentCardEnabled === true && !hasQrCard) {
+    const card = qrPaymentCard(config);
+    if (hasPrintableCardContent(card, context)) cards.push(card);
+  }
+  if (config.structured?.signatureCardEnabled === true && !hasSignatureCard) {
+    const card = signatureCard(config);
+    if (hasPrintableCardContent(card, context)) cards.push(card);
+  }
   return cards;
 }
 
@@ -113,7 +229,7 @@ function signatureCard(config = {}) {
     type: 'signature',
     enabled: true,
     title: cleanText(source.title, 'Authorized Signature'),
-    content: rows.join('\n') || 'Authorized Signature',
+    content: rows.join('\n'),
     variable: cleanText(source.imageUrl, ''),
     width: config.structured?.defaultCardWidth || 'full',
     minHeight: 90,
@@ -128,8 +244,9 @@ function cardHeight(doc, card, width, context) {
   if (card.type === 'spacer') return Number(card.minHeight || 24);
   const content = cardBodyText(card, context);
   useFont(doc, 'Body', 'Helvetica');
-  const textHeight = content ? doc.fontSize(8.4).heightOfString(content, { width: width - 38, lineGap: 2 }) : 0;
-  return Math.max(Number(card.minHeight || 74), textHeight + 46);
+  const textWidth = card.type === 'qr' ? width - 126 : width - 58;
+  const textHeight = content ? doc.fontSize(8.4).heightOfString(content, { width: Math.max(48, textWidth), lineGap: 2 }) : 0;
+  return Math.max(Number(card.minHeight || defaultCardHeight(card)), textHeight + 56);
 }
 
 function widthRatioForCard(card, config = {}) {
@@ -151,11 +268,14 @@ function widthForCard(card, config = {}) {
 
 function drawAdvancedHeader(doc, title, company, accentColor) {
   doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT).fill('#ffffff');
+  doc.roundedRect(PAGE_X, 30, CONTENT_WIDTH, 54, 10).fill('#f7fbff');
+  doc.roundedRect(PAGE_X, 30, CONTENT_WIDTH, 54, 10).strokeColor('#d8e5f7').lineWidth(0.8).stroke();
+  doc.rect(PAGE_X, 30, 4, 54).fill(accentColor);
   useFont(doc, 'BodyBold', 'Helvetica-Bold');
-  doc.fontSize(12).fillColor(accentColor).text(cleanText(company?.name, 'Universal Systems'), PAGE_X, 34, { width: 240 });
-  doc.fontSize(10).fillColor('#0f172a').text('Custom PDF Sections', PAGE_X, 55, { width: 240 });
-  doc.fontSize(8).fillColor('#64748b').text(cleanText(title, 'PDF Template'), PAGE_RIGHT - 210, 40, { width: 210, align: 'right' });
-  doc.strokeColor('#d8e5f7').lineWidth(0.7).moveTo(PAGE_X, 78).lineTo(PAGE_RIGHT, 78).stroke();
+  doc.fontSize(12).fillColor(accentColor).text(cleanText(company?.name, 'Universal Systems'), PAGE_X + 18, 43, { width: 230 });
+  doc.fontSize(10).fillColor('#0f172a').text('Additional Information', PAGE_X + 18, 61, { width: 230 });
+  useFont(doc, 'Body', 'Helvetica');
+  doc.fontSize(7.6).fillColor('#64748b').text(cleanText(title, 'PDF Template'), PAGE_RIGHT - 220, 46, { width: 198, align: 'right' });
 }
 
 function drawQrPattern(doc, x, y, size, color) {
@@ -173,6 +293,26 @@ function drawQrPattern(doc, x, y, size, color) {
   doc.restore();
 }
 
+function drawCardMark(doc, type, x, y, accent) {
+  const labels = {
+    text: 'T',
+    info: 'i',
+    notice: '!',
+    qr: 'QR',
+    signature: 'S',
+    payment: 'Rs',
+    bank: 'Rs',
+    terms: 'T'
+  };
+  const label = labels[type] || '*';
+  doc.save();
+  doc.roundedRect(x, y, 22, 22, 6).fill('#f0f7ff');
+  doc.roundedRect(x, y, 22, 22, 6).strokeColor('#cfe3f8').lineWidth(0.55).stroke();
+  useFont(doc, 'BodyBold', 'Helvetica-Bold');
+  doc.fontSize(label.length > 1 ? 6.6 : 9).fillColor(accent).text(label, x, y + 6, { width: 22, align: 'center' });
+  doc.restore();
+}
+
 function drawCard(doc, card, x, y, width, height, context, options = {}) {
   const accent = card.accentColor || '#0f2a52';
   const borderStyle = options.borderStyle || 'default';
@@ -183,11 +323,12 @@ function drawCard(doc, card, x, y, width, height, context, options = {}) {
   if (card.type === 'spacer') {
     const label = cleanText(card.title, '');
     doc.save();
-    doc.strokeColor(accent).lineWidth(0.7).moveTo(x, y + Math.floor(height / 2)).lineTo(x + width, y + Math.floor(height / 2)).stroke();
+    doc.strokeColor('#cfe3f8').lineWidth(0.7).moveTo(x, y + Math.floor(height / 2)).lineTo(x + width, y + Math.floor(height / 2)).stroke();
     if (label) {
       useFont(doc, 'BodyBold', 'Helvetica-Bold');
-      doc.roundedRect(x + 12, y + Math.floor(height / 2) - 8, Math.min(180, width - 24), 16, 8).fill('#ffffff');
-      doc.fontSize(7.8).fillColor(accent).text(label, x + 18, y + Math.floor(height / 2) - 5, { width: Math.min(168, width - 36) });
+      doc.roundedRect(x + 12, y + Math.floor(height / 2) - 9, Math.min(190, width - 24), 18, 9).fill('#ffffff');
+      doc.roundedRect(x + 12, y + Math.floor(height / 2) - 9, Math.min(190, width - 24), 18, 9).strokeColor('#d8e5f7').lineWidth(0.45).stroke();
+      doc.fontSize(7.8).fillColor(accent).text(label, x + 20, y + Math.floor(height / 2) - 5, { width: Math.min(174, width - 40) });
     }
     doc.restore();
     return;
@@ -201,30 +342,40 @@ function drawCard(doc, card, x, y, width, height, context, options = {}) {
       .lineWidth(borderStyle === 'thin' ? 0.45 : borderStyle === 'highlight' ? 1.2 : 0.7)
       .stroke();
   }
-  doc.rect(x, y, 5, height).fill(accent);
+  doc.roundedRect(x + 12, y + 12, width - 24, Math.max(1, height - 24), 5).fillOpacity(0.025).fill(accent).fillOpacity(1);
+  doc.rect(x, y, 4, height).fill(accent);
+  drawCardMark(doc, card.type, x + 16, y + 12, accent);
   const label = cleanText(card.title, CARD_LABELS[card.type] || 'Custom Section');
   useFont(doc, 'BodyBold', 'Helvetica-Bold');
-  doc.fontSize(9.8).fillColor(accent).text(label, x + 18, y + 13, { width: width - 36 });
+  doc.fontSize(9.8).fillColor(accent).text(label, x + 48, y + 15, { width: width - 68 });
 
   if (card.type === 'signature') {
-    doc.strokeColor('#94a3b8').lineWidth(0.7).moveTo(x + width - 185, y + height - 26).lineTo(x + width - 28, y + height - 26).stroke();
+    doc.strokeColor('#94a3b8').lineWidth(0.7).moveTo(x + width - 190, y + height - 28).lineTo(x + width - 28, y + height - 28).stroke();
     useFont(doc, 'Body', 'Helvetica');
-    doc.fontSize(7.8).fillColor('#64748b').text(renderText(card.content || card.variable || 'Authorized Signature', context), x + width - 185, y + height - 17, { width: 157, align: 'center' });
+    const signatureText = cardBodyText(card, context);
+    if (signatureText) {
+      doc.fontSize(7.8).fillColor('#64748b').text(signatureText, x + width - 190, y + height - 18, { width: 162, align: 'center' });
+    }
     doc.restore();
     return;
   }
 
   if (card.type === 'qr') {
-    drawQrPattern(doc, x + 18, y + 34, 58, accent);
+    drawQrPattern(doc, x + 20, y + 42, 58, accent);
     useFont(doc, 'Body', 'Helvetica');
-    doc.fontSize(8.3).fillColor(textColor).text(cardBodyText(card, context) || 'Payment details will appear here after configuration.', x + 92, y + 39, { width: width - 120, lineGap: 2 });
+    const qrText = cardBodyText(card, context);
+    if (qrText) {
+      doc.fontSize(8.3).fillColor(textColor).text(qrText, x + 96, y + 45, { width: width - 124, lineGap: 2 });
+    }
     doc.restore();
     return;
   }
 
   useFont(doc, 'Body', 'Helvetica');
   const body = cardBodyText(card, context);
-  doc.fontSize(8.4).fillColor(textColor).text(body || '-', x + 18, y + 34, { width: width - 36, lineGap: 2 });
+  if (body) {
+    doc.fontSize(8.4).fillColor(textColor).text(body, x + 20, y + 46, { width: width - 40, lineGap: 2 });
+  }
   doc.restore();
 }
 
@@ -1014,7 +1165,7 @@ export function drawVisualDesignPdf(doc, options = {}) {
 
 export function drawAdvancedPdfSections(doc, options = {}) {
   const { config = {}, context = {}, title = '', company = {} } = options;
-  const cards = sectionCards(config);
+  const cards = sectionCards(config, context);
   const positionedElements = designElements(config);
   if (!cards.length && !positionedElements.length) return { pagesAdded: 0 };
 

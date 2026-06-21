@@ -122,6 +122,8 @@ export async function remove(req, res) {
 
 export async function downloadPdf(req, res) {
   const pdf = await generateWorkOrderPdf({ workOrderId: req.params.id, type: req.params.type, user: req.user });
+  res.set('Cache-Control', 'no-store, max-age=0');
+  res.set('Pragma', 'no-cache');
   res.download(pdf.filePath, pdf.filename);
 }
 

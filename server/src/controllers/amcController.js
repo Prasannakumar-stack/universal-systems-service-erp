@@ -1,4 +1,4 @@
-import { createAmcContract, createWorkOrderFromAmc, listAmcContracts, listAmcRenewals, listAmcSchedule } from '../services/amcService.js';
+import { createAmcContract, createWorkOrderFromAmc, deleteOrArchiveAmcContract, listAmcContracts, listAmcRenewals, listAmcSchedule, updateAmcContractAssignment } from '../services/amcService.js';
 import { required } from '../utils/http.js';
 
 export async function listContracts(req, res) {
@@ -25,4 +25,14 @@ export async function listRenewals(req, res) {
 export async function postWorkOrder(req, res) {
   const data = await createWorkOrderFromAmc(req.params.id, req.body, req.user);
   res.status(201).json({ ...data, message: 'Repair & Service Job created from AMC visit' });
+}
+
+export async function patchAssignment(req, res) {
+  const contract = await updateAmcContractAssignment(req.params.id, req.body, req.user);
+  res.json({ contract, message: 'AMC contract reassigned successfully.' });
+}
+
+export async function removeContract(req, res) {
+  const result = await deleteOrArchiveAmcContract(req.params.id, req.user);
+  res.json({ success: true, ...result });
 }

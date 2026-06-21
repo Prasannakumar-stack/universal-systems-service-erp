@@ -1260,13 +1260,32 @@ function styleDefaultsForInvoiceElement(type = 'text') {
   };
 }
 
+function isWatermarkImageElement(element = {}) {
+  const content = element.content || {};
+  if (element.type && normalizeElementType(element.type) !== 'image') return false;
+  const roleValues = [
+    content.imageMode,
+    content.imageRole,
+    content.role,
+    element.imageMode,
+    element.imageRole,
+    element.role,
+    element.groupId
+  ].map((value) => String(value || '').trim().toLowerCase());
+  return roleValues.includes('watermark')
+    || String(element.id || '').toLowerCase() === 'invoice.watermark'
+    || content.backgroundElement === true
+    || element.backgroundElement === true;
+}
+
 function isBackgroundElement(element = {}) {
   const content = element.content || {};
   return content.backgroundElement === true
     || element.backgroundElement === true
     || element.groupId === 'watermark'
     || element.id === 'invoice.watermark'
-    || content.imageMode === 'watermark';
+    || content.imageMode === 'watermark'
+    || isWatermarkImageElement(element);
 }
 
 function isTinyCanvasElement(element = {}) {
@@ -1448,6 +1467,9 @@ function normalizeBuilderElement(element = {}, index = 0) {
     textColor: element.style?.textColor || element.textColor || styleDefaults.textColor,
     borderColor: element.style?.borderColor || element.borderColor || styleDefaults.borderColor
   };
+  if (type === 'image' && isWatermarkImageElement({ ...element, content }) && element.style?.opacity === undefined && element.opacity === undefined) {
+    style.opacity = 0.08;
+  }
   if (invoiceManifestElement && type === 'divider' && !style.orientation && Number(element.height || 0) > Number(element.width || 0)) {
     style.orientation = 'vertical';
   }
@@ -1486,17 +1508,23 @@ function normalizeDesignPages(source = {}, elements = [], sections = []) {
   const savedPages = Array.isArray(source.pages) ? source.pages : [];
   const pageIds = new Set(['page-1']);
   const usedPageIds = new Set(['page-1']);
+  const elementIdsByPage = new Map();
+  const rememberPageElement = (pageId = 'page-1', itemId = '') => {
+    const id = pageId || 'page-1';
+    if (!elementIdsByPage.has(id)) elementIdsByPage.set(id, []);
+    if (itemId && !elementIdsByPage.get(id).includes(itemId)) elementIdsByPage.get(id).push(itemId);
+  };
   elements.forEach((element) => {
-    if (element.pageId) {
-      pageIds.add(element.pageId);
-      usedPageIds.add(element.pageId);
-    }
+    const pageId = element.pageId || 'page-1';
+    pageIds.add(pageId);
+    usedPageIds.add(pageId);
+    rememberPageElement(pageId, element.id);
   });
   sections.forEach((section) => {
-    if (section.pageId) {
-      pageIds.add(section.pageId);
-      usedPageIds.add(section.pageId);
-    }
+    const pageId = section.pageId || 'page-1';
+    pageIds.add(pageId);
+    usedPageIds.add(pageId);
+    rememberPageElement(pageId, section.id);
   });
   savedPages.forEach((page) => {
     if (!page?.id) return;
@@ -1510,7 +1538,7 @@ function normalizeDesignPages(source = {}, elements = [], sections = []) {
     return {
       id,
       name: saved.name || `Page ${index + 1}`,
-      elements: Array.isArray(saved.elements) ? saved.elements : [],
+      elements: elementIdsByPage.get(id) || (Array.isArray(saved.elements) ? saved.elements : []),
       manual: saved.manual === true || saved.userAdded === true
     };
   });
@@ -1722,7 +1750,7 @@ const draftPreviewHelperText = new Set([
   'Card',
   'Table',
   'Icon',
-  'Click Start from Current Template to load the editable PDF canvas.'
+  'Click Reset to Default Design to load the editable PDF canvas.'
 ]);
 
 const draftPreviewStyleProperties = [
@@ -1834,17 +1862,84 @@ function applyDraftElementPrintOverrides(clone, design = {}) {
   });
 }
 
-function buildDraftCanvasSnapshot(paper, design = {}) {
+function resetDesignPrintPageStyles(page) {
+  page.className = 'design-print-page';
+  page.style.position = 'relative';
+  page.style.width = `${builderCanvas.width}px`;
+  page.style.height = `${builderCanvas.height}px`;
+  page.style.margin = '0';
+  page.style.padding = '0';
+  page.style.overflow = 'hidden';
+  page.style.background = '#ffffff';
+  page.style.breakAfter = 'page';
+  page.style.pageBreakAfter = 'always';
+}
+
+function resetDraftPageContentStyles(page) {
+  page.classList.remove('pdf-draft-print-page');
+  page.style.position = 'absolute';
+  page.style.inset = '0 auto auto 0';
+  page.style.left = '0';
+  page.style.top = '0';
+  page.style.width = `${builderCanvas.width}px`;
+  page.style.height = `${builderCanvas.height}px`;
+  page.style.minWidth = `${builderCanvas.width}px`;
+  page.style.minHeight = `${builderCanvas.height}px`;
+  page.style.maxWidth = `${builderCanvas.width}px`;
+  page.style.maxHeight = `${builderCanvas.height}px`;
+  page.style.margin = '0';
+  page.style.padding = '0';
+  page.style.overflow = 'hidden';
+  page.style.transform = 'none';
+  page.style.transformOrigin = 'top left';
+  page.style.background = '#ffffff';
+  page.style.boxShadow = 'none';
+  page.style.border = '0';
+  page.style.breakAfter = 'auto';
+  page.style.pageBreakAfter = 'auto';
+}
+
+function buildDesignPrintDocumentClone(sourceRoot) {
+  const sourcePages = sourceRoot?.matches?.('[data-pdf-print-page="true"], .pdf-a4-page')
+    ? [sourceRoot]
+    : [...(sourceRoot?.querySelectorAll?.('[data-pdf-print-page="true"], .pdf-a4-page') || [])];
+  const documentClone = document.createElement('div');
+  documentClone.className = 'design-print-document';
+  documentClone.setAttribute('data-pdf-print-document', 'true');
+  documentClone.style.width = `${builderCanvas.width}px`;
+  documentClone.style.margin = '0';
+  documentClone.style.padding = '0';
+  documentClone.style.background = '#ffffff';
+  documentClone.style.overflow = 'visible';
+  const pages = sourcePages.length ? sourcePages : [sourceRoot].filter(Boolean);
+  pages.forEach((sourcePage, index) => {
+    const pageId = sourcePage.getAttribute?.('data-pdf-page-id') || `page-${index + 1}`;
+    const section = document.createElement('section');
+    resetDesignPrintPageStyles(section);
+    section.setAttribute('data-pdf-print-page', 'true');
+    section.setAttribute('data-pdf-page-id', pageId);
+    section.setAttribute('data-pdf-page-index', String(index + 1));
+    const pageClone = sourcePage.cloneNode(true);
+    resetDraftPageContentStyles(pageClone);
+    section.appendChild(pageClone);
+    documentClone.appendChild(section);
+  });
+  return documentClone;
+}
+
+function buildDraftCanvasSnapshot(paper, design = {}, templateKey = 'invoice') {
+  const pages = Array.isArray(design.pages) && design.pages.length ? design.pages : [{ id: 'page-1', name: 'Page 1' }];
   const meta = {
     width: builderCanvas.width,
     height: builderCanvas.height,
-    templateKey: 'invoice',
-    elementCount: (Array.isArray(design.elements) ? design.elements.length : 0) + (Array.isArray(design.sections) ? design.sections.length : 0)
+    templateKey,
+    elementCount: (Array.isArray(design.elements) ? design.elements.length : 0) + (Array.isArray(design.sections) ? design.sections.length : 0),
+    pageCount: pages.length
   };
   if (!paper || typeof document === 'undefined') {
     return { draftCanvasHtml: '', draftMeta: meta };
   }
-  const clone = paper.cloneNode(true);
+  const clone = buildDesignPrintDocumentClone(paper);
   draftPreviewRemoveSelectors.forEach((selector) => clone.querySelectorAll(selector).forEach((node) => node.remove()));
   clone.classList.remove(...draftPreviewStateClasses);
   clone.querySelectorAll('*').forEach((node) => {
@@ -1853,11 +1948,22 @@ function buildDraftCanvasSnapshot(paper, design = {}) {
     node.removeAttribute('tabindex');
     node.removeAttribute('aria-disabled');
   });
+  const clonedPages = clone.querySelectorAll('.design-print-page');
+  const pageCount = Math.max(1, clonedPages.length);
+  meta.pageCount = pageCount;
   clone.style.width = `${builderCanvas.width}px`;
-  clone.style.height = `${builderCanvas.height}px`;
+  clone.style.height = 'auto';
   clone.style.transform = 'none';
   clone.style.margin = '0';
-  clone.style.overflow = 'hidden';
+  clone.style.padding = '0';
+  clone.style.overflow = 'visible';
+  clonedPages.forEach((page) => {
+    resetDesignPrintPageStyles(page);
+    const content = page.querySelector('.pdf-a4-page');
+    if (content) resetDraftPageContentStyles(content);
+  });
+  clonedPages[clonedPages.length - 1]?.style.setProperty('break-after', 'auto');
+  clonedPages[clonedPages.length - 1]?.style.setProperty('page-break-after', 'auto');
   applyDraftElementPrintOverrides(clone, design);
   clearDraftHelperText(clone);
 
@@ -1867,7 +1973,7 @@ function buildDraftCanvasSnapshot(paper, design = {}) {
   sandbox.style.left = '-10000px';
   sandbox.style.top = '0';
   sandbox.style.width = `${builderCanvas.width}px`;
-  sandbox.style.height = `${builderCanvas.height}px`;
+  sandbox.style.height = `${builderCanvas.height * pageCount}px`;
   sandbox.style.opacity = '0';
   sandbox.style.pointerEvents = 'none';
   sandbox.appendChild(clone);
@@ -1875,10 +1981,21 @@ function buildDraftCanvasSnapshot(paper, design = {}) {
   try {
     inlineDraftPreviewStyles(clone);
     clone.style.width = `${builderCanvas.width}px`;
-    clone.style.height = `${builderCanvas.height}px`;
+    clone.style.height = 'auto';
     clone.style.transform = 'none';
     clone.style.margin = '0';
-    clone.style.overflow = 'hidden';
+    clone.style.padding = '0';
+    clone.style.overflow = 'visible';
+    const measuredPages = [...clone.querySelectorAll('.design-print-page')];
+    measuredPages.forEach((page, index) => {
+      resetDesignPrintPageStyles(page);
+      const content = page.querySelector('.pdf-a4-page');
+      if (content) resetDraftPageContentStyles(content);
+      if (index === measuredPages.length - 1) {
+        page.style.breakAfter = 'auto';
+        page.style.pageBreakAfter = 'auto';
+      }
+    });
     applyDraftElementPrintOverrides(clone, design);
     return { draftCanvasHtml: clone.outerHTML, draftMeta: meta };
   } finally {
@@ -1895,6 +2012,8 @@ function TemplateCard({ template, canEdit, busyKey, onEdit, onPreview, onDownloa
   const downloadBusy = String(busyKey || '').startsWith(`download-${template.key}`);
   const resetBusy = busyKey === `reset-${template.key}`;
   const busy = Boolean(busyKey);
+  const livePreviewOptions = template.key === 'invoice' ? { intent: 'published' } : undefined;
+  const livePreviewTitle = template.key === 'invoice' ? 'Shows current published invoice template.' : undefined;
   return (
     <article className="surface admin-control-card flex h-full flex-col p-5">
       <div className="flex items-start justify-between gap-3">
@@ -1924,19 +2043,19 @@ function TemplateCard({ template, canEdit, busyKey, onEdit, onPreview, onDownloa
       <div className="mt-5 grid gap-2 sm:grid-cols-2">
         <button type="button" className="btn btn-primary min-h-11" disabled={!canEdit || busy} onClick={() => onEdit(template)}>
           <Edit3 className="h-4 w-4" />
-          Edit Template
+          Edit Design
         </button>
-        <button type="button" className="btn btn-secondary min-h-11" disabled={busy} onClick={() => onPreview(template)}>
+        <button type="button" className="btn btn-secondary min-h-11" disabled={busy} onClick={() => onPreview(template, null, livePreviewOptions)} title={livePreviewTitle}>
           {previewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
           {previewBusy ? 'Loading...' : 'Preview PDF'}
         </button>
-        <button type="button" className="btn btn-secondary min-h-11" disabled={busy} onClick={() => onDownload(template)}>
+        <button type="button" className="btn btn-secondary min-h-11" disabled={busy} onClick={() => onDownload(template, null, livePreviewOptions)} title={livePreviewTitle}>
           {downloadBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           {downloadBusy ? 'Downloading...' : 'Download Sample PDF'}
         </button>
         <button type="button" className="btn btn-secondary min-h-11" disabled={!canEdit || busy} onClick={() => onReset(template)}>
           {resetBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          Reset
+          Reset to Default Design
         </button>
       </div>
       {!canEdit ? <p className="mt-3 text-xs font-semibold text-amber-100">Admin role required to edit or reset templates.</p> : null}
@@ -1972,8 +2091,11 @@ function versionActionLabel(action = '') {
   switch (action) {
     case 'before_publish_backup':
       return 'Before Publish Backup';
+    case 'published_backup':
+      return 'Published Backup';
     case 'draft_saved':
       return 'Draft Saved';
+    case 'restored_as_draft':
     case 'restore_as_draft':
       return 'Restored as Draft';
     case 'restored':
@@ -1987,30 +2109,66 @@ function versionActionLabel(action = '') {
   }
 }
 
-function VersionHistoryPanel({ versions, restoring, onRestore }) {
+function formatVersionDateTime(value) {
+  if (!value) return 'No date';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'No date';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  }).format(date).replace(/\b(am|pm)\b/gi, (match) => match.toUpperCase());
+}
+
+function versionEditedBy(version = {}) {
+  return version.editedBy?.name || version.editedBy?.username || 'System';
+}
+
+function versionSummary(version = {}) {
+  return `${versionActionLabel(version.action)} - ${formatVersionDateTime(version.editedAt)} - ${versionEditedBy(version)}`;
+}
+
+function VersionHistoryPanel({ versions, restoring, onRestore, onDeleteVersion, deletingVersionId = '' }) {
   return (
     <section className="surface admin-control-card pdf-version-history-panel p-4">
       <div className="flex items-center gap-3">
         <div className="admin-control-icon"><History className="h-5 w-5" /></div>
         <div>
           <h3 className="font-black">Saved Versions</h3>
-          <p className="mt-1 text-xs muted">Restore old designs as editable drafts.</p>
+          <p className="mt-1 text-xs muted">Restore opens a saved version as draft. Publish to make it live.</p>
         </div>
       </div>
       <div className="mt-4 grid gap-2">
         {versions.length ? versions.slice(0, 4).map((version) => (
-          <div key={version.id || version.version} className="rounded-card border border-white/10 bg-white/[0.035] p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="font-black text-slate-100">v{version.version}</p>
-                <p className="text-[11px] font-black uppercase tracking-wide text-sky-200/80">{versionActionLabel(version.action)}</p>
-              </div>
-              <button type="button" className="btn btn-secondary py-1.5 text-xs" disabled={restoring} onClick={() => onRestore(version)}>
-                <RotateCcw className="h-3.5 w-3.5" />
-                Restore
-              </button>
+          <div key={version.id || version.version} className="pdf-version-card">
+            <div className="pdf-version-card-head">
+              <p>v{version.version}</p>
+              <span>{versionActionLabel(version.action)}</span>
             </div>
-            <p className="mt-1 text-xs muted">{version.editedAt ? formatDate(version.editedAt) : 'No date'} by {version.editedBy?.name || version.editedBy?.username || 'System'}</p>
+            <div className="pdf-version-card-body">
+              <small>{formatVersionDateTime(version.editedAt)} &middot; {versionEditedBy(version)}</small>
+              <div className="pdf-version-actions">
+                <button type="button" className="btn btn-secondary py-1.5 text-xs" disabled={restoring || Boolean(deletingVersionId)} onClick={() => onRestore(version)}>
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Restore Draft
+                </button>
+                {onDeleteVersion ? (
+                  <button
+                    type="button"
+                    className="icon-button pdf-version-delete-button"
+                    disabled={restoring || deletingVersionId === String(version.id || version.version)}
+                    onClick={() => onDeleteVersion(version)}
+                    title="Delete saved version"
+                    aria-label={`Delete version v${version.version}`}
+                  >
+                    {deletingVersionId === String(version.id || version.version) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  </button>
+                ) : null}
+              </div>
+            </div>
           </div>
         )) : <p className="rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm muted">Previous versions will appear after the first edit.</p>}
       </div>
@@ -2135,7 +2293,7 @@ function CustomSectionsEditor({ draft, setDraft, canEdit, saving, advancedEnable
             <div className="admin-control-icon"><Layers className="h-5 w-5" /></div>
             <div className="min-w-0">
               <h3 className="text-lg font-black text-[var(--app-text)]">Custom Sections / Cards</h3>
-              <p className="mt-1 text-sm muted">Enable custom sections/cards in Advanced Layout to add custom cards.</p>
+              <p className="mt-1 text-sm muted">Enable custom sections/cards in Advanced Layout to show custom cards in the backup PDF.</p>
             </div>
           </div>
           <span className="pdf-state-badge is-off">OFF</span>
@@ -2204,7 +2362,7 @@ function CustomSectionsEditor({ draft, setDraft, canEdit, saving, advancedEnable
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Add Custom Card</p>
             <h3 className="mt-1 text-lg font-black text-[var(--app-text)]">Custom Sections / Cards</h3>
-            <p className="mt-1 text-xs muted">Add optional cards after the fixed PDF sections. Saved PDFs render these only after Advanced Layout is enabled and the template is saved.</p>
+            <p className="mt-1 text-xs muted">Add optional cards after the fixed PDF sections. Backup preview uses your current local edits before Save Template.</p>
           </div>
         </div>
         <button type="button" className="btn btn-secondary h-9 px-3 py-1.5 text-xs" onClick={() => setOpen((current) => !current)}>
@@ -2215,6 +2373,11 @@ function CustomSectionsEditor({ draft, setDraft, canEdit, saving, advancedEnable
 
       {open ? (
         <>
+      <div className="pdf-custom-status-strip">
+        <span className="pdf-state-badge is-on">Custom cards enabled</span>
+        <span className="pdf-state-badge is-visible">Visible in backup preview</span>
+        <p>Advanced Layout and Custom Sections/Cards are on. Visible cards render in Backup Layout Preview immediately and persist after Save Template. Empty cards are hidden from Backup PDF until content is added.</p>
+      </div>
       <div className="pdf-custom-add-row mt-4">
         <div className="pdf-custom-add-controls">
           <SelectControl label="Card type" value={newType} options={customCardTypes} disabled={disabled} onChange={setNewType} />
@@ -2234,7 +2397,7 @@ function CustomSectionsEditor({ draft, setDraft, canEdit, saving, advancedEnable
           const isQr = type === 'qr';
           const isSignature = type === 'signature';
           const contentLabel = isQr ? 'UPI ID or payment note' : isSignature ? 'Name / designation text' : 'Body / content';
-          const variableLabel = isQr ? 'Optional QR text/value' : isSignature ? 'Signature image URL or fallback text' : 'Optional variable value';
+          const variableLabel = isQr ? 'Optional QR text/value' : isSignature ? 'Signature image URL or backup text' : 'Optional variable value';
           return (
             <article key={cardId} className="pdf-custom-card">
               <div className="pdf-custom-card-header">
@@ -2266,6 +2429,7 @@ function CustomSectionsEditor({ draft, setDraft, canEdit, saving, advancedEnable
               </div>
               <div className="pdf-custom-card-meta">
                 <span className={`pdf-state-badge ${card.enabled !== false ? 'is-on' : 'is-off'}`}>{card.enabled !== false ? 'Visible' : 'Hidden'}</span>
+                {card.enabled !== false ? <span className="pdf-state-badge is-visible">Visible in backup preview</span> : null}
                 <span className="pdf-state-badge is-fixed">{card.width || getPath(draft, 'structured.defaultCardWidth', 'full')}</span>
               </div>
               {editing ? (
@@ -2352,6 +2516,8 @@ function DesignModeWorkspace({
   versions,
   restoring,
   onRestore,
+  onDeleteVersion,
+  deletingVersionId = '',
   hasUnsavedDesignChanges,
   previewUrl,
   previewLoading,
@@ -2398,12 +2564,18 @@ function DesignModeWorkspace({
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false);
   const paperRef = useRef(null);
+  const printSnapshotRef = useRef(null);
+  const designDraftRef = useRef(designDraft);
   const variableCursorRef = useRef(null);
   const clipboardLayerRef = useRef(null);
   const freeLayoutWarningShownRef = useRef(false);
   const normalizedSignature = stableJson(normalizedDesign);
   const rawDesignSignature = stableJson(designDraft);
   const draftSignature = stableJson(draft);
+
+  useEffect(() => {
+    designDraftRef.current = designDraft;
+  }, [designDraft]);
 
   useEffect(() => {
     if (rawDesignSignature !== normalizedSignature) setDesignDraft(normalizedDesign);
@@ -2434,7 +2606,7 @@ function DesignModeWorkspace({
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ config: draft })
+          body: JSON.stringify({ config: configForDefaultPdfPreview(draft), previewIntent: 'default' })
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.message || 'PDF layout manifest failed to load');
@@ -2523,6 +2695,7 @@ function DesignModeWorkspace({
   const referencePdfUrl = previewUrl ? `${previewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&page=${currentPageIndex + 1}` : '';
   const activeReferencePdfUrl = showReferenceLayer ? referencePdfUrl : '';
   const zoomScale = zoom === '125' ? 1.25 : zoom === '100' ? 1 : zoom === '75' ? 0.75 : zoom === 'fit-width' ? 1.1 : 0.88;
+  const hasSavedDesignDraft = Boolean(draft?.designDraft);
   const previewConfig = useMemo(() => mergeDesignStateForSave(draft, canvasDesign, { previewDraft: true }), [draft, canvasDesign]);
   const defaultPreviewConfig = useMemo(() => configForDefaultPdfPreview(draft), [draft]);
   const defaultPreviewBusy = busyKey === `preview-${template.key}-default`;
@@ -2534,25 +2707,45 @@ function DesignModeWorkspace({
   const visiblePageElements = elements
     .filter((element) => (element.pageId || 'page-1') === currentPage.id && element.visible !== false && element.enabled !== false)
     .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  const selectedElementOnCurrentPage = selectedElement && (selectedElement.pageId || 'page-1') === currentPage.id ? selectedElement : null;
+  const floatingToolbarVisible = Boolean(
+    selectedElementOnCurrentPage
+    && selectedLayer
+    && !toolbarMoreOpen
+    && activeRail !== 'history'
+    && !publishConfirmOpen
+    && !revertConfirmOpen
+  );
+
+  function clearSelectedLayer() {
+    setSelectedLayerId('');
+    setEditingElementId('');
+    setFloatingToolbarPosition({ ready: false, left: 12, top: 12, placement: 'above' });
+  }
 
   function previewDefaultPdf() {
     // Default preview intentionally disables design flags so it stays on the structured invoice PDF path.
     onPreview(template, defaultPreviewConfig, { intent: 'default' });
   }
 
+  function confirmApplyDefaultTemplateLayout() {
+    if (!window.confirm('Reset the editable design canvas to the default template layout? Unsaved canvas changes will be replaced.')) return;
+    applyDefaultTemplateLayout();
+  }
+
   function previewDraftPdf() {
     // Draft preview intentionally sets design.previewDraft without publishing the design.
-    const snapshot = buildDraftCanvasSnapshot(paperRef.current, canvasDesign);
+    const snapshot = buildDraftCanvasSnapshot(printSnapshotRef.current || paperRef.current, canvasDesign, template.key);
     onPreview(template, previewConfig, { intent: 'draft', ...snapshot });
   }
 
   function downloadDraftPdf() {
-    const snapshot = buildDraftCanvasSnapshot(paperRef.current, canvasDesign);
+    const snapshot = buildDraftCanvasSnapshot(printSnapshotRef.current || paperRef.current, canvasDesign, template.key);
     onDownload(template, previewConfig, { intent: 'draft', ...snapshot });
   }
 
   function refreshFloatingToolbarPosition() {
-    if (!selectedLayerId || !selectedFrame || typeof window === 'undefined') {
+    if (!floatingToolbarVisible || !selectedElementOnCurrentPage || typeof window === 'undefined') {
       setFloatingToolbarPosition((current) => current.ready ? { ready: false, left: 12, top: 12, placement: 'above' } : current);
       return;
     }
@@ -2567,7 +2760,7 @@ function DesignModeWorkspace({
     const toolbarRect = document.querySelector(`[data-pdf-floating-toolbar-id="${pdfLayerSelectorValue(selectedLayerId)}"]`)?.getBoundingClientRect();
     const margin = 12;
     const gap = 10;
-    const toolbarWidth = Math.min(toolbarRect?.width || (selectedElement?.type === 'table' ? 560 : 480), window.innerWidth - margin * 2);
+    const toolbarWidth = Math.min(toolbarRect?.width || (selectedElementOnCurrentPage?.type === 'table' ? 560 : 480), window.innerWidth - margin * 2);
     const toolbarHeight = toolbarRect?.height || 42;
     const visibleTop = Math.max(margin, scrollRect?.top ?? margin);
     const visibleBottom = Math.min(window.innerHeight - margin, scrollRect?.bottom ?? window.innerHeight - margin);
@@ -2607,7 +2800,7 @@ function DesignModeWorkspace({
   }, [selectedLayerId]);
 
   useEffect(() => {
-    if (!selectedLayerId || !selectedFrame || typeof window === 'undefined') {
+    if (!floatingToolbarVisible || !selectedElementOnCurrentPage || typeof window === 'undefined') {
       setFloatingToolbarPosition({ ready: false, left: 12, top: 12, placement: 'above' });
       return undefined;
     }
@@ -2640,7 +2833,8 @@ function DesignModeWorkspace({
     selectedFrame?.width,
     selectedFrame?.height,
     selectedFrame?.zIndex,
-    selectedElement?.type,
+    selectedElementOnCurrentPage?.type,
+    floatingToolbarVisible,
     zoomScale,
     activeRail,
     rightInspectorOpen,
@@ -2684,14 +2878,59 @@ function DesignModeWorkspace({
     return designStateWithTemplateSections(source, sections, draft, template);
   }
 
+  function appendHistorySnapshot(history, snapshot) {
+    const normalizedSnapshot = normalizeDesignState(snapshot);
+    if (history.length && stableJson(history[history.length - 1]) === stableJson(normalizedSnapshot)) return history;
+    return [...history.slice(-24), normalizedSnapshot];
+  }
+
+  function rememberUndoSnapshot(snapshot) {
+    setUndoStack((history) => appendHistorySnapshot(history, snapshot));
+    setRedoStack([]);
+  }
+
+  function minFrameSizeForItem(item = {}, kind = 'element') {
+    if (kind === 'section') return { width: 80, height: 32 };
+    return isInvoiceManifestElement(item) ? { width: 0.1, height: 0.1 } : defaultSizeForElement(item.type || 'text');
+  }
+
+  function constrainFramePatch(item = {}, patch = {}, kind = 'element') {
+    if (!hasFramePatch(patch)) return patch;
+    const minSize = minFrameSizeForItem(item, kind);
+    const currentWidth = Number(item.width || minSize.width);
+    const currentHeight = Number(item.height || minSize.height);
+    const width = Object.prototype.hasOwnProperty.call(patch, 'width')
+      ? clampBuilderNumber(patch.width, currentWidth, minSize.width, builderCanvas.width)
+      : currentWidth;
+    const height = Object.prototype.hasOwnProperty.call(patch, 'height')
+      ? clampBuilderNumber(patch.height, currentHeight, minSize.height, builderCanvas.height)
+      : currentHeight;
+    let x = Object.prototype.hasOwnProperty.call(patch, 'x') ? Number(patch.x) : Number(item.x || 0);
+    let y = Object.prototype.hasOwnProperty.call(patch, 'y') ? Number(patch.y) : Number(item.y || 0);
+    if (!Number.isFinite(x)) x = Number(item.x || 0);
+    if (!Number.isFinite(y)) y = Number(item.y || 0);
+    if (!freeLayoutMode) {
+      x = clampBuilderNumber(x, 0, 0, Math.max(0, builderCanvas.width - width));
+      y = clampBuilderNumber(y, 0, 0, Math.max(0, builderCanvas.height - height));
+    }
+    return {
+      ...patch,
+      x,
+      y,
+      width,
+      height
+    };
+  }
+
   function commitDesign(updater) {
     if (disabled) return;
-    setUndoStack((history) => [...history.slice(-24), currentCanvasDesign(designDraft)]);
-    setRedoStack([]);
     setDesignDraft((current) => {
       const currentDesign = currentCanvasDesign(current);
       const next = typeof updater === 'function' ? updater(currentDesign) : updater;
-      return normalizeDesignState(next);
+      const normalizedNext = normalizeDesignState(next);
+      if (stableJson(currentDesign) === stableJson(normalizedNext)) return current;
+      rememberUndoSnapshot(currentDesign);
+      return normalizedNext;
     });
   }
 
@@ -2704,9 +2943,10 @@ function DesignModeWorkspace({
       const nextElements = current.elements.map((element, index) => {
         if (element.id !== elementId) return element;
         const patchValue = typeof patch === 'function' ? patch(element) : patch;
+        const constrainedPatch = hasFramePatch(patchValue) ? constrainFramePatch(element, patchValue, 'element') : patchValue;
         const merged = {
           ...element,
-          ...patchValue,
+          ...constrainedPatch,
           content: patchValue.content ? { ...(element.content || {}), ...patchValue.content } : element.content,
           style: patchValue.style ? { ...(element.style || {}), ...patchValue.style } : element.style
         };
@@ -2721,7 +2961,8 @@ function DesignModeWorkspace({
       const nextElements = current.elements.map((element, index) => {
         if (element.id !== elementId) return element;
         const patchValue = typeof patch === 'function' ? patch(element) : patch;
-        return normalizeBuilderElement({ ...element, ...patchValue }, index);
+        const constrainedPatch = hasFramePatch(patchValue) ? constrainFramePatch(element, patchValue, 'element') : patchValue;
+        return normalizeBuilderElement({ ...element, ...constrainedPatch }, index);
       });
       return { ...current, elements: nextElements, customElements: nextElements };
     });
@@ -2732,10 +2973,11 @@ function DesignModeWorkspace({
       const nextSections = current.sections.map((section, index) => {
         if (section.id !== sectionId) return section;
         const patchValue = typeof patch === 'function' ? patch(section) : patch;
+        const constrainedPatch = hasFramePatch(patchValue) ? constrainFramePatch(section, patchValue, 'section') : patchValue;
         const frameEdited = hasFramePatch(patchValue);
         const merged = {
           ...section,
-          ...patchValue,
+          ...constrainedPatch,
           layoutSource: frameEdited ? 'custom' : section.layoutSource,
           rendererFrame: frameEdited ? false : section.rendererFrame,
           content: patchValue.content ? { ...(section.content || {}), ...patchValue.content } : section.content,
@@ -2756,10 +2998,11 @@ function DesignModeWorkspace({
       const nextSections = current.sections.map((section, index) => {
         if (section.id !== sectionId) return section;
         const patchValue = typeof patch === 'function' ? patch(section) : patch;
+        const constrainedPatch = hasFramePatch(patchValue) ? constrainFramePatch(section, patchValue, 'section') : patchValue;
         const frameEdited = hasFramePatch(patchValue);
         return normalizeBuilderSection({
           ...section,
-          ...patchValue,
+          ...constrainedPatch,
           layoutSource: frameEdited ? 'custom' : section.layoutSource,
           rendererFrame: frameEdited ? false : section.rendererFrame
         }, index);
@@ -2829,6 +3072,30 @@ function DesignModeWorkspace({
 
   function applyDefaultTemplateLayout() {
     if (disabled) return;
+    const livePublishedDesign = designStateFromConfig({ design: template.config?.design || {} });
+    if (
+      template.key === 'invoice'
+      && livePublishedDesign.published === true
+      && livePublishedDesign.mode === 'manifest'
+      && livePublishedDesign.elements.length
+    ) {
+      const draftFromPublished = normalizeDesignState({
+        ...livePublishedDesign,
+        enabled: true,
+        confirmed: false,
+        published: false,
+        previewDraft: false,
+        savedTemplates: canvasDesign.savedTemplates || livePublishedDesign.savedTemplates || []
+      });
+      commitDesign((current) => ({
+        ...draftFromPublished,
+        savedTemplates: current.savedTemplates || draftFromPublished.savedTemplates || []
+      }));
+      setSelectedLayerId('');
+      setCurrentPageId(draftFromPublished.pages?.[0]?.id || 'page-1');
+      setActiveRail('');
+      return;
+    }
     if (manifestState.data?.elements?.length) {
       const manifestDesign = designStateFromManifest(manifestState.data, {
         savedTemplates: canvasDesign.savedTemplates || [],
@@ -3025,6 +3292,50 @@ function DesignModeWorkspace({
   function deleteSelectedLayer() {
     if (selectedElement) deleteElement(selectedElement.id);
     else if (selectedSection?.system === false) deleteSection(selectedSection.id);
+  }
+
+  function moveSelectedElementToPage(pageId) {
+    if (!selectedElement || selectedElement.locked || disabled || !pages.some((page) => page.id === pageId)) return;
+    patchElement(selectedElement.id, { pageId });
+    setCurrentPageId(pageId);
+  }
+
+  function moveSelectedElementToNextPage() {
+    if (!selectedElement) return;
+    const sourcePageId = selectedElement.pageId || 'page-1';
+    const sourceIndex = pages.findIndex((page) => page.id === sourcePageId);
+    const nextPage = pages[sourceIndex + 1];
+    if (nextPage) moveSelectedElementToPage(nextPage.id);
+  }
+
+  function duplicateSelectedElementToAllPages() {
+    if (!selectedElement || selectedElement.locked || disabled) return;
+    if (!(selectedElement.type === 'image' || isBackgroundElement(selectedElement))) return;
+    commitDesign((current) => {
+      const sourcePageId = selectedElement.pageId || 'page-1';
+      const identity = selectedElement.groupId || selectedElement.content?.imageMode || selectedElement.name || selectedElement.id;
+      const copies = current.pages
+        .filter((page) => page.id !== sourcePageId)
+        .filter((page) => !current.elements.some((element) => {
+          if ((element.pageId || 'page-1') !== page.id || element.type !== selectedElement.type) return false;
+          const elementIdentity = element.groupId || element.content?.imageMode || element.name || element.id;
+          return elementIdentity === identity;
+        }))
+        .map((page, index) => normalizeBuilderElement({
+          ...cloneValue(selectedElement),
+          id: `element-${Date.now()}-${page.id}-${index}`,
+          pageId: page.id,
+          zIndex: duplicateZIndexForElement(selectedElement, current.elements)
+        }, current.elements.length + index));
+      if (!copies.length) return current;
+      const nextElements = [...current.elements, ...copies];
+      return {
+        ...current,
+        elements: nextElements,
+        customElements: nextElements,
+        pages: normalizeDesignPages(current, nextElements, current.sections)
+      };
+    });
   }
 
   function copySelectedLayerToClipboard() {
@@ -3305,8 +3616,6 @@ function DesignModeWorkspace({
     setEditingElementId('');
     const rect = paperRef.current?.getBoundingClientRect();
     const scale = rect ? rect.width / builderCanvas.width : zoomScale;
-    setUndoStack((history) => [...history.slice(-24), currentCanvasDesign(designDraft)]);
-    setRedoStack([]);
     setSelectedLayerId(element.id);
     setInteraction({
       kind: 'element',
@@ -3323,7 +3632,8 @@ function DesignModeWorkspace({
         y: element.y,
         width: element.width,
         height: element.height
-      }
+      },
+      historySnapshot: currentCanvasDesign(designDraft)
     });
   }
 
@@ -3333,8 +3643,6 @@ function DesignModeWorkspace({
     event.stopPropagation();
     const rect = paperRef.current?.getBoundingClientRect();
     const scale = rect ? rect.width / builderCanvas.width : zoomScale;
-    setUndoStack((history) => [...history.slice(-24), currentCanvasDesign(designDraft)]);
-    setRedoStack([]);
     setSelectedLayerId(section.id);
     setInteraction({
       kind: 'section',
@@ -3350,7 +3658,8 @@ function DesignModeWorkspace({
         y: section.y,
         width: section.width,
         height: section.height
-      }
+      },
+      historySnapshot: currentCanvasDesign(designDraft)
     });
   }
 
@@ -3384,19 +3693,19 @@ function DesignModeWorkspace({
           next.height = snapBuilderValue(next.height, gridSize);
         }
       }
-      const minSize = interaction.kind === 'section'
-        ? { width: 80, height: 32 }
-        : interaction.invoiceManifestElement === true
-          ? { width: 0.1, height: 0.1 }
-          : defaultSizeForElement(interaction.type || selectedElement?.type || 'text');
-      next.width = clampBuilderNumber(next.width, minSize.width, minSize.width, builderCanvas.width);
-      next.height = clampBuilderNumber(next.height, minSize.height, minSize.height, builderCanvas.height);
-      next.x = clampBuilderNumber(next.x, 0, 0, builderCanvas.width - 12);
-      next.y = clampBuilderNumber(next.y, 0, 0, builderCanvas.height - 8);
+      const sourceFrame = {
+        ...start,
+        type: interaction.type,
+        ...(interaction.invoiceManifestElement ? { manifestSemanticId: 'invoice.drag-frame' } : {})
+      };
+      next = constrainFramePatch(sourceFrame, next, interaction.kind);
       if (interaction.kind === 'section') patchSectionDirect(interaction.id, next);
       else patchElementDirect(interaction.id, next);
     }
     function onUp() {
+      const before = interaction.historySnapshot;
+      const after = currentCanvasDesign(designDraftRef.current);
+      if (before && stableJson(before) !== stableJson(after)) rememberUndoSnapshot(before);
       setInteraction(null);
     }
     window.addEventListener('pointermove', onMove);
@@ -3405,16 +3714,33 @@ function DesignModeWorkspace({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [interaction, gridSize, snapEnabled, selectedElement?.type]);
+  }, [interaction, gridSize, snapEnabled, selectedElement?.type, freeLayoutMode]);
 
   useEffect(() => {
     function onKeyDown(event) {
-      if ((!selectedElement && !selectedSection) || disabled) return;
-      if (editingElementId) return;
       const target = event.target;
       const targetTag = String(target?.tagName || '').toLowerCase();
       if (target?.isContentEditable || ['input', 'textarea', 'select'].includes(targetTag)) return;
       const shortcutKey = String(event.key || '').toLowerCase();
+      if (event.key === 'Escape') {
+        setToolbarMoreOpen(false);
+        clearSelectedLayer();
+        return;
+      }
+      if (disabled) return;
+      if ((event.ctrlKey || event.metaKey) && shortcutKey === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redoDesign();
+        else undoDesign();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && shortcutKey === 'y') {
+        event.preventDefault();
+        redoDesign();
+        return;
+      }
+      if ((!selectedElement && !selectedSection) || disabled) return;
+      if (editingElementId) return;
       if ((event.ctrlKey || event.metaKey) && shortcutKey === 'c') {
         event.preventDefault();
         copySelectedLayerToClipboard();
@@ -3446,23 +3772,27 @@ function DesignModeWorkspace({
       if (selectedElement?.locked) return;
       if (selectedSection && (!freeLayoutMode || selectedSection.locked)) return;
       event.preventDefault();
-      const amount = event.shiftKey ? 10 : 1;
+      const amount = snapEnabled ? (event.shiftKey ? gridSize * 4 : gridSize) : (event.shiftKey ? 10 : 1);
       const [xDelta, yDelta] = deltas[event.key];
       if (selectedElement) {
+        const nextX = selectedElement.x + xDelta * amount;
+        const nextY = selectedElement.y + yDelta * amount;
         patchElement(selectedElement.id, {
-          x: clampBuilderNumber(selectedElement.x + xDelta * amount, selectedElement.x, 0, builderCanvas.width - 12),
-          y: clampBuilderNumber(selectedElement.y + yDelta * amount, selectedElement.y, 0, builderCanvas.height - 8)
+          x: snapEnabled ? snapBuilderValue(nextX, gridSize) : nextX,
+          y: snapEnabled ? snapBuilderValue(nextY, gridSize) : nextY
         });
         return;
       }
+      const nextX = selectedSection.x + xDelta * amount;
+      const nextY = selectedSection.y + yDelta * amount;
       patchSection(selectedSection.id, {
-        x: clampBuilderNumber(selectedSection.x + xDelta * amount, selectedSection.x, 0, builderCanvas.width - 12),
-        y: clampBuilderNumber(selectedSection.y + yDelta * amount, selectedSection.y, 0, builderCanvas.height - 8)
+        x: snapEnabled ? snapBuilderValue(nextX, gridSize) : nextX,
+        y: snapEnabled ? snapBuilderValue(nextY, gridSize) : nextY
       });
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedElement, selectedSection, selectedLayerLocked, freeLayoutMode, disabled, editingElementId]);
+  }, [selectedElement, selectedSection, selectedLayerLocked, freeLayoutMode, disabled, editingElementId, undoStack, redoStack, snapEnabled, gridSize]);
 
   function insertVariable(variable) {
     const cursor = variableCursorRef.current;
@@ -3567,9 +3897,9 @@ function DesignModeWorkspace({
                 <Copy className="h-4 w-4" />
                 Duplicate
               </button>
-              <button type="button" className="btn btn-primary justify-center" disabled={disabled || manifestState.loading} onClick={applyDefaultTemplateLayout}>
+              <button type="button" className="btn btn-primary justify-center" disabled={disabled || manifestState.loading} onClick={confirmApplyDefaultTemplateLayout}>
                 <LayoutGrid className="h-4 w-4" />
-                Start from Current Template
+                Reset to Default Design
               </button>
               {manifestState.error ? <small className="text-amber-200">{manifestState.error}</small> : null}
             </article>
@@ -3583,7 +3913,7 @@ function DesignModeWorkspace({
                 <p>Default {template.name}</p>
                 <small>Restore fixed document sections</small>
               </div>
-              <button type="button" className="btn btn-secondary justify-center" disabled={disabled} onClick={applyDefaultTemplateLayout}>
+              <button type="button" className="btn btn-secondary justify-center" disabled={disabled} onClick={confirmApplyDefaultTemplateLayout}>
                 <RotateCcw className="h-4 w-4" />
                 Restore Default Layout
               </button>
@@ -3665,7 +3995,10 @@ function DesignModeWorkspace({
               const pageSections = canvasSections.filter((section) => (section.pageId || 'page-1') === page.id);
               return (
                 <div key={page.id} className={`pdf-page-row ${currentPageId === page.id ? 'is-active' : ''}`}>
-                  <button type="button" className="pdf-page-main" onClick={() => setCurrentPageId(page.id)}>
+                  <button type="button" className="pdf-page-main" onClick={() => {
+                    if (page.id !== currentPageId) clearSelectedLayer();
+                    setCurrentPageId(page.id);
+                  }}>
                   <span className="pdf-page-thumb">{index + 1}</span>
                   <span className="min-w-0">
                     <span className="pdf-page-name">{page.name || `Page ${index + 1}`}</span>
@@ -3725,19 +4058,36 @@ function DesignModeWorkspace({
         <div className="pdf-builder-panel-body">
           <div className="pdf-builder-note">
             <p className="font-black text-slate-100">Published Design</p>
-            <p className="mt-1 text-xs muted">Currently live for future invoice PDFs. Saved versions restore as draft until you publish again.</p>
+            <p className="mt-1 text-xs muted">Restore opens a saved version as draft. Publish to make it live.</p>
           </div>
           <div className="grid gap-2">
             {versions.length ? versions.slice(0, 8).map((version) => (
-              <div key={version.id || version.version} className="pdf-builder-history-row">
-                <div className="min-w-0">
+              <div key={version.id || version.version} className="pdf-builder-history-row pdf-version-card">
+                <div className="pdf-version-card-main">
+                  <div className="pdf-version-card-head">
                   <p>v{version.version}</p>
-                  <span>{versionActionLabel(version.action)} - {version.editedAt ? formatDate(version.editedAt) : 'No date'} - {version.editedBy?.name || version.editedBy?.username || 'System'}</span>
+                    <span>{versionActionLabel(version.action)}</span>
+                  </div>
+                  <small>{formatVersionDateTime(version.editedAt)} &middot; {versionEditedBy(version)}</small>
                 </div>
-                <button type="button" className="btn btn-secondary py-1.5 text-xs" disabled={restoring} onClick={() => onRestore(version)}>
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Restore Draft
-                </button>
+                <div className="pdf-builder-history-actions">
+                  <button type="button" className="btn btn-secondary py-1.5 text-xs" disabled={restoring || Boolean(deletingVersionId)} onClick={() => onRestore(version)}>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Restore Draft
+                  </button>
+                  {onDeleteVersion ? (
+                    <button
+                      type="button"
+                      className="icon-button pdf-version-delete-button"
+                      disabled={restoring || deletingVersionId === String(version.id || version.version)}
+                      onClick={() => onDeleteVersion(version)}
+                      title="Delete saved version"
+                      aria-label={`Delete version v${version.version}`}
+                    >
+                      {deletingVersionId === String(version.id || version.version) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             )) : <p className="pdf-builder-empty">Saved versions will appear after the first edit.</p>}
           </div>
@@ -3849,6 +4199,10 @@ function DesignModeWorkspace({
             pages={pages}
             disabled={disabled || selectedElement.locked}
             onPatch={(patch) => patchElement(selectedElement.id, patch)}
+            onMoveToNextPage={moveSelectedElementToNextPage}
+            canMoveToNextPage={pages.findIndex((page) => page.id === (selectedElement.pageId || 'page-1')) < pages.length - 1}
+            onApplyToAllPages={duplicateSelectedElementToAllPages}
+            canApplyToAllPages={selectedElement.type === 'image' || isBackgroundElement(selectedElement)}
           />
         );
       }
@@ -3986,21 +4340,78 @@ function DesignModeWorkspace({
     );
   }
 
+  function renderPrintSnapshotPage(page) {
+    const pageSections = canvasSections
+      .filter((section) => (section.pageId || 'page-1') === page.id && section.visible !== false && section.enabled !== false)
+      .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+    const pageElements = elements
+      .filter((element) => (element.pageId || 'page-1') === page.id && element.visible !== false && element.enabled !== false)
+      .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+    return (
+      <div key={`print-${page.id}`} className="pdf-draft-print-sheet" data-pdf-print-sheet="true">
+        <div
+          className="pdf-a4-page pdf-draft-print-page"
+          data-pdf-print-page="true"
+          data-pdf-page-id={page.id}
+          style={{ width: builderCanvas.width, height: builderCanvas.height }}
+        >
+          {pageSections.map((section) => {
+            const layer = sectionLayers.find((item) => item.id === section.id);
+            return (
+              <BuilderCanvasSection
+                key={`print-section-${section.id}`}
+                section={section}
+                layer={layer}
+                selected={false}
+                disabled
+                freeLayoutMode
+                onSelect={() => {}}
+                onDragStart={() => {}}
+                onResizeStart={() => {}}
+              />
+            );
+          })}
+          {pageElements.map((element) => {
+            const backgroundElement = isBackgroundElement(element);
+            return (
+              <BuilderCanvasElement
+                key={`print-element-${element.id}`}
+                element={element}
+                selected={false}
+                disabled
+                editing={false}
+                backgroundElement={backgroundElement}
+                backgroundSelectable
+                onSelect={() => {}}
+                onEditStart={() => {}}
+                onInlineCommit={() => {}}
+                onInlineCancel={() => {}}
+                onInlineCursor={() => {}}
+                onDragStart={() => {}}
+                onResizeStart={() => {}}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
     <div className={`pdf-builder-workspace ${fullScreenEditor ? 'is-fullscreen' : ''} ${activeRail ? 'has-left-drawer' : ''} ${rightInspectorOpen ? 'has-right-inspector' : ''} ${inspectorCollapsed ? 'is-inspector-collapsed' : ''}`}>
       <section className="pdf-builder-toolbar">
         <div className="pdf-builder-toolbar-title">
-          <span className="pdf-builder-warning">Design Mode - default PDFs change only after Publish</span>
+          <span className="pdf-builder-warning">Design Mode - PDFs change only after Publish</span>
           <span className="pdf-builder-mode">{canvasDesign.mode === 'manifest' ? 'MANIFEST PDF BUILDER' : 'VISUAL PDF BUILDER'}</span>
           <span className={`pdf-state-badge ${canvasDesign.published ? 'is-on' : 'is-fixed'}`}>{canvasDesign.published ? 'Published Design' : 'Draft Design'}</span>
           {!canvasDesign.published ? <span className="pdf-state-badge is-off">Not Published</span> : null}
-          {hasUnsavedDesignChanges ? <span className="pdf-builder-unsaved">Unsaved Changes</span> : <span className="pdf-builder-saved">Saved Draft</span>}
+          {hasUnsavedDesignChanges ? <span className="pdf-builder-unsaved">Unsaved Changes</span> : hasSavedDesignDraft ? <span className="pdf-builder-saved">Saved Draft</span> : null}
         </div>
         <div className="pdf-builder-toolbar-actions">
-          <button type="button" className="btn btn-primary admin-compact-button" disabled={disabled || manifestState.loading} onClick={applyDefaultTemplateLayout}>
+          <button type="button" className="btn btn-primary admin-compact-button" disabled={disabled || manifestState.loading} onClick={confirmApplyDefaultTemplateLayout}>
             {manifestState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LayoutGrid className="h-4 w-4" />}
-            Start from Current Template
+            Reset to Default Design
           </button>
           <button type="button" className={`btn admin-compact-button ${rightInspectorOpen ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setRightInspectorOpen((value) => !value)}>
             <Settings2 className="h-4 w-4" />
@@ -4012,13 +4423,13 @@ function DesignModeWorkspace({
           <button type="button" className="icon-button" disabled={!redoStack.length || disabled} onClick={redoDesign} title="Redo">
             <Redo2 className="h-4 w-4" />
           </button>
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={previewDefaultPdf} title="Structured default comparison preview">
-            {defaultPreviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <EyeOff className="h-4 w-4" />}
-            Preview Default PDF
-          </button>
           <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={previewDraftPdf}>
             {draftPreviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
             Preview Draft PDF
+          </button>
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving || Boolean(busyKey)} onClick={downloadDraftPdf}>
+            {draftDownloadBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Download Draft PDF
           </button>
           <button type="submit" className="btn btn-primary admin-compact-button pdf-builder-save-button" disabled={!canEdit || saving || Boolean(busyKey)}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -4031,9 +4442,13 @@ function DesignModeWorkspace({
             <ShieldCheck className="h-4 w-4" />
             Publish Design
           </button>
+          <button type="button" className={`btn admin-compact-button ${activeRail === 'history' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => toggleRailDrawer('history')}>
+            <History className="h-4 w-4" />
+            Saved Versions
+          </button>
           <button type="button" className="btn btn-secondary admin-compact-button" disabled={saving} onClick={onBack}>
             <LayoutGrid className="h-4 w-4" />
-            Back to Structured Mode
+            Back to Templates
           </button>
           <div className="pdf-builder-more-menu-wrap">
             <button type="button" className={`btn admin-compact-button ${toolbarMoreOpen ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setToolbarMoreOpen((value) => !value)} aria-expanded={toolbarMoreOpen}>
@@ -4182,7 +4597,7 @@ function DesignModeWorkspace({
                   height: builderCanvas.height,
                   transform: `scale(${zoomScale})`
                 }}
-                onPointerDown={() => setSelectedLayerId('')}
+                onPointerDown={clearSelectedLayer}
               >
                 {activeReferencePdfUrl ? (
                   <>
@@ -4272,11 +4687,11 @@ function DesignModeWorkspace({
                     onResizeStart={(event, handle) => beginElementInteraction(event, element, 'resize', handle)}
                   />
                 )) : null}
-                {selectedLayer && selectedFrame && !publishConfirmOpen ? (
+                {floatingToolbarVisible ? (
                   <FloatingLayerToolbar
-                    frame={selectedFrame}
+                    frame={selectedElementOnCurrentPage}
                     layer={selectedLayer}
-                    element={selectedElement}
+                    element={selectedElementOnCurrentPage}
                     position={floatingToolbarPosition}
                     locked={selectedLayerLocked}
                     backgroundSelected={selectedLayerBackground}
@@ -4305,7 +4720,7 @@ function DesignModeWorkspace({
                 <div className="pdf-page-break-guide">Page break safe zone</div>
                 {visiblePageSections.length === 0 && visiblePageElements.length === 0 ? (
                   <div className="pdf-canvas-empty">
-                    <p>Click Start from Current Template to load the editable PDF canvas.</p>
+                    <p>Click Reset to Default Design to load the editable PDF canvas.</p>
                   </div>
                 ) : null}
               </div>
@@ -4322,15 +4737,27 @@ function DesignModeWorkspace({
         ) : null}
       </div>
     </div>
+    <div
+      ref={printSnapshotRef}
+      className="pdf-draft-print-root"
+      data-pdf-print-root="true"
+      aria-hidden="true"
+    >
+      {pages.map((page) => renderPrintSnapshotPage(page))}
+    </div>
     {publishConfirmOpen ? (
       <ConfirmModal
         title="Publish PDF design?"
-        message="This will apply the current design to future generated Invoice PDFs. Existing saved PDFs will not be changed."
+        message={`This will apply the current design to future generated ${template.name}. Existing saved PDFs will not be changed.`}
         confirmLabel="Publish Design"
         onCancel={() => setPublishConfirmOpen(false)}
         onConfirm={() => {
           setPublishConfirmOpen(false);
-          onPublishDesign?.(canvasDesign);
+          const snapshot = buildDraftCanvasSnapshot(printSnapshotRef.current || paperRef.current, canvasDesign, template.key);
+          onPublishDesign?.(canvasDesign, {
+            publishedCanvasHtml: snapshot.draftCanvasHtml,
+            publishedMeta: snapshot.draftMeta
+          });
         }}
       />
     ) : null}
@@ -4480,7 +4907,7 @@ function BuilderCanvasElement({
   const iconLabel = content.label || (content.variant ? '' : content.iconName) || '';
   const iconEmoji = content.emoji || '✅';
   const imagePreviewSrc = element.type === 'image' ? imagePreviewSource(content) : '';
-  const imageMode = content.imageMode || (imagePreviewSrc.includes('logo-icon') ? 'watermark' : 'logo');
+  const imageMode = isWatermarkImageElement(element) ? 'watermark' : (content.imageMode || (imagePreviewSrc.includes('logo-icon') ? 'watermark' : 'logo'));
   const tablePaddingX = clampBuilderNumber(element.style?.paddingX, 4, 0, 24);
   const tablePaddingY = clampBuilderNumber(element.style?.paddingY, 5, 0, 24);
   const tableCellStyle = {
@@ -4561,7 +4988,15 @@ function BuilderCanvasElement({
           }}
         />
       ) : element.type === 'table' ? (
-        <div className="pdf-canvas-table">
+        <div
+          className="pdf-canvas-table"
+          data-pdf-invoice-table="true"
+          data-pdf-table-element-id={element.id}
+          data-pdf-table-dynamic-rows={content.dynamicRows !== false ? 'true' : 'false'}
+          data-pdf-table-columns={encodeURIComponent(JSON.stringify(tableColumns))}
+          data-pdf-table-row-template={encodeURIComponent(JSON.stringify(Array.isArray(content.rowTemplate) && content.rowTemplate.length ? content.rowTemplate : contentDefaultsForElement('table').rowTemplate))}
+          data-pdf-table-row-height={element.style?.rowHeight || 18}
+        >
           {content.title ? <p>{content.title}</p> : null}
           <div className="pdf-canvas-table-grid" style={{ borderColor: tableBorderColor, borderWidth: tableBorderWidth }}>
             <div className="pdf-canvas-table-head" style={{ gridTemplateColumns: tableColumnTemplate, minHeight: element.style?.rowHeight || 18, background: element.style?.headerBackgroundColor || element.style?.accentColor || '#0f2a52', color: element.style?.headerTextColor || '#ffffff' }}>
@@ -5085,7 +5520,7 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
           </div>
           <BuilderToggle label="Dynamic invoice rows" checked={content.dynamicRows !== false} disabled={disabled} onChange={(checked) => patchTableContent({ dynamicRows: checked })} />
           <BuilderHint tone="info">
-            Dynamic rows use real invoice items in Draft Preview and published PDFs. Preview rows below remain design-only fallback content.
+            Dynamic rows use real invoice items in Draft Preview and published PDFs. Preview rows below remain design-only sample content.
           </BuilderHint>
           {content.dynamicRows !== false ? (
             <div className="pdf-table-template-editor pdf-field-full">
@@ -5150,7 +5585,7 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
                 onChange={(value) => onPatch({ content: { emoji: value } })}
               />
               <BuilderTextInput label="Custom emoji" value={content.emoji || '✅'} disabled={disabled} onChange={(value) => onPatch({ content: { emoji: value } })} onCursor={remember('emoji', content.emoji || '✅')} />
-              <BuilderHint tone="info">Draft preview PDFs render these emoji through Chromium; the browser may use a monochrome fallback if color emoji glyphs are unavailable.</BuilderHint>
+              <BuilderHint tone="info">Draft preview PDFs render these emoji through Chromium; the browser may use a monochrome substitute if color emoji glyphs are unavailable.</BuilderHint>
             </>
           ) : null}
           <BuilderSelect
@@ -5189,7 +5624,9 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
                 backgroundElement: value === 'watermark'
               },
               backgroundElement: value === 'watermark',
-              groupId: value === 'watermark' ? 'watermark' : element.groupId
+              groupId: value === 'watermark' ? 'watermark' : element.groupId,
+              zIndex: value === 'watermark' ? 1 : element.zIndex,
+              style: value === 'watermark' ? { opacity: 0.08 } : {}
             })}
           />
           <BuilderTextInput
@@ -5221,7 +5658,16 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
   );
 }
 
-function ElementLayoutControls({ element, pages, disabled, onPatch }) {
+function ElementLayoutControls({
+  element,
+  pages,
+  disabled,
+  onPatch,
+  onMoveToNextPage = null,
+  canMoveToNextPage = false,
+  onApplyToAllPages = null,
+  canApplyToAllPages = false
+}) {
   const pageOptions = pages.map((page, index) => [page.id, page.name || `Page ${index + 1}`]);
   const invoiceManifestElement = isInvoiceManifestElement(element);
   const minWidth = invoiceManifestElement ? 0.1 : 24;
@@ -5242,6 +5688,22 @@ function ElementLayoutControls({ element, pages, disabled, onPatch }) {
       <BuilderToggle label="Full width" checked={element.fullWidth === true} disabled={disabled} onChange={(checked) => onPatch(checked ? { fullWidth: true, widthMode: 'full', x: 32, width: builderCanvas.width - 64 } : { fullWidth: false, widthMode: 'custom' })} />
       <BuilderToggle label="Two-column card" checked={element.twoColumn === true} disabled={disabled || element.type !== 'card'} onChange={(checked) => onPatch({ twoColumn: checked, content: { twoColumn: checked } })} />
       <BuilderSelect label="Page number" value={element.pageId || 'page-1'} options={pageOptions} disabled={disabled} onChange={(value) => onPatch({ pageId: value })} />
+      {onMoveToNextPage || onApplyToAllPages ? (
+        <div className="pdf-layout-quick-actions pdf-field-full">
+          {onMoveToNextPage ? (
+            <button type="button" className="btn btn-secondary justify-center" disabled={disabled || !canMoveToNextPage} onClick={onMoveToNextPage}>
+              <ArrowDown className="h-4 w-4" />
+              Move to Next Page
+            </button>
+          ) : null}
+          {onApplyToAllPages ? (
+            <button type="button" className="btn btn-secondary justify-center" disabled={disabled || !canApplyToAllPages || pages.length <= 1} onClick={onApplyToAllPages}>
+              <Copy className="h-4 w-4" />
+              Apply to All Pages
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -5429,19 +5891,56 @@ function AdvancedLayoutPanel({ draft, setDraft, canEdit, saving }) {
   );
 }
 
-function LivePreviewPanel({ template, previewUrl, previewLoading, previewError }) {
+function pdfViewerUrl(url = '') {
+  return url ? `${url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH` : '';
+}
+
+function LivePreviewPanel({ template, previewUrl, previewLoading, previewError, liveDesignModeActive = false }) {
+  const framedPreviewUrl = pdfViewerUrl(previewUrl);
+
+  function openPreviewPdf() {
+    if (!previewUrl) return;
+    window.open(framedPreviewUrl || previewUrl, '_blank', 'noopener,noreferrer');
+  }
+
+  function downloadPreviewPdf() {
+    if (!previewUrl) return;
+    const anchor = document.createElement('a');
+    anchor.href = previewUrl;
+    anchor.download = `${template.key}-backup-layout-preview.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
   return (
-    <section className="surface admin-control-card pdf-live-preview-panel p-3">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <h3 className="font-black">Live PDF Preview</h3>
-          <p className="mt-1 text-xs muted">Server-rendered draft preview.</p>
+    <section className={`surface admin-control-card pdf-live-preview-panel p-3 ${liveDesignModeActive ? 'is-secondary' : ''}`}>
+      <div className="pdf-backup-preview-head">
+        <div className="min-w-0">
+          <div className="pdf-structured-badge-row">
+            <span className="pdf-structured-mode-badge is-backup">Backup Preview</span>
+            {liveDesignModeActive ? <span className="pdf-structured-mode-badge is-live">Live Design Active</span> : null}
+          </div>
+          <h3>Backup Layout Preview</h3>
+          <p>This preview shows the backup structured layout. Your published Design Mode template is used for live invoices.</p>
+        </div>
+        <div className="pdf-preview-actions">
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={!previewUrl} onClick={openPreviewPdf}>
+            <Maximize2 className="h-4 w-4" />
+            Open PDF
+          </button>
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={!previewUrl} onClick={downloadPreviewPdf}>
+            <Download className="h-4 w-4" />
+            Download
+          </button>
         </div>
         {previewLoading ? <Loader2 className="h-4 w-4 animate-spin text-sky-100" /> : null}
       </div>
       <div className="pdf-preview-frame">
         {previewUrl ? (
-          <iframe title={`${template.name} preview`} src={previewUrl} className="w-full bg-white" />
+          <div className="pdf-preview-page-shell">
+            <iframe title={`${template.name} backup layout preview`} src={framedPreviewUrl} className="w-full bg-white" />
+          </div>
         ) : (
           <div className="pdf-preview-empty grid place-items-center p-6 text-center text-sm muted">
             {previewError || 'Preparing PDF preview...'}
@@ -5449,8 +5948,23 @@ function LivePreviewPanel({ template, previewUrl, previewLoading, previewError }
         )}
       </div>
       {previewError ? <p className="mt-3 rounded-card border border-rose-400/25 bg-rose-500/10 p-3 text-sm font-semibold text-rose-100">{previewError}</p> : null}
-      <p className="mt-3 text-xs muted">Unsaved edits are used only for preview until you save the template.</p>
+      <p className="mt-3 text-xs muted">Backup layout edits are used only for this preview until you save the template.</p>
     </section>
+  );
+}
+
+function StructuredFallbackBanner({ liveDesignModeActive }) {
+  return (
+    <div className="pdf-structured-fallback-banner">
+      <div className="min-w-0">
+        <div className="pdf-structured-badge-row">
+          {liveDesignModeActive ? <span className="pdf-structured-mode-badge is-live">Live Design Active</span> : null}
+          <span className="pdf-structured-mode-badge is-backup">Backup Layout</span>
+        </div>
+        <h3>Backup Invoice Layout</h3>
+        <p>Live invoices use your published Design Mode template. This backup layout is used only when no live design is available or for default comparison preview.</p>
+      </div>
+    </div>
   );
 }
 
@@ -5463,7 +5977,7 @@ function SelectedCustomCardEditor({ item, draft, setDraft, canEdit, saving, cust
   const isQr = type === 'qr';
   const isSignature = type === 'signature';
   const contentLabel = isQr ? 'UPI ID or payment note' : isSignature ? 'Name / designation text' : 'Body / content';
-  const variableLabel = isQr ? 'Optional QR text/value' : isSignature ? 'Signature image URL or fallback text' : 'Optional variable value';
+  const variableLabel = isQr ? 'Optional QR text/value' : isSignature ? 'Signature image URL or backup text' : 'Optional variable value';
 
   function updateCard(patch) {
     setDraft((current) => {
@@ -5665,7 +6179,10 @@ function StructuredBuilderWorkspace({
   template,
   versions,
   restoring,
-  onRestore
+  onRestore,
+  onDeleteVersion,
+  deletingVersionId = '',
+  liveDesignModeActive = false
 }) {
   function sectionKeysFromDraft() {
     const keys = sections.map((section, index) => sectionKey(section, index));
@@ -5758,8 +6275,20 @@ function StructuredBuilderWorkspace({
         <CustomSectionsEditor draft={draft} setDraft={setDraft} canEdit={canEdit} saving={saving} advancedEnabled={advancedEnabled} customSectionsEnabled={customSectionsEnabled} customColorsEnabled={customColorsEnabled} />
       </main>
       <aside className="pdf-structured-preview">
-        <LivePreviewPanel template={template} previewUrl={previewUrl} previewLoading={previewLoading} previewError={previewError} />
-        <VersionHistoryPanel versions={versions} restoring={restoring} onRestore={onRestore} />
+        <LivePreviewPanel
+          template={template}
+          previewUrl={previewUrl}
+          previewLoading={previewLoading}
+          previewError={previewError}
+          liveDesignModeActive={liveDesignModeActive}
+        />
+        <VersionHistoryPanel
+          versions={versions}
+          restoring={restoring}
+          onRestore={onRestore}
+          onDeleteVersion={onDeleteVersion}
+          deletingVersionId={deletingVersionId}
+        />
       </aside>
     </div>
   );
@@ -6065,6 +6594,8 @@ function StructuredTemplateEditor({
   versions,
   restoring,
   onRestore,
+  onDeleteVersion,
+  deletingVersionId,
   onShowVariables,
   onDesignDirtyChange,
   onDesignModeChange
@@ -6072,14 +6603,12 @@ function StructuredTemplateEditor({
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
-  const [designConfirmOpen, setDesignConfirmOpen] = useState(false);
-  const [uiMode, setUiMode] = useState('structured');
   const [designDraft, setDesignDraft] = useState(() => designStateFromConfig(draft));
   const previewUrlRef = useRef('');
   const requestIdRef = useRef(0);
   const sections = templateSectionDefinitions[template.key] || [];
   const busy = Boolean(busyKey) || saving;
-  const designMode = uiMode === 'design';
+  const designMode = true;
   const draftDesignSignature = stableJson(draft.design || {});
   const savedDesignState = useMemo(() => designStateFromConfig(draft), [draftDesignSignature]);
   const designDraftDirty = stableJson(normalizeDesignState(designDraft)) !== stableJson(savedDesignState);
@@ -6089,8 +6618,6 @@ function StructuredTemplateEditor({
   }, []);
 
   useEffect(() => {
-    setUiMode('structured');
-    setDesignConfirmOpen(false);
     setDesignDraft(designStateFromConfig(draft));
   }, [template.key]);
 
@@ -6121,7 +6648,7 @@ function StructuredTemplateEditor({
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ config: draft })
+          body: JSON.stringify({ config: configForDefaultPdfPreview(draft), previewIntent: 'default' })
         });
         const blob = await response.blob();
         if (!response.ok) throw new Error('PDF preview failed');
@@ -6151,83 +6678,16 @@ function StructuredTemplateEditor({
     onSave(event, draft);
   }
 
-  function publishDesign(designForPublish = designDraft) {
+  function publishDesign(designForPublish = designDraft, snapshot = null) {
     const nextDesign = designStateWithTemplateSections(designForPublish, sections, draft, template);
     const publishConfig = mergeDesignStateForSave(draft, nextDesign, { publish: true });
     setDesignDraft(designStateFromConfig(publishConfig));
-    onPublishDesignCommit?.(publishConfig);
-  }
-
-  function switchToStructuredMode() {
-    setUiMode('structured');
-  }
-
-  function activateDesignMode() {
-    setUiMode('design');
-  }
-
-  function switchToDesignMode() {
-    if (designMode) return;
-    setDesignConfirmOpen(true);
+    onPublishDesignCommit?.(publishConfig, snapshot);
   }
 
   return (
     <>
-      <form className={`grid gap-5 ${designMode ? 'pdf-design-editor-form' : ''}`} onSubmit={submit}>
-        {!designMode ? <section className="surface admin-control-card pdf-editor-hero p-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="min-w-0">
-              <button
-                type="button"
-                className="btn btn-secondary admin-compact-button mb-4"
-                onClick={() => {
-                  if (designDraftDirty && !window.confirm('Discard unsaved design mode changes?')) return;
-                  onCancel();
-                }}
-              >
-                <X className="h-4 w-4" />
-                Back to Templates
-              </button>
-              <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Structured PDF Editor</p>
-              <h2 className="mt-1 text-2xl font-black">{template.name}</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 muted">Edit this fixed PDF from top to bottom using cards that follow the real PDF layout. Preview refreshes automatically after edits.</p>
-              <div className="mt-4 inline-flex flex-wrap rounded-card border border-white/10 bg-slate-950/35 p-1">
-                <button type="button" className={`btn admin-compact-button border-0 ${!designMode ? 'btn-primary' : 'btn-secondary'}`} disabled={busy} onClick={switchToStructuredMode}>
-                  <LayoutGrid className="h-4 w-4" />
-                  Structured Mode
-                </button>
-                <button type="button" className={`btn admin-compact-button border-0 ${designMode ? 'btn-primary' : 'btn-secondary'}`} disabled={!canEdit || busy} onClick={switchToDesignMode}>
-                  <Edit3 className="h-4 w-4" />
-                  Design Mode
-                </button>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className="btn btn-secondary admin-compact-button" onClick={onShowVariables}>
-                <ShieldCheck className="h-4 w-4" />
-                Template Variables
-              </button>
-              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onPreview(template, designMode ? null : draft, { intent: 'structured' })}>
-                {String(busyKey || '').startsWith(`preview-${template.key}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-                Preview PDF
-              </button>
-              <button type="button" className="btn btn-secondary admin-compact-button" disabled={busy} onClick={() => onDownload(template, designMode ? null : draft, { intent: 'structured' })}>
-                {String(busyKey || '').startsWith(`download-${template.key}`) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                Download Sample PDF
-              </button>
-              <button type="button" className="btn btn-secondary admin-compact-button" disabled={!canEdit || busy} onClick={() => onReset(template)}>
-                <RotateCcw className="h-4 w-4" />
-                Reset to Default
-              </button>
-              <button type="submit" className="btn btn-primary admin-compact-button" disabled={!canEdit || busy}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {saving ? 'Saving...' : 'Save Template'}
-              </button>
-            </div>
-          </div>
-        </section> : null}
-
-      {designMode ? (
+      <form className="grid gap-5 pdf-design-editor-form" onSubmit={submit}>
         <DesignModeWorkspace
           template={template}
           sections={sections}
@@ -6241,46 +6701,20 @@ function StructuredTemplateEditor({
           versions={versions}
           restoring={restoring}
           onRestore={(version) => onRestore(version, { asDraft: true })}
+          onDeleteVersion={onDeleteVersion}
+          deletingVersionId={deletingVersionId}
           hasUnsavedDesignChanges={designDraftDirty}
           previewUrl={previewUrl}
           previewLoading={previewLoading}
           previewError={previewError}
           token={token}
-          onBack={switchToStructuredMode}
+          onBack={onCancel}
           onPreview={onPreview}
           onDownload={onDownload}
           onPublishDesign={publishDesign}
           onShowVariables={onShowVariables}
         />
-      ) : (
-        <StructuredBuilderWorkspace
-          sections={sections}
-          draft={draft}
-          setDraft={setDraft}
-          canEdit={canEdit}
-          saving={saving}
-          previewUrl={previewUrl}
-          previewLoading={previewLoading}
-          previewError={previewError}
-          template={template}
-          versions={versions}
-          restoring={restoring}
-          onRestore={onRestore}
-        />
-      )}
       </form>
-      {designConfirmOpen ? (
-        <ConfirmModal
-          title="Switch to Design Mode?"
-          message="Design Mode gives visual layout control. Drafts are safe, and generated PDFs change only after you publish the design. Continue?"
-          confirmLabel="Continue"
-          onCancel={() => setDesignConfirmOpen(false)}
-          onConfirm={() => {
-            setDesignConfirmOpen(false);
-            activateDesignMode();
-          }}
-        />
-      ) : null}
     </>
   );
 }
@@ -6296,6 +6730,8 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
   const [variablesOpen, setVariablesOpen] = useState(false);
   const [resetCandidate, setResetCandidate] = useState(null);
   const [restoreCandidate, setRestoreCandidate] = useState(null);
+  const [deleteVersionCandidate, setDeleteVersionCandidate] = useState(null);
+  const [deletingVersionId, setDeletingVersionId] = useState('');
   const [designEditorDirty, setDesignEditorDirty] = useState(false);
   const canEdit = hasRole(user, 'admin') && can(user, 'manage_pdf_templates');
   const { data, loading, error, reload } = useResource(() => request('/pdf-templates'), [request]);
@@ -6467,20 +6903,25 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     }
   }
 
-  async function publishDesign(configOverride = null) {
+  async function publishDesign(configOverride = null, snapshot = null) {
     if (!activeTemplate) return;
     if (!canEdit) {
       push('Only admin users can publish PDF templates', 'error');
       return;
     }
     const configToPublish = configOverride || draft;
+    const payload = { config: configToPublish };
+    if (activeTemplate.key === 'invoice') {
+      payload.publishedCanvasHtml = snapshot?.publishedCanvasHtml || snapshot?.draftCanvasHtml || '';
+      payload.publishedMeta = snapshot?.publishedMeta || snapshot?.draftMeta || null;
+    }
     setSaving(true);
     try {
       const result = await request(`/pdf-templates/${activeTemplate.key}/publish-design`, {
         method: 'POST',
-        body: JSON.stringify({ config: configToPublish })
+        body: JSON.stringify(payload)
       });
-      push(result.message || 'Invoice design published successfully.');
+      push(result.message || 'PDF design published successfully.');
       await reload({ silent: true });
       setEditingKey(result.template?.key || activeTemplate.key);
       setDraft(result.template ? editorConfigForTemplate(result.template) : cloneValue(configToPublish));
@@ -6514,7 +6955,7 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
   async function restoreVersion(candidate) {
     if (!activeTemplate || !canEdit) return;
     const version = candidate?.version || candidate;
-    const restoreAsDraft = activeTemplate.key === 'invoice' && candidate?.asDraft === true;
+    const restoreAsDraft = candidate?.asDraft === true;
     setRestoring(true);
     try {
       const versionId = version.id || version.version;
@@ -6530,6 +6971,21 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
       push(err.message, 'error');
     } finally {
       setRestoring(false);
+    }
+  }
+
+  async function deleteSavedVersion(version) {
+    if (!activeTemplate || !canEdit) return;
+    const versionId = version.id || version.version;
+    setDeletingVersionId(String(versionId));
+    try {
+      const result = await request(`/pdf-templates/${activeTemplate.key}/versions/${versionId}`, { method: 'DELETE' });
+      push(result.message || 'Saved version deleted');
+      await reload({ silent: true });
+    } catch (err) {
+      push(err.message, 'error');
+    } finally {
+      setDeletingVersionId('');
     }
   }
 
@@ -6561,6 +7017,8 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
           versions={activeTemplate.versions || []}
           restoring={restoring}
           onRestore={(version, options = {}) => setRestoreCandidate({ version, ...options })}
+          onDeleteVersion={(version) => setDeleteVersionCandidate(version)}
+          deletingVersionId={deletingVersionId}
           onShowVariables={() => setVariablesOpen(true)}
           onDesignDirtyChange={setDesignEditorDirty}
           onDesignModeChange={onDesignModeChange}
@@ -6583,7 +7041,7 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
           <ConfirmModal
             title={restoreCandidate.asDraft ? 'Restore saved version as draft?' : 'Restore template version?'}
             message={restoreCandidate.asDraft
-              ? `Restore version v${restoreCandidate.version.version} as a draft. The current published invoice design stays live until you publish again.`
+              ? `Restore version v${restoreCandidate.version.version} as a draft. The current published design stays live until you publish again.`
               : `Restore version v${restoreCandidate.version.version}. Existing generated PDFs will not be changed.`}
             confirmLabel={restoreCandidate.asDraft ? 'Restore as Draft' : 'Restore Version'}
             onCancel={() => setRestoreCandidate(null)}
@@ -6591,6 +7049,19 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
               const version = restoreCandidate;
               setRestoreCandidate(null);
               await restoreVersion(version);
+            }}
+          />
+        ) : null}
+        {deleteVersionCandidate ? (
+          <ConfirmModal
+            title="Delete saved version?"
+            message="This removes this saved version from history. Current published design will not be changed."
+            confirmLabel="Delete Version"
+            onCancel={() => setDeleteVersionCandidate(null)}
+            onConfirm={async () => {
+              const version = deleteVersionCandidate;
+              setDeleteVersionCandidate(null);
+              await deleteSavedVersion(version);
             }}
           />
         ) : null}
@@ -6608,7 +7079,7 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
               <span className="admin-premium-badge">6 FIXED TEMPLATES</span>
             </div>
             <h2 className="text-2xl font-black">PDF / Document Templates</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Edit the fixed Universal Systems PDF templates with structured cards and real server-rendered previews.</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 muted">Edit the fixed Universal Systems PDF templates in Design Mode with safe drafts, previews, publishing, and saved versions.</p>
           </div>
           <div className="rounded-card border border-sky-300/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
             <div className="flex items-center gap-2 font-black">

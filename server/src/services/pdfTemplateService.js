@@ -20,7 +20,7 @@ import { renderInvoicePdf, sampleInvoiceData } from './invoicePdfTemplate.js';
 import { renderQuotationPdf, sampleQuotationData } from './quotationPdfTemplate.js';
 import { renderServiceCompletedPdf, sampleServiceCompletedData } from './serviceCompletedPdfTemplate.js';
 import { buildPdfTemplateManifest } from './pdfTemplateManifestService.js';
-import { renderInvoiceDraftDomPreviewPdf } from './pdfTemplateDomPreviewService.js';
+import { renderInvoiceDraftDomPreviewPdf, renderInvoicePublishedDomPdf } from './pdfTemplateDomPreviewService.js';
 
 export const PDF_TEMPLATE_PLACEHOLDERS = [
   '{{company_name}}',
@@ -55,6 +55,10 @@ export const PDF_TEMPLATE_PLACEHOLDERS = [
   '{{next_service_date}}',
   '{{current_date}}'
 ];
+
+const MAX_INVOICE_PUBLISHED_HTML_BYTES = 4_500_000;
+const INVOICE_CANVAS_WIDTH = 595;
+const INVOICE_CANVAS_HEIGHT = 842;
 
 const textFields = [
   'headerTitle',
@@ -898,6 +902,56 @@ function cleanText(value, fallback = '', max = 5000) {
   return text.length > max ? text.slice(0, max) : text;
 }
 
+function byteLength(value = '') {
+  return Buffer.byteLength(String(value || ''), 'utf8');
+}
+
+function publishedCanvasSnapshotFrom(source = {}, { strict = false } = {}) {
+  const rawHtml = String(source.publishedCanvasHtml ?? source.publishedHtml ?? '').trim();
+  const rawMeta = source.publishedMeta || {};
+  if (!rawHtml) {
+    if (strict) throw appError('Invoice publish requires a captured design canvas', 400);
+    return { publishedHtml: '', publishedMeta: null };
+  }
+  if (byteLength(rawHtml) > MAX_INVOICE_PUBLISHED_HTML_BYTES) {
+    throw appError('Invoice published design canvas is too large', 413);
+  }
+  const meta = {
+    width: Number(rawMeta.width),
+    height: Number(rawMeta.height),
+    templateKey: cleanText(rawMeta.templateKey, 'invoice', 40),
+    elementCount: clampNumber(rawMeta.elementCount, 0, 0, 2000)
+  };
+  if (
+    meta.templateKey !== 'invoice'
+    || Math.round(meta.width) !== INVOICE_CANVAS_WIDTH
+    || Math.round(meta.height) !== INVOICE_CANVAS_HEIGHT
+  ) {
+    if (strict) throw appError('Invoice published design canvas metadata is invalid', 400);
+    return { publishedHtml: '', publishedMeta: null };
+  }
+  return { publishedHtml: rawHtml, publishedMeta: meta };
+}
+
+function applyInvoicePublishedSnapshot(config = {}, source = {}, options = {}) {
+  const snapshot = publishedCanvasSnapshotFrom(source, options);
+  if (!snapshot.publishedHtml) {
+    delete config.design.publishedHtml;
+    delete config.design.publishedMeta;
+    return config;
+  }
+  config.design.publishedHtml = snapshot.publishedHtml;
+  config.design.publishedMeta = snapshot.publishedMeta;
+  return config;
+}
+
+function hasPublishedInvoiceHtml(config = {}) {
+  return config?.design?.published === true
+    && typeof config.design.publishedHtml === 'string'
+    && config.design.publishedHtml.trim()
+    && config.design.publishedMeta?.templateKey === 'invoice';
+}
+
 function sanitizeColor(value, fallback = '#0f2a52') {
   const text = clean(value || fallback);
   return /^#[0-9a-f]{6}$/i.test(text) ? text : fallback;
@@ -905,6 +959,10 @@ function sanitizeColor(value, fallback = '#0f2a52') {
 
 function sanitizeConfig(payload = {}, key = '') {
   const defaults = structuredDefaultsFor(key);
+  const rawPublishedSnapshot = key === 'invoice' ? {
+    publishedHtml: payload?.design?.publishedHtml,
+    publishedMeta: payload?.design?.publishedMeta
+  } : {};
   let sanitized = deepMerge(defaults, legacyStructuredOverrides(payload, key));
   sanitized = deepMerge(sanitized, payload || {});
   sanitized = sanitizeStrings(sanitized);
@@ -969,6 +1027,12 @@ function sanitizeConfig(payload = {}, key = '') {
   sanitized.design.layoutGuides = boolValue(sanitized.design.layoutGuides, false);
   sanitized.design.visualElementMode = boolValue(sanitized.design.visualElementMode, true);
   sanitized.design.snapToGrid = boolValue(sanitized.design.snapToGrid, sanitized.design.canvas.snap);
+  if (key === 'invoice') {
+    applyInvoicePublishedSnapshot(sanitized, rawPublishedSnapshot);
+  } else {
+    delete sanitized.design.publishedHtml;
+    delete sanitized.design.publishedMeta;
+  }
   sanitized.design.page = deepMerge(defaults.design.page, sanitized.design.page || {});
   sanitized.design.page.size = sanitized.design.page.size === 'A4' ? 'A4' : 'A4';
   sanitized.design.page.orientation = sanitized.design.page.orientation === 'landscape' ? 'landscape' : 'portrait';
@@ -1115,13 +1179,16 @@ function draftDesignFor(config = {}, key = '') {
 }
 
 function forceDraftDesignState(design = {}) {
-  return {
+  const next = {
     ...design,
     enabled: true,
     confirmed: false,
     published: false,
     previewDraft: false
   };
+  delete next.publishedHtml;
+  delete next.publishedMeta;
+  return next;
 }
 
 function forcePublishedDesignState(design = {}) {
@@ -1183,9 +1250,7 @@ function addVersionSnapshot(template, action = 'updated', options = {}) {
 }
 
 function assertInvoiceDesignKey(key) {
-  const normalized = assertTemplateKey(key);
-  if (normalized !== 'invoice') throw appError('Invoice design publishing is only available for invoice templates', 400);
-  return normalized;
+  return assertTemplateKey(key);
 }
 
 function draftConfigFromPayload(payload = {}, key = '') {
@@ -1225,7 +1290,13 @@ export async function getPdfTemplateManifest(key, options = {}) {
 export async function getTemplateByKey(key) {
   if (!definitionsByKey.has(key)) return null;
   const template = await findTemplate(key);
-  return template ? serializeTemplate(template) : {
+  if (template) {
+    const serialized = serializeTemplate(template);
+    serialized.config = liveGenerationConfig(template.config || {}, key);
+    delete serialized.draftConfig;
+    return serialized;
+  }
+  return {
     key,
     config: sanitizeConfig(defaultConfigFor(key), key)
   };
@@ -1245,8 +1316,27 @@ export async function updatePdfTemplate(key, payload = {}, user = null) {
   const template = await findTemplate(normalized);
   if (!template) throw appError('PDF template not found', 404);
   const before = sanitizeConfig(template.config || {}, normalized);
+  const rawConfig = payload.config || payload;
+  let nextConfigPayload = rawConfig;
+  if (normalized === 'invoice') {
+    const existingDesign = isPlainObject(before.design) ? before.design : {};
+    const incomingDesign = isPlainObject(rawConfig?.design) ? rawConfig.design : {};
+    nextConfigPayload = {
+      ...rawConfig,
+      design: {
+        ...existingDesign,
+        ...incomingDesign,
+        published: existingDesign.published === true ? true : incomingDesign.published,
+        publishedHtml: existingDesign.publishedHtml,
+        publishedMeta: existingDesign.publishedMeta
+      }
+    };
+    if (rawConfig?.designDraft === undefined && before.designDraft) {
+      nextConfigPayload.designDraft = before.designDraft;
+    }
+  }
   addVersionSnapshot(template, 'updated');
-  template.config = sanitizeConfig(payload.config || payload, normalized);
+  template.config = sanitizeConfig(nextConfigPayload, normalized);
   template.version = (template.version || 1) + 1;
   template.lastEditedBy = user?._id || null;
   await template.save();
@@ -1298,10 +1388,22 @@ export async function publishInvoiceDesign(key, payload = {}, user = null) {
   const template = await findTemplate(normalized);
   if (!template) throw appError('PDF template not found', 404);
   const before = sanitizeConfig(template.config || {}, normalized);
+  const publishedSnapshot = normalized === 'invoice'
+    ? publishedCanvasSnapshotFrom({
+      publishedCanvasHtml: payload.publishedCanvasHtml,
+      publishedHtml: payload.publishedHtml,
+      publishedMeta: payload.publishedMeta
+    }, { strict: true })
+    : null;
   const { config: incomingConfig, design: draftDesign } = draftConfigFromPayload(payload, normalized);
   const publishedDesign = forcePublishedDesignState(draftDesign);
+  const backupConfig = sanitizeConfig({
+    ...before,
+    design: publishedDesignFor(before, normalized)
+  }, normalized);
+  delete backupConfig.designDraft;
   addVersionSnapshot(template, 'before_publish_backup', {
-    config: before,
+    config: backupConfig,
     editedAt: new Date(),
     editedBy: user?._id || null
   });
@@ -1315,9 +1417,12 @@ export async function publishInvoiceDesign(key, payload = {}, user = null) {
       ...(incomingConfig.structured || {}),
       designModeEnabled: true
     },
-    design: publishedDesign,
-    designDraft: publishedDesign
+    design: publishedDesign
   }, normalized);
+  if (normalized === 'invoice') {
+    applyInvoicePublishedSnapshot(nextConfig, publishedSnapshot, { strict: true });
+  }
+  delete nextConfig.designDraft;
   template.config = nextConfig;
   template.version = (template.version || 1) + 1;
   template.lastEditedBy = user?._id || null;
@@ -1329,6 +1434,34 @@ export async function publishInvoiceDesign(key, payload = {}, user = null) {
     recordId: template._id,
     before,
     after: { key: normalized, version: template.version, config: template.config }
+  });
+  return getPdfTemplate(normalized);
+}
+
+export async function deleteInvoiceDesignVersion(key, versionId, user = null) {
+  assertAdmin(user);
+  const normalized = assertInvoiceDesignKey(key);
+  const template = await findTemplate(normalized);
+  if (!template) throw appError('PDF template not found', 404);
+  const version = template.versions.id(versionId) || template.versions.find((item) => String(item.version) === String(versionId));
+  if (!version) throw appError('Template version not found', 404);
+  const before = {
+    key: normalized,
+    version: template.version,
+    removedVersion: version.version,
+    action: version.action || 'updated',
+    versionsCount: template.versions.length
+  };
+  template.versions = template.versions.filter((item) => String(item._id || '') !== String(version._id || versionId) && String(item.version) !== String(versionId));
+  template.lastEditedBy = user?._id || null;
+  await template.save();
+  await logAudit({
+    userId: user?._id || null,
+    action: 'pdf_template_version_deleted',
+    module: 'pdf_template',
+    recordId: template._id,
+    before,
+    after: { key: normalized, version: template.version, versionsCount: template.versions.length }
   });
   return getPdfTemplate(normalized);
 }
@@ -1368,7 +1501,7 @@ export async function restoreInvoiceDesignVersionAsDraft(key, versionId, user = 
     ? publishedDesignFor(versionConfig, normalized)
     : draftDesignFor(version.config || versionConfig, normalized);
   const draftDesign = forceDraftDesignState(sourceDesign);
-  addVersionSnapshot(template, 'restore_as_draft');
+  addVersionSnapshot(template, 'restored_as_draft');
   const nextConfig = sanitizeConfig({
     ...before,
     editMode: 'design',
@@ -1430,6 +1563,12 @@ function formatAmount(value) {
   return `Rs. ${Number(value || 0).toFixed(2)}`;
 }
 
+function safeTemplateValue(value) {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
 function fallbackCompany(company = COMPANY) {
   return {
     name: company.name || COMPANY.name,
@@ -1458,6 +1597,49 @@ function forceDefaultPreviewConfig(config = {}, key = '') {
   return sanitizeConfig(next, key);
 }
 
+function liveGenerationConfig(config = {}, key = '') {
+  const next = sanitizeConfig(config || {}, key);
+  delete next.designDraft;
+  if (key === 'invoice' && !hasPublishedInvoiceHtml(next)) {
+    return forceDefaultPreviewConfig(next, key);
+  }
+  return next;
+}
+
+function forcePublishedPreviewConfig(config = {}, key = '') {
+  const next = liveGenerationConfig(config || {}, key);
+  if (next.design?.published !== true || (key === 'invoice' && !hasPublishedInvoiceHtml(next))) {
+    return forceDefaultPreviewConfig(next, key);
+  }
+  next.editMode = 'design';
+  next.structured = {
+    ...(next.structured || {}),
+    designModeEnabled: true
+  };
+  next.design = {
+    ...(next.design || {}),
+    enabled: true,
+    published: true,
+    previewDraft: false
+  };
+  return sanitizeConfig(next, key);
+}
+
+export function canRenderPublishedInvoiceDom(template = {}) {
+  return template?.key === 'invoice' && hasPublishedInvoiceHtml(template.config || {});
+}
+
+export async function renderPublishedInvoiceDomTemplate(template = {}, context = {}, filenamePrefix = 'invoice-published-dom') {
+  if (!canRenderPublishedInvoiceDom(template)) return null;
+  return renderInvoicePublishedDomPdf({
+    key: template.key,
+    publishedHtml: template.config.design.publishedHtml,
+    publishedMeta: template.config.design.publishedMeta,
+    context,
+    filenamePrefix
+  });
+}
+
 export function buildTemplateContext(source = {}, company = COMPANY) {
   const currentCompany = fallbackCompany(company);
   const invoiceNumber = source.invoiceNo || source.invoiceNumber || '-';
@@ -1468,8 +1650,11 @@ export function buildTemplateContext(source = {}, company = COMPANY) {
   const finalTotal = source.finalTotal ?? source.totalAmount ?? 0;
   const amountPaid = source.amountPaid ?? source.paidAmount ?? 0;
   const balanceDue = source.balanceDue ?? source.balance ?? Math.max(0, Number(finalTotal || 0) - Number(amountPaid || 0));
-  const serviceName = source.serviceName || source.serviceType || '-';
-  const brandModel = source.brandModel || [source.deviceBrand, source.deviceModel].filter(Boolean).join(' ').trim();
+  const serviceName = safeTemplateValue(source.serviceName) || safeTemplateValue(source.serviceType) || '-';
+  const sourceDeviceBrand = safeTemplateValue(source.deviceBrand);
+  const sourceDeviceModel = safeTemplateValue(source.deviceModel);
+  const sourceModel = safeTemplateValue(source.model);
+  const brandModel = safeTemplateValue(source.brandModel) || [sourceDeviceBrand, sourceDeviceModel].filter(Boolean).join(' ').trim();
   const [fallbackDeviceBrand = '-', ...fallbackDeviceModelParts] = String(brandModel || '-').split(' ');
   const invoiceItems = Array.isArray(source.items)
     ? source.items.map((item, index) => ({
@@ -1501,11 +1686,11 @@ export function buildTemplateContext(source = {}, company = COMPANY) {
     amc_contract_no: amcReference,
     amc_reference: amcReference,
     service_name: serviceName,
-    service_type: source.serviceType || serviceName,
-    device: source.device || '-',
-    device_name: source.deviceName || source.device || '-',
-    device_brand: source.deviceBrand || source.brand || (fallbackDeviceModelParts.length ? fallbackDeviceBrand : '-'),
-    device_model: source.deviceModel || source.model || (fallbackDeviceModelParts.length ? fallbackDeviceModelParts.join(' ') : brandModel || '-'),
+    service_type: safeTemplateValue(source.serviceType) || serviceName,
+    device: safeTemplateValue(source.device) || '-',
+    device_name: safeTemplateValue(source.deviceName) || safeTemplateValue(source.device) || '-',
+    device_brand: sourceDeviceBrand || safeTemplateValue(source.brand) || (fallbackDeviceModelParts.length ? fallbackDeviceBrand : '-'),
+    device_model: sourceDeviceModel || sourceModel || (fallbackDeviceModelParts.length ? fallbackDeviceModelParts.join(' ') : brandModel || '-'),
     brand_model: brandModel || '-',
     problem_complaint: source.problemComplaint || source.problemDescription || '-',
     problem_description: source.problemDescription || source.problemComplaint || '-',
@@ -1618,6 +1803,7 @@ function sampleContextFor(key, company = COMPANY) {
   const now = new Date();
   const next = new Date(now);
   next.setDate(next.getDate() + 30);
+  const invoiceSample = key === 'invoice' ? sampleInvoiceData() : null;
   return buildTemplateContext({
     customerName: 'Rahul Kumar',
     customerPhone: '98427 81971',
@@ -1637,6 +1823,7 @@ function sampleContextFor(key, company = COMPANY) {
     finalTotal: key.startsWith('amc') ? 12500 : 2850,
     amountPaid: key.startsWith('amc') ? 12500 : 0,
     balanceDue: key.startsWith('amc') ? 0 : 2850,
+    items: invoiceSample?.items || [],
     amcStartDate: now,
     amcEndDate: new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()),
     nextServiceDate: next
@@ -1754,17 +1941,27 @@ export async function generatePdfTemplatePreview(key, options = {}) {
       draftMeta: options.draftMeta
     });
   }
+  const publishedPreview = previewIntent === 'published' || previewIntent === 'live';
   const template = await getPdfTemplate(key);
-  if (options.config && isPlainObject(options.config)) {
+  if (!publishedPreview && options.config && isPlainObject(options.config)) {
     template.config = sanitizeConfig(options.config, template.key);
   }
   if (previewIntent === 'default') {
     template.config = forceDefaultPreviewConfig(template.config || {}, template.key);
+  } else if (publishedPreview) {
+    template.config = forcePublishedPreviewConfig(template.config || {}, template.key);
   }
   const [company, businessSettings] = await Promise.all([
     getCompanyIdentity(),
     getBusinessSettings().catch(() => null)
   ]);
+  if (publishedPreview && canRenderPublishedInvoiceDom(template)) {
+    return renderPublishedInvoiceDomTemplate(
+      template,
+      sampleContextFor(template.key, fallbackCompany(company)),
+      'invoice-published-template-preview'
+    );
+  }
   fs.mkdirSync(PDF_DIR, { recursive: true });
   const filename = `${template.key}-template-preview-${Date.now()}.pdf`;
   const filePath = path.join(PDF_DIR, filename);

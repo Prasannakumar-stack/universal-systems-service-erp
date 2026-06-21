@@ -24,5 +24,7 @@ export async function getById(req, res) {
 
 export async function downloadPdf(req, res) {
   const pdf = await generateDocumentPdf(req.params.id, req.user);
+  res.set('Cache-Control', 'no-store, max-age=0');
+  res.set('Pragma', 'no-cache');
   res.download(pdf.filePath, pdf.filename);
 }

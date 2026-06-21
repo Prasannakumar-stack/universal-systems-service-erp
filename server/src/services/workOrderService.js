@@ -973,7 +973,7 @@ export async function deleteWorkOrder(id, user) {
 
   const invoiceCount = await Invoice.countDocuments({ workOrderId: workOrder._id });
   if (workOrder.invoiceId || invoiceCount) {
-    throw appError('Work orders with generated invoices cannot be deleted', 409);
+    throw appError('This work order has linked billing records. Archive it instead of deleting.', 409);
   }
   if ((workOrder.partsUsed || []).length || (workOrder.partRequests || []).length) {
     throw appError('Remove parts and part requests before deleting this work order', 409);

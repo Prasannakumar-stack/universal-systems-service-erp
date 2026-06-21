@@ -317,23 +317,6 @@ export function WorkOrdersPage({ role = 'admin' }) {
     setPage(1);
   }, [debouncedSearch, status, dateFrom, dateTo, technicianId, serviceType, source, priorityFilter]);
 
-  async function autoAssign(id) {
-    if (!canAssignTechnician) {
-      push('You do not have permission to assign technicians', 'error');
-      return;
-    }
-    try {
-      await preserveScroll(async () => {
-        await request(`/work-orders/${id}/auto-assign`, { method: 'POST' });
-        push('Service job auto-assigned');
-        reload({ silent: true });
-        emitSidebarBadgesUpdated();
-      });
-    } catch (err) {
-      push(err.message, 'error');
-    }
-  }
-
   async function saveAssignment(order, nextTechnicianId) {
     if (!canAssignTechnician) {
       push('You do not have permission to assign technicians', 'error');
@@ -533,10 +516,9 @@ export function WorkOrdersPage({ role = 'admin' }) {
             </thead>
             <tbody className="divide-y divide-[var(--line)]">
               {visibleWorkOrders.map((order) => {
-                const canShowAutoAssign = canAssignTechnician && !order.technicianId;
                 const canShowAssignmentAction = canAssignTechnician && !isTechnician;
                 const canShowDeleteAction = canDeleteWorkOrder;
-                const hasMoreActions = canShowAutoAssign || canShowAssignmentAction || canShowDeleteAction;
+                const hasMoreActions = canShowAssignmentAction || canShowDeleteAction;
                 const brandModel = workOrderDeviceBrandModel(order);
 
                 return (
@@ -596,9 +578,6 @@ export function WorkOrdersPage({ role = 'admin' }) {
                           </button>
                           {actionMenuId === recordId(order) ? (
                             <div className="work-orders-more-menu">
-                              {canShowAutoAssign ? (
-                                <button type="button" onClick={() => autoAssign(order.id)}>Auto Assign</button>
-                              ) : null}
                               {canShowAssignmentAction ? <button type="button" onClick={() => { setAssignOrder(order); setActionMenuId(''); }}>
                                 {order.technicianId ? 'Reassign' : 'Assign'}
                               </button> : null}

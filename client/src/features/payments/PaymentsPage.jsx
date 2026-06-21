@@ -424,29 +424,59 @@ export function PaymentsPage({ role = 'admin' }) {
   function invoiceSourceLabel(invoice) {
     if (recordId(invoice?.workOrderId)) return getWorkOrderDisplayId(invoice.workOrderId);
     if (recordId(invoice?.amcContractId)) return invoice.amcContractId?.contractId || 'AMC Contract';
+    const parentInvoiceId = recordId(invoice?.parentInvoiceId || invoice?.adjustmentForInvoiceId);
+    if (parentInvoiceId) return getInvoiceDisplayId(invoice?.parentInvoiceId || invoice?.adjustmentForInvoiceId) || parentInvoiceId;
     return '-';
   }
 
+  function linkedSourceAction(invoice, { selected = false } = {}) {
+    const workOrderId = recordId(invoice?.workOrderId);
+    if (workOrderId) {
+      return {
+        as: selected ? 'button' : 'link',
+        to: `${base}/work-orders/${workOrderId}`,
+        label: getWorkOrderDisplayId(invoice.workOrderId),
+        actionLabel: 'Open Work Order \u2192',
+        title: 'Open linked work order',
+        disabledTitle: 'You do not have permission to view Work Orders',
+        onClick: selected ? openLinkedWorkOrder : undefined,
+        disabled: selected ? !canViewWorkOrders : false,
+        returnPath: paymentsReturnPath
+      };
+    }
+
+    const amcContractId = recordId(invoice?.amcContractId);
+    if (amcContractId) {
+      return {
+        to: `${base}/amc-contracts?contractId=${encodeURIComponent(amcContractId)}`,
+        state: { from: paymentsReturnPath, focusContractId: amcContractId },
+        label: invoice.amcContractId?.contractId || 'AMC Contract',
+        actionLabel: 'Open AMC Contract \u2192',
+        title: 'Open linked AMC contract'
+      };
+    }
+
+    const parentInvoice = invoice?.parentInvoiceId || invoice?.adjustmentForInvoiceId;
+    const parentInvoiceId = recordId(parentInvoice);
+    if (parentInvoiceId) {
+      const label = getInvoiceDisplayId(parentInvoice) || parentInvoiceId;
+      const sourceType = String(label).toUpperCase().startsWith('ADJ-') ? 'extra_invoice' : 'invoice';
+      return {
+        to: `${base}/invoices?invoiceId=${encodeURIComponent(parentInvoiceId)}`,
+        state: { from: paymentsReturnPath, focusInvoiceId: parentInvoiceId },
+        label,
+        actionLabel: sourceType === 'extra_invoice' ? 'Open Extra Invoice \u2192' : 'Open Invoice \u2192',
+        title: sourceType === 'extra_invoice' ? 'Open linked extra invoice' : 'Open linked invoice'
+      };
+    }
+
+    return null;
+  }
+
   function invoiceSourceCell(invoice) {
-    if (recordId(invoice?.workOrderId)) {
-      return (
-        <WorkOrderSourceLink
-          to={`${base}/work-orders/${recordId(invoice.workOrderId)}`}
-          label={getWorkOrderDisplayId(invoice.workOrderId)}
-          returnPath={paymentsReturnPath}
-          compact
-        />
-      );
-    }
-    if (recordId(invoice?.amcContractId)) {
-      return (
-        <Link className="billing-link" to={`${base}/amc-contracts`}>
-          {invoice.amcContractId?.contractId || 'AMC Contract'}
-          <span className="block truncate text-xs muted" title={invoice.amcContractId?.contractType || '-'}>{invoice.amcContractId?.contractType || '-'}</span>
-        </Link>
-      );
-    }
-      return <span className="muted">{'\u2014'}</span>;
+    const action = linkedSourceAction(invoice);
+    if (!action) return <span className="muted">{'\u2014'}</span>;
+    return <LinkedSourceAction {...action} compact />;
   }
 
   async function openLinkedWorkOrder() {
@@ -469,6 +499,8 @@ export function PaymentsPage({ role = 'admin' }) {
   function canReversePaymentRow(payment) {
     return canReversePayments && recordId(payment?.invoiceId) && payment?.status !== 'Reversed' && !payment?.reversedAt && Number(payment?.paidAmount || 0) > 0;
   }
+
+  const selectedLinkedSourceAction = selectedInvoice ? linkedSourceAction(selectedInvoice, { selected: true }) : null;
 
   return (
     <div className="billing-page payments-page">
@@ -575,12 +607,9 @@ export function PaymentsPage({ role = 'admin' }) {
                   <BillingInfo
                     label="Linked Source"
                     value={invoiceSourceLabel(selectedInvoice)}
-                    valueNode={selectedWorkOrderId ? (
-                      <WorkOrderSourceLink
-                        as="button"
-                        label={invoiceSourceLabel(selectedInvoice)}
-                        onClick={openLinkedWorkOrder}
-                        disabled={!canViewWorkOrders}
+                    valueNode={selectedLinkedSourceAction ? (
+                      <LinkedSourceAction
+                        {...selectedLinkedSourceAction}
                         helper
                       />
                     ) : null}
@@ -708,7 +737,20 @@ export function PaymentsPage({ role = 'admin' }) {
   );
 }
 
-function WorkOrderSourceLink({ as = 'link', to = '', label, onClick, disabled = false, returnPath = '', helper = false, compact = false }) {
+function LinkedSourceAction({
+  as = 'link',
+  to = '',
+  label,
+  actionLabel = 'Open Source \u2192',
+  title = 'Open linked source',
+  disabledTitle = 'Linked source unavailable',
+  onClick,
+  disabled = false,
+  returnPath = '',
+  state = null,
+  helper = false,
+  compact = false
+}) {
   const className = `billing-workorder-source-link ${compact ? 'billing-workorder-source-link-compact' : ''} ${disabled ? 'billing-workorder-source-link-disabled' : ''}`.trim();
   const content = (
     <>
@@ -716,7 +758,7 @@ function WorkOrderSourceLink({ as = 'link', to = '', label, onClick, disabled = 
         <span className="billing-workorder-source-id">{label}</span>
         <ArrowUpRight className="billing-workorder-source-icon" aria-hidden="true" />
       </span>
-      {helper ? <span className="billing-workorder-source-helper">Open Work Order {'\u2192'}</span> : null}
+      {helper || compact ? <span className="billing-workorder-source-helper">{actionLabel}</span> : null}
     </>
   );
 
@@ -727,7 +769,7 @@ function WorkOrderSourceLink({ as = 'link', to = '', label, onClick, disabled = 
         className={className}
         onClick={onClick}
         disabled={disabled}
-        title={disabled ? 'You do not have permission to view Work Orders' : 'Open linked work order'}
+        title={disabled ? disabledTitle : title}
       >
         {content}
       </button>
@@ -735,7 +777,7 @@ function WorkOrderSourceLink({ as = 'link', to = '', label, onClick, disabled = 
   }
 
   return (
-    <Link className={className} to={to} state={returnPath ? { from: returnPath } : undefined} title="Open linked work order">
+    <Link className={className} to={to} state={state || (returnPath ? { from: returnPath } : undefined)} title={title}>
       {content}
     </Link>
   );

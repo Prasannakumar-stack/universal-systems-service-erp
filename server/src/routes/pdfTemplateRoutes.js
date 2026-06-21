@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate, requireRole } from '../auth.js';
 import { requirePermission } from '../permissions.js';
 import {
+  deleteVersion,
   getByKey,
   list,
   manifest,
@@ -27,6 +28,7 @@ router.post('/:key/publish-design', requireRole('admin'), requirePermission('man
 router.patch('/:key', requireRole('admin'), requirePermission('manage_pdf_templates'), asyncHandler(update));
 router.post('/:key/reset', requireRole('admin'), requirePermission('manage_pdf_templates'), asyncHandler(reset));
 router.post('/:key/restore-draft/:versionId', requireRole('admin'), requirePermission('manage_pdf_templates'), asyncHandler(restoreDesignDraft));
+router.delete('/:key/versions/:versionId', requireRole('admin'), requirePermission('manage_pdf_templates'), asyncHandler(deleteVersion));
 router.post('/:key/restore/:versionId', requireRole('admin'), requirePermission('manage_pdf_templates'), asyncHandler(restore));
 
 export default router;

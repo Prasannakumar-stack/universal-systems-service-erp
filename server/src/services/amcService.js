@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import AuditLog from '../models/AuditLog.js';
 import AMCContract from '../models/AMCContract.js';
 import Invoice from '../models/Invoice.js';
+import Payment from '../models/Payment.js';
 import User from '../models/User.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { assertPermission } from '../permissions.js';
 import { clean, appError, numberValue } from '../utils/http.js';
+import { validObjectId } from '../utils/pagination.js';
 import { upsertCustomer } from './customerService.js';
 import { createWorkOrder } from './workOrderService.js';
 import { logAudit } from './auditService.js';
@@ -14,6 +17,7 @@ import { getTechnicianScope } from './technicianScopeService.js';
 const contractTypes = ['Basic AMC', 'Comprehensive AMC', 'CCTV AMC', 'Printer AMC', 'Networking AMC', 'Solar / UPS AMC', 'Custom'];
 const serviceFrequencies = ['Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
 const oneDay = 24 * 60 * 60 * 1000;
+const activeContractFilter = (extra = {}) => ({ isDeleted: { $ne: true }, archivedAt: null, ...extra });
 
 const coveredServiceByType = {
   'Basic AMC': 'Computer Service AMC',
@@ -113,9 +117,13 @@ function serializeContract(contract) {
   const item = contract.toJSON();
   const coverage = amcCoverageSummary(item);
   const warrantyIncluded = Boolean(item.warrantyIncluded);
+  const linked = item.linkedBusinessHistory || contract.linkedBusinessHistory || {};
+  const hasLinkedBusinessHistory = Boolean(item.hasLinkedBusinessHistory || contract.hasLinkedBusinessHistory || linked.hasLinkedBusinessHistory);
   return {
     ...item,
     ...coverage,
+    hasLinkedBusinessHistory,
+    lifecycleAction: hasLinkedBusinessHistory ? 'archive' : 'delete',
     warrantyIncluded,
     warrantyStartDate: warrantyIncluded ? item.warrantyStartDate || null : null,
     warrantyEndDate: warrantyIncluded ? item.warrantyEndDate || null : null,
@@ -181,6 +189,85 @@ async function extraChargeSummaries(contractIds = []) {
   return summaries;
 }
 
+async function linkedBusinessHistorySummaries(contracts = []) {
+  const ids = contracts.map((contract) => contract._id).filter(Boolean);
+  const summaries = new Map(ids.map((id) => [String(id), {
+    workOrderCount: 0,
+    invoiceCount: 0,
+    paymentCount: 0,
+    completedOrLinkedVisitCount: 0,
+    auditCount: 0,
+    hasLinkedBusinessHistory: false
+  }]));
+  if (!ids.length) return summaries;
+
+  const workOrders = await WorkOrder.find({ amcContractId: { $in: ids } }).select('_id amcContractId invoiceId').lean();
+  const workOrderIds = workOrders.map((order) => order._id).filter(Boolean);
+  const invoiceQuery = [
+    { amcContractId: { $in: ids } },
+    { _id: { $in: contracts.map((contract) => contract.invoiceId).filter(Boolean) } }
+  ];
+  if (workOrderIds.length) invoiceQuery.push({ workOrderId: { $in: workOrderIds } });
+  const invoices = await Invoice.find({ $or: invoiceQuery }).select('_id amcContractId workOrderId').lean();
+  const invoiceIds = invoices.map((invoice) => invoice._id).filter(Boolean);
+  const payments = invoiceIds.length
+    ? await Payment.aggregate([
+      { $match: { invoiceId: { $in: invoiceIds }, status: { $ne: 'Reversed' } } },
+      { $group: { _id: '$invoiceId', count: { $sum: 1 } } }
+    ])
+    : [];
+  const paymentCountsByInvoice = new Map(payments.map((row) => [String(row._id), row.count]));
+  const auditRows = await AuditLog.aggregate([
+    {
+      $match: {
+        module: 'amc',
+        recordId: { $in: ids },
+        action: { $nin: ['amc_contract_created'] }
+      }
+    },
+    { $group: { _id: '$recordId', count: { $sum: 1 } } }
+  ]);
+  const auditCountsByContract = new Map(auditRows.map((row) => [String(row._id), row.count]));
+
+  workOrders.forEach((order) => {
+    const contractId = String(order.amcContractId || '');
+    const summary = summaries.get(contractId);
+    if (summary) summary.workOrderCount += 1;
+  });
+
+  invoices.forEach((invoice) => {
+    let contractId = String(invoice.amcContractId || '');
+    if (!contractId && invoice.workOrderId) {
+      const sourceOrder = workOrders.find((order) => String(order._id) === String(invoice.workOrderId));
+      contractId = String(sourceOrder?.amcContractId || '');
+    }
+    if (!contractId) {
+      const sourceContract = contracts.find((contract) => String(contract.invoiceId || '') === String(invoice._id));
+      contractId = String(sourceContract?._id || '');
+    }
+    const summary = summaries.get(contractId);
+    if (!summary) return;
+    summary.invoiceCount += 1;
+    summary.paymentCount += paymentCountsByInvoice.get(String(invoice._id)) || 0;
+  });
+
+  contracts.forEach((contract) => {
+    const summary = summaries.get(String(contract._id));
+    if (!summary) return;
+    summary.completedOrLinkedVisitCount = (contract.visits || []).filter((visit) => visit.status === 'Completed' || visit.workOrderId).length;
+    summary.auditCount = auditCountsByContract.get(String(contract._id)) || 0;
+    summary.hasLinkedBusinessHistory = Boolean(
+      summary.workOrderCount
+      || summary.invoiceCount
+      || summary.paymentCount
+      || summary.completedOrLinkedVisitCount
+      || summary.auditCount
+    );
+  });
+
+  return summaries;
+}
+
 function flattenSchedule(contracts = []) {
   return contracts.flatMap((contract) => {
     const item = serializeContract(contract);
@@ -203,8 +290,8 @@ function flattenSchedule(contracts = []) {
 }
 
 export async function getAmcSummary(scope = null) {
-  const filter = scope ? { _id: { $in: scope.amcContractObjectIds } } : {};
-  const contracts = await AMCContract.find(filter).populate('visits.technicianId visits.workOrderId customerId invoiceId').sort({ endDate: 1 });
+  const filter = activeContractFilter(scope ? { _id: { $in: scope.amcContractObjectIds } } : {});
+  const contracts = await AMCContract.find(filter).populate('visits.technicianId visits.workOrderId customerId invoiceId technicianId').sort({ endDate: 1 });
   const serialized = contracts.map(serializeContract);
   const today = normalizeDay(new Date());
   const weekEnd = new Date(today);
@@ -223,7 +310,7 @@ export async function getAmcSummary(scope = null) {
 }
 
 export async function listAmcContracts(query = {}, user = null) {
-  const filter = {};
+  const filter = activeContractFilter();
   const technicianScope = await getTechnicianScope(user);
   if (technicianScope) filter._id = { $in: technicianScope.amcContractObjectIds };
   const search = clean(query.search);
@@ -238,12 +325,16 @@ export async function listAmcContracts(query = {}, user = null) {
     ];
   }
 
-  const contracts = await AMCContract.find(filter).populate('customerId visits.technicianId visits.workOrderId invoiceId').sort({ createdAt: -1 });
+  const contracts = await AMCContract.find(filter).populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId').sort({ createdAt: -1 });
   const extras = await extraChargeSummaries(contracts.map((contract) => contract._id));
-  const serialized = contracts.map((contract) => ({
-    ...serializeContract(contract),
-    extraCharges: extras.get(String(contract._id)) || emptyExtraChargeSummary()
-  }));
+  const linkedHistory = await linkedBusinessHistorySummaries(contracts);
+  const serialized = contracts.map((contract) => {
+    const linked = linkedHistory.get(String(contract._id)) || {};
+    return {
+      ...serializeContract(Object.assign(contract, { linkedBusinessHistory: linked, hasLinkedBusinessHistory: Boolean(linked.hasLinkedBusinessHistory) })),
+      extraCharges: extras.get(String(contract._id)) || emptyExtraChargeSummary()
+    };
+  });
   const summary = await getAmcSummary(technicianScope);
   return { contracts: serialized, summary };
 }
@@ -316,6 +407,7 @@ export async function createAmcContract(payload, user) {
     startDate,
     endDate,
     contractValue: Math.max(0, numberValue(payload.contractValue, 0)),
+    technicianId,
     includedVisits: Math.max(0, numberValue(payload.includedVisits, 0)),
     notes: clean(payload.notes),
     visits
@@ -341,13 +433,13 @@ export async function createAmcContract(payload, user) {
     console.warn('Audit log failed for AMC contract create:', error.message);
   }
 
-  return serializeContract(await contract.populate('customerId visits.technicianId visits.workOrderId invoiceId'));
+  return serializeContract(await contract.populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId'));
 }
 
 export async function listAmcSchedule(query = {}, user = null) {
   const technicianScope = await getTechnicianScope(user);
-  const filter = technicianScope ? { _id: { $in: technicianScope.amcContractObjectIds } } : {};
-  const contracts = await AMCContract.find(filter).populate('customerId visits.technicianId visits.workOrderId invoiceId').sort({ startDate: -1 });
+  const filter = activeContractFilter(technicianScope ? { _id: { $in: technicianScope.amcContractObjectIds } } : {});
+  const contracts = await AMCContract.find(filter).populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId').sort({ startDate: -1 });
   let schedule = flattenSchedule(contracts);
   const status = clean(query.status);
   if (status) schedule = schedule.filter((visit) => visit.status === status);
@@ -356,15 +448,112 @@ export async function listAmcSchedule(query = {}, user = null) {
 
 export async function listAmcRenewals(user = null) {
   const technicianScope = await getTechnicianScope(user);
-  const filter = technicianScope ? { _id: { $in: technicianScope.amcContractObjectIds } } : {};
-  const contracts = await AMCContract.find(filter).populate('customerId visits.technicianId visits.workOrderId invoiceId').sort({ endDate: 1 });
+  const filter = activeContractFilter(technicianScope ? { _id: { $in: technicianScope.amcContractObjectIds } } : {});
+  const contracts = await AMCContract.find(filter).populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId').sort({ endDate: 1 });
   const renewals = contracts.map(serializeContract).filter((contract) => ['Renewal Due', 'Expired'].includes(contract.renewalStatus));
   return { renewals };
 }
 
+export async function updateAmcContractAssignment(contractId, payload = {}, user) {
+  assertPermission(user, 'assign_technician', 'You do not have permission to assign AMC contracts');
+  const contract = await AMCContract.findOne(activeContractFilter({ _id: contractId }));
+  if (!contract) throw appError('AMC contract not found', 404);
+
+  const rawTechnicianId = clean(payload.technicianId);
+  const before = {
+    technicianId: contract.technicianId || null,
+    visitTechnicianIds: (contract.visits || []).map((visit) => ({ id: visit._id, technicianId: visit.technicianId || null, status: visit.status }))
+  };
+  let nextTechnician = null;
+
+  if (rawTechnicianId) {
+    const technicianId = validObjectId(rawTechnicianId);
+    if (!technicianId) throw appError('Select a valid active technician');
+    nextTechnician = await User.findOne({ _id: technicianId, role: 'technician', active: true });
+    if (!nextTechnician) throw appError('Select a valid active technician');
+    contract.technicianId = nextTechnician._id;
+  } else {
+    contract.technicianId = null;
+  }
+
+  (contract.visits || []).forEach((visit) => {
+    if (visit.status === 'Completed') return;
+    visit.technicianId = nextTechnician?._id || null;
+  });
+
+  await contract.save();
+  await logAudit({
+    userId: user?._id || null,
+    action: 'amc_contract_reassigned',
+    module: 'amc',
+    recordId: contract._id,
+    before,
+    after: {
+      contractId: contract.contractId,
+      customerName: contract.customerName,
+      technicianId: nextTechnician?._id || null,
+      technicianName: nextTechnician?.name || 'Admin'
+    }
+  });
+
+  const populated = await contract.populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId');
+  const linked = await linkedBusinessHistorySummaries([populated]);
+  populated.linkedBusinessHistory = linked.get(String(populated._id)) || {};
+  populated.hasLinkedBusinessHistory = Boolean(populated.linkedBusinessHistory.hasLinkedBusinessHistory);
+  return serializeContract(populated);
+}
+
+export async function deleteOrArchiveAmcContract(contractId, user) {
+  assertPermission(user, 'create_amc', 'You do not have permission to delete AMC contracts');
+  const contract = await AMCContract.findById(contractId).populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId');
+  if (!contract || contract.isDeleted || contract.archivedAt) throw appError('AMC contract not found', 404);
+
+  const linked = await linkedBusinessHistorySummaries([contract]);
+  const summary = linked.get(String(contract._id)) || {};
+  const hasLinkedBusinessHistory = Boolean(summary.hasLinkedBusinessHistory);
+  const before = {
+    contractId: contract.contractId,
+    customerName: contract.customerName,
+    status: contract.status,
+    technicianId: contract.technicianId || null,
+    linkedBusinessHistory: summary
+  };
+
+  if (hasLinkedBusinessHistory) {
+    contract.archivedAt = new Date();
+    contract.archivedBy = user?._id || null;
+    await contract.save();
+  }
+
+  await logAudit({
+    userId: user?._id || null,
+    action: hasLinkedBusinessHistory ? 'amc_contract_archived' : 'amc_contract_deleted',
+    module: 'amc',
+    recordId: contract._id,
+    before,
+    after: {
+      contractId: contract.contractId,
+      customerName: contract.customerName,
+      deleted: !hasLinkedBusinessHistory,
+      archivedAt: contract.archivedAt,
+      linkedBusinessHistory: summary
+    }
+  });
+
+  if (!hasLinkedBusinessHistory) {
+    await AMCContract.deleteOne({ _id: contract._id });
+  }
+
+  return {
+    id: String(contract._id),
+    action: hasLinkedBusinessHistory ? 'archive' : 'delete',
+    message: hasLinkedBusinessHistory ? 'AMC contract archived' : 'AMC contract deleted'
+  };
+}
+
 export async function createWorkOrderFromAmc(contractId, payload, user) {
   assertPermission(user, 'create_amc_job');
-  const contract = await AMCContract.findById(contractId);
+  const contract = await AMCContract.findOne(activeContractFilter({ _id: contractId }));
   if (!contract) throw appError('AMC contract not found', 404);
   const visit = payload.visitId ? contract.visits.id(payload.visitId) : contract.visits.find((item) => item.status !== 'Completed');
 
@@ -405,5 +594,5 @@ export async function createWorkOrderFromAmc(contractId, payload, user) {
     console.warn('Audit log failed for AMC visit conversion:', error.message);
   }
 
-  return { workOrder, contract: serializeContract(await contract.populate('customerId visits.technicianId visits.workOrderId invoiceId')) };
+  return { workOrder, contract: serializeContract(await contract.populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId')) };
 }

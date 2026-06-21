@@ -1,4 +1,5 @@
 import {
+  deleteInvoiceDesignVersion,
   generatePdfTemplatePreview,
   getPdfTemplate,
   getPdfTemplateManifest,
@@ -33,7 +34,7 @@ export async function saveDesignDraft(req, res) {
 
 export async function publishDesign(req, res) {
   const template = await publishInvoiceDesign(req.params.key, req.body, req.user);
-  res.json({ success: true, template, message: 'Invoice design published successfully.' });
+  res.json({ success: true, template, message: 'PDF design published successfully.' });
 }
 
 export async function reset(req, res) {
@@ -51,6 +52,11 @@ export async function restoreDesignDraft(req, res) {
   res.json({ success: true, template, message: 'Version restored as draft. Preview and publish to make it live.' });
 }
 
+export async function deleteVersion(req, res) {
+  const template = await deleteInvoiceDesignVersion(req.params.key, req.params.versionId, req.user);
+  res.json({ success: true, template, message: 'Saved version deleted' });
+}
+
 export async function preview(req, res) {
   const pdf = await generatePdfTemplatePreview(req.params.key, {
     config: req.body?.config,
@@ -58,6 +64,8 @@ export async function preview(req, res) {
     draftCanvasHtml: req.body?.draftCanvasHtml,
     draftMeta: req.body?.draftMeta
   });
+  res.set('Cache-Control', 'no-store, max-age=0');
+  res.set('Pragma', 'no-cache');
   res.download(pdf.filePath, pdf.filename);
 }
 

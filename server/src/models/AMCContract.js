@@ -46,9 +46,15 @@ const amcContractSchema = new mongoose.Schema(
     endDate: { type: Date, required: true },
     contractValue: { type: Number, min: 0, default: 0 },
     invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
+    technicianId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     includedVisits: { type: Number, min: 0, default: 0 },
     notes: { type: String, trim: true, default: '' },
     status: { type: String, enum: ['Active', 'Cancelled'], default: 'Active' },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    archivedAt: { type: Date, default: null },
+    archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     visits: [visitSchema]
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }

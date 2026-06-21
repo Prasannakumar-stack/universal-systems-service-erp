@@ -136,9 +136,10 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { createPortal } from 'react-dom';
+import { MoreHorizontal } from 'lucide-react';
 import {
   amcCoverageFlags,
-  amcCoverageRules,
   amcCoverageTypes,
   defaultAmcCoverageType,
   normalizeAmcCoverageType
@@ -194,31 +195,68 @@ export function AMCContractsPage({ role = 'admin' }) {
   const canCreateAmc = can(permissionSubject, 'create_amc');
   const canRenewAmc = can(permissionSubject, 'renew_amc');
   const canCreateAmcJob = can(permissionSubject, 'create_amc_job');
-  const canCreateInvoice = can(permissionSubject, 'create_invoice');
-  const canManageAmc = canCreateAmc || canRenewAmc || canCreateAmcJob || canCreateInvoice;
+  const canAssignTechnician = can(permissionSubject, 'assign_technician');
+  const canDeleteAmc = canCreateAmc;
   const base = isTechnician ? '/app/tech' : '/app/admin';
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(defaultAmcForm);
   const [customers, setCustomers] = useState([]);
   const [technicians, setTechnicians] = useState([]);
+  const [actionMenuId, setActionMenuId] = useState('');
+  const [actionMenuPosition, setActionMenuPosition] = useState(null);
+  const [detailsContract, setDetailsContract] = useState(null);
+  const [reassignContract, setReassignContract] = useState(null);
+  const [deleteContract, setDeleteContract] = useState(null);
+  const actionMenuRef = useRef(null);
+  const actionTriggerRefs = useRef(new Map());
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const handledRenewalRef = useRef('');
   const { data, loading, error, reload } = useResource(() => request('/amc/contracts'), [request]);
 
   useEffect(() => {
+    if (!actionMenuId) return undefined;
+    function closeActionMenu(event) {
+      if (actionMenuRef.current?.contains(event.target)) return;
+      if (actionTriggerRefs.current.get(actionMenuId)?.contains(event.target)) return;
+      setActionMenuId('');
+      setActionMenuPosition(null);
+    }
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') {
+        setActionMenuId('');
+        setActionMenuPosition(null);
+      }
+    }
+    function closeOnViewportChange() {
+      setActionMenuId('');
+      setActionMenuPosition(null);
+    }
+    document.addEventListener('mousedown', closeActionMenu);
+    document.addEventListener('keydown', closeOnEscape);
+    window.addEventListener('scroll', closeOnViewportChange, true);
+    window.addEventListener('resize', closeOnViewportChange);
+    return () => {
+      document.removeEventListener('mousedown', closeActionMenu);
+      document.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener('scroll', closeOnViewportChange, true);
+      window.removeEventListener('resize', closeOnViewportChange);
+    };
+  }, [actionMenuId]);
+
+  useEffect(() => {
     request('/customers?limit=100').then((result) => setCustomers(result.customers || [])).catch(() => setCustomers([]));
   }, [request]);
 
   useEffect(() => {
-    if (!canCreateAmc && !canCreateAmcJob) {
+    if (!canCreateAmc && !canCreateAmcJob && !canAssignTechnician) {
       setTechnicians([]);
       return;
     }
     request('/users?role=technician&active=true&limit=100')
       .then((result) => setTechnicians((result.users || []).filter((user) => user.role === 'technician' && user.active)))
       .catch(() => setTechnicians([]));
-  }, [canCreateAmc, canCreateAmcJob, request]);
+  }, [canAssignTechnician, canCreateAmc, canCreateAmcJob, request]);
 
   useEffect(() => {
     const renewalContract = location.state?.renewContract;
@@ -244,6 +282,57 @@ export function AMCContractsPage({ role = 'admin' }) {
     { icon: CalendarClock, label: 'Visits This Week', value: summary.visitsThisWeek || 0, helper: 'Scheduled AMC visits for the next 7 days.', tone: 'blue' },
     { icon: AlertTriangle, label: 'Expired Contracts', value: summary.expiredContracts || 0, helper: 'Coverage ended and should be renewed.', tone: 'red' }
   ];
+
+  function setActionTriggerRef(contractId, node) {
+    if (!node) {
+      actionTriggerRefs.current.delete(contractId);
+      return;
+    }
+    actionTriggerRefs.current.set(contractId, node);
+  }
+
+  function actionMenuCoords(contractId) {
+    const trigger = actionTriggerRefs.current.get(contractId);
+    if (!trigger || typeof window === 'undefined') return null;
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 228;
+    const estimatedMenuHeight = 236;
+    const gap = 8;
+    const margin = 12;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const opensUp = rect.bottom + gap + estimatedMenuHeight > viewportHeight - margin;
+    const rawTop = opensUp ? rect.top - estimatedMenuHeight - gap : rect.bottom + gap;
+    const leftOpening = rect.right + menuWidth > viewportWidth - margin;
+    const rawLeft = leftOpening ? rect.right - menuWidth : rect.left;
+    return {
+      top: Math.min(Math.max(margin, rawTop), Math.max(margin, viewportHeight - estimatedMenuHeight - margin)),
+      left: Math.min(Math.max(margin, rawLeft), Math.max(margin, viewportWidth - menuWidth - margin)),
+      width: menuWidth,
+      placement: opensUp ? 'top' : 'bottom'
+    };
+  }
+
+  function toggleActionMenu(contractId) {
+    setActionMenuId((current) => {
+      if (current === contractId) {
+        setActionMenuPosition(null);
+        return '';
+      }
+      const nextPosition = actionMenuCoords(contractId);
+      if (!nextPosition) {
+        setActionMenuPosition(null);
+        return '';
+      }
+      setActionMenuPosition(nextPosition);
+      return contractId;
+    });
+  }
+
+  function closeActionMenu() {
+    setActionMenuId('');
+    setActionMenuPosition(null);
+  }
 
   function selectCustomer(customerId) {
     const customer = customers.find((item) => recordId(item) === customerId);
@@ -355,28 +444,39 @@ export function AMCContractsPage({ role = 'admin' }) {
     }
   }
 
-  async function createInvoice(contract) {
-    if (!canCreateInvoice) return;
-    const existingInvoiceId = recordId(contract.invoiceId);
-    if (existingInvoiceId) {
-      navigate(`${base}/payments?invoiceId=${existingInvoiceId}`);
+  async function saveAmcAssignment(contract, nextTechnicianId) {
+    if (!canAssignTechnician) {
+      push('You do not have permission to assign technicians', 'error');
       return;
     }
     try {
-      const result = await request('/invoices', {
-        method: 'POST',
-        body: JSON.stringify({
-          amcContractId: recordId(contract),
-          contractValue: contract.contractValue,
-          coverage: contract.coveredService || contract.coveredDevices,
-          notes: `AMC Coverage Type: ${normalizeAmcCoverageType(contract.coverageType)}\nCoverage Rules:\n${amcCoverageRules(contract).join('\n')}\nCoverage:\n${contract.coveredService || contract.coveredDevices || contract.contractType || 'AMC Service'}`
-        })
+      await preserveScroll(async () => {
+        await request(`/amc/contracts/${recordId(contract)}/assignment`, {
+          method: 'PATCH',
+          body: JSON.stringify({ technicianId: nextTechnicianId || null })
+        });
+        push('AMC contract reassigned successfully.');
+        closeActionMenu();
+        await reload({ silent: true });
+        emitSidebarBadgesUpdated();
       });
-      const invoiceId = recordId(result.invoice);
-      push('AMC invoice created');
-      await reload({ silent: true });
-      emitSidebarBadgesUpdated();
-      if (invoiceId) navigate(`${base}/payments?invoiceId=${invoiceId}`);
+    } catch (err) {
+      push(err.message, 'error');
+      throw err;
+    }
+  }
+
+  async function confirmDeleteOrArchiveContract() {
+    if (!deleteContract || !canDeleteAmc) return;
+    try {
+      await preserveScroll(async () => {
+        const result = await request(`/amc/contracts/${recordId(deleteContract)}`, { method: 'DELETE' });
+        push(result.message || (deleteContract.lifecycleAction === 'archive' ? 'AMC contract archived' : 'AMC contract moved to deleted records'));
+        setDeleteContract(null);
+        closeActionMenu();
+        await reload({ silent: true });
+        emitSidebarBadgesUpdated();
+      });
     } catch (err) {
       push(err.message, 'error');
     }
@@ -593,6 +693,31 @@ export function AMCContractsPage({ role = 'admin' }) {
           />
         ) : (
           <>
+          {!isTechnician ? (
+            <div className="amc-responsive-card-list">
+              {visibleContracts.map((contract) => (
+                <AmcContractCompactCard
+                  key={recordId(contract)}
+                  contract={contract}
+                  menuOpen={actionMenuId === recordId(contract)}
+                  actionMenuPosition={actionMenuPosition}
+                  actionMenuRef={actionMenuRef}
+                  setActionTriggerRef={setActionTriggerRef}
+                  toggleActionMenu={toggleActionMenu}
+                  closeActionMenu={closeActionMenu}
+                  canCreateAmcJob={canCreateAmcJob}
+                  canAssignTechnician={canAssignTechnician}
+                  canDeleteAmc={canDeleteAmc}
+                  setDetailsContract={setDetailsContract}
+                  setReassignContract={setReassignContract}
+                  setDeleteContract={setDeleteContract}
+                  createJob={createJob}
+                  navigate={navigate}
+                  base={base}
+                />
+              ))}
+            </div>
+          ) : null}
           {isTechnician ? (
             <div className="technician-mobile-card-list amc-mobile-cards">
               {visibleContracts.map((contract) => (
@@ -602,18 +727,16 @@ export function AMCContractsPage({ role = 'admin' }) {
           ) : null}
           <div className={`table-wrap amc-table-wrap bg-[var(--surface)] ${isTechnician ? 'technician-desktop-table' : ''}`}>
             <table className="data-table amc-table amc-contracts-table">
-            <thead><tr><th>Customer</th><th>Plan / Coverage</th><th>Period</th><th>AMC Payment</th><th>Extra Charges</th><th className="text-center">Status</th><th className="text-center">Action</th></tr></thead>
+            <thead><tr><th>Customer</th><th>Plan / Coverage</th><th>Period</th><th>AMC Payment</th><th>Extra Charges</th><th className="amc-status-header amc-status-divider text-center">Status</th><th className="amc-actions-header amc-actions-header-cell amc-actions-sticky text-center">Actions</th></tr></thead>
             <tbody>
               {visibleContracts.map((contract) => {
                 const contractStatus = contract.renewalStatus === 'Renewal Due' ? contract.renewalStatus : contract.status;
-                const isRenewalDue = contractStatus === 'Renewal Due';
                 const invoiceId = recordId(contract.invoiceId);
-                const visitWorkOrderId = recordId((contract.visits || []).find((visit) => recordId(visit.workOrderId))?.workOrderId);
                 const payment = amcPaymentSummary(contract);
                 const extra = extraChargeSummary(contract);
                 const brandModel = amcDeviceBrandModel(contract);
                 return (
-                  <tr key={recordId(contract)}>
+                  <tr className="amc-contracts-row" key={recordId(contract)}>
                     <td>
                       <div className="amc-customer-cell">
                         <span className="amc-customer-name" title={contract.customerName || '-'}>{contract.customerName || '-'}</span>
@@ -626,7 +749,7 @@ export function AMCContractsPage({ role = 'admin' }) {
                         <span className="amc-plan-title" title={contract.contractType || '-'}>{contract.contractType || '-'}</span>
                         <span className="amc-muted-badge" title={normalizeAmcCoverageType(contract.coverageType)}>{normalizeAmcCoverageType(contract.coverageType)}</span>
                         <span className="amc-plan-service" title={contract.coveredService || contract.coveredDevices || '-'}>{contract.coveredService || contract.coveredDevices || '-'}</span>
-                        <span className="amc-plan-service" title={brandModel || 'Not specified'}>Brand / Model: {brandModel || 'Not specified'}</span>
+                        {brandModel ? <span className="amc-plan-service" title={brandModel}>Brand / Model: {brandModel}</span> : null}
                         {contract.warrantyIncluded ? <span className="amc-warranty-line">{amcWarrantyLine(contract)}</span> : null}
                       </div>
                     </td>
@@ -637,42 +760,97 @@ export function AMCContractsPage({ role = 'admin' }) {
                         <b>{formatDate(contract.endDate)}</b>
                       </div>
                     </td>
-                    <td>
-                      <div className="amc-payment-stack">
+                    <td className="amc-money-cell">
+                      <div className="amc-money-card">
                         <AmcPaymentPill status={payment.status} hasInvoice={Boolean(invoiceId)} />
-                        <span className="amc-payment-row"><span>Contract Value</span><b>{currency(payment.contractValue)}</b></span>
-                        <span className="amc-payment-row"><span>AMC Paid</span><b>{currency(payment.paid)}</b></span>
-                        <span className="amc-payment-row"><span>AMC Pending</span><b>{currency(payment.pending)}</b></span>
+                        <div className="amc-money-row"><span className="amc-money-label">Contract Value</span><span className="amc-money-value">{currency(payment.contractValue)}</span></div>
+                        <div className="amc-money-row"><span className="amc-money-label">AMC Paid</span><span className="amc-money-value">{currency(payment.paid)}</span></div>
+                        <div className="amc-money-row"><span className="amc-money-label">AMC Pending</span><span className="amc-money-value">{currency(payment.pending)}</span></div>
                       </div>
                     </td>
-                    <td>
-                      <div className="amc-payment-stack">
+                    <td className="amc-money-cell">
+                      <div className="amc-money-card">
                         <ExtraChargePill status={extra.status} />
-                        <span className="amc-payment-row"><span>Extra Invoice Total</span><b>{currency(extra.total)}</b></span>
-                        <span className="amc-payment-row"><span>Extra Paid</span><b>{currency(extra.paid)}</b></span>
-                        <span className="amc-payment-row"><span>Extra Pending</span><b>{currency(extra.pending)}</b></span>
+                        <div className="amc-money-row"><span className="amc-money-label">Extra Invoice Total</span><span className="amc-money-value">{currency(extra.total)}</span></div>
+                        <div className="amc-money-row"><span className="amc-money-label">Extra Paid</span><span className="amc-money-value">{currency(extra.paid)}</span></div>
+                        <div className="amc-money-row"><span className="amc-money-label">Extra Pending</span><span className="amc-money-value">{currency(extra.pending)}</span></div>
                       </div>
                     </td>
-                    <td className="amc-status-cell">
+                    <td className="amc-status-cell amc-status-divider">
                       <AmcStatusPill status={contractStatus} />
                       <span className="mt-1 block text-xs muted">{amcRenewalHelper(contract)}</span>
                     </td>
-                    <td className="text-center">
-                      <div className="amc-action-stack">
-                        {canManageAmc ? (
-                          <>
-                            {canCreateAmcJob ? <button className="btn btn-primary amc-action-button" type="button" onClick={() => createJob(contract)}><Wrench className="h-4 w-4" />Create Job</button> : null}
-                            {invoiceId
-                              ? <Link className="btn btn-secondary amc-action-button" to={`${base}/payments?invoiceId=${invoiceId}`}><CreditCard className="h-4 w-4" />Go to Payments</Link>
-                              : canCreateInvoice ? <button className="btn btn-secondary amc-action-button" type="button" onClick={() => createInvoice(contract)}><ReceiptText className="h-4 w-4" />Create Invoice</button> : null}
-                            {isRenewalDue && canRenewAmc ? <button className="btn btn-secondary amc-action-button" type="button" onClick={() => startRenewal(contract)}><AlertTriangle className="h-4 w-4" />Renew</button> : null}
-                          </>
-                        ) : (
-                          <>
-                            {visitWorkOrderId ? <Link className="btn btn-secondary amc-action-button" to={`${base}/work-orders/${visitWorkOrderId}`}><Wrench className="h-4 w-4" />View Job</Link> : null}
-                            {invoiceId ? <Link className="btn btn-secondary amc-action-button" to={`${base}/payments?invoiceId=${invoiceId}`}><CreditCard className="h-4 w-4" />View Payments</Link> : null}
-                          </>
-                        )}
+                    <td className="amc-actions-cell amc-actions-column amc-actions-sticky text-center">
+                      <div className="amc-row-action-wrap">
+                        <div className="relative">
+                          <button
+                            type="button"
+                            ref={(node) => setActionTriggerRef(recordId(contract), node)}
+                            className="work-orders-more-button amc-actions-more-button"
+                            onClick={() => toggleActionMenu(recordId(contract))}
+                            aria-haspopup="menu"
+                            aria-expanded={actionMenuId === recordId(contract)}
+                            aria-label="More AMC contract actions"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                        {actionMenuId === recordId(contract) && actionMenuPosition ? createPortal(
+                          <div
+                            ref={actionMenuRef}
+                            className={`work-orders-more-menu amc-row-action-menu is-portal is-${actionMenuPosition.placement}`}
+                            role="menu"
+                            style={{
+                              position: 'fixed',
+                              top: `${actionMenuPosition.top}px`,
+                              left: `${actionMenuPosition.left}px`,
+                              width: `${actionMenuPosition.width}px`
+                            }}
+                          >
+                            <button
+                              type="button"
+                              role="menuitem"
+                              disabled={!canCreateAmcJob}
+                              title={canCreateAmcJob ? 'Create service job from this AMC contract' : 'You do not have permission to create AMC jobs'}
+                              onClick={() => { closeActionMenu(); createJob(contract); }}
+                            >
+                              <Wrench className="h-3.5 w-3.5" />
+                              Create Job
+                            </button>
+                            <button type="button" role="menuitem" onClick={() => { setDetailsContract(contract); closeActionMenu(); }}>
+                              <FileText className="h-3.5 w-3.5" />
+                              View Details
+                            </button>
+                            {canAssignTechnician ? (
+                              <button type="button" role="menuitem" onClick={() => { setReassignContract(contract); closeActionMenu(); }}>
+                                <Users className="h-3.5 w-3.5" />
+                                Reassign
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              role="menuitem"
+                              disabled={!invoiceId}
+                              title={invoiceId ? 'Open related payments' : 'Create an invoice before opening payments'}
+                              onClick={() => { closeActionMenu(); navigate(`${base}/payments?invoiceId=${invoiceId}`); }}
+                            >
+                              <CreditCard className="h-3.5 w-3.5" />
+                              Go to Payments
+                            </button>
+                            {canDeleteAmc ? (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className={contract.lifecycleAction === 'delete' ? 'work-orders-danger-menu-item' : 'work-orders-warning-menu-item'}
+                                onClick={() => { setDeleteContract(contract); closeActionMenu(); }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                {contract.lifecycleAction === 'delete' ? 'Delete' : 'Archive'}
+                              </button>
+                            ) : null}
+                          </div>,
+                          document.body
+                        ) : null}
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -684,6 +862,146 @@ export function AMCContractsPage({ role = 'admin' }) {
           </>
         )}
       </div>
+      {detailsContract ? <AmcContractDetailsModal contract={detailsContract} onClose={() => setDetailsContract(null)} /> : null}
+      {reassignContract ? (
+        <AmcContractReassignModal
+          contract={reassignContract}
+          technicians={technicians}
+          onClose={() => setReassignContract(null)}
+          onSave={saveAmcAssignment}
+        />
+      ) : null}
+      {deleteContract ? (
+        <ConfirmModal
+          title={deleteContract.lifecycleAction === 'delete' ? 'Delete AMC contract?' : 'Archive AMC contract?'}
+          message={deleteContract.lifecycleAction === 'delete'
+            ? 'This will permanently remove this AMC contract. This action cannot be undone.'
+            : 'This hides the contract from active lists but keeps history, payments, and jobs safe.'}
+          confirmLabel={deleteContract.lifecycleAction === 'delete' ? 'Delete Contract' : 'Archive Contract'}
+          onCancel={() => setDeleteContract(null)}
+          onConfirm={confirmDeleteOrArchiveContract}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function AmcContractDetailsModal({ contract, onClose }) {
+  const payment = amcPaymentSummary(contract);
+  const extra = extraChargeSummary(contract);
+  const brandModel = amcDeviceBrandModel(contract);
+  const detailStatus = contract.renewalStatus === 'Renewal Due' ? contract.renewalStatus : contract.status;
+  const assigned = contract.technicianId && typeof contract.technicianId === 'object'
+    ? contract.technicianId.name || contract.technicianId.username
+    : (contract.visits || []).find((visit) => visit.technicianId)?.technicianId?.name;
+
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4">
+      <section className="surface admin-modal amc-details-modal w-full max-w-3xl p-5">
+        <div className="amc-details-header">
+          <div className="amc-details-title-block">
+            <p className="amc-details-kicker">{contract.contractId || 'AMC Contract'}</p>
+            <h2>AMC Contract Details</h2>
+            <p>{contract.customerName || 'Customer'} - {contract.phone || '-'}</p>
+          </div>
+          <AmcStatusPill status={detailStatus} />
+          <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close AMC contract details">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="amc-details-body">
+          <div className="amc-details-section">
+            <h3>Contract Info</h3>
+            <div className="amc-details-grid">
+              <AmcDetailItem label="Plan" value={contract.contractType || '-'} />
+              <AmcDetailItem label="Coverage" value={normalizeAmcCoverageType(contract.coverageType)} />
+              <AmcDetailItem label="Brand / Model" value={brandModel || 'Not specified'} />
+              <AmcDetailItem label="Assigned To" value={assigned || ADMIN_ASSIGNMENT_LABEL} />
+              <AmcDetailItem label="Period" value={`${formatDate(contract.startDate)} to ${formatDate(contract.endDate)}`} />
+              <AmcDetailItem label="Visits" value={`${contract.visits?.length || 0} scheduled`} />
+            </div>
+          </div>
+
+          <div className="amc-details-section">
+            <h3>Payment Summary</h3>
+            <div className="amc-details-grid">
+              <AmcDetailItem label="AMC Payment Status" value={payment.status} />
+              <AmcDetailItem label="AMC Pending" value={currency(payment.pending)} />
+              <AmcDetailItem label="Extra Charges Status" value={extra.status} />
+              <AmcDetailItem label="Extra Pending" value={currency(extra.pending)} />
+            </div>
+          </div>
+
+          <div className="amc-details-section">
+            <h3>Covered Devices / Service</h3>
+            <div className="amc-detail-item amc-detail-item-wide">
+              <span>Covered Devices / Service</span>
+              <b>{contract.coveredService || contract.coveredDevices || '-'}</b>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AmcDetailItem({ label, value }) {
+  return (
+    <div className="amc-detail-item">
+      <span>{label}</span>
+      <b>{value || '-'}</b>
+    </div>
+  );
+}
+
+function AmcContractReassignModal({ contract, technicians, onClose, onSave }) {
+  const initialTechnicianId = recordId(contract.technicianId) || recordId((contract.visits || []).find((visit) => recordId(visit.technicianId))?.technicianId) || '';
+  const [technicianId, setTechnicianId] = useState(initialTechnicianId);
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setSaving(true);
+    let saved = false;
+    try {
+      await onSave(contract, technicianId);
+      saved = true;
+    } catch {
+      // Parent owns the toast so the modal can stay focused on form state.
+    } finally {
+      if (!saved) setSaving(false);
+    }
+    if (saved) onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-4">
+      <form className="surface admin-modal w-full max-w-md p-5" onSubmit={submit}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-black">Reassign AMC Contract</h2>
+            <p className="mt-1 text-sm muted">Choose Admin or an active technician for future AMC visits.</p>
+          </div>
+          <button type="button" className="icon-button h-9 w-9" onClick={onClose} aria-label="Close reassignment modal">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <label className="mt-5 block">
+          <span className="label">Assign to</span>
+          <select className="input" value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}>
+            <option value="">{ADMIN_ASSIGNMENT_LABEL}</option>
+            {technicians.map((tech) => <option key={recordId(tech)} value={recordId(tech)}>{tech.name}</option>)}
+          </select>
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            <Save className="h-4 w-4" />
+            {saving ? 'Saving...' : 'Save Assignment'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -733,6 +1051,141 @@ function TechnicianAmcContractMobileCard({ contract, base }) {
         {visitWorkOrderId ? <Link className="btn btn-primary" to={`${base}/work-orders/${visitWorkOrderId}`}>View Job</Link> : null}
         {invoiceId ? <Link className="btn btn-secondary" to={`${base}/payments?invoiceId=${invoiceId}`}>View Payments</Link> : null}
         {!visitWorkOrderId && !invoiceId ? <span className="technician-mobile-readonly-pill">Read-only</span> : null}
+      </div>
+    </article>
+  );
+}
+
+function AmcContractCompactCard({
+  contract,
+  menuOpen,
+  actionMenuPosition,
+  actionMenuRef,
+  setActionTriggerRef,
+  toggleActionMenu,
+  closeActionMenu,
+  canCreateAmcJob,
+  canAssignTechnician,
+  canDeleteAmc,
+  setDetailsContract,
+  setReassignContract,
+  setDeleteContract,
+  createJob,
+  navigate,
+  base
+}) {
+  const contractId = recordId(contract);
+  const contractStatus = contract.renewalStatus === 'Renewal Due' ? contract.renewalStatus : contract.status;
+  const invoiceId = recordId(contract.invoiceId);
+  const payment = amcPaymentSummary(contract);
+  const extra = extraChargeSummary(contract);
+  const brandModel = amcDeviceBrandModel(contract);
+
+  return (
+    <article className="technician-mobile-card amc-responsive-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="technician-mobile-card-eyebrow">{contract.contractId || 'AMC Contract'}</p>
+          <h2 className="technician-mobile-card-title" title={contract.customerName || 'Customer'}>{contract.customerName || 'Customer'}</h2>
+          <p className="technician-mobile-card-muted">Phone: {contract.phone || '-'}</p>
+        </div>
+        <AmcStatusPill status={contractStatus} />
+      </div>
+      <div className="technician-mobile-card-body">
+        <div>
+          <span>Plan / Coverage</span>
+          <b>{contract.contractType || '-'}</b>
+          <p>{normalizeAmcCoverageType(contract.coverageType)} | {contract.coveredService || contract.coveredDevices || '-'}</p>
+          {brandModel ? <p>Brand / Model: {brandModel}</p> : null}
+          {contract.warrantyIncluded ? <p>{amcWarrantyLine(contract)}</p> : null}
+        </div>
+        <div>
+          <span>Period</span>
+          <p>{formatDate(contract.startDate)} to {formatDate(contract.endDate)}</p>
+        </div>
+      </div>
+      <div className="technician-detail-card-metrics">
+        <span><b>{currency(payment.pending)}</b><small>AMC Pending</small></span>
+        <span><b>{currency(extra.pending)}</b><small>Extra Pending</small></span>
+        <span><b>{amcRenewalHelper(contract) || '-'}</b><small>Status Note</small></span>
+      </div>
+      <div className="technician-mobile-card-footer amc-responsive-card-footer">
+        {invoiceId ? (
+          <Link className="btn btn-secondary" to={`${base}/payments?invoiceId=${invoiceId}`}>
+            Go to Payments
+          </Link>
+        ) : (
+          <span className="technician-mobile-readonly-pill">No invoice yet</span>
+        )}
+        <div className="relative ml-auto">
+          <button
+            type="button"
+            ref={(node) => setActionTriggerRef(contractId, node)}
+            className="work-orders-more-button amc-actions-more-button"
+            onClick={() => toggleActionMenu(contractId)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-label="More AMC contract actions"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+          {menuOpen && actionMenuPosition ? createPortal(
+            <div
+              ref={actionMenuRef}
+              className={`work-orders-more-menu amc-row-action-menu is-portal is-${actionMenuPosition.placement}`}
+              role="menu"
+              style={{
+                position: 'fixed',
+                top: `${actionMenuPosition.top}px`,
+                left: `${actionMenuPosition.left}px`,
+                width: `${actionMenuPosition.width}px`
+              }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!canCreateAmcJob}
+                title={canCreateAmcJob ? 'Create service job from this AMC contract' : 'You do not have permission to create AMC jobs'}
+                onClick={() => { closeActionMenu(); createJob(contract); }}
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                Create Job
+              </button>
+              <button type="button" role="menuitem" onClick={() => { setDetailsContract(contract); closeActionMenu(); }}>
+                <FileText className="h-3.5 w-3.5" />
+                View Details
+              </button>
+              {canAssignTechnician ? (
+                <button type="button" role="menuitem" onClick={() => { setReassignContract(contract); closeActionMenu(); }}>
+                  <Users className="h-3.5 w-3.5" />
+                  Reassign
+                </button>
+              ) : null}
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!invoiceId}
+                title={invoiceId ? 'Open related payments' : 'Create an invoice before opening payments'}
+                onClick={() => { closeActionMenu(); navigate(`${base}/payments?invoiceId=${invoiceId}`); }}
+              >
+                <CreditCard className="h-3.5 w-3.5" />
+                Go to Payments
+              </button>
+              {canDeleteAmc ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={contract.lifecycleAction === 'delete' ? 'work-orders-danger-menu-item' : 'work-orders-warning-menu-item'}
+                  onClick={() => { setDeleteContract(contract); closeActionMenu(); }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {contract.lifecycleAction === 'delete' ? 'Delete' : 'Archive'}
+                </button>
+              ) : null}
+            </div>,
+            document.body
+          ) : null}
+        </div>
       </div>
     </article>
   );
