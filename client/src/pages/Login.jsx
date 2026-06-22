@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Eye, EyeOff, LockKeyhole, ShieldCheck, UserRound } from 'lucide-react';
 import PwaInstallButton from '../components/PwaInstallButton.jsx';
+import UniversalLoader from '../components/UniversalLoader.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { staffWorkspacePath } from '../utils/roles.js';
@@ -44,7 +45,10 @@ export default function Login({ role, appMode = false }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(appMode);
   const [showPassword, setShowPassword] = useState(false);
+  const redirectTimerRef = useRef(null);
   const { login, loading: authLoading, user } = useAuth();
   const { push } = useToast();
   const navigate = useNavigate();
@@ -53,8 +57,18 @@ export default function Login({ role, appMode = false }) {
   const loginRoleLabel = appMode ? 'Staff app' : role === 'admin' ? 'Admin' : 'Technician';
 
   useEffect(() => {
-    if (!authLoading && user) navigate(staffWorkspacePath(user.role), { replace: true });
-  }, [authLoading, navigate, user]);
+    if (!authLoading && user && !redirecting) navigate(staffWorkspacePath(user.role), { replace: true });
+  }, [authLoading, navigate, redirecting, user]);
+
+  useEffect(() => {
+    if (!appMode) return undefined;
+    const timer = window.setTimeout(() => setBootstrapping(false), 1400);
+    return () => window.clearTimeout(timer);
+  }, [appMode]);
+
+  useEffect(() => () => {
+    if (redirectTimerRef.current) window.clearTimeout(redirectTimerRef.current);
+  }, []);
 
   async function submit(event) {
     event.preventDefault();
@@ -62,12 +76,26 @@ export default function Login({ role, appMode = false }) {
     try {
       const user = await login(username, password);
       push(`Welcome ${user.name}`);
-      navigate(staffWorkspacePath(user.role), { replace: true });
+      setRedirecting(true);
+      if (redirectTimerRef.current) window.clearTimeout(redirectTimerRef.current);
+      redirectTimerRef.current = window.setTimeout(() => navigate(staffWorkspacePath(user.role), { replace: true }), 1300);
     } catch (error) {
+      setRedirecting(false);
       push(error.message, 'error');
     } finally {
       setLoading(false);
     }
+  }
+
+  if (appMode && (bootstrapping || authLoading || redirecting || user)) {
+    return (
+      <UniversalLoader
+        active
+        variant="staff"
+        message={redirecting ? 'Opening your workspace...' : 'Loading secure workspace...'}
+        minVisibleMs={redirecting ? 1300 : 1500}
+      />
+    );
   }
 
   return (

@@ -172,6 +172,7 @@ export function InventoryPage({ role = 'admin' }) {
   const [stockChoicePart, setStockChoicePart] = useState(null);
   const [purchasePart, setPurchasePart] = useState(null);
   const [deletePart, setDeletePart] = useState(null);
+  const [deletePartBusy, setDeletePartBusy] = useState(false);
   const [actionMenuId, setActionMenuId] = useState('');
   const [actionMenuPosition, setActionMenuPosition] = useState(null);
   const actionMenuRef = useRef(null);
@@ -342,11 +343,12 @@ export function InventoryPage({ role = 'admin' }) {
   }
 
   async function confirmDeletePart() {
-    if (!deletePart) return;
+    if (!deletePart || deletePartBusy) return;
     if (!canDeletePart) {
       push('You do not have permission to delete parts', 'error');
       return;
     }
+    setDeletePartBusy(true);
     try {
       await preserveScroll(async () => {
         await request(`/inventory/${deletePart.id}`, { method: 'DELETE' });
@@ -357,6 +359,8 @@ export function InventoryPage({ role = 'admin' }) {
       });
     } catch (err) {
       push(err.message, 'error');
+    } finally {
+      setDeletePartBusy(false);
     }
   }
 
@@ -620,9 +624,11 @@ export function InventoryPage({ role = 'admin' }) {
       ) : null}
       {canDeletePart && deletePart ? (
         <ConfirmModal
-          title="Delete Inventory Part"
-          message={`Delete ${deletePart.partName}? This removes the part from inventory.`}
-          confirmLabel="Delete"
+          title="Delete inventory part permanently?"
+          message={`Delete ${deletePart.partName}? If this part is used in existing records, the system will block deletion and ask you to archive or disable it instead.`}
+          confirmLabel="Delete Permanently"
+          loading={deletePartBusy}
+          loadingLabel="Deleting..."
           onCancel={() => setDeletePart(null)}
           onConfirm={confirmDeletePart}
         />

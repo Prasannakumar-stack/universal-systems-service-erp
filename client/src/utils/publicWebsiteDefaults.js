@@ -13,6 +13,21 @@ function publicAssetOrigin() {
 
 const apiOrigin = publicAssetOrigin();
 
+export const defaultBookingServiceTypes = [
+  'Laptop Repair',
+  'Desktop Repair',
+  'Printer Service / Toner Refilling',
+  'CCTV Installation & Maintenance',
+  'Networking Support',
+  'OS Installation & Setup',
+  'Software Support',
+  'Data Recovery',
+  'Computer Sales & Service',
+  'UPS Battery Sales & Replacement',
+  'Solar / UPS / Inverter Sales & Service',
+  'AMC / On-site Support'
+];
+
 export const defaultPublicWebsiteSettings = {
   status: {
     websiteEnabled: true,
@@ -138,7 +153,13 @@ export const defaultPublicWebsiteSettings = {
     bookingButtonText: 'Book a Service',
     defaultBookingStatus: 'Pending',
     showServiceSelection: true,
-    showPreferredDateTime: false
+    showPreferredDateTime: false,
+    serviceTypes: defaultBookingServiceTypes.map((name, index) => ({
+      key: `booking-service-${index + 1}`,
+      name,
+      active: true,
+      order: index
+    }))
   },
   branding: {
     logoUrl: '/logo-icon.png',
@@ -154,6 +175,27 @@ export const defaultPublicWebsiteSettings = {
     socialSharingImage: '/Home%20Page%20image.png'
   }
 };
+
+function normalizeBookingServiceTypes(serviceTypes = []) {
+  const source = Array.isArray(serviceTypes) && serviceTypes.length
+    ? serviceTypes
+    : defaultPublicWebsiteSettings.booking.serviceTypes;
+  return source
+    .map((service, index) => {
+      const name = typeof service === 'string' ? service : service?.name;
+      const trimmedName = String(name || '').trim();
+      if (!trimmedName) return null;
+      return {
+        key: String((typeof service === 'string' ? '' : service?.key) || `booking-service-${index + 1}`),
+        name: trimmedName,
+        active: typeof service === 'string' ? true : service?.active !== false,
+        order: Number.isFinite(Number(service?.order)) ? Number(service.order) : index
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.order - b.order)
+    .map((service, index) => ({ ...service, order: index }));
+}
 
 const publicPageHeroImages = {
   home: '/Home%20Page%20image.png',
@@ -179,6 +221,7 @@ export function mergePublicWebsiteSettings(settings = {}) {
     branding: { ...defaultPublicWebsiteSettings.branding, ...(settings.branding || {}) },
     seo: { ...defaultPublicWebsiteSettings.seo, ...(settings.seo || {}) }
   };
+  merged.booking.serviceTypes = normalizeBookingServiceTypes(merged.booking.serviceTypes);
   merged.services = Array.isArray(settings.services) && settings.services.length
     ? settings.services.map((service, index) => ({ ...service, order: Number.isFinite(Number(service.order)) ? Number(service.order) : index }))
     : defaultPublicWebsiteSettings.services;
@@ -239,4 +282,9 @@ export function visiblePublicServices(settings = defaultPublicWebsiteSettings) {
   return (settings.services || [])
     .filter((service) => service.visible !== false)
     .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+}
+
+export function publicBookingServiceTypes(settings = defaultPublicWebsiteSettings, { activeOnly = true } = {}) {
+  return normalizeBookingServiceTypes(settings.booking?.serviceTypes)
+    .filter((service) => !activeOnly || service.active !== false);
 }

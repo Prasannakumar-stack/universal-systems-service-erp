@@ -26,7 +26,7 @@ import {
 import { formatDate, useAuth, useResource, useToast } from '../../shared/phase1Shared.jsx';
 
 const NOT_AVAILABLE = 'Not available';
-const UNSUPPORTED_SAVE_MESSAGE = 'This setting requires backend support before it can be saved.';
+const UNSUPPORTED_SAVE_MESSAGE = 'This advanced option is unavailable in the current setup.';
 
 const SECURITY_DRAFT_DEFAULTS = {
   password: {
@@ -345,6 +345,7 @@ export default function SecuritySettingsSection() {
   const [saving, setSaving] = useState(false);
   const [actionWorking, setActionWorking] = useState(false);
   const [dangerExpanded, setDangerExpanded] = useState(false);
+  const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
   const {
     data: securityData,
@@ -383,8 +384,7 @@ export default function SecuritySettingsSection() {
     const loginActive = Number(draft.login.failedLoginLimit) > 0 && Number(draft.login.lockoutMinutes) > 0;
     const sessionActive = Number(draft.session.timeoutMinutes) >= 5;
     const auditActive = Boolean(draft.audit.enabled);
-    const twoFactorActive = false;
-    const activeCount = [passwordActive, loginActive, sessionActive, auditActive, twoFactorActive].filter(Boolean).length;
+    const activeCount = [passwordActive, loginActive, sessionActive, auditActive].filter(Boolean).length;
     const status = activeCount >= 4 ? 'Good - Estimated' : activeCount >= 2 ? 'Needs attention' : 'Critical';
     const statusTone = activeCount >= 4 ? 'healthy' : activeCount >= 2 ? 'warning' : 'danger';
     return [
@@ -392,7 +392,6 @@ export default function SecuritySettingsSection() {
       { key: 'login', icon: LockKeyhole, label: 'Login Protection', value: loginActive ? 'Active' : 'Needs attention', tone: loginActive ? 'healthy' : 'warning' },
       { key: 'session', icon: Monitor, label: 'Session Security', value: sessionActive ? 'Active' : 'Needs attention', tone: sessionActive ? 'healthy' : 'warning' },
       { key: 'audit', icon: FileText, label: 'Audit Trail', value: auditActive ? 'Active' : 'Disabled', tone: auditActive ? 'healthy' : 'danger' },
-      { key: 'twoFactor', icon: ShieldAlert, label: 'Two-Factor Auth', value: 'Not configured', tone: 'warning' },
       { key: 'score', icon: Activity, label: 'Security Score', value: status, tone: statusTone }
     ];
   }, [draft]);
@@ -506,7 +505,7 @@ export default function SecuritySettingsSection() {
             <span className="security-settings-card-icon"><Activity className="h-4 w-4" /></span>
             <div>
               <h3>Security Health Summary</h3>
-              <p>Only real platform safeguards are marked active. Unsupported items stay read-only.</p>
+              <p>Real platform safeguards and current enforcement status.</p>
             </div>
           </div>
         </div>
@@ -530,8 +529,6 @@ export default function SecuritySettingsSection() {
         <SecurityPanel icon={KeyRound} title="Password Policy" subtitle="Requirements enforced for admin, staff, and technician password changes.">
           <div className="security-settings-field-grid">
             <SecurityNumberField label="Minimum password length" value={draft.password.minimumLength} min={6} suffix="chars" onChange={(value) => updateDraft('password', 'minimumLength', value)} />
-            <SecurityNumberField label="Password expiry days" value={draft.password.expiryDays} min={0} suffix="days" disabled badge={<SecurityBadge tone="warning">Not supported</SecurityBadge>} onDisabledClick={notifyUnsupported} onChange={(value) => updateDraft('password', 'expiryDays', value)} />
-            <SecurityNumberField label="Prevent password reuse" value={draft.password.reuseCount} min={0} suffix="previous" disabled badge={<SecurityBadge tone="warning">Not supported</SecurityBadge>} onDisabledClick={notifyUnsupported} onChange={(value) => updateDraft('password', 'reuseCount', value)} />
           </div>
           <div className="security-settings-list">
             <SecurityToggle label="Require uppercase letters" checked={draft.password.requireUppercase} onChange={(value) => handleToggle('password', 'requireUppercase', value)} />
@@ -547,9 +544,7 @@ export default function SecuritySettingsSection() {
             <SecurityNumberField label="Lockout duration" value={draft.login.lockoutMinutes} min={1} suffix="minutes" onChange={(value) => updateDraft('login', 'lockoutMinutes', value)} />
           </div>
           <div className="security-settings-list">
-            <SecurityReadOnlyRow label="Two-factor authentication" value="Not configured" badge={<SecurityBadge tone="warning">Planned</SecurityBadge>} />
             <SecurityToggle label="Admin login alerts" checked={draft.login.adminLoginAlerts} onChange={(value) => handleToggle('login', 'adminLoginAlerts', value)} />
-            <SecurityReadOnlyRow label="Remembered devices" value="Not supported" badge={<SecurityBadge tone="warning">Disabled</SecurityBadge>} />
           </div>
           <InfoStrip>Failed login lockout is enforced per user account and audited.</InfoStrip>
         </SecurityPanel>
@@ -557,10 +552,6 @@ export default function SecuritySettingsSection() {
         <SecurityPanel icon={Monitor} title="Session Handling" subtitle="Session timeout and token invalidation without exposing secrets.">
           <div className="security-settings-field-grid">
             <SecurityNumberField label="Session timeout" value={draft.session.timeoutMinutes} min={5} suffix="minutes" onChange={(value) => updateDraft('session', 'timeoutMinutes', value)} />
-          </div>
-          <div className="security-settings-list">
-            <SecurityReadOnlyRow label="Logout idle sessions" value="Not supported" badge={<SecurityBadge tone="warning">Disabled</SecurityBadge>} />
-            <SecurityReadOnlyRow label="Full active-session tracking" value="Not available" badge={<SecurityBadge tone="warning">Disabled</SecurityBadge>} />
           </div>
           <div className="security-settings-session-card">
             <div>
@@ -573,7 +564,7 @@ export default function SecuritySettingsSection() {
               <div><dt>Last active</dt><dd>{currentSession.lastActive}</dd></div>
             </dl>
           </div>
-          <InfoStrip>Full active-session management requires a session table; token reset actions are supported.</InfoStrip>
+          <InfoStrip>Token reset actions are supported for session safety.</InfoStrip>
         </SecurityPanel>
 
         <SecurityPanel
@@ -636,6 +627,36 @@ export default function SecuritySettingsSection() {
               <Info className="h-5 w-5" />
               <strong>No recent security events found.</strong>
             </div>
+          )}
+        </SecurityPanel>
+
+        <SecurityPanel
+          icon={ShieldAlert}
+          title="Advanced Security Options"
+          subtitle="Optional controls reserved for expanded security providers."
+          action={(
+            <button type="button" className="security-danger-collapse-button" onClick={() => setAdvancedExpanded((current) => !current)}>
+              {advancedExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              {advancedExpanded ? 'Collapse' : 'Expand'}
+            </button>
+          )}
+        >
+          {advancedExpanded ? (
+            <>
+              <InfoStrip>These optional controls can be enabled when the matching security provider is available.</InfoStrip>
+              <div className="security-settings-field-grid">
+                <SecurityNumberField label="Password expiry days" value={draft.password.expiryDays} min={0} suffix="days" disabled badge={<SecurityBadge tone="warning">Advanced option unavailable</SecurityBadge>} onDisabledClick={notifyUnsupported} onChange={(value) => updateDraft('password', 'expiryDays', value)} />
+                <SecurityNumberField label="Prevent password reuse" value={draft.password.reuseCount} min={0} suffix="previous" disabled badge={<SecurityBadge tone="warning">Advanced option unavailable</SecurityBadge>} onDisabledClick={notifyUnsupported} onChange={(value) => updateDraft('password', 'reuseCount', value)} />
+              </div>
+              <div className="security-settings-list">
+                <SecurityReadOnlyRow label="Two-factor authentication" value="Optional security upgrade" badge={<SecurityBadge tone="warning">Optional upgrade</SecurityBadge>} />
+                <SecurityReadOnlyRow label="Remembered devices" value="Not enabled" badge={<SecurityBadge tone="warning">Optional upgrade</SecurityBadge>} />
+                <SecurityReadOnlyRow label="Logout idle sessions" value="Not enabled" badge={<SecurityBadge tone="warning">Optional upgrade</SecurityBadge>} />
+                <SecurityReadOnlyRow label="Full active-session tracking" value="Not enabled" badge={<SecurityBadge tone="warning">Optional upgrade</SecurityBadge>} />
+              </div>
+            </>
+          ) : (
+            <InfoStrip>Collapsed by default. Expand to review optional security upgrades.</InfoStrip>
           )}
         </SecurityPanel>
 

@@ -397,7 +397,6 @@ export default function AdminPreferencesSection({ themePreference, resolvedTheme
               <span>Event</span>
               <span>In-App</span>
               <span>Email</span>
-              <span>WhatsApp</span>
             </div>
             {notificationRows.map((row) => {
               const item = form.notifications?.[row.key] || {};
@@ -406,7 +405,6 @@ export default function AdminPreferencesSection({ themePreference, resolvedTheme
                   <strong>{row.label}</strong>
                   <ToggleSwitch checked={Boolean(item.inApp)} disabled={!canEdit || saving} label={`${row.label} in-app`} onChange={(value) => setPath(`notifications.${row.key}.inApp`, value)} />
                   <ToggleSwitch checked={Boolean(item.email)} disabled={!canEdit || saving} label={`${row.label} email`} onChange={(value) => setPath(`notifications.${row.key}.email`, value)} />
-                  <span className="admin-preferences-badge" title="WhatsApp preferences will be available after backend integration.">Coming soon</span>
                 </div>
               );
             })}
@@ -453,7 +451,7 @@ export default function AdminPreferencesSection({ themePreference, resolvedTheme
           <div className="admin-preferences-note-row">
             <div>
               <span>Default invoice footer note</span>
-              <p>{form.documents?.invoiceFooterNote || 'Not configured'}</p>
+              <p>{form.documents?.invoiceFooterNote || 'Optional'}</p>
             </div>
             <button type="button" className="btn btn-secondary admin-table-button" disabled={saving} onClick={placeholderToast}>Edit Note</button>
           </div>

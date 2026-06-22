@@ -286,6 +286,7 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
   const [addErrors, setAddErrors] = useState([]);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [disableConfirm, setDisableConfirm] = useState(null);
   const [unsavedConfirm, setUnsavedConfirm] = useState(null);
   const [automationEnabled, setAutomationEnabled] = useState({});
   const [descriptionEditKey, setDescriptionEditKey] = useState('');
@@ -375,8 +376,20 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
   function toggleActive(originalIndex) {
     const status = draft[activeFlow]?.[originalIndex];
     if (!status || status.protected) return;
+    if (status.active !== false) {
+      setDisableConfirm({ flow: activeFlow, index: originalIndex, status });
+      setMenuKey('');
+      return;
+    }
     updateStatus(originalIndex, 'active', status.active === false);
     setMenuKey('');
+  }
+
+  function disableStatus() {
+    if (!disableConfirm) return;
+    updateStatus(disableConfirm.index, 'active', false);
+    setDisableConfirm(null);
+    push('Status disabled in draft');
   }
 
   function editDescription(menuId) {
@@ -453,7 +466,7 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
       return next;
     });
     setDeleteConfirm(null);
-    push('Status deleted');
+    push('Status removed from draft');
   }
 
   function requestResetFlow() {
@@ -846,10 +859,19 @@ function StatusWorkflowSettingsSection({ onDirtyChange = null }) {
       ) : null}
 
       {deleteConfirm ? (
-        <WorkflowModal title="Delete this status?" description="Delete this status from the workflow? Existing records using this status may not display correctly." onClose={() => setDeleteConfirm(null)}>
+        <WorkflowModal title="Remove workflow status?" description="Remove this status from the workflow draft only if it is unused. If existing records use it, disable or rename it instead. Save Workflow is required before the backend is updated." onClose={() => setDeleteConfirm(null)}>
           <div className="status-workflow-modal-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>Cancel</button>
-            <button type="button" className="btn btn-primary" onClick={deleteStatus}>Delete Status</button>
+            <button type="button" className="btn btn-primary" onClick={deleteStatus}>Remove Status</button>
+          </div>
+        </WorkflowModal>
+      ) : null}
+
+      {disableConfirm ? (
+        <WorkflowModal title="Disable workflow status?" description={`${disableConfirm.status.label} will be disabled in this workflow draft. Save Workflow is required before the backend is updated.`} onClose={() => setDisableConfirm(null)}>
+          <div className="status-workflow-modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setDisableConfirm(null)}>Cancel</button>
+            <button type="button" className="btn btn-primary" onClick={disableStatus}>Disable</button>
           </div>
         </WorkflowModal>
       ) : null}

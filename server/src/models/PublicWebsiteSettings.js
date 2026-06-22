@@ -12,6 +12,16 @@ const publicWebsiteServiceSchema = new mongoose.Schema(
   { _id: true }
 );
 
+const publicBookingServiceTypeSchema = new mongoose.Schema(
+  {
+    key: { type: String, trim: true, default: '' },
+    name: { type: String, trim: true, default: '' },
+    active: { type: Boolean, default: true },
+    order: { type: Number, default: 0 }
+  },
+  { _id: true }
+);
+
 const publicWebsiteSettingsSchema = new mongoose.Schema(
   {
     key: { type: String, required: true, unique: true, default: 'default' },
@@ -42,7 +52,8 @@ const publicWebsiteSettingsSchema = new mongoose.Schema(
       bookingButtonText: { type: String, trim: true, default: 'Book a Service' },
       defaultBookingStatus: { type: String, enum: ['Pending', 'Converted'], default: 'Pending' },
       showServiceSelection: { type: Boolean, default: true },
-      showPreferredDateTime: { type: Boolean, default: false }
+      showPreferredDateTime: { type: Boolean, default: false },
+      serviceTypes: [publicBookingServiceTypeSchema]
     },
     branding: {
       logoUrl: { type: String, trim: true, default: '' },

@@ -268,6 +268,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
   const [technicians, setTechnicians] = useState([]);
   const [assignOrder, setAssignOrder] = useState(null);
   const [deleteOrder, setDeleteOrder] = useState(null);
+  const [deleteOrderBusy, setDeleteOrderBusy] = useState(false);
   const [actionMenuId, setActionMenuId] = useState('');
   const [page, setPage] = useState(1);
   const limit = 10;
@@ -340,11 +341,12 @@ export function WorkOrdersPage({ role = 'admin' }) {
   }
 
   async function confirmDeleteWorkOrder() {
-    if (!deleteOrder) return;
+    if (!deleteOrder || deleteOrderBusy) return;
     if (!canDeleteWorkOrder) {
       push('You do not have permission to delete work orders', 'error');
       return;
     }
+    setDeleteOrderBusy(true);
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${recordId(deleteOrder)}`, { method: 'DELETE' });
@@ -356,6 +358,8 @@ export function WorkOrdersPage({ role = 'admin' }) {
       });
     } catch (err) {
       push(err.message, 'error');
+    } finally {
+      setDeleteOrderBusy(false);
     }
   }
 
@@ -610,9 +614,11 @@ export function WorkOrdersPage({ role = 'admin' }) {
       ) : null}
       {canDeleteWorkOrder && deleteOrder ? (
         <ConfirmModal
-          title="Delete Work Order"
-          message="Are you sure you want to delete this work order? This action cannot be undone."
-          confirmLabel="Delete"
+          title="Delete work order permanently?"
+          message={`${getWorkOrderDisplayId(deleteOrder)} will be permanently deleted only if it has no linked bookings, invoices, payments, AMC visits, or parts history. Linked records are protected and will block deletion.`}
+          confirmLabel="Delete Permanently"
+          loading={deleteOrderBusy}
+          loadingLabel="Deleting..."
           onCancel={() => setDeleteOrder(null)}
           onConfirm={confirmDeleteWorkOrder}
         />

@@ -14,6 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { PublicWebsiteSettingsProvider, usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
+import UniversalLoader from './UniversalLoader.jsx';
 import { phoneHref, publicLogoSources, publicPhoneList, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 
 const baseLinks = [
@@ -39,6 +40,8 @@ const footerServiceLinks = [
   'CCTV Installation & Maintenance',
   'Networking Support'
 ];
+
+let publicInitialLoaderShown = false;
 
 function logoWidth(value, fallback, min, max) {
   const numeric = Number(value);
@@ -154,7 +157,7 @@ function PublicMaintenancePage({ settings }) {
 
 function PublicLayoutShell() {
   const [open, setOpen] = useState(false);
-  const { settings, contact, booking, branding } = usePublicWebsiteSettings();
+  const { settings, contact, booking, branding, loading } = usePublicWebsiteSettings();
   const links = useMemo(
     () => baseLinks.filter((link) => !link.booking || booking.publicBookingEnabled),
     [booking.publicBookingEnabled]
@@ -176,10 +179,16 @@ function PublicLayoutShell() {
     '--public-navbar-logo-width': `${navbarLogoWidth}px`,
     '--public-footer-logo-width': `${footerLogoWidth}px`
   };
+  const showInitialLoader = loading && !publicInitialLoaderShown;
+
+  useEffect(() => {
+    if (!loading && !publicInitialLoaderShown) publicInitialLoaderShown = true;
+  }, [loading]);
 
   if (!settings.status?.websiteEnabled || settings.status?.maintenanceMode) {
     return (
       <div className="public-site-shell" style={publicBrandStyle}>
+        <UniversalLoader active={showInitialLoader} variant="public" message="Powering your service experience..." minVisibleMs={1300} />
         <PublicMaintenancePage settings={settings} />
       </div>
     );
@@ -187,6 +196,7 @@ function PublicLayoutShell() {
 
   return (
     <div className="public-site-shell min-h-screen" style={publicBrandStyle}>
+      <UniversalLoader active={showInitialLoader} variant="public" message="Powering your service experience..." minVisibleMs={1300} />
       <header className="public-header sticky top-0 z-50 border-b border-[var(--line)] backdrop-blur-xl">
         <div className="container-page public-header-inner">
           <div className="public-header-zone public-header-zone-logo">

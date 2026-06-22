@@ -516,6 +516,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   });
   const [adjustmentSaving, setAdjustmentSaving] = useState(false);
   const [partAction, setPartAction] = useState(null);
+  const [removePartCandidate, setRemovePartCandidate] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [moveToUsedUnitPrice, setMoveToUsedUnitPrice] = useState('');
   const [moveToUsedChargeType, setMoveToUsedChargeType] = useState(autoAmcPartChargeType);
@@ -561,7 +562,6 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       .then((result) => {
         if (!mounted || !result?.user) return;
         setUser(result.user);
-        window.localStorage.setItem('us_user', JSON.stringify(result.user));
       })
       .catch(() => {});
     return () => {
@@ -812,10 +812,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     }
   }
 
-  async function removePart(partId, event) {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-
+  async function removePart(partId) {
     if (!canManagePartsUsed) {
       push('You do not have permission to remove parts used', 'error');
       return;
@@ -829,6 +826,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     try {
       await preserveScroll(async () => {
         await request(`/work-orders/${id}/parts/${partId}`, { method: 'DELETE' });
+        setRemovePartCandidate(null);
         push('Part removed');
         await reloadSidebarAware();
       });
@@ -1346,7 +1344,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   async function previewWorkflowPdf(flow) {
     try {
       await preserveScroll(async () => {
-        const authToken = token || localStorage.getItem('us_token') || localStorage.getItem('adminToken') || localStorage.getItem('token');
+        const authToken = token;
         const response = await fetch(`${apiBase}/work-orders/${id}/pdf/${flow.type}?preview=true`, {
           headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
         });
@@ -3111,7 +3109,16 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                                 type="button"
                                 className="icon-button h-9 w-9 disabled:cursor-not-allowed disabled:opacity-40"
                                 disabled={partsLocked}
-                                onClick={(event) => removePart(item._id, event)}
+                                title={partsLocked ? partsLockMessage : 'Remove part'}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  setRemovePartCandidate({
+                                    id: item._id,
+                                    name: item.name,
+                                    quantity: item.quantity
+                                  });
+                                }}
                                 aria-label={`Delete ${item.name}`}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -3711,6 +3718,15 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
           confirmLabel="Approve"
           onCancel={() => setPartAction(null)}
           onConfirm={runPartRequestAction}
+        />
+      ) : null}
+      {canManagePartsUsed && removePartCandidate ? (
+        <ConfirmModal
+          title="Remove part from work order?"
+          message={`Remove ${removePartCandidate.name} x${removePartCandidate.quantity || 1} from this work order's parts used list.`}
+          confirmLabel="Remove Part"
+          onCancel={() => setRemovePartCandidate(null)}
+          onConfirm={() => removePart(removePartCandidate.id)}
         />
       ) : null}
       {canManagePartsUsed && editPartRow ? (

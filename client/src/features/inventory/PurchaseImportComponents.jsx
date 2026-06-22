@@ -404,6 +404,7 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState(null);
   const [deletePurchase, setDeletePurchase] = useState(null);
+  const [deletePurchaseBusy, setDeletePurchaseBusy] = useState(false);
   const [selectedId, setSelectedId] = useState('');
   const debouncedSearch = useDebouncedValue(search);
   const limit = 10;
@@ -476,7 +477,8 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
   }
 
   async function confirmDelete() {
-    if (!deletePurchase) return;
+    if (!deletePurchase || deletePurchaseBusy) return;
+    setDeletePurchaseBusy(true);
     try {
       await preserveScroll(async () => {
         await request(`/purchase-imports/${rowId(deletePurchase)}`, { method: 'DELETE' });
@@ -488,6 +490,8 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
       });
     } catch (err) {
       push(err.message, 'error');
+    } finally {
+      setDeletePurchaseBusy(false);
     }
   }
 
@@ -597,9 +601,11 @@ export function PurchaseRegisterTab({ parts = [], onPartsChanged }) {
       ) : null}
       {deletePurchase ? (
         <ConfirmModal
-          title="Delete Purchase / Import"
-          message="Are you sure you want to delete this purchase/import record? This may affect purchase history and stock records."
-          confirmLabel="Delete"
+          title="Delete purchase / import permanently?"
+          message="Delete this purchase/import record only if it is unused. If stock usage is linked, the system will block deletion."
+          confirmLabel="Delete Permanently"
+          loading={deletePurchaseBusy}
+          loadingLabel="Deleting..."
           onCancel={() => setDeletePurchase(null)}
           onConfirm={confirmDelete}
         />
@@ -840,6 +846,7 @@ export function SuppliersTab() {
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState(null);
   const [deleteSupplier, setDeleteSupplier] = useState(null);
+  const [deleteSupplierBusy, setDeleteSupplierBusy] = useState(false);
   const debouncedSearch = useDebouncedValue(search);
   const limit = 10;
   const query = useMemo(() => {
@@ -855,7 +862,8 @@ export function SuppliersTab() {
   }, [debouncedSearch, status]);
 
   async function confirmDelete() {
-    if (!deleteSupplier) return;
+    if (!deleteSupplier || deleteSupplierBusy) return;
+    setDeleteSupplierBusy(true);
     try {
       await request(`/suppliers/${rowId(deleteSupplier)}`, { method: 'DELETE' });
       push('Supplier deleted');
@@ -863,6 +871,8 @@ export function SuppliersTab() {
       reload({ silent: true });
     } catch (err) {
       push(err.message, 'error');
+    } finally {
+      setDeleteSupplierBusy(false);
     }
   }
 
@@ -946,9 +956,11 @@ export function SuppliersTab() {
       {editor ? <SupplierModal supplier={rowId(editor) ? editor : null} onClose={() => setEditor(null)} onSaved={() => reload({ silent: true })} /> : null}
       {deleteSupplier ? (
         <ConfirmModal
-          title="Delete Supplier"
-          message="Are you sure you want to delete this supplier? Existing purchase history should remain safe."
-          confirmLabel="Delete"
+          title="Delete supplier permanently?"
+          message="Delete this supplier only if it has no purchase history. If it is used in existing records, disable it instead."
+          confirmLabel="Delete Permanently"
+          loading={deleteSupplierBusy}
+          loadingLabel="Deleting..."
           onCancel={() => setDeleteSupplier(null)}
           onConfirm={confirmDelete}
         />

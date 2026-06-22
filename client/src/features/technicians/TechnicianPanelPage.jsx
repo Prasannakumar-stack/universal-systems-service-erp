@@ -155,6 +155,7 @@ export function TechnicianPanelPage() {
   const [resetUser, setResetUser] = useState(null);
   const [confirmResetUser, setConfirmResetUser] = useState(null);
   const [confirmDisableUser, setConfirmDisableUser] = useState(null);
+  const [disableUserBusy, setDisableUserBusy] = useState(false);
   const [actionMenuId, setActionMenuId] = useState('');
   const actionMenuRef = useRef(null);
   const { data, loading, error, reload } = useResource(async () => {
@@ -239,15 +240,22 @@ export function TechnicianPanelPage() {
       });
       push(technician.active ? 'Technician account disabled' : 'Technician account enabled');
       reload({ silent: true });
+      return true;
     } catch (err) {
       push(err.message, 'error');
+      return false;
     }
   }
 
   async function confirmDisableTechnician() {
-    if (!confirmDisableUser) return;
-    await toggleStatus(confirmDisableUser);
-    setConfirmDisableUser(null);
+    if (!confirmDisableUser || disableUserBusy) return;
+    setDisableUserBusy(true);
+    try {
+      const saved = await toggleStatus(confirmDisableUser);
+      if (saved) setConfirmDisableUser(null);
+    } finally {
+      setDisableUserBusy(false);
+    }
   }
 
   async function createTechnician(form) {
@@ -532,6 +540,8 @@ export function TechnicianPanelPage() {
           title={`Disable ${confirmDisableUser.name || 'this technician'}?`}
           message="This technician will no longer be able to sign in until the account is enabled again."
           confirmLabel="Disable Account"
+          loading={disableUserBusy}
+          loadingLabel="Disabling..."
           onCancel={() => setConfirmDisableUser(null)}
           onConfirm={confirmDisableTechnician}
         />

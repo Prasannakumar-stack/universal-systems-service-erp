@@ -2,8 +2,61 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { apiBase } from '../utils/constants.js';
 
 const AuthContext = createContext(null);
+const AUTH_TOKEN_KEY = 'us_token';
+const AUTH_USER_KEY = 'us_user';
+const LEGACY_AUTH_KEYS = ['us_token', 'us_user', 'adminToken', 'token'];
+const AUTH_BOOTSTRAP_TIMEOUT_MS = 10000;
+
+function safeStorage(storageName) {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window[storageName] || null;
+  } catch {
+    return null;
+  }
+}
+
+function clearLegacyPersistentAuth() {
+  const storage = safeStorage('localStorage');
+  if (!storage) return;
+  LEGACY_AUTH_KEYS.forEach((key) => storage.removeItem(key));
+}
+
+function readSessionToken() {
+  const storage = safeStorage('sessionStorage');
+  return storage?.getItem(AUTH_TOKEN_KEY) || '';
+}
+
+function readSessionUser() {
+  const storage = safeStorage('sessionStorage');
+  const stored = storage?.getItem(AUTH_USER_KEY);
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored);
+  } catch {
+    storage.removeItem(AUTH_USER_KEY);
+    return null;
+  }
+}
+
+function writeSessionToken(token) {
+  const storage = safeStorage('sessionStorage');
+  if (!storage) return;
+  if (token) storage.setItem(AUTH_TOKEN_KEY, token);
+  else storage.removeItem(AUTH_TOKEN_KEY);
+}
+
+function writeSessionUser(user) {
+  const storage = safeStorage('sessionStorage');
+  if (!storage) return;
+  if (user) storage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+  else storage.removeItem(AUTH_USER_KEY);
+}
 
 function toNetworkMessage(error) {
+  if (error?.name === 'AbortError') {
+    return 'Cannot connect to server. Please check backend is running.';
+  }
   if (error instanceof TypeError && /fetch/i.test(error.message || '')) {
     return 'Cannot connect to server. Please check backend is running.';
   }
@@ -14,6 +67,19 @@ async function parseResponse(response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.message || 'Request failed');
   return data;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = AUTH_BOOTSTRAP_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: options.signal || controller.signal
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 function hasAvatarField(value) {
@@ -31,26 +97,26 @@ function normalizeAuthUser(nextUser, currentUser = null) {
 }
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem('us_token') || '');
-  const [user, setUserState] = useState(() => {
-    const stored = localStorage.getItem('us_user');
-    return stored ? JSON.parse(stored) : null;
+  const [token, setToken] = useState(() => {
+    clearLegacyPersistentAuth();
+    return readSessionToken();
   });
+  const [user, setUserState] = useState(() => readSessionUser());
   const [loading, setLoading] = useState(Boolean(token));
 
   const setUser = useCallback((nextUser) => {
     setUserState((current) => {
       const resolved = typeof nextUser === 'function' ? nextUser(current) : nextUser;
       const normalized = normalizeAuthUser(resolved, current);
-      if (normalized) localStorage.setItem('us_user', JSON.stringify(normalized));
-      else localStorage.removeItem('us_user');
+      writeSessionUser(normalized);
       return normalized;
     });
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('us_token');
-    localStorage.removeItem('us_user');
+    writeSessionToken('');
+    writeSessionUser(null);
+    clearLegacyPersistentAuth();
     setToken('');
     setUserState(null);
   }, []);
@@ -59,7 +125,7 @@ export function AuthProvider({ children }) {
     if (!authToken) return null;
     try {
       const data = await parseResponse(
-        await fetch(`${apiBase}/auth/me`, {
+        await fetchWithTimeout(`${apiBase}/auth/me`, {
           headers: { Authorization: `Bearer ${authToken}` },
           cache: 'no-store'
         })
@@ -112,7 +178,8 @@ export function AuthProvider({ children }) {
     if (!user) {
       throw new Error('Invalid credentials');
     }
-    localStorage.setItem('us_token', data.token);
+    clearLegacyPersistentAuth();
+    writeSessionToken(data.token);
     setToken(data.token);
     setUser(user);
     return user;

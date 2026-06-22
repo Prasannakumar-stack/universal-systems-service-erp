@@ -1,4 +1,5 @@
 import PublicWebsiteSettings from '../models/PublicWebsiteSettings.js';
+import Booking from '../models/Booking.js';
 import { COMPANY } from '../config.js';
 import { hasRole } from '../permissions.js';
 import { appError, clean } from '../utils/http.js';
@@ -8,6 +9,21 @@ import { logAudit } from './auditService.js';
 const SETTINGS_KEY = 'default';
 const MAX_TEXT = 3000;
 const allowedBookingStatuses = new Set(['Pending', 'Converted']);
+
+const defaultBookingServiceTypes = [
+  'Laptop Repair',
+  'Desktop Repair',
+  'Printer Service / Toner Refilling',
+  'CCTV Installation & Maintenance',
+  'Networking Support',
+  'OS Installation & Setup',
+  'Software Support',
+  'Data Recovery',
+  'Computer Sales & Service',
+  'UPS Battery Sales & Replacement',
+  'Solar / UPS / Inverter Sales & Service',
+  'AMC / On-site Support'
+];
 
 const defaultServices = [
   {
@@ -117,7 +133,13 @@ export const defaultPublicWebsiteSettings = {
     bookingButtonText: 'Book a Service',
     defaultBookingStatus: 'Pending',
     showServiceSelection: true,
-    showPreferredDateTime: false
+    showPreferredDateTime: false,
+    serviceTypes: defaultBookingServiceTypes.map((name, index) => ({
+      key: `booking-service-${index + 1}`,
+      name,
+      active: true,
+      order: index
+    }))
   },
   branding: {
     logoUrl: '/logo-icon.png',
@@ -168,6 +190,51 @@ function sanitizeServices(services = []) {
   })).sort((a, b) => a.order - b.order).map((service, index) => ({ ...service, order: index }));
 }
 
+function normalizeServiceTypeKey(value = '') {
+  return clean(value)
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function sanitizeBookingServiceTypes(serviceTypes = []) {
+  const source = Array.isArray(serviceTypes) && serviceTypes.length
+    ? serviceTypes
+    : defaultPublicWebsiteSettings.booking.serviceTypes;
+  const seenKeys = new Set();
+  const seenNames = new Set();
+
+  return source
+    .slice(0, 80)
+    .map((service, index) => {
+      const rawName = typeof service === 'string' ? service : service?.name;
+      const name = cleanText(rawName, '', 160);
+      if (!name) return null;
+      const baseKey = normalizeServiceTypeKey(typeof service === 'string' ? name : service?.key || name) || `booking-service-${index + 1}`;
+      let key = baseKey;
+      let suffix = 2;
+      while (seenKeys.has(key)) {
+        key = `${baseKey}-${suffix}`;
+        suffix += 1;
+      }
+      const normalizedName = normalizeServiceTypeKey(name);
+      if (seenNames.has(normalizedName)) return null;
+      seenKeys.add(key);
+      seenNames.add(normalizedName);
+      return {
+        key,
+        name,
+        active: typeof service === 'string' ? true : service?.active !== false,
+        order: Number.isFinite(Number(service?.order)) ? Number(service.order) : index
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.order - b.order)
+    .map((service, index) => ({ ...service, order: index }));
+}
+
 export function sanitizePublicWebsiteSettings(payload = {}) {
   const base = {
     ...defaultPublicWebsiteSettings,
@@ -215,7 +282,8 @@ export function sanitizePublicWebsiteSettings(payload = {}) {
       bookingButtonText: cleanText(base.booking.bookingButtonText, defaultBooking.bookingButtonText, 80),
       defaultBookingStatus: allowedBookingStatuses.has(base.booking.defaultBookingStatus) ? base.booking.defaultBookingStatus : defaultBooking.defaultBookingStatus,
       showServiceSelection: booleanValue(base.booking.showServiceSelection, defaultBooking.showServiceSelection),
-      showPreferredDateTime: booleanValue(base.booking.showPreferredDateTime, defaultBooking.showPreferredDateTime)
+      showPreferredDateTime: booleanValue(base.booking.showPreferredDateTime, defaultBooking.showPreferredDateTime),
+      serviceTypes: sanitizeBookingServiceTypes(base.booking.serviceTypes)
     },
     branding: {
       logoUrl: cleanText(base.branding.logoUrl, defaultBranding.logoUrl, 400),
@@ -229,6 +297,44 @@ export function sanitizePublicWebsiteSettings(payload = {}) {
       metaDescription: cleanText(base.seo.metaDescription, defaultSeo.metaDescription, 320),
       keywords: cleanText(base.seo.keywords, defaultSeo.keywords, 500),
       socialSharingImage: cleanText(base.seo.socialSharingImage, defaultSeo.socialSharingImage, 400)
+    }
+  };
+}
+
+export async function getBookingServiceTypeUsageCounts() {
+  const rows = await Booking.aggregate([
+    { $match: { serviceType: { $type: 'string', $ne: '' } } },
+    { $group: { _id: '$serviceType', count: { $sum: 1 } } }
+  ]);
+  return rows.reduce((map, row) => {
+    map[row._id] = row.count;
+    return map;
+  }, {});
+}
+
+function preserveUsedRemovedServiceTypes(sanitized, before, usageCounts = {}) {
+  const nextTypes = sanitized.booking.serviceTypes || [];
+  const nextKeys = new Set(nextTypes.map((item) => item.key).filter(Boolean));
+  const nextNames = new Set(nextTypes.map((item) => item.name));
+  const restored = [];
+
+  (before.booking?.serviceTypes || []).forEach((service) => {
+    const usage = usageCounts[service.name] || 0;
+    if (!usage) return;
+    if (nextKeys.has(service.key) || nextNames.has(service.name)) return;
+    restored.push({
+      ...service,
+      active: false,
+      order: nextTypes.length + restored.length
+    });
+  });
+
+  if (!restored.length) return sanitized;
+  return {
+    ...sanitized,
+    booking: {
+      ...sanitized.booking,
+      serviceTypes: sanitizeBookingServiceTypes([...nextTypes, ...restored])
     }
   };
 }
@@ -291,7 +397,8 @@ export async function updatePublicWebsiteSettings(payload = {}, user = null) {
   if (!hasRole(user, 'admin')) throw appError('Only admin users can edit public website settings', 403);
   const existing = await ensurePublicWebsiteSettings();
   const before = serializeSettings(existing);
-  const sanitized = sanitizePublicWebsiteSettings(payload.settings || payload);
+  const usageCounts = await getBookingServiceTypeUsageCounts();
+  const sanitized = preserveUsedRemovedServiceTypes(sanitizePublicWebsiteSettings(payload.settings || payload), before, usageCounts);
   const updated = await PublicWebsiteSettings.findOneAndUpdate(
     { key: SETTINGS_KEY },
     { $set: { ...sanitized, lastUpdatedBy: user?._id || null } },
@@ -351,7 +458,8 @@ export async function resetPublicWebsiteSettings(user = null) {
   if (!hasRole(user, 'admin')) throw appError('Only admin users can reset public website settings', 403);
   const existing = await ensurePublicWebsiteSettings();
   const before = serializeSettings(existing);
-  const defaults = sanitizePublicWebsiteSettings(defaultPublicWebsiteSettings);
+  const usageCounts = await getBookingServiceTypeUsageCounts();
+  const defaults = preserveUsedRemovedServiceTypes(sanitizePublicWebsiteSettings(defaultPublicWebsiteSettings), before, usageCounts);
   const updated = await PublicWebsiteSettings.findOneAndUpdate(
     { key: SETTINGS_KEY },
     { $set: { ...defaults, lastUpdatedBy: user?._id || null } },

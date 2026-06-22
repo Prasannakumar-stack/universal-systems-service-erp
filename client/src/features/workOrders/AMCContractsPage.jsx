@@ -207,6 +207,7 @@ export function AMCContractsPage({ role = 'admin' }) {
   const [detailsContract, setDetailsContract] = useState(null);
   const [reassignContract, setReassignContract] = useState(null);
   const [deleteContract, setDeleteContract] = useState(null);
+  const [deleteContractBusy, setDeleteContractBusy] = useState(false);
   const actionMenuRef = useRef(null);
   const actionTriggerRefs = useRef(new Map());
   const [search, setSearch] = useState('');
@@ -467,7 +468,8 @@ export function AMCContractsPage({ role = 'admin' }) {
   }
 
   async function confirmDeleteOrArchiveContract() {
-    if (!deleteContract || !canDeleteAmc) return;
+    if (!deleteContract || !canDeleteAmc || deleteContractBusy) return;
+    setDeleteContractBusy(true);
     try {
       await preserveScroll(async () => {
         const result = await request(`/amc/contracts/${recordId(deleteContract)}`, { method: 'DELETE' });
@@ -479,6 +481,8 @@ export function AMCContractsPage({ role = 'admin' }) {
       });
     } catch (err) {
       push(err.message, 'error');
+    } finally {
+      setDeleteContractBusy(false);
     }
   }
 
@@ -873,11 +877,13 @@ export function AMCContractsPage({ role = 'admin' }) {
       ) : null}
       {deleteContract ? (
         <ConfirmModal
-          title={deleteContract.lifecycleAction === 'delete' ? 'Delete AMC contract?' : 'Archive AMC contract?'}
+          title={deleteContract.lifecycleAction === 'delete' ? 'Delete AMC contract permanently?' : 'Archive AMC contract?'}
           message={deleteContract.lifecycleAction === 'delete'
-            ? 'This will permanently remove this AMC contract. This action cannot be undone.'
+            ? 'Delete this AMC contract only if it has no linked jobs, invoices, payments, or visits.'
             : 'This hides the contract from active lists but keeps history, payments, and jobs safe.'}
-          confirmLabel={deleteContract.lifecycleAction === 'delete' ? 'Delete Contract' : 'Archive Contract'}
+          confirmLabel={deleteContract.lifecycleAction === 'delete' ? 'Delete Permanently' : 'Archive Contract'}
+          loading={deleteContractBusy}
+          loadingLabel={deleteContract.lifecycleAction === 'delete' ? 'Deleting...' : 'Archiving...'}
           onCancel={() => setDeleteContract(null)}
           onConfirm={confirmDeleteOrArchiveContract}
         />

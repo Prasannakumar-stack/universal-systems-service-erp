@@ -1,4 +1,4 @@
-import { AlertCircle, CalendarClock, Search } from 'lucide-react';
+import { AlertCircle, CalendarClock, Loader2, Search } from 'lucide-react';
 
 function formatDateFilterValue(value) {
   const [year, month, day] = String(value || '').split('-').map(Number);
@@ -91,9 +91,10 @@ export function StatCard({ icon: Icon, label, value, tone = 'brand' }) {
   );
 }
 
-export function ConfirmModal({ title, message, onCancel, onConfirm, confirmLabel = 'Confirm' }) {
-  const destructivePattern = /delete|remove|reject|deny|void/i;
+export function ConfirmModal({ title, message, onCancel, onConfirm, confirmLabel = 'Confirm', loading = false, loadingLabel = '' }) {
+  const destructivePattern = /delete|remove|reject|deny|void|trash|archive|disable/i;
   const isDestructive = destructivePattern.test(`${title} ${confirmLabel}`);
+  const busyLabel = loadingLabel || `${confirmLabel}...`;
 
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
@@ -101,11 +102,12 @@ export function ConfirmModal({ title, message, onCancel, onConfirm, confirmLabel
         <h2 className="text-lg font-black">{title}</h2>
         <p className="mt-2 text-sm leading-6 muted">{message}</p>
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          <button type="button" className="btn btn-secondary" disabled={loading} onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" className={`btn ${isDestructive ? 'btn-danger' : 'btn-primary'}`} onClick={onConfirm}>
-            {confirmLabel}
+          <button type="button" className={`btn ${isDestructive ? 'btn-danger' : 'btn-primary'}`} disabled={loading} onClick={onConfirm}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {loading ? busyLabel : confirmLabel}
           </button>
         </div>
       </div>

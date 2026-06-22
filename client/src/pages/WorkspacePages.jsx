@@ -463,6 +463,7 @@ export function BookingDetailPage({ role = 'admin' }) {
   const [imageUrl, setImageUrl] = useState('');
   const [imageLoading, setImageLoading] = useState(false);
   const [partForm, setPartForm] = useState({ partName: '', quantity: 1, unitPrice: 0 });
+  const [removePartCandidate, setRemovePartCandidate] = useState(null);
   const [progress, setProgress] = useState({ status: '', note: '' });
   const [bill, setBill] = useState({ serviceCharge: 0, discount: 0, paymentStatus: 'Unpaid', billNotes: '' });
 
@@ -572,6 +573,7 @@ export function BookingDetailPage({ role = 'admin' }) {
     try {
       await request(`/bookings/${booking.id}/parts/${partId}`, { method: 'DELETE' });
       push('Part removed');
+      setRemovePartCandidate(null);
       reload();
     } catch (err) {
       push(err.message, 'error');
@@ -759,7 +761,7 @@ export function BookingDetailPage({ role = 'admin' }) {
                     </div>
                     <div className="flex items-center gap-2">
                       <p className="font-black">{currency(part.total)}</p>
-                      <button className="icon-button h-8 w-8" onClick={() => removePart(part.id)} aria-label="Remove part">
+                      <button className="icon-button h-8 w-8" onClick={() => setRemovePartCandidate(part)} aria-label="Remove part">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -829,6 +831,15 @@ export function BookingDetailPage({ role = 'admin' }) {
           </div>
         </div>
       </div>
+      {removePartCandidate ? (
+        <ConfirmModal
+          title="Remove part from booking?"
+          message={`Remove ${removePartCandidate.part_name} from this booking's parts list.`}
+          confirmLabel="Remove Part"
+          onCancel={() => setRemovePartCandidate(null)}
+          onConfirm={() => removePart(removePartCandidate.id)}
+        />
+      ) : null}
     </>
   );
 }
@@ -996,11 +1007,11 @@ export function PartsPage() {
       )}
       {confirm ? (
         <ConfirmModal
-          title="Delete inventory part?"
-          message={`This removes ${confirm.part_name} from inventory. Existing booking bills are not changed.`}
+          title="Delete inventory part permanently?"
+          message={`Delete ${confirm.part_name} from inventory only if it is unused. Linked records are protected.`}
           onCancel={() => setConfirm(null)}
           onConfirm={deletePart}
-          confirmLabel="Delete"
+          confirmLabel="Delete Permanently"
         />
       ) : null}
     </>
@@ -1276,7 +1287,6 @@ export function TechnicianProfilePage() {
     try {
       const result = await request('/auth/profile', { method: 'PATCH', body: JSON.stringify(form) });
       setUser(result.user);
-      localStorage.setItem('us_user', JSON.stringify(result.user));
       setForm((current) => ({ ...current, password: '' }));
       push('Profile updated');
     } catch (err) {

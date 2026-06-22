@@ -1,6 +1,7 @@
 import {
   assertPublicBookingOpen,
   assertPublicWebsiteOpen,
+  getBookingServiceTypeUsageCounts,
   getPublicWebsiteSettings,
   resetPublicWebsiteSettings,
   updatePublicWebsiteSettings
@@ -13,17 +14,20 @@ export async function publicSettings(_req, res) {
 
 export async function adminSettings(_req, res) {
   const settings = await getPublicWebsiteSettings();
-  res.json({ success: true, settings });
+  const serviceTypeUsage = await getBookingServiceTypeUsageCounts();
+  res.json({ success: true, settings, serviceTypeUsage });
 }
 
 export async function updateSettings(req, res) {
   const settings = await updatePublicWebsiteSettings(req.body, req.user);
-  res.json({ success: true, settings, message: 'Public website settings saved' });
+  const serviceTypeUsage = await getBookingServiceTypeUsageCounts();
+  res.json({ success: true, settings, serviceTypeUsage, message: 'Public website settings saved' });
 }
 
 export async function resetSettings(req, res) {
   const settings = await resetPublicWebsiteSettings(req.user);
-  res.json({ success: true, settings, message: 'Public website settings reset to default' });
+  const serviceTypeUsage = await getBookingServiceTypeUsageCounts();
+  res.json({ success: true, settings, serviceTypeUsage, message: 'Public website settings reset to default' });
 }
 
 export async function uploadAsset(req, res) {

@@ -303,8 +303,8 @@ const rolePresetButtons = [
 
 const settingsStatusToneClass = {
   Configured: 'settings-status-configured',
-  'Needs Setup': 'settings-status-needs-setup',
-  'Coming Soon': 'settings-status-coming-soon',
+  Healthy: 'settings-status-configured',
+  'Future-ready': 'settings-status-coming-soon',
   Active: 'settings-status-active'
 };
 
@@ -383,7 +383,7 @@ const settingsOverviewGroups = [
         icon: Workflow,
         title: 'Status Workflow',
         description: 'Prepare stored status flows for bookings, work orders, invoices, and AMC.',
-        status: 'Coming Soon',
+        status: 'Configured',
         tags: ['status', 'workflow', 'bookings', 'work orders', 'invoice', 'amc']
       },
       {
@@ -418,7 +418,7 @@ const settingsOverviewGroups = [
         icon: MessageSquareText,
         title: 'Notification Templates',
         description: 'Reusable message text and variables for future customer communication.',
-        status: 'Coming Soon',
+        status: 'Active',
         tags: ['notifications', 'messages', 'templates', 'whatsapp', 'email', 'sms']
       }
     ]
@@ -485,7 +485,7 @@ const settingsOverviewGroups = [
         icon: ShieldCheck,
         title: 'System Health & Backup',
         description: 'Monitor system status, storage usage, backups, and service readiness.',
-        status: 'Needs Setup',
+        status: 'Healthy',
         tags: ['system health', 'backup', 'restore', 'storage', 'api', 'database']
       }
     ]
@@ -2322,7 +2322,7 @@ function AdminProfileSection({ onDirtyChange = null }) {
           <div className="admin-profile-security-list">
             <SettingsInfoItem icon={CheckCircle2} label="Account Status" value={accountStatus} />
             <SettingsInfoItem icon={Globe2} label="Active Session" value="Current browser" />
-            <SettingsInfoItem icon={ShieldCheck} label="2FA" value="Coming soon" />
+            <SettingsInfoItem icon={ShieldCheck} label="2FA" value="Optional security upgrade" />
             <SettingsInfoItem icon={KeyRound} label="Password Last Changed" value={user?.passwordChangedAt || user?.passwordUpdatedAt ? formatDate(user.passwordChangedAt || user.passwordUpdatedAt) : 'Not available'} />
           </div>
         </section>
@@ -3466,6 +3466,7 @@ function TaxGstSettingsSection({ onDirtyChange = null }) {
   const [modalType, setModalType] = useState(null);
   const [modalDraft, setModalDraft] = useState({});
   const [editingCodeId, setEditingCodeId] = useState(null);
+  const [deleteCodeCandidate, setDeleteCodeCandidate] = useState(null);
   const [saving, setSaving] = useState(false);
   const [backupWorking, setBackupWorking] = useState(false);
   const canEdit = (hasRole(user, 'admin') || hasRole(user, 'super_admin')) && can(user, 'manage_tax_settings');
@@ -3641,7 +3642,8 @@ function TaxGstSettingsSection({ onDirtyChange = null }) {
       return;
     }
     setTaxState((current) => ({ ...current, codes: current.codes.filter((item) => item.id !== record.id) }));
-    push('HSN/SAC code deleted successfully');
+    setDeleteCodeCandidate(null);
+    push('HSN/SAC code removed from draft', 'info');
   }
 
   function updateInlineSetting(key, value) {
@@ -3689,13 +3691,13 @@ function TaxGstSettingsSection({ onDirtyChange = null }) {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-primary admin-compact-button" disabled={backupWorking} onClick={() => createTaxBackup(false)}>
-              {backupWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseBackup className="h-4 w-4" />}
-              Backup Now
-            </button>
+            <Link className="btn btn-primary admin-compact-button" to="/app/admin/audit-logs">
+              <Bell className="h-4 w-4" />
+              View Audit Logs
+            </Link>
             <button type="button" className="btn btn-secondary admin-compact-button" disabled={backupWorking} onClick={() => createTaxBackup(true)}>
               <Download className="h-4 w-4" />
-              Export Data
+              Export Tax Data
             </button>
             <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => push('Tax settings apply to new invoices, quotations, AMC invoices, and PDF tax display.', 'info')}>
               <Info className="h-4 w-4" />
@@ -3817,7 +3819,7 @@ function TaxGstSettingsSection({ onDirtyChange = null }) {
                   <th className="px-4 py-3 font-black">Type</th>
                   <th className="px-4 py-3 font-black">Description</th>
                   <th className="px-4 py-3 font-black">GST Rate</th>
-                  <th className="rounded-r-card px-4 py-3 text-right font-black">Action</th>
+                  <th className="rounded-r-card px-4 py-3 text-right font-black">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/10">
@@ -3832,7 +3834,7 @@ function TaxGstSettingsSection({ onDirtyChange = null }) {
                         <button type="button" className="icon-button h-9 w-9" disabled={!canEdit} onClick={() => openCodeModal(item)} aria-label={`Edit HSN/SAC code ${item.code}`}>
                           <Edit3 className="h-4 w-4" />
                         </button>
-                        <button type="button" className="icon-button h-9 w-9 text-rose-100" disabled={!canEdit} onClick={() => deleteCode(item)} aria-label={`Delete HSN/SAC code ${item.code}`}>
+                        <button type="button" className="icon-button h-9 w-9 text-rose-100" disabled={!canEdit} onClick={() => setDeleteCodeCandidate(item)} aria-label={`Delete HSN/SAC code ${item.code}`}>
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
@@ -3861,7 +3863,7 @@ function TaxGstSettingsSection({ onDirtyChange = null }) {
             </div>
           </div>
           <div className="mt-5 rounded-card border border-white/10 bg-white/[0.035] p-4 text-sm leading-6 muted">
-            No saved tax activity yet. Future GST, HSN/SAC, and tax setting changes will be shown here when audit history is connected.
+            No tax activity yet. Saved tax changes will appear here.
           </div>
           <button type="button" className="btn btn-secondary admin-table-button mt-4 w-full" onClick={() => push('Full tax update history can be reviewed from Audit Logs.', 'info')}>
             View Audit Logs
@@ -3960,6 +3962,15 @@ function TaxGstSettingsSection({ onDirtyChange = null }) {
             </>
           ) : null}
         </TaxDashboardModal>
+      ) : null}
+      {deleteCodeCandidate ? (
+        <ConfirmModal
+          title="Remove HSN / SAC code?"
+          message={`Remove ${deleteCodeCandidate.code} - ${deleteCodeCandidate.description} from this tax settings draft. Save Tax Settings is required before the backend is updated.`}
+          confirmLabel="Remove Code"
+          onCancel={() => setDeleteCodeCandidate(null)}
+          onConfirm={() => deleteCode(deleteCodeCandidate)}
+        />
       ) : null}
     </div>
   );
@@ -4400,13 +4411,9 @@ function PaymentSettingsSection({ onDirtyChange = null }) {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-primary admin-compact-button" disabled={backupWorking} onClick={() => createPaymentBackup(false)}>
-              {backupWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : <DatabaseBackup className="h-4 w-4" />}
-              Backup Now
-            </button>
-            <button type="button" className="btn btn-secondary admin-compact-button" disabled={backupWorking} onClick={() => createPaymentBackup(true)}>
+            <button type="button" className="btn btn-primary admin-compact-button" disabled={backupWorking} onClick={() => createPaymentBackup(true)}>
               <Download className="h-4 w-4" />
-              Export Data
+              Export Payment Settings
             </button>
             <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => push('Payment settings apply to new invoices, AMC invoices, payment records, and invoice PDF payment sections.', 'info')}>
               <Info className="h-4 w-4" />
@@ -4862,11 +4869,11 @@ function SettingsOverviewSection({ onManage }) {
           <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {group.cards.map((module) => {
               const Icon = module.icon;
-              const isComingSoon = module.status === 'Coming Soon';
+              const isFutureReady = module.status === 'Future-ready';
               return (
-                <button key={module.id} type="button" className={`surface admin-control-card settings-overview-card w-full p-5 text-left ${isComingSoon ? 'settings-overview-card-coming-soon' : ''}`} onClick={() => onManage(module)}>
+                <button key={module.id} type="button" className={`surface admin-control-card settings-overview-card w-full p-5 text-left ${isFutureReady ? 'settings-overview-card-coming-soon' : ''}`} onClick={() => onManage(module)}>
                   <div className="flex items-start justify-between gap-3">
-                    <div className="admin-control-icon">{isComingSoon ? <LockKeyhole className="h-5 w-5" /> : <Icon className="h-5 w-5" />}</div>
+                    <div className="admin-control-icon">{isFutureReady ? <LockKeyhole className="h-5 w-5" /> : <Icon className="h-5 w-5" />}</div>
                     <span className={`settings-status-badge ${settingsStatusToneClass[module.status] || ''}`}>{module.status}</span>
                   </div>
                   <div className="mt-4 min-w-0">
@@ -4897,38 +4904,6 @@ function SettingsOverviewSection({ onManage }) {
   );
 }
 
-function SettingsAttentionBanner({ onManage }) {
-  const attentionItems = [
-    { label: 'System Health & Backup', tabId: 'systemHealthBackup' },
-    { label: 'Notification Templates', tabId: 'notificationTemplates' },
-    { label: 'Status Workflow', tabId: 'statusWorkflow' }
-  ];
-
-  return (
-    <section className="settings-attention-banner" aria-label="Settings setup status">
-      <div className="settings-attention-copy">
-        <span className="settings-attention-dot" aria-hidden="true" />
-        <div>
-          <p className="settings-attention-kicker">Setup status</p>
-          <h2>Review optional setup before handoff</h2>
-        </div>
-      </div>
-      <div className="settings-attention-items">
-        {attentionItems.map((item) => (
-          <button key={item.tabId} type="button" className="settings-attention-item" onClick={() => onManage({ tabId: item.tabId })}>
-            <span aria-hidden="true" />
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <button type="button" className="settings-attention-view-all" onClick={() => onManage({ tabId: 'systemHealthBackup' })}>
-        View all
-        <ChevronRight className="h-3.5 w-3.5" />
-      </button>
-    </section>
-  );
-}
-
 function SettingsComingSoonState({ module, onBack }) {
   const Icon = module?.icon || Info;
   const tags = module?.tags || [];
@@ -4939,12 +4914,12 @@ function SettingsComingSoonState({ module, onBack }) {
           <div className="admin-control-icon settings-coming-soon-icon"><Icon className="h-5 w-5" /></div>
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="settings-status-badge settings-status-coming-soon">Coming Soon</span>
-              <span className="admin-premium-badge">PLANNED SETTINGS AREA</span>
+              <span className="settings-status-badge settings-status-coming-soon">Future-ready</span>
+              <span className="admin-premium-badge">Optional upgrade</span>
             </div>
             <h2 className="text-2xl font-black">{module?.title || 'Settings Area'}</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 muted">
-              {module?.description || 'This settings area is planned for a future release.'} This placeholder keeps admins inside a clean settings experience until the full controls are ready.
+              {module?.description || 'This settings area is available for future expansion.'} This area is reserved for optional controls when they are enabled.
             </p>
             {tags.length ? (
               <div className="mt-4 flex flex-wrap gap-2">
@@ -5179,8 +5154,6 @@ export function SystemSettingsPage({ initialTab = 'overview', standaloneTab = fa
           </div>
         </div>
       </section>
-
-      <SettingsAttentionBanner onManage={handleOverviewManage} />
 
       <div className="surface settings-tabs-card p-2">
         <div className="tabs-list amc-tabs settings-tabs border-b-0">

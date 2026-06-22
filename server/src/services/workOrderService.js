@@ -3,6 +3,7 @@ import AMCContract from '../models/AMCContract.js';
 import Customer from '../models/Customer.js';
 import InventoryPart from '../models/InventoryPart.js';
 import Invoice from '../models/Invoice.js';
+import Payment from '../models/Payment.js';
 import User from '../models/User.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { assertPermission } from '../permissions.js';
@@ -972,11 +973,17 @@ export async function deleteWorkOrder(id, user) {
   if (!workOrder) throw appError('Work order not found', 404);
 
   const invoiceCount = await Invoice.countDocuments({ workOrderId: workOrder._id });
-  if (workOrder.invoiceId || invoiceCount) {
-    throw appError('This work order has linked billing records. Archive it instead of deleting.', 409);
+  const linkedInvoices = invoiceCount
+    ? await Invoice.find({ workOrderId: workOrder._id }).select('_id').lean()
+    : [];
+  const paymentCount = linkedInvoices.length
+    ? await Payment.countDocuments({ invoiceId: { $in: linkedInvoices.map((invoice) => invoice._id) } })
+    : 0;
+  if (workOrder.bookingId || workOrder.amcContractId || workOrder.amcVisitId || workOrder.invoiceId || invoiceCount || paymentCount) {
+    throw appError('This item is used in existing records. You can disable or archive it instead.', 409);
   }
   if ((workOrder.partsUsed || []).length || (workOrder.partRequests || []).length) {
-    throw appError('Remove parts and part requests before deleting this work order', 409);
+    throw appError('This item is used in existing records. You can disable or archive it instead.', 409);
   }
 
   const before = {

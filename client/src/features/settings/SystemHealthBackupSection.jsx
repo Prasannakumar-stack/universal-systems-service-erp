@@ -37,7 +37,7 @@ import {
 import { can, hasRole } from '../../utils/roles.js';
 
 const NO_DATA = '—';
-const MISSING_ACTION_MESSAGE = 'This action will be available after backend integration.';
+const MISSING_ACTION_MESSAGE = 'This action is not enabled in the current setup.';
 
 function stableJson(value) {
   return JSON.stringify(value || {});
@@ -96,7 +96,7 @@ function backupTypeLabel(record = {}) {
 }
 
 function backupNextRunLabel(settings = {}) {
-  if (!settings.automaticBackupEnabled) return 'Not configured';
+  if (!settings.automaticBackupEnabled) return 'Optional';
   if (!settings.lastBackupAt) return 'Due after first automatic backup';
   const next = new Date(settings.lastBackupAt);
   if (Number.isNaN(next.getTime())) return 'Not available';
@@ -193,7 +193,11 @@ function providerStatus(settings, keys = []) {
       }
     }
   }
-  return makeStatus('warning', 'Not configured', 'No provider configuration found');
+  return makeStatus('warning', 'Setup pending', 'No provider configuration found');
+}
+
+function isFailedBackup(record = {}) {
+  return /fail|error/i.test(String(record.status || record.result || ''));
 }
 
 function compactPath(value = '') {
@@ -227,26 +231,25 @@ function buildHealthSummary({ systemInfo, systemError, systemReason, backupData,
     : !storageHasNumber
       ? makeStatus('warning', 'Not available', 'Storage usage is not available')
       : pathValues.some((item) => item?.exists === false)
-        ? makeStatus('warning', 'Partial', 'One or more storage paths are missing')
+        ? makeStatus('critical', 'Storage error', 'One or more storage paths are missing')
         : makeStatus('healthy', 'Ready', `${formatBytes(storage.storageUsed)} used`);
   const backup = backupError
-    ? makeStatus('warning', 'Not available', backupError)
+    ? makeStatus('critical', 'Backup failed', backupError)
+    : records.some(isFailedBackup)
+      ? makeStatus('critical', 'Backup failed', 'A backup record reports a failed status')
     : records.length || backupSettings.lastBackupAt
       ? makeStatus('healthy', 'Ready', records[0]?.createdAt ? `Latest: ${backupCreatedAt(records[0])}` : 'Backup metadata available')
-      : makeStatus('warning', 'Not configured', 'No backup history found');
+      : makeStatus('warning', 'Optional', 'No backup history found');
   const pdf = paths.pdfs?.exists === true
     ? makeStatus('healthy', 'Ready', paths.pdfs.path || 'PDF storage is available')
     : paths.pdfs?.exists === false
-      ? makeStatus('warning', 'Missing', 'PDF storage path is missing')
+      ? makeStatus('critical', 'PDF engine failed', 'PDF storage path is missing')
       : makeStatus('warning', 'Not available', 'PDF service status is not available');
   const items = { database, api, storage: storageStatus, backup, pdf };
-  const hasCriticalCore = [database, api, storageStatus].some((item) => item.level === 'critical');
-  const hasWarning = Object.values(items).some((item) => item.level !== 'healthy');
-  const overall = hasCriticalCore
-    ? makeStatus('critical', 'Critical', 'Database, API, or storage needs attention')
-    : hasWarning
-      ? makeStatus('warning', 'Warning', 'One or more services are missing or not configured')
-      : makeStatus('healthy', 'System Healthy', 'All core services are ready');
+  const hasCoreFailure = [database, api, storageStatus, backup, pdf].some((item) => item.level === 'critical');
+  const overall = hasCoreFailure
+    ? makeStatus('critical', 'Needs Attention', 'A core service needs attention')
+    : makeStatus('healthy', 'System Healthy', 'All core services are ready');
   return { ...items, overall };
 }
 
@@ -419,7 +422,7 @@ export function SystemHealthBackupSection({ onDirtyChange = null }) {
       label: 'Cron Jobs / Scheduler',
       status: backupSettings.automaticBackupEnabled
         ? makeStatus('warning', 'Configured', `Backup frequency: ${backupSettings.backupFrequency || 'Weekly'}`)
-        : makeStatus('warning', 'Not configured', 'Automatic backups are disabled')
+        : makeStatus('warning', 'Optional', 'Automatic backups are disabled')
     }
   ];
   const restoreValidationLabel = actionBusy === 'validateUpload' || restoreValidationStatus === 'validating'
@@ -445,7 +448,7 @@ export function SystemHealthBackupSection({ onDirtyChange = null }) {
   ];
   const footerSummary = {
     message: health.overall.level === 'healthy'
-      ? 'System is running smoothly'
+      ? 'System is running smoothly. Optional integrations can be configured when needed.'
       : health.overall.level === 'critical'
         ? 'System needs immediate attention'
         : 'System has warnings to review',
@@ -825,7 +828,7 @@ export function SystemHealthBackupSection({ onDirtyChange = null }) {
               <div className="system-health-panel-header">
                 <div>
                   <h3>Additional Services Status</h3>
-                  <p>Provider readiness summary. Open Services for full detail.</p>
+                  <p>Optional integrations are listed below. They do not affect core system health.</p>
                 </div>
                 <Activity className="h-5 w-5" />
               </div>
@@ -1076,7 +1079,7 @@ export function SystemHealthBackupSection({ onDirtyChange = null }) {
             <div className="system-health-panel-header">
               <div>
                 <h3>Additional Services Status</h3>
-                <p>Provider readiness is shown only when configuration is discoverable. No connected status is faked.</p>
+                <p>Optional integrations are listed below. They do not affect core system health.</p>
               </div>
               <Activity className="h-5 w-5" />
             </div>
@@ -1207,9 +1210,9 @@ export function SystemHealthBackupSection({ onDirtyChange = null }) {
       ) : null}
       {confirmation?.type === 'delete' ? (
         <ConfirmModal
-          title="Delete Backup?"
+          title="Delete backup permanently?"
           message="This will permanently remove the backup ZIP file and its record. You cannot restore using this backup after deletion."
-          confirmLabel="Delete Backup"
+          confirmLabel="Delete Permanently"
           onCancel={() => setConfirmation(null)}
           onConfirm={() => deleteBackup(confirmation.record)}
         />

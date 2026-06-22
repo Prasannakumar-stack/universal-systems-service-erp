@@ -2814,6 +2814,7 @@ function DesignModeWorkspace({
   const [manifestState, setManifestState] = useState({ loading: false, error: '', data: null });
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [revertConfirmOpen, setRevertConfirmOpen] = useState(false);
+  const [deleteSavedTemplateCandidate, setDeleteSavedTemplateCandidate] = useState(null);
   const paperRef = useRef(null);
   const printSnapshotRef = useRef(null);
   const designDraftRef = useRef(designDraft);
@@ -3481,6 +3482,7 @@ function DesignModeWorkspace({
       ...current,
       savedTemplates: (current.savedTemplates || []).filter((item) => item.id !== templateId)
     }));
+    setDeleteSavedTemplateCandidate(null);
   }
 
   function duplicateElement(element) {
@@ -4221,7 +4223,7 @@ function DesignModeWorkspace({
                   <button type="button" className="icon-button" disabled={disabled} onClick={() => applySavedTemplate(savedTemplate)} title="Apply saved template">
                     <Eye className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" className="icon-button pdf-danger-icon" disabled={disabled} onClick={() => deleteSavedTemplate(savedTemplate.id)} title="Delete saved template">
+                  <button type="button" className="icon-button pdf-danger-icon" disabled={disabled} onClick={() => setDeleteSavedTemplateCandidate(savedTemplate)} title="Delete saved template">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -5035,6 +5037,15 @@ function DesignModeWorkspace({
           setRevertConfirmOpen(false);
           revertDraftDesign();
         }}
+      />
+    ) : null}
+    {deleteSavedTemplateCandidate ? (
+      <ConfirmModal
+        title="Remove saved template?"
+        message={`Remove ${deleteSavedTemplateCandidate.name || 'this saved template'} from the local design gallery draft?`}
+        confirmLabel="Remove Template"
+        onCancel={() => setDeleteSavedTemplateCandidate(null)}
+        onConfirm={() => deleteSavedTemplate(deleteSavedTemplateCandidate.id)}
       />
     ) : null}
     </>
@@ -7322,11 +7333,13 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
             title="Reset template?"
             message={`Reset ${resetCandidate.name} to the default text and styling. Existing generated PDFs will not be changed.`}
             confirmLabel="Reset Template"
+            loading={busyKey === `reset-${resetCandidate.key}`}
+            loadingLabel="Resetting..."
             onCancel={() => setResetCandidate(null)}
             onConfirm={async () => {
               const template = resetCandidate;
-              setResetCandidate(null);
               await resetTemplate(template);
+              setResetCandidate(null);
             }}
           />
         ) : null}
@@ -7347,14 +7360,16 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
         ) : null}
         {deleteVersionCandidate ? (
           <ConfirmModal
-            title="Delete saved version?"
+            title="Delete saved version permanently?"
             message="Delete this saved version only. This will not affect the published design or current draft."
-            confirmLabel="Delete Version"
+            confirmLabel="Delete Permanently"
+            loading={deletingVersionId === String(deleteVersionCandidate.id || deleteVersionCandidate.version)}
+            loadingLabel="Deleting..."
             onCancel={() => setDeleteVersionCandidate(null)}
             onConfirm={async () => {
               const version = deleteVersionCandidate;
-              setDeleteVersionCandidate(null);
               await deleteSavedVersion(version);
+              setDeleteVersionCandidate(null);
             }}
           />
         ) : null}
@@ -7424,11 +7439,13 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
           title="Reset template?"
           message={`Reset ${resetCandidate.name} to the default text and styling. Existing generated PDFs will not be changed.`}
           confirmLabel="Reset Template"
+          loading={busyKey === `reset-${resetCandidate.key}`}
+          loadingLabel="Resetting..."
           onCancel={() => setResetCandidate(null)}
           onConfirm={async () => {
             const template = resetCandidate;
-            setResetCandidate(null);
             await resetTemplate(template);
+            setResetCandidate(null);
           }}
         />
       ) : null}

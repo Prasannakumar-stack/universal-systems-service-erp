@@ -105,16 +105,66 @@ function sectionStatus(sectionId, draft, savedSettings) {
   const titleLength = String(draft.seo?.websiteTitle || '').length;
   const metaLength = String(draft.seo?.metaDescription || '').length;
   const contactComplete = Boolean(draft.contact?.phoneNumber && draft.contact?.whatsappNumber && isValidEmail(draft.contact?.email));
+  const bookingServiceTypes = draft.booking?.serviceTypes || [];
+  const activeBookingTypes = bookingServiceTypes.filter((service) => service.active !== false).length;
   const statusBySection = {
     hero: !draft.hero?.imageUrl ? 'Needs image' : heroDirty ? 'Updated' : 'Complete',
     services: `${activeServices} active / ${hiddenServices} hidden`,
     contact: draft.contact?.googleMapsLink ? (contactComplete ? 'Complete' : 'Check contact') : 'Check map link',
-    booking: draft.booking?.publicBookingEnabled ? 'Enabled' : 'Disabled',
+    booking: draft.booking?.publicBookingEnabled ? `${activeBookingTypes} active services` : 'Disabled',
     branding: draft.branding?.logoUrl ? 'Logo set' : 'Needs logo',
     seo: `${titleLength}/60 title / ${metaLength}/160 meta`,
     footer: 'Synced from company profile'
   };
   return statusBySection[sectionId] || '';
+}
+
+function normalizeServiceTypeName(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/\b(service|services|support|repair|maintenance)\b/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function serviceSimilarityScore(a = '', b = '') {
+  const first = new Set(normalizeServiceTypeName(a).split(' ').filter(Boolean));
+  const second = new Set(normalizeServiceTypeName(b).split(' ').filter(Boolean));
+  if (!first.size || !second.size) return 0;
+  const overlap = [...first].filter((token) => second.has(token)).length;
+  return overlap / Math.max(first.size, second.size);
+}
+
+function serviceTypeDuplicateMessage(name = '', serviceTypes = [], ignoreIndex = -1) {
+  const normalized = normalizeServiceTypeName(name);
+  if (!normalized) return '';
+  const match = serviceTypes.find((service, index) => {
+    if (index === ignoreIndex) return false;
+    const existing = normalizeServiceTypeName(service.name);
+    const containsMatch = normalized.length > 3 && existing.length > 3 && (existing.includes(normalized) || normalized.includes(existing));
+    return existing === normalized || containsMatch || serviceSimilarityScore(name, service.name) >= 0.72;
+  });
+  return match ? `Similar to "${match.name}". Check before saving to avoid duplicate dropdown options.` : '';
+}
+
+function makeServiceTypeKey(name = '', serviceTypes = []) {
+  const base = String(name || 'service-type')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'service-type';
+  const existing = new Set(serviceTypes.map((service) => service.key));
+  let key = base;
+  let suffix = 2;
+  while (existing.has(key)) {
+    key = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return key;
 }
 
 function ToggleField({ label, checked, disabled, onChange, helper }) {
@@ -571,11 +621,183 @@ function ServiceEditor({ services, disabled, uploadingKey, onChange, onUpload })
       ) : null}
       {deleteIndex != null ? (
         <ConfirmModal
-          title="Delete service?"
-          message={`Delete ${services[deleteIndex]?.title || 'this service'} from the public website services list?`}
-          confirmLabel="Delete Service"
+          title="Remove service card?"
+          message={`Remove ${services[deleteIndex]?.title || 'this service'} from this public website draft. This only removes the marketing card and does not change existing bookings.`}
+          confirmLabel="Remove Service Card"
           onCancel={() => setDeleteIndex(null)}
           onConfirm={deleteService}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function BookingServiceTypeManager({ serviceTypes = [], usageCounts = {}, disabled, onChange, onBlockedDelete }) {
+  const [newName, setNewName] = useState('');
+  const [confirmAction, setConfirmAction] = useState(null);
+  const sortedTypes = useMemo(() => (
+    [...serviceTypes]
+      .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+      .map((service, index) => ({ ...service, order: index }))
+  ), [serviceTypes]);
+  const activeCount = sortedTypes.filter((service) => service.active !== false).length;
+  const inactiveCount = Math.max(0, sortedTypes.length - activeCount);
+  const addWarning = serviceTypeDuplicateMessage(newName, sortedTypes);
+
+  function commit(nextTypes) {
+    onChange(nextTypes.map((service, index) => ({
+      ...service,
+      name: String(service.name || '').trim(),
+      key: service.key || makeServiceTypeKey(service.name, nextTypes),
+      order: index
+    })).filter((service) => service.name));
+  }
+
+  function update(index, patch) {
+    const next = [...sortedTypes];
+    next[index] = { ...next[index], ...patch };
+    commit(next);
+  }
+
+  function move(index, direction) {
+    const target = index + direction;
+    if (target < 0 || target >= sortedTypes.length) return;
+    const next = [...sortedTypes];
+    const [item] = next.splice(index, 1);
+    next.splice(target, 0, item);
+    commit(next);
+  }
+
+  function addServiceType() {
+    const name = newName.trim();
+    if (!name) return;
+    commit([
+      ...sortedTypes,
+      {
+        key: makeServiceTypeKey(name, sortedTypes),
+        name,
+        active: true,
+        order: sortedTypes.length
+      }
+    ]);
+    setNewName('');
+  }
+
+  function deleteServiceType(service) {
+    const index = sortedTypes.findIndex((item) => item.key === service.key);
+    if (index < 0) return;
+    const usage = usageCounts[service.name] || 0;
+    if (usage > 0) {
+      onBlockedDelete?.(service.name);
+      return;
+    }
+    commit(sortedTypes.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  return (
+    <div className="public-booking-service-manager">
+      <div className="public-booking-service-head">
+        <div>
+          <h3>Service Type Dropdown</h3>
+          <p>Manage the exact service options customers see on the public Book Service form.</p>
+        </div>
+        <div className="public-booking-service-stats">
+          <span>{activeCount} active</span>
+          <span>{inactiveCount} hidden</span>
+          <span>{sortedTypes.length} total</span>
+        </div>
+      </div>
+
+      <div className="public-booking-service-add">
+        <label className="public-website-field">
+          <span className="public-website-field-label">
+            <span className="label">Add service type</span>
+          </span>
+          <input
+            className="input"
+            value={newName}
+            disabled={disabled}
+            onChange={(event) => setNewName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                addServiceType();
+              }
+            }}
+            placeholder="Example: Laptop Repair"
+          />
+          {addWarning ? <span className="public-website-field-helper text-amber-100">{addWarning}</span> : null}
+        </label>
+        <button type="button" className="btn btn-secondary admin-compact-button" disabled={disabled || !newName.trim()} onClick={addServiceType}>
+          <Plus className="h-4 w-4" />
+          Add Type
+        </button>
+      </div>
+
+      <div className="public-booking-service-list">
+        {sortedTypes.map((service, index) => {
+          const usage = usageCounts[service.name] || 0;
+          const duplicateWarning = serviceTypeDuplicateMessage(service.name, sortedTypes, index);
+          return (
+            <article key={service.key || `${service.name}-${index}`} className={`public-booking-service-row ${service.active === false ? 'is-inactive' : ''}`}>
+              <div className="public-booking-service-order">
+                <GripVertical className="h-4 w-4" />
+                {index + 1}
+              </div>
+              <label className="public-booking-service-name">
+                <span className="sr-only">Service type name</span>
+                <input
+                  className="input"
+                  value={service.name || ''}
+                  disabled={disabled}
+                  onChange={(event) => update(index, { name: event.target.value })}
+                />
+                {duplicateWarning ? <span>{duplicateWarning}</span> : null}
+              </label>
+              <div className="public-booking-service-meta">
+                <span className={service.active === false ? 'is-hidden' : 'is-active'}>{service.active === false ? 'Hidden' : 'Active'}</span>
+                {usage > 0 ? <span>{usage} booking{usage === 1 ? '' : 's'}</span> : <span>Unused</span>}
+              </div>
+              <div className="public-booking-service-actions">
+                <button type="button" className="btn btn-secondary py-2 text-xs" disabled={disabled || index === 0} onClick={() => move(index, -1)}>Up</button>
+                <button type="button" className="btn btn-secondary py-2 text-xs" disabled={disabled || index === sortedTypes.length - 1} onClick={() => move(index, 1)}>Down</button>
+                <button type="button" className="btn btn-secondary py-2 text-xs" disabled={disabled} onClick={() => {
+                  if (service.active === false) update(index, { active: true });
+                  else setConfirmAction({ type: 'disable', service });
+                }}>
+                  {service.active === false ? 'Enable' : 'Disable'}
+                </button>
+                <button type="button" className="btn btn-secondary py-2 text-xs" disabled={disabled} onClick={() => setConfirmAction({ type: usage > 0 ? 'disable' : 'delete', service })}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {usage > 0 ? 'Disable' : 'Delete'}
+                </button>
+              </div>
+            </article>
+          );
+        })}
+        {!sortedTypes.length ? (
+          <p className="rounded-card border border-white/10 bg-white/[0.035] p-4 text-sm muted">No service types yet. Add at least one active service type for the public booking dropdown.</p>
+        ) : null}
+      </div>
+      <p className="public-booking-service-note">Inactive service types are hidden from the public dropdown. Existing bookings keep their saved service type text.</p>
+      {confirmAction ? (
+        <ConfirmModal
+          title={confirmAction.type === 'disable' ? 'Disable service type?' : 'Remove service type?'}
+          message={confirmAction.type === 'disable'
+            ? `${confirmAction.service.name} will be disabled in this draft and hidden from the public dropdown after Save Changes. Existing bookings keep their saved service type text.`
+            : `Remove ${confirmAction.service.name} from this public booking dropdown draft. This service type is not used by existing bookings.`}
+          confirmLabel={confirmAction.type === 'disable' ? 'Disable' : 'Remove Service Type'}
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={() => {
+            const action = confirmAction;
+            setConfirmAction(null);
+            if (action.type === 'disable') {
+              const index = sortedTypes.findIndex((item) => item.key === action.service.key);
+              if (index >= 0) update(index, { active: false });
+              return;
+            }
+            deleteServiceType(action.service);
+          }}
         />
       ) : null}
     </div>
@@ -594,6 +816,7 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
   const [activeSection, setActiveSection] = useState(publicWebsiteSections[0].id);
   const { data, loading, error, reload } = useResource(() => request('/settings/public-website'), [request]);
   const savedSettings = useMemo(() => mergePublicWebsiteSettings(data?.settings || defaultPublicWebsiteSettings), [data?.settings]);
+  const serviceTypeUsage = useMemo(() => data?.serviceTypeUsage || {}, [data?.serviceTypeUsage]);
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(savedSettings), [draft, savedSettings]);
 
   useEffect(() => {
@@ -811,6 +1034,15 @@ export function PublicWebsiteSettingsSection({ onDirtyChange = null }) {
               <option>Converted</option>
             </select>
           </label>
+        </div>
+        <div className="mt-5">
+          <BookingServiceTypeManager
+            serviceTypes={draft.booking.serviceTypes || []}
+            usageCounts={serviceTypeUsage}
+            disabled={!canEdit}
+            onChange={(serviceTypes) => setPath('booking.serviceTypes', serviceTypes)}
+            onBlockedDelete={(name) => push(`${name} is used in existing bookings. You can disable it instead.`, 'info')}
+          />
         </div>
       </SectionCard>
       ) : null}

@@ -1,4 +1,5 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import UniversalLoader from './UniversalLoader.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { canAccessRoles, roleLabel } from '../utils/roles.js';
 
@@ -21,11 +22,7 @@ export default function ProtectedRoute({ role, allowedRoles = null, loginPath = 
   const location = useLocation();
 
   if (loading) {
-    return (
-      <div className="grid min-h-screen place-items-center bg-[var(--bg)]">
-        <div className="surface px-6 py-5 text-sm font-semibold">Loading secure workspace...</div>
-      </div>
-    );
+    return <UniversalLoader active variant="staff" message="Loading secure workspace..." minVisibleMs={1500} />;
   }
 
   const loginTarget = loginPath || '/app';

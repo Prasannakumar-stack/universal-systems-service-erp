@@ -453,6 +453,7 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
   const [previewState, setPreviewState] = useState(null);
   const [resetConfirm, setResetConfirm] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [disableConfirm, setDisableConfirm] = useState(null);
   const [usageTemplate, setUsageTemplate] = useState(null);
   const [menuKey, setMenuKey] = useState(null);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
@@ -587,6 +588,20 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
       template.channels[channelId] = { ...template.channels[channelId], [field]: value };
       return template;
     });
+  }
+
+  function requestTemplateEnabledChange(template) {
+    if (!template.enabled) {
+      updateTemplate(template.key, { enabled: true });
+      return;
+    }
+    setDisableConfirm(template);
+  }
+
+  function disableTemplate(templateKey) {
+    updateTemplate(templateKey, { enabled: false });
+    setDisableConfirm(null);
+    push('Template disabled in draft', 'info');
   }
 
   function activeInputRef() {
@@ -875,7 +890,7 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
                           className={`notification-toggle ${template.enabled ? 'is-on' : 'is-off'}`}
                           disabled={!canEdit || saving}
                           aria-pressed={template.enabled}
-                          onClick={() => updateTemplate(template.key, { enabled: !template.enabled })}
+                          onClick={() => requestTemplateEnabledChange(template)}
                         >
                           <span aria-hidden="true" />
                           <strong>{template.enabled ? 'Enabled' : 'Disabled'}</strong>
@@ -899,7 +914,7 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
                               <MenuButton disabled={!anyConnected} title={sendTestTitle} onClick={() => anyConnected ? push('Test sending will use connected provider configuration. No test was sent from this screen.', 'info') : sendTestBlocked('whatsapp')}><Send className="h-4 w-4" /> Send Test</MenuButton>
                               <MenuButton onClick={() => duplicateTemplate(template)}><Copy className="h-4 w-4" /> Duplicate</MenuButton>
                               {!template.isCustom ? <MenuButton onClick={() => { setResetConfirm({ type: 'template', template }); setMenuKey(null); }}><RotateCcw className="h-4 w-4" /> Reset to Default</MenuButton> : null}
-                              <MenuButton onClick={() => { updateTemplate(template.key, { enabled: !template.enabled }); setMenuKey(null); }}>{template.enabled ? <X className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />} {template.enabled ? 'Disable' : 'Enable'}</MenuButton>
+                              <MenuButton onClick={() => { requestTemplateEnabledChange(template); setMenuKey(null); }}>{template.enabled ? <X className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />} {template.enabled ? 'Disable' : 'Enable'}</MenuButton>
                               <MenuButton onClick={() => { setUsageTemplate(template); setMenuKey(null); }}><Hash className="h-4 w-4" /> View usage / trigger</MenuButton>
                               {template.isCustom ? <MenuButton danger onClick={() => { setDeleteConfirm(template); setMenuKey(null); }}><Trash2 className="h-4 w-4" /> Delete</MenuButton> : null}
                             </div>
@@ -975,7 +990,7 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
                 className={`notification-toggle ${activeTemplate.enabled ? 'is-on' : 'is-off'}`}
                 disabled={!canEdit || saving}
                 aria-pressed={activeTemplate.enabled}
-                onClick={() => updateTemplate(activeTemplate.key, { enabled: !activeTemplate.enabled })}
+                onClick={() => requestTemplateEnabledChange(activeTemplate)}
               >
                 <span aria-hidden="true" />
                 <strong>{activeTemplate.enabled ? 'Enabled' : 'Disabled'}</strong>
@@ -1158,7 +1173,7 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
       ) : null}
 
       {resetConfirm ? (
-        <ModalShell title={resetConfirm.type === 'all' ? 'Reset all templates?' : 'Reset this template?'} subtitle={resetConfirm.type === 'all' ? 'This will restore all default notification messages. This action cannot be undone.' : `This will restore the default message for ${resetConfirm.template.name}. This action cannot be undone.`} onClose={() => setResetConfirm(null)}>
+        <ModalShell title={resetConfirm.type === 'all' ? 'Reset all templates?' : 'Reset this template?'} subtitle={resetConfirm.type === 'all' ? 'This will prepare the default notification messages in this draft. Save Changes is required before the backend is updated.' : `This will prepare the default message for ${resetConfirm.template.name} in this draft. Save Changes is required before the backend is updated.`} onClose={() => setResetConfirm(null)}>
           <div className="notification-confirm-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setResetConfirm(null)}>Cancel</button>
             <button type="button" className="btn btn-primary" onClick={() => resetConfirm.type === 'all' ? resetAllToDefaults() : resetTemplateToDefault(resetConfirm.template.key)}>Reset Template</button>
@@ -1167,10 +1182,19 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
       ) : null}
 
       {deleteConfirm ? (
-        <ModalShell title="Delete custom template?" subtitle={`This will remove ${deleteConfirm.name}. System default templates cannot be deleted.`} onClose={() => setDeleteConfirm(null)}>
+        <ModalShell title="Remove custom template?" subtitle={`Remove ${deleteConfirm.name} from this draft. Save Changes is required before the backend is updated.`} onClose={() => setDeleteConfirm(null)}>
           <div className="notification-confirm-actions">
             <button type="button" className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>Cancel</button>
-            <button type="button" className="btn btn-primary" onClick={() => deleteCustomTemplate(deleteConfirm.key)}>Delete Template</button>
+            <button type="button" className="btn btn-primary" onClick={() => deleteCustomTemplate(deleteConfirm.key)}>Remove Template</button>
+          </div>
+        </ModalShell>
+      ) : null}
+
+      {disableConfirm ? (
+        <ModalShell title="Disable notification template?" subtitle={`${disableConfirm.name} will be disabled in this draft. Save Changes is required before the backend is updated.`} onClose={() => setDisableConfirm(null)}>
+          <div className="notification-confirm-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setDisableConfirm(null)}>Cancel</button>
+            <button type="button" className="btn btn-primary" onClick={() => disableTemplate(disableConfirm.key)}>Disable</button>
           </div>
         </ModalShell>
       ) : null}
@@ -1181,7 +1205,7 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
             <span>Trigger</span><strong>{usageTemplate.triggerEvent}</strong>
             <span>Audience</span><strong>{usageTemplate.audience}</strong>
             <span>Category</span><strong>{usageTemplate.category}</strong>
-            <span>Attachment</span><strong>{usageTemplate.supportsAttachment ? 'Supported' : 'Not supported'}</strong>
+            <span>Attachment</span><strong>{usageTemplate.supportsAttachment ? 'Supported' : 'No attachment'}</strong>
             <span>Used when</span><strong>{usageDescription(usageTemplate)}</strong>
           </div>
         </ModalShell>

@@ -19,10 +19,9 @@ import {
   UploadCloud,
   Wrench
 } from 'lucide-react';
-import { serviceTypes } from '../utils/constants.js';
 import { usePublicWebsiteSettings } from '../context/PublicWebsiteSettingsContext.jsx';
 import { createBooking } from '../utils/publicApi.js';
-import { publicAssetUrl, publicPageHeroImage, visiblePublicServices, whatsappHref } from '../utils/publicWebsiteDefaults.js';
+import { publicAssetUrl, publicBookingServiceTypes, publicPageHeroImage, whatsappHref } from '../utils/publicWebsiteDefaults.js';
 import { useToast } from '../context/ToastContext.jsx';
 
 const initial = {
@@ -38,23 +37,6 @@ const initial = {
   preferredDate: '',
   preferredTime: ''
 };
-
-const publicServiceOptions = [
-  'OS Installation & Setup',
-  'Laptop Repair',
-  'Desktop Repair',
-  'Printer Service / Toner Refilling',
-  'CCTV Installation & Maintenance',
-  'Networking Support',
-  'Computer Sales & Service',
-  'UPS Battery Sales & Replacement',
-  'Solar UPS & Inverter Sales & Service',
-  'AMC / On-site Support',
-  'Software Support',
-  'Data Recovery'
-];
-
-const bookingServiceOptions = Array.from(new Set([...publicServiceOptions, ...serviceTypes]));
 
 const maxSize = 5 * 1024 * 1024;
 const accepted = ['image/jpeg', 'image/png', 'image/webp'];
@@ -100,11 +82,9 @@ export default function BookService() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const requestedService = searchParams.get('service')?.trim() || '';
-  const servicesFromSettings = useMemo(() => visiblePublicServices(settings).map((service) => service.title), [settings]);
-  const activeBookingServiceOptions = useMemo(() => Array.from(new Set([
-    ...servicesFromSettings,
-    ...bookingServiceOptions
-  ])), [servicesFromSettings]);
+  const activeBookingServiceOptions = useMemo(() => (
+    publicBookingServiceTypes(settings).map((service) => service.name)
+  ), [settings]);
   const queryServiceType = activeBookingServiceOptions.includes(requestedService) ? requestedService : '';
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(() => ({ ...initial, serviceType: queryServiceType }));

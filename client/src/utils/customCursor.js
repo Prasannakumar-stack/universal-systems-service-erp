@@ -6,20 +6,36 @@ const HOVER_SELECTOR = [
   '.service-card',
   '.card-hover',
   '[role="button"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+  '[role="tab"]',
+  '[role="switch"]',
+  '[aria-haspopup]',
+  '[data-radix-collection-item]',
   '[data-cursor-hover]',
   'input[type="button"]',
   'input[type="submit"]',
   'input[type="reset"]',
+  'select',
   'summary'
 ].join(',');
 
 const NATIVE_CURSOR_SELECTOR = [
-  "input:not([type='button']):not([type='submit']):not([type='reset']):not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']):not([type='range'])",
+  'input:not([type])',
+  "input[type='text']",
+  "input[type='search']",
+  "input[type='email']",
+  "input[type='password']",
+  "input[type='tel']",
+  "input[type='url']",
+  "input[type='number']",
   'textarea',
-  'select',
   "[contenteditable='true']",
   "[contenteditable='']",
-  "[contenteditable='plaintext-only']",
+  "[contenteditable='plaintext-only']"
+].join(',');
+
+const SPECIAL_NATIVE_CURSOR_SELECTOR = [
   ':disabled',
   "[aria-disabled='true']",
   '.resize-handle',
@@ -55,6 +71,7 @@ export function initCustomCursor() {
   const cursor = createCursorLayer('custom-cursor');
   const trails = [0, 1, 2].map((index) => createCursorLayer(`custom-cursor-trail custom-cursor-trail-${index + 1}`));
   const html = document.documentElement;
+  const listenerOptions = { passive: true, capture: true };
 
   let targetX = window.innerWidth / 2;
   let targetY = window.innerHeight / 2;
@@ -91,6 +108,11 @@ export function initCustomCursor() {
     updateHoverState(!isNativeTarget && Boolean(target?.closest?.(HOVER_SELECTOR)));
   }
 
+  function resolvePointerTarget(event) {
+    const pathTarget = event.composedPath?.().find((node) => node instanceof Element);
+    return pathTarget || document.elementFromPoint(event.clientX, event.clientY) || event.target;
+  }
+
   function animate() {
     currentX += (targetX - currentX) * 0.15;
     currentY += (targetY - currentY) * 0.15;
@@ -121,15 +143,23 @@ export function initCustomCursor() {
       html.classList.add('custom-cursor-ready');
     }
 
-    updateTargetState(event.target);
+    updateTargetState(resolvePointerTarget(event));
   }
 
   function handlePointerOver(event) {
-    updateTargetState(event.target);
+    updateTargetState(resolvePointerTarget(event));
   }
 
   function handlePointerOut(event) {
     if (!event.relatedTarget) {
+      const insideViewport = event.clientX >= 0
+        && event.clientY >= 0
+        && event.clientX <= window.innerWidth
+        && event.clientY <= window.innerHeight;
+      if (insideViewport) {
+        updateTargetState(document.elementFromPoint(event.clientX, event.clientY));
+        return;
+      }
       html.classList.remove('custom-cursor-ready');
       isVisible = false;
     }
@@ -137,7 +167,8 @@ export function initCustomCursor() {
   }
 
   function handlePointerDown(event) {
-    if (isNativeTarget || isNativeCursorTarget(event.target)) return;
+    const target = resolvePointerTarget(event);
+    if (isNativeTarget || isNativeCursorTarget(target) || target?.closest?.(SPECIAL_NATIVE_CURSOR_SELECTOR)) return;
 
     cursor.classList.add('is-clicking');
 
@@ -154,20 +185,20 @@ export function initCustomCursor() {
   }
 
   html.classList.add('custom-cursor-enabled');
-  document.addEventListener('pointermove', handlePointerMove, { passive: true });
-  document.addEventListener('pointerover', handlePointerOver, { passive: true });
-  document.addEventListener('pointerout', handlePointerOut, { passive: true });
-  document.addEventListener('pointerdown', handlePointerDown, { passive: true });
-  document.addEventListener('pointerup', handlePointerUp, { passive: true });
+  document.addEventListener('pointermove', handlePointerMove, listenerOptions);
+  document.addEventListener('pointerover', handlePointerOver, listenerOptions);
+  document.addEventListener('pointerout', handlePointerOut, listenerOptions);
+  document.addEventListener('pointerdown', handlePointerDown, listenerOptions);
+  document.addEventListener('pointerup', handlePointerUp, listenerOptions);
   rafId = window.requestAnimationFrame(animate);
 
   cleanupCursor = () => {
     window.cancelAnimationFrame(rafId);
-    document.removeEventListener('pointermove', handlePointerMove);
-    document.removeEventListener('pointerover', handlePointerOver);
-    document.removeEventListener('pointerout', handlePointerOut);
-    document.removeEventListener('pointerdown', handlePointerDown);
-    document.removeEventListener('pointerup', handlePointerUp);
+    document.removeEventListener('pointermove', handlePointerMove, listenerOptions);
+    document.removeEventListener('pointerover', handlePointerOver, listenerOptions);
+    document.removeEventListener('pointerout', handlePointerOut, listenerOptions);
+    document.removeEventListener('pointerdown', handlePointerDown, listenerOptions);
+    document.removeEventListener('pointerup', handlePointerUp, listenerOptions);
     html.classList.remove('custom-cursor-enabled', 'custom-cursor-ready');
     cursor.remove();
     trails.forEach((trail) => trail.remove());

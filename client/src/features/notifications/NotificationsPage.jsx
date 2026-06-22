@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
+import { ConfirmModal } from '../../components/Ui.jsx';
 import {
   clearFallbackNotifications,
   clearReadNotificationIds,
@@ -158,6 +159,7 @@ export function NotificationsPage({ role = 'admin' }) {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState('');
+  const [clearConfirm, setClearConfirm] = useState(null);
 
   async function fetchAllNotificationRows() {
     const firstPage = await request('/notifications?limit=100&page=1');
@@ -253,10 +255,8 @@ export function NotificationsPage({ role = 'admin' }) {
     }
   }
 
-  async function clearAll() {
+  async function confirmClearAll() {
     if (!hasNotifications) return;
-    const confirmed = window.confirm('Clear all notifications? This will remove every alert and cannot be undone.');
-    if (!confirmed) return;
     setActionBusy('clear-all');
     try {
       const hasRemoteRows = notifications.some((item) => !item.isFallback);
@@ -267,6 +267,7 @@ export function NotificationsPage({ role = 'admin' }) {
       resetClearedNotificationIds();
       setNotifications([]);
       notifyNotificationChange();
+      setClearConfirm(null);
       push('Notifications cleared');
     } catch (error) {
       push(error.message || 'Unable to clear notifications', 'error');
@@ -275,18 +276,15 @@ export function NotificationsPage({ role = 'admin' }) {
     }
   }
 
-  async function clearRead() {
+  async function confirmClearRead() {
     if (!hasRead) return;
     const readItems = notifications.filter((item) => item.read);
-    const confirmed = window.confirm(
-      `Clear ${readItems.length} read notification${readItems.length === 1 ? '' : 's'}? Unread notifications will be kept.`
-    );
-    if (!confirmed) return;
     setActionBusy('clear-read');
     try {
       clearReadNotificationIds(readItems.map((item) => item.id));
       setNotifications((current) => current.filter((item) => !item.read));
       notifyNotificationChange();
+      setClearConfirm(null);
       push('Read notifications cleared');
     } catch (error) {
       push(error.message || 'Unable to clear read notifications', 'error');
@@ -348,13 +346,13 @@ export function NotificationsPage({ role = 'admin' }) {
             <button
               type="button"
               className="btn notifications-clear-read-button"
-              onClick={clearRead}
+              onClick={() => setClearConfirm({ type: 'read', count: counts.read })}
               disabled={!hasRead || actionBusy === 'clear-read'}
             >
               {actionBusy === 'clear-read' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
               Clear Read
             </button>
-            <button type="button" className="btn notifications-clear-button" onClick={clearAll} disabled={!hasNotifications || actionBusy === 'clear-all'}>
+            <button type="button" className="btn notifications-clear-button" onClick={() => setClearConfirm({ type: 'all', count: notifications.length })} disabled={!hasNotifications || actionBusy === 'clear-all'}>
               {actionBusy === 'clear-all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               Clear All
             </button>
@@ -389,6 +387,19 @@ export function NotificationsPage({ role = 'admin' }) {
       </section>
 
       <NotificationPagination page={page} total={filteredNotifications.length} onPageChange={setPage} />
+      {clearConfirm ? (
+        <ConfirmModal
+          title={clearConfirm.type === 'all' ? 'Clear notifications permanently?' : 'Clear read notifications?'}
+          message={clearConfirm.type === 'all'
+            ? `Clear ${clearConfirm.count} notification${clearConfirm.count === 1 ? '' : 's'} from this notification center. Remote notifications are permanently deleted.`
+            : `Clear ${clearConfirm.count} read notification${clearConfirm.count === 1 ? '' : 's'} from this notification center. Unread notifications will be kept.`}
+          confirmLabel={clearConfirm.type === 'all' ? 'Delete Permanently' : 'Clear Read'}
+          loading={actionBusy === (clearConfirm.type === 'all' ? 'clear-all' : 'clear-read')}
+          loadingLabel="Clearing..."
+          onCancel={() => setClearConfirm(null)}
+          onConfirm={clearConfirm.type === 'all' ? confirmClearAll : confirmClearRead}
+        />
+      ) : null}
     </div>
   );
 }

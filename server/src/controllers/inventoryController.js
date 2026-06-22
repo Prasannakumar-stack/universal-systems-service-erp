@@ -1,4 +1,9 @@
 import InventoryPart from '../models/InventoryPart.js';
+import PurchaseImport from '../models/PurchaseImport.js';
+import PurchaseUsageAllocation from '../models/PurchaseUsageAllocation.js';
+import StockMovement from '../models/StockMovement.js';
+import WorkOrder from '../models/WorkOrder.js';
+import { logAudit } from '../services/auditService.js';
 import { appError, clean, numberValue, required } from '../utils/http.js';
 import { addDateRange, paginatedPayload, paginationMeta, parsePagination, searchRegex, withIds } from '../utils/pagination.js';
 import { applyStockMovement, syncPartAvailability } from '../services/stockMovementService.js';
@@ -151,7 +156,27 @@ export async function update(req, res) {
 }
 
 export async function remove(req, res) {
-  const part = await InventoryPart.findByIdAndDelete(req.params.id);
+  const part = await InventoryPart.findById(req.params.id);
   if (!part) throw appError('Inventory part not found', 404);
-  res.json({ message: 'Inventory part deleted' });
+
+  const linkedCounts = await Promise.all([
+    WorkOrder.countDocuments({ $or: [{ 'partsUsed.inventoryPartId': part._id }, { 'partRequests.inventoryPartId': part._id }] }),
+    PurchaseImport.countDocuments({ 'items.inventoryPartId': part._id }),
+    PurchaseUsageAllocation.countDocuments({ inventoryPartId: part._id }),
+    StockMovement.countDocuments({ partId: part._id })
+  ]);
+  if (linkedCounts.some((count) => count > 0)) {
+    throw appError('This item is used in existing records. You can disable or archive it instead.', 409);
+  }
+
+  const before = part.toObject();
+  await part.deleteOne();
+  await logAudit({
+    userId: req.user?._id || null,
+    action: 'inventory_part_deleted',
+    module: 'inventory',
+    recordId: part._id,
+    before
+  });
+  res.json({ message: 'Inventory part deleted permanently' });
 }
