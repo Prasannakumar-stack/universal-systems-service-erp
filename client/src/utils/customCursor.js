@@ -13,6 +13,22 @@ const HOVER_SELECTOR = [
   'summary'
 ].join(',');
 
+const NATIVE_CURSOR_SELECTOR = [
+  "input:not([type='button']):not([type='submit']):not([type='reset']):not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']):not([type='range'])",
+  'textarea',
+  'select',
+  "[contenteditable='true']",
+  "[contenteditable='']",
+  "[contenteditable='plaintext-only']",
+  ':disabled',
+  "[aria-disabled='true']",
+  '.resize-handle',
+  '.pdf-resize-handle',
+  '.drag-handle',
+  '[data-resize-handle]',
+  '[data-drag-handle]'
+].join(',');
+
 function shouldUseCustomCursor() {
   if (typeof window === 'undefined') return false;
   if (!window.matchMedia) return false;
@@ -46,6 +62,7 @@ export function initCustomCursor() {
   let currentY = targetY;
   let isVisible = false;
   let isHovering = false;
+  let isNativeTarget = false;
   let rafId = 0;
 
   const trailState = trails.map(() => ({ x: targetX, y: targetY }));
@@ -58,6 +75,20 @@ export function initCustomCursor() {
     if (isHovering === nextHovering) return;
     isHovering = nextHovering;
     cursor.classList.toggle('is-hovering', isHovering);
+  }
+
+  function isNativeCursorTarget(target) {
+    return Boolean(target?.closest?.(NATIVE_CURSOR_SELECTOR));
+  }
+
+  function updateTargetState(target) {
+    const nextNativeTarget = isNativeCursorTarget(target);
+    if (isNativeTarget !== nextNativeTarget) {
+      isNativeTarget = nextNativeTarget;
+      cursor.classList.toggle('is-native-target', isNativeTarget);
+      trails.forEach((trail) => trail.classList.toggle('is-native-target', isNativeTarget));
+    }
+    updateHoverState(!isNativeTarget && Boolean(target?.closest?.(HOVER_SELECTOR)));
   }
 
   function animate() {
@@ -90,11 +121,11 @@ export function initCustomCursor() {
       html.classList.add('custom-cursor-ready');
     }
 
-    updateHoverState(Boolean(event.target.closest?.(HOVER_SELECTOR)));
+    updateTargetState(event.target);
   }
 
   function handlePointerOver(event) {
-    updateHoverState(Boolean(event.target.closest?.(HOVER_SELECTOR)));
+    updateTargetState(event.target);
   }
 
   function handlePointerOut(event) {
@@ -102,10 +133,12 @@ export function initCustomCursor() {
       html.classList.remove('custom-cursor-ready');
       isVisible = false;
     }
-    updateHoverState(Boolean(event.relatedTarget?.closest?.(HOVER_SELECTOR)));
+    updateTargetState(event.relatedTarget);
   }
 
-  function handlePointerDown() {
+  function handlePointerDown(event) {
+    if (isNativeTarget || isNativeCursorTarget(event.target)) return;
+
     cursor.classList.add('is-clicking');
 
     const ripple = document.createElement('div');

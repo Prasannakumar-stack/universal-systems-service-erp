@@ -4905,12 +4905,12 @@ function SettingsAttentionBanner({ onManage }) {
   ];
 
   return (
-    <section className="settings-attention-banner" aria-label="Settings needing attention">
+    <section className="settings-attention-banner" aria-label="Settings setup status">
       <div className="settings-attention-copy">
         <span className="settings-attention-dot" aria-hidden="true" />
         <div>
-          <p className="settings-attention-kicker">Needs your attention</p>
-          <h2>Review operational readiness before handoff</h2>
+          <p className="settings-attention-kicker">Setup status</p>
+          <h2>Review optional setup before handoff</h2>
         </div>
       </div>
       <div className="settings-attention-items">

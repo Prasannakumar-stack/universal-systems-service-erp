@@ -4,6 +4,7 @@ import {
   AlignRight,
   ArrowDown,
   ArrowUp,
+  Bell,
   Box,
   CalendarDays,
   ChevronDown,
@@ -22,8 +23,10 @@ import {
   GripVertical,
   Grid2X2,
   Handshake,
+  Headphones,
   History,
   Image as ImageIcon,
+  IndianRupee,
   Layers,
   LayoutGrid,
   Loader2,
@@ -31,6 +34,7 @@ import {
   Mail,
   MapPin,
   Maximize2,
+  MessageCircle,
   Minus,
   Move,
   Palette,
@@ -1222,6 +1226,13 @@ function contentDefaultsForElement(type = 'text') {
 }
 
 function isInvoiceManifestElement(element = {}) {
+  if (
+    element.manifestSource === 'current-pdf-layout'
+    || element.manifest?.source === 'current-pdf-layout'
+    || element.designGenerated === true
+  ) {
+    return true;
+  }
   return [
     element.id,
     element.sourceKey,
@@ -1229,7 +1240,19 @@ function isInvoiceManifestElement(element = {}) {
     element.manifest?.semanticId
   ].some((value) => {
     const text = String(value || '');
-    return text.startsWith('invoice.') || text.replace(/[^a-z0-9]/gi, '').toLowerCase().startsWith('invoice');
+    const compact = text.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    return text.startsWith('invoice.')
+      || text.startsWith('quotation.')
+      || text.startsWith('service-completed.')
+      || text.startsWith('amc-contract.')
+      || text.startsWith('amc-service-visit.')
+      || text.startsWith('amc-renewal-reminder.')
+      || compact.startsWith('invoice')
+      || compact.startsWith('quotation')
+      || compact.startsWith('servicecompleted')
+      || compact.startsWith('amccontract')
+      || compact.startsWith('amcservicevisit')
+      || compact.startsWith('amcrenewalreminder');
   });
 }
 
@@ -1331,7 +1354,6 @@ function CanvasIconPreview({ variant = '', mode = 'vector', emoji = '' }) {
       </svg>
     );
   }
-  if (normalized === 'rupee') return <span className="pdf-canvas-rupee">Rs</span>;
   if (normalized === 'completion') {
     return (
       <svg className="pdf-canvas-completion-badge" viewBox="0 0 34 48" aria-hidden="true" focusable="false">
@@ -1348,12 +1370,18 @@ function CanvasIconPreview({ variant = '', mode = 'vector', emoji = '' }) {
     phone: Phone,
     email: Mail,
     website: Globe,
+    whatsapp: MessageCircle,
     invoice: ReceiptText,
     work: ClipboardCheck,
     date: CalendarDays,
+    calendar: CalendarDays,
     status: CreditCard,
     document: FileText,
-    handshake: Handshake
+    handshake: Handshake,
+    shield: ShieldCheck,
+    bell: Bell,
+    headset: Headphones,
+    rupee: IndianRupee
   };
   const Icon = iconMap[normalized] || Box;
   return <Icon className="h-4 w-4 pdf-canvas-icon-svg" />;
@@ -1645,6 +1673,21 @@ function designStateFromManifest(manifest = {}, current = {}) {
   });
 }
 
+function isPlaceholderDesignState(source = {}) {
+  const rawElements = Array.isArray(source.customElements) && source.customElements.length
+    ? source.customElements
+    : Array.isArray(source.elements)
+      ? source.elements
+      : [];
+  if (source.manifestSource === 'placeholder-adapter') return true;
+  return rawElements.some((element) => (
+    element?.manifestSource === 'placeholder-adapter'
+    || element?.manifest?.source === 'placeholder-adapter'
+    || String(element?.id || '').includes('safePlaceholder')
+    || String(element?.manifestSemanticId || '').includes('safePlaceholder')
+  ));
+}
+
 function configForDefaultPdfPreview(config = {}) {
   return {
     ...config,
@@ -1715,6 +1758,13 @@ function styleForBuilderElement(element = {}, selected = false) {
 }
 
 const draftPreviewRemoveSelectors = [
+  '[data-editor-only]',
+  '[data-helper]',
+  '.design-helper',
+  '.pdf-builder-helper',
+  '.canvas-debug-label',
+  '.pdf-floating-toolbar',
+  '.pdf-inline-text-editor',
   '.pdf-element-grip',
   '.pdf-resize-handle',
   '.pdf-element-hit-area',
@@ -1751,6 +1801,22 @@ const draftPreviewHelperText = new Set([
   'Table',
   'Icon',
   'Click Reset to Default Design to load the editable PDF canvas.'
+]);
+
+const draftPreviewIconHelperText = new Set([
+  ...[...draftPreviewHelperText].map((value) => String(value).trim().toLowerCase()),
+  'dot',
+  'phone',
+  'address',
+  'shield',
+  'handshake',
+  'hands hake',
+  'a',
+  'p',
+  'e',
+  'w',
+  'c',
+  'h'
 ]);
 
 const draftPreviewStyleProperties = [
@@ -1819,6 +1885,13 @@ const draftPreviewStyleProperties = [
 ];
 
 function clearDraftHelperText(clone) {
+  clone.querySelectorAll('.pdf-canvas-divider span, .pdf-canvas-spacer').forEach((node) => {
+    node.textContent = '';
+  });
+  clone.querySelectorAll('.pdf-canvas-icon span').forEach((node) => {
+    const text = String(node.textContent || '').trim().toLowerCase();
+    if (draftPreviewIconHelperText.has(text)) node.textContent = '';
+  });
   clone.querySelectorAll('*').forEach((node) => {
     if (node.children.length) return;
     const text = String(node.textContent || '').trim();
@@ -1839,6 +1912,15 @@ function inlineDraftPreviewStyles(root) {
   });
 }
 
+function cssLengthValue(value, fallback = '') {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'number') return Number.isFinite(value) ? `${value}px` : fallback;
+  const text = String(value).trim();
+  if (!text) return fallback;
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? `${numeric}px` : text;
+}
+
 function applyDraftElementPrintOverrides(clone, design = {}) {
   const byId = new Map([
     ...(Array.isArray(design.sections) ? design.sections : []),
@@ -1848,9 +1930,34 @@ function applyDraftElementPrintOverrides(clone, design = {}) {
     const node = clone.querySelector(`[data-pdf-layer-id="${pdfLayerSelectorValue(id)}"]`);
     if (!node) return;
     const style = item.style || {};
+    node.style.left = cssLengthValue(item.x, node.style.left);
+    node.style.top = cssLengthValue(item.y, node.style.top);
+    node.style.width = cssLengthValue(item.width, node.style.width);
+    node.style.height = cssLengthValue(item.height, node.style.height);
+    if (Number.isFinite(Number(item.zIndex))) node.style.zIndex = String(Number(item.zIndex));
+    node.style.position = 'absolute';
     node.style.outline = 'none';
     node.style.boxShadow = style.shadow ? node.style.boxShadow : 'none';
+    node.style.background = item.type === 'divider' ? 'transparent' : (style.backgroundColor || node.style.background);
+    node.style.color = item.type === 'icon'
+      ? (style.accentColor || style.textColor || node.style.color)
+      : (style.textColor || node.style.color);
     node.style.borderColor = item.type === 'divider' ? 'transparent' : (style.borderColor || node.style.borderColor);
+    node.style.borderWidth = item.type === 'divider' ? '0px' : cssLengthValue(style.borderWidth, '0px');
+    node.style.borderRadius = item.type === 'divider' ? '0px' : cssLengthValue(style.borderRadius, '0px');
+    node.style.fontSize = cssLengthValue(style.fontSize, node.style.fontSize);
+    node.style.fontWeight = style.fontWeight || node.style.fontWeight;
+    node.style.lineHeight = Number.isFinite(Number(style.lineHeight)) ? String(Number(style.lineHeight)) : node.style.lineHeight;
+    node.style.textAlign = style.alignment || item.alignment || node.style.textAlign;
+    if (item.type !== 'divider') {
+      const padding = style.padding ?? 0;
+      node.style.padding = cssLengthValue(padding, '0px');
+    }
+    if (item.type === 'divider' || item.type === 'spacer') {
+      node.querySelectorAll('*').forEach((child) => {
+        child.textContent = '';
+      });
+    }
     if (item.type === 'image') {
       const img = node.querySelector('img');
       if (img) {
@@ -2012,8 +2119,10 @@ function TemplateCard({ template, canEdit, busyKey, onEdit, onPreview, onDownloa
   const downloadBusy = String(busyKey || '').startsWith(`download-${template.key}`);
   const resetBusy = busyKey === `reset-${template.key}`;
   const busy = Boolean(busyKey);
-  const livePreviewOptions = template.key === 'invoice' ? { intent: 'published' } : undefined;
-  const livePreviewTitle = template.key === 'invoice' ? 'Shows current published invoice template.' : undefined;
+  const publishedDesignAvailable = template.config?.design?.published === true
+    && template.config?.design?.publishedMeta?.templateKey === template.key;
+  const livePreviewOptions = publishedDesignAvailable ? { intent: 'published' } : undefined;
+  const livePreviewTitle = publishedDesignAvailable ? 'Shows the current published design.' : undefined;
   return (
     <article className="surface admin-control-card flex h-full flex-col p-5">
       <div className="flex items-start justify-between gap-3">
@@ -2710,6 +2819,7 @@ function DesignModeWorkspace({
   const designDraftRef = useRef(designDraft);
   const variableCursorRef = useRef(null);
   const clipboardLayerRef = useRef(null);
+  const manifestDefaultAppliedRef = useRef('');
   const freeLayoutWarningShownRef = useRef(false);
   const normalizedSignature = stableJson(normalizedDesign);
   const rawDesignSignature = stableJson(designDraft);
@@ -2762,6 +2872,31 @@ function DesignModeWorkspace({
       cancelled = true;
     };
   }, [template.key, token, draftSignature]);
+
+  useEffect(() => {
+    const manifest = manifestState.data;
+    if (!manifest?.elements?.length || manifest.source === 'placeholder-adapter') return;
+    const sourceDesign = designStateFromConfig(draft);
+    const currentDesign = normalizeDesignState(designDraftRef.current || {});
+    const sourceHasRealManifest = sourceDesign.mode === 'manifest'
+      && sourceDesign.elements.length
+      && !isPlaceholderDesignState(sourceDesign);
+    const currentHasRealManifest = currentDesign.mode === 'manifest'
+      && currentDesign.elements.length
+      && !isPlaceholderDesignState(currentDesign);
+    const shouldReplacePlaceholder = isPlaceholderDesignState(sourceDesign) || isPlaceholderDesignState(currentDesign);
+    if (sourceHasRealManifest || (currentHasRealManifest && !shouldReplacePlaceholder)) return;
+    if ((sourceDesign.elements?.length || currentDesign.elements?.length) && !shouldReplacePlaceholder) return;
+    const applyKey = `${template.key}:${draftSignature}:${manifest.key || ''}:${manifest.elements.length}`;
+    if (manifestDefaultAppliedRef.current === applyKey) return;
+    manifestDefaultAppliedRef.current = applyKey;
+    const manifestDesign = designStateFromManifest(manifest, {
+      ...sourceDesign,
+      savedTemplates: currentDesign.savedTemplates || sourceDesign.savedTemplates || [],
+      canvas: currentDesign.canvas || sourceDesign.canvas || {}
+    });
+    setDesignDraft(manifestDesign);
+  }, [manifestState.data, template.key, draft, draftSignature, setDesignDraft]);
 
   useEffect(() => {
     if (!pages.some((page) => page.id === currentPageId)) setCurrentPageId(pages[0]?.id || 'page-1');
@@ -3276,7 +3411,7 @@ function DesignModeWorkspace({
         savedTemplates: sourceDesign.savedTemplates || [],
         canvas: sourceDesign.canvas || {}
       }));
-    } else if (sourceDesign.published === true && sourceDesign.mode === 'manifest' && sourceDesign.elements.length) {
+    } else if (sourceDesign.published === true && sourceDesign.mode === 'manifest' && sourceDesign.elements.length && !isPlaceholderDesignState(sourceDesign)) {
       setDesignDraft(sourceDesign);
     } else if (manifestState.data?.elements?.length) {
       setDesignDraft(designStateFromManifest(manifestState.data, sourceDesign));
@@ -5620,8 +5755,8 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
           <div className="pdf-table-editor pdf-field-full">
             <div className="pdf-table-editor-head">
               <div>
-                <p>Invoice table structure</p>
-                <span>{tableColumns.length} columns - {content.dynamicRows !== false ? 'uses live invoice items' : 'uses design preview rows'}</span>
+                <p>Table structure</p>
+                <span>{tableColumns.length} columns - {content.dynamicRows !== false ? 'uses live document rows' : 'uses design preview rows'}</span>
               </div>
               <button type="button" className="btn btn-secondary admin-compact-button" disabled={disabled || tableColumns.length >= 8} onClick={addTableColumn}>
                 <Plus className="h-4 w-4" />
@@ -5647,16 +5782,16 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
               ))}
             </div>
           </div>
-          <BuilderToggle label="Dynamic invoice rows" checked={content.dynamicRows !== false} disabled={disabled} onChange={(checked) => patchTableContent({ dynamicRows: checked })} />
+          <BuilderToggle label="Dynamic live rows" checked={content.dynamicRows !== false} disabled={disabled} onChange={(checked) => patchTableContent({ dynamicRows: checked })} />
           <BuilderHint tone="info">
-            Dynamic rows use real invoice items in Draft Preview and published PDFs. Preview rows below remain design-only sample content.
+            Dynamic rows use real document line items in Draft Preview and published PDFs. Preview rows below remain design-only sample content.
           </BuilderHint>
           {content.dynamicRows !== false ? (
             <div className="pdf-table-template-editor pdf-field-full">
               <div className="pdf-table-editor-head">
                 <div>
                   <p>Live row template</p>
-                  <span>Map each invoice column to an existing variable.</span>
+                  <span>Map each table column to an existing variable.</span>
                 </div>
               </div>
               <div className="pdf-table-template-grid">
@@ -7046,10 +7181,8 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     }
     const configToPublish = configOverride || draft;
     const payload = { config: configToPublish };
-    if (activeTemplate.key === 'invoice') {
-      payload.publishedCanvasHtml = snapshot?.publishedCanvasHtml || snapshot?.draftCanvasHtml || '';
-      payload.publishedMeta = snapshot?.publishedMeta || snapshot?.draftMeta || null;
-    }
+    payload.publishedCanvasHtml = snapshot?.publishedCanvasHtml || snapshot?.draftCanvasHtml || '';
+    payload.publishedMeta = snapshot?.publishedMeta || snapshot?.draftMeta || null;
     setSaving(true);
     try {
       const result = await request(`/pdf-templates/${activeTemplate.key}/publish-design`, {

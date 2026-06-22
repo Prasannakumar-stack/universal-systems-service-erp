@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import PDFDocument from 'pdfkit';
 import PdfTemplate from '../models/PdfTemplate.js';
-import { COMPANY, LOGO_FULL_PATH, PDF_DIR } from '../config.js';
+import { COMPANY, LOGO_FULL_PATH, LOGO_ICON_PATH, PDF_DIR } from '../config.js';
 import { hasRole } from '../permissions.js';
 import { appError, clean } from '../utils/http.js';
 import { logAudit } from './auditService.js';
@@ -50,6 +50,22 @@ export const PDF_TEMPLATE_PLACEHOLDERS = [
   '{{final_total}}',
   '{{amount_paid}}',
   '{{balance_due}}',
+  '{{amount_in_words}}',
+  '{{item_index}}',
+  '{{item_description}}',
+  '{{item_quantity}}',
+  '{{item_unit_price}}',
+  '{{item_total}}',
+  '{{quotation_status}}',
+  '{{amc_status}}',
+  '{{visit_status}}',
+  '{{renewal_status}}',
+  '{{plan_name}}',
+  '{{coverage_type}}',
+  '{{covered_for}}',
+  '{{renewal_period}}',
+  '{{technician_notes}}',
+  '{{footer_text}}',
   '{{amc_start_date}}',
   '{{amc_end_date}}',
   '{{next_service_date}}',
@@ -213,6 +229,35 @@ export const PDF_TEMPLATE_DEFINITIONS = [
 ];
 
 const definitionsByKey = new Map(PDF_TEMPLATE_DEFINITIONS.map((definition) => [definition.key, definition]));
+const CURRENT_LAYOUT_REPAIR_KEYS = new Set([
+  'quotation',
+  'service-completed',
+  'amc-contract',
+  'amc-service-visit',
+  'amc-renewal-reminder'
+]);
+const HELPER_LABELS = new Set([
+  'Divider',
+  'dot',
+  'phone',
+  'address',
+  'shield',
+  'handshake',
+  'Icon',
+  'Image / Logo',
+  'Locked'
+]);
+const helperLabelPattern = />\s*(Divider|dot|phone|address|shield|handshake|Icon|Image \/ Logo|Locked)\s*</g;
+const helperNodePattern = /<[^>]+class=(["'])[^"']*(?:pdf-element-lock|pdf-element-grip|pdf-resize-handle|pdf-element-hit-area|pdf-page-break-guide|canvas-debug-label|design-helper|pdf-builder-helper)[^"']*\1[^>]*>[\s\S]*?<\/[^>]+>/gi;
+const designPrefixByKey = {
+  quotation: 'quotation',
+  'service-completed': 'service-completed',
+  'amc-contract': 'amc-contract',
+  'amc-service-visit': 'amc-service-visit',
+  'amc-renewal-reminder': 'amc-renewal-reminder'
+};
+let cachedLogoFullDataUri = '';
+let cachedLogoIconDataUri = '';
 
 function isPlainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
@@ -658,7 +703,27 @@ function normalizeDesignElementType(type = 'text') {
   return advancedSectionTypes.has(normalized) ? normalized : 'text';
 }
 
-function isInvoiceDesignElement(element = {}) {
+const currentLayoutDesignPrefixes = [
+  'invoice',
+  'quotation',
+  'service-completed',
+  'servicecompleted',
+  'amc-contract',
+  'amccontract',
+  'amc-service-visit',
+  'amcservicevisit',
+  'amc-renewal-reminder',
+  'amcrenewalreminder'
+];
+
+function isCurrentLayoutDesignElement(element = {}) {
+  if (
+    element.manifestSource === 'current-pdf-layout'
+    || element.manifest?.source === 'current-pdf-layout'
+    || element.designGenerated === true
+  ) {
+    return true;
+  }
   return [
     element.id,
     element.sourceKey,
@@ -666,7 +731,10 @@ function isInvoiceDesignElement(element = {}) {
     element.manifest?.semanticId
   ].some((value) => {
     const text = String(value || '');
-    return text.startsWith('invoice.') || text.replace(/[^a-z0-9]/gi, '').toLowerCase().startsWith('invoice');
+    const compact = text.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    return currentLayoutDesignPrefixes.some((prefix) => (
+      text.startsWith(`${prefix}.`) || compact.startsWith(prefix.replace(/[^a-z0-9]/gi, ''))
+    ));
   });
 }
 
@@ -677,15 +745,15 @@ function sanitizeDesignColor(value, fallback = '#0f2a52') {
 }
 
 function sanitizeDesignContent(type = 'text', content = {}, element = {}) {
-  const invoiceElement = isInvoiceDesignElement(element);
+  const currentLayoutElement = isCurrentLayoutDesignElement(element);
   const source = isPlainObject(content) ? content : { text: cleanText(content, '', 5000) };
   const common = {
     kind: cleanText(source.kind, type === 'section' ? 'details' : type, 80),
-    label: cleanText(invoiceElement ? source.label : source.label ?? element.label, '', 160),
-    title: cleanText(invoiceElement ? source.title : source.title ?? element.title, '', 160),
-    body: cleanText(invoiceElement ? source.body : source.body ?? element.body, '', 5000),
-    text: cleanText(invoiceElement ? source.text : source.text ?? (typeof element.content === 'string' ? element.content : ''), '', 5000),
-    helperText: cleanText(invoiceElement ? source.helperText : source.helperText ?? element.helperText, '', 1000),
+    label: cleanText(currentLayoutElement ? source.label : source.label ?? element.label, '', 160),
+    title: cleanText(currentLayoutElement ? source.title : source.title ?? element.title, '', 160),
+    body: cleanText(currentLayoutElement ? source.body : source.body ?? element.body, '', 5000),
+    text: cleanText(currentLayoutElement ? source.text : source.text ?? (typeof element.content === 'string' ? element.content : ''), '', 5000),
+    helperText: cleanText(currentLayoutElement ? source.helperText : source.helperText ?? element.helperText, '', 1000),
     name: cleanText(source.name ?? element.personName, '', 160),
     designation: cleanText(source.designation, '', 160),
     iconName: cleanText(source.iconName ?? element.iconName, '', 80),
@@ -712,21 +780,21 @@ function sanitizeDesignContent(type = 'text', content = {}, element = {}) {
       ? source.rows.map((row) => (Array.isArray(row) ? row.map((item) => cleanText(item, '', 160)).slice(0, 8) : [cleanText(row, '', 160)])).slice(0, 12)
       : []
   };
-  if (type === 'card' && !common.title && !common.boxOnly && !invoiceElement) common.title = cleanText(element.name, 'Card title', 160);
+  if (type === 'card' && !common.title && !common.boxOnly && !currentLayoutElement) common.title = cleanText(element.name, 'Card title', 160);
   if (type === 'qr' && !common.label) common.label = 'QR CODE';
   if (type === 'signature' && !common.label) common.label = 'Authorized Signature';
-  if (type === 'table' && !common.title && !invoiceElement) common.title = 'Table';
-  if (type === 'icon' && !common.label && !invoiceElement) common.label = cleanText(source.iconName ?? element.iconName, 'Icon', 80);
-  if ((type === 'divider' || type === 'spacer' || type === 'image') && !common.label && !invoiceElement) common.label = type === 'image' ? 'Image / Logo' : type === 'spacer' ? 'Spacer' : 'Divider';
-  if (type === 'text' && !common.text && !invoiceElement) common.text = cleanText(element.title, 'Text block', 160);
+  if (type === 'table' && !common.title && !currentLayoutElement) common.title = 'Table';
+  if (type === 'icon' && !common.label && !currentLayoutElement) common.label = cleanText(source.iconName ?? element.iconName, 'Icon', 80);
+  if ((type === 'divider' || type === 'spacer' || type === 'image') && !common.label && !currentLayoutElement) common.label = type === 'image' ? 'Image / Logo' : type === 'spacer' ? 'Spacer' : 'Divider';
+  if (type === 'text' && !common.text && !currentLayoutElement) common.text = cleanText(element.title, 'Text block', 160);
   return common;
 }
 
 function sanitizeDesignStyle(style = {}, element = {}) {
   const source = isPlainObject(style) ? style : {};
-  const invoiceElement = isInvoiceDesignElement(element);
+  const currentLayoutElement = isCurrentLayoutDesignElement(element);
   const inferredOrientation = source.orientation
-    || (invoiceElement && element.type === 'divider' && Number(element.height || 0) > Number(element.width || 0) ? 'vertical' : 'horizontal');
+    || (currentLayoutElement && element.type === 'divider' && Number(element.height || 0) > Number(element.width || 0) ? 'vertical' : 'horizontal');
   return {
     accentColor: sanitizeDesignColor(source.accentColor || element.accentColor, '#0284c7'),
     backgroundColor: sanitizeDesignColor(source.backgroundColor || element.backgroundColor, '#ffffff'),
@@ -736,7 +804,7 @@ function sanitizeDesignStyle(style = {}, element = {}) {
     borderWidth: clampNumber(source.borderWidth, 1, 0, 8),
     shadow: boolValue(source.shadow, false),
     opacity: clampNumber(source.opacity, 1, 0, 1),
-    fontSize: clampNumber(source.fontSize, 13, invoiceElement ? 4 : 8, 32),
+    fontSize: clampNumber(source.fontSize, 13, currentLayoutElement ? 4 : 8, 32),
     fontWeight: clampNumber(source.fontWeight, 700, 300, 950),
     alignment: ['left', 'center', 'right'].includes(source.alignment || element.alignment) ? (source.alignment || element.alignment) : 'left',
     rowHeight: clampNumber(source.rowHeight, 18, 12, 34),
@@ -744,7 +812,7 @@ function sanitizeDesignStyle(style = {}, element = {}) {
     paddingX: clampNumber(source.paddingX, 0, 0, 80),
     paddingY: clampNumber(source.paddingY, 0, 0, 80),
     lineHeight: clampNumber(source.lineHeight, 1.16, 0.85, 2.4),
-    dividerThickness: clampNumber(source.dividerThickness, 2, invoiceElement ? 0.1 : 1, 8),
+    dividerThickness: clampNumber(source.dividerThickness, 2, currentLayoutElement ? 0.1 : 1, 8),
     dividerStyle: ['solid', 'dashed', 'dotted'].includes(source.dividerStyle) ? source.dividerStyle : 'solid',
     orientation: ['horizontal', 'vertical'].includes(inferredOrientation) ? inferredOrientation : 'horizontal',
     rotate: clampNumber(source.rotate, 0, -360, 360),
@@ -805,7 +873,7 @@ function sanitizeDesignSection(section = {}, index = 0) {
 
 function sanitizeDesignElement(element = {}, index = 0) {
   const type = normalizeDesignElementType(element.type);
-  const invoiceElement = isInvoiceDesignElement(element);
+  const currentLayoutElement = isCurrentLayoutDesignElement(element);
   const fallbackName = type === 'qr'
     ? 'QR Code'
     : type === 'signature'
@@ -825,8 +893,8 @@ function sanitizeDesignElement(element = {}, index = 0) {
               : 'Text';
   const pageId = clean(element.pageId || 'page-1').replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || 'page-1';
   const content = sanitizeDesignContent(type, element.content, element);
-  const minWidth = invoiceElement ? 0.1 : 24;
-  const minHeight = invoiceElement ? 0.1 : 8;
+  const minWidth = currentLayoutElement ? 0.1 : 24;
+  const minHeight = currentLayoutElement ? 0.1 : 8;
   return {
     id: clean(element.id || `design-element-${index + 1}`).replace(/[^a-z0-9_-]/gi, '').slice(0, 80) || `design-element-${index + 1}`,
     type,
@@ -847,7 +915,7 @@ function sanitizeDesignElement(element = {}, index = 0) {
     twoColumn: boolValue(element.twoColumn ?? content.twoColumn, false),
     pageBreakBefore: boolValue(element.pageBreakBefore, false),
     avoidSplit: boolValue(element.avoidSplit, true),
-    printSafe: invoiceElement ? boolValue(element.printSafe, false) : boolValue(element.printSafe, true),
+    printSafe: currentLayoutElement ? boolValue(element.printSafe, false) : boolValue(element.printSafe, true),
     zIndex: clampNumber(element.zIndex, index + 20, 1, 999),
     sourceSectionId: cleanText(element.sourceSectionId, '', 120),
     sourceKey: cleanText(element.sourceKey, '', 120),
@@ -906,28 +974,46 @@ function byteLength(value = '') {
   return Buffer.byteLength(String(value || ''), 'utf8');
 }
 
-function publishedCanvasSnapshotFrom(source = {}, { strict = false } = {}) {
-  const rawHtml = String(source.publishedCanvasHtml ?? source.publishedHtml ?? '').trim();
+function sanitizePublishedCanvasHtml(html = '') {
+  helperLabelPattern.lastIndex = 0;
+  helperNodePattern.lastIndex = 0;
+  return String(html || '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, '')
+    .replace(/<embed\b[^>]*>[\s\S]*?<\/embed>/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*'[^']*'/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*[^\s>]+/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(helperNodePattern, '')
+    .replace(helperLabelPattern, '><')
+    .trim();
+}
+
+function publishedCanvasSnapshotFrom(source = {}, { strict = false, key = 'invoice' } = {}) {
+  const templateKey = clean(key || 'invoice');
+  const rawHtml = sanitizePublishedCanvasHtml(source.publishedCanvasHtml ?? source.publishedHtml ?? '');
   const rawMeta = source.publishedMeta || {};
   if (!rawHtml) {
-    if (strict) throw appError('Invoice publish requires a captured design canvas', 400);
+    if (strict) throw appError('PDF publish requires a captured design canvas', 400);
     return { publishedHtml: '', publishedMeta: null };
   }
   if (byteLength(rawHtml) > MAX_INVOICE_PUBLISHED_HTML_BYTES) {
-    throw appError('Invoice published design canvas is too large', 413);
+    throw appError('Published design canvas is too large', 413);
   }
   const meta = {
     width: Number(rawMeta.width),
     height: Number(rawMeta.height),
-    templateKey: cleanText(rawMeta.templateKey, 'invoice', 40),
+    templateKey: cleanText(rawMeta.templateKey, templateKey, 40),
     elementCount: clampNumber(rawMeta.elementCount, 0, 0, 2000)
   };
   if (
-    meta.templateKey !== 'invoice'
+    meta.templateKey !== templateKey
     || Math.round(meta.width) !== INVOICE_CANVAS_WIDTH
     || Math.round(meta.height) !== INVOICE_CANVAS_HEIGHT
   ) {
-    if (strict) throw appError('Invoice published design canvas metadata is invalid', 400);
+    if (strict) throw appError('Published design canvas metadata is invalid', 400);
     return { publishedHtml: '', publishedMeta: null };
   }
   return { publishedHtml: rawHtml, publishedMeta: meta };
@@ -945,11 +1031,16 @@ function applyInvoicePublishedSnapshot(config = {}, source = {}, options = {}) {
   return config;
 }
 
-function hasPublishedInvoiceHtml(config = {}) {
+function hasPublishedDesignHtml(config = {}, key = 'invoice') {
+  const templateKey = clean(key || 'invoice');
   return config?.design?.published === true
     && typeof config.design.publishedHtml === 'string'
     && config.design.publishedHtml.trim()
-    && config.design.publishedMeta?.templateKey === 'invoice';
+    && config.design.publishedMeta?.templateKey === templateKey;
+}
+
+function hasPublishedInvoiceHtml(config = {}) {
+  return hasPublishedDesignHtml(config, 'invoice');
 }
 
 function sanitizeColor(value, fallback = '#0f2a52') {
@@ -959,10 +1050,10 @@ function sanitizeColor(value, fallback = '#0f2a52') {
 
 function sanitizeConfig(payload = {}, key = '') {
   const defaults = structuredDefaultsFor(key);
-  const rawPublishedSnapshot = key === 'invoice' ? {
+  const rawPublishedSnapshot = {
     publishedHtml: payload?.design?.publishedHtml,
     publishedMeta: payload?.design?.publishedMeta
-  } : {};
+  };
   let sanitized = deepMerge(defaults, legacyStructuredOverrides(payload, key));
   sanitized = deepMerge(sanitized, payload || {});
   sanitized = sanitizeStrings(sanitized);
@@ -1027,12 +1118,7 @@ function sanitizeConfig(payload = {}, key = '') {
   sanitized.design.layoutGuides = boolValue(sanitized.design.layoutGuides, false);
   sanitized.design.visualElementMode = boolValue(sanitized.design.visualElementMode, true);
   sanitized.design.snapToGrid = boolValue(sanitized.design.snapToGrid, sanitized.design.canvas.snap);
-  if (key === 'invoice') {
-    applyInvoicePublishedSnapshot(sanitized, rawPublishedSnapshot);
-  } else {
-    delete sanitized.design.publishedHtml;
-    delete sanitized.design.publishedMeta;
-  }
+  applyInvoicePublishedSnapshot(sanitized, rawPublishedSnapshot, { key });
   sanitized.design.page = deepMerge(defaults.design.page, sanitized.design.page || {});
   sanitized.design.page.size = sanitized.design.page.size === 'A4' ? 'A4' : 'A4';
   sanitized.design.page.orientation = sanitized.design.page.orientation === 'landscape' ? 'landscape' : 'portrait';
@@ -1047,8 +1133,8 @@ function sanitizeConfig(payload = {}, key = '') {
   const designElementSource = Array.isArray(sanitized.design.customElements) && sanitized.design.customElements.length
     ? sanitized.design.customElements
     : sanitized.design.elements;
-  const invoiceManifestDesign = key === 'invoice' && sanitized.design.mode === 'manifest';
-  const designElementLimit = invoiceManifestDesign ? Number.POSITIVE_INFINITY : 80;
+  const manifestDesign = sanitized.design.mode === 'manifest';
+  const designElementLimit = manifestDesign ? Number.POSITIVE_INFINITY : 80;
   sanitized.design.elements = Array.isArray(designElementSource)
     ? designElementSource.slice(0, designElementLimit).map((element, index) => sanitizeDesignElement(element, index))
     : [];
@@ -1072,7 +1158,7 @@ function sanitizeConfig(payload = {}, key = '') {
         ...sanitized.design.sections.filter((section) => section.pageId === pageId).map((section) => section.id),
         ...sanitized.design.elements.filter((element) => element.pageId === pageId).map((element) => element.id)
       ]
-    }, index, invoiceManifestDesign ? Number.POSITIVE_INFINITY : 180);
+    }, index, manifestDesign ? Number.POSITIVE_INFINITY : 180);
   });
   sanitized.design.sectionOptions = isPlainObject(sanitized.design.sectionOptions) ? sanitized.design.sectionOptions : {};
   if (!sanitized.design.enabled) sanitized.editMode = 'structured';
@@ -1125,6 +1211,361 @@ function sanitizeConfig(payload = {}, key = '') {
   return sanitized;
 }
 
+function htmlEscape(value = '') {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function cssValue(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function cssText(style = {}) {
+  return Object.entries(style)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `${key.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)}:${value}`)
+    .join(';');
+}
+
+function assetDataUri(filePath, fallbackText = COMPANY.name) {
+  if (filePath === LOGO_FULL_PATH && cachedLogoFullDataUri) return cachedLogoFullDataUri;
+  if (filePath === LOGO_ICON_PATH && cachedLogoIconDataUri) return cachedLogoIconDataUri;
+  let uri = '';
+  if (fs.existsSync(filePath)) {
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
+    uri = `data:${mime};base64,${fs.readFileSync(filePath).toString('base64')}`;
+  } else {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="420" height="120" viewBox="0 0 420 120"><rect width="420" height="120" fill="#fff"/><text x="24" y="72" font-family="Arial" font-size="34" font-weight="700" fill="#082a73">${htmlEscape(fallbackText)}</text></svg>`;
+    uri = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  }
+  if (filePath === LOGO_FULL_PATH) cachedLogoFullDataUri = uri;
+  if (filePath === LOGO_ICON_PATH) cachedLogoIconDataUri = uri;
+  return uri;
+}
+
+function jsonAttribute(value) {
+  return encodeURIComponent(JSON.stringify(value));
+}
+
+function imageSourceForPublishedElement(element = {}) {
+  const content = element.content || {};
+  const source = `${content.src || content.imageUrl || content.assetPath || ''} ${content.imageMode || ''} ${element.id || ''}`;
+  return /watermark|logo-icon/i.test(source)
+    ? assetDataUri(LOGO_ICON_PATH, 'US')
+    : assetDataUri(LOGO_FULL_PATH, COMPANY.name);
+}
+
+function publishedElementStyle(element = {}) {
+  const style = element.style || {};
+  const isDivider = element.type === 'divider';
+  const borderWidth = isDivider ? 0 : cssValue(style.borderWidth, 0);
+  return cssText({
+    position: 'absolute',
+    left: `${cssValue(element.x)}px`,
+    top: `${cssValue(element.y)}px`,
+    width: `${Math.max(0.1, cssValue(element.width, 1))}px`,
+    height: `${Math.max(0.1, cssValue(element.height, 1))}px`,
+    zIndex: cssValue(element.zIndex, 20),
+    color: element.type === 'icon' ? (style.accentColor || style.textColor || '#082a73') : (style.textColor || '#1e293b'),
+    background: isDivider ? 'transparent' : (style.backgroundColor || 'transparent'),
+    borderStyle: borderWidth > 0 ? 'solid' : 'none',
+    borderColor: style.borderColor || 'transparent',
+    borderWidth: `${borderWidth}px`,
+    borderRadius: `${isDivider ? 0 : cssValue(style.borderRadius, 0)}px`,
+    boxShadow: style.shadow ? '0 14px 28px rgba(15,23,42,.16)' : 'none',
+    textAlign: style.alignment || element.alignment || 'left',
+    fontSize: `${cssValue(style.fontSize, 10)}px`,
+    fontWeight: style.fontWeight || 700,
+    lineHeight: cssValue(style.lineHeight, 1.16),
+    padding: `${isDivider ? 0 : cssValue(style.padding, 0)}px`,
+    opacity: cssValue(style.opacity, 1),
+    overflow: 'hidden',
+    boxSizing: 'border-box'
+  });
+}
+
+function publishedIconSvg(variant = '') {
+  const name = String(variant || '').toLowerCase();
+  if (name === 'dot') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg>';
+  if (name === 'check' || name === 'completion') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  if (name === 'rupee') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5h10M7 9h10M9 9c6 0 6 8 0 8l7 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  if (name === 'calendar' || name === 'date') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 3v4M16 3v4M4 10h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  if (name === 'phone' || name === 'whatsapp' || name === 'headset') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5l3 4-2 2c2 4 5 6 9 7l2-3 4 2c-1 3-3 4-6 3C9 19 4 14 3 7c0-3 1-5 4-6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  if (name === 'email') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 7l8 6 8-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
+  if (name === 'address') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s7-6 7-12a7 7 0 10-14 0c0 6 7 12 7 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="9" r="2.5" fill="currentColor"/></svg>';
+  if (name === 'shield') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l8 3v6c0 5-3 8-8 10-5-2-8-5-8-10V6l8-3z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 12l3 3 5-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+  if (name === 'handshake') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12l4-5 4 3 4-3 4 5-6 7-2-2-2 2-6-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v10M7 12h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+}
+
+function publishedTableHtml(element = {}) {
+  const content = element.content || {};
+  const style = element.style || {};
+  const columns = Array.isArray(content.columns) && content.columns.length ? content.columns : ['S.No', 'Description', 'Qty', 'Unit Price', 'Total'];
+  const widths = Array.isArray(content.columnWidths) ? content.columnWidths : [];
+  const gridTemplate = widths.length
+    ? columns.map((_column, index) => `${Math.max(0.2, Number(widths[index]) || 1)}fr`).join(' ')
+    : `repeat(${Math.max(1, columns.length)}, minmax(0, 1fr))`;
+  const rowHeight = cssValue(style.rowHeight, 18);
+  const cellStyle = cssText({
+    padding: `${cssValue(style.paddingY, 5)}px ${cssValue(style.paddingX, 4)}px`,
+    textAlign: style.alignment || element.alignment || 'left',
+    minWidth: 0,
+    overflowWrap: 'anywhere',
+    whiteSpace: 'normal'
+  });
+  const rowTemplate = Array.isArray(content.rowTemplate) && content.rowTemplate.length
+    ? content.rowTemplate
+    : ['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}'];
+  const rows = (Array.isArray(content.rows) && content.rows.length ? content.rows : [rowTemplate])
+    .slice(0, Math.max(1, Number(content.previewRowCount || 5)));
+  return `
+    <div class="pdf-canvas-table" data-pdf-invoice-table="true" data-pdf-table-element-id="${htmlEscape(element.id)}" data-pdf-table-dynamic-rows="${content.dynamicRows !== false ? 'true' : 'false'}" data-pdf-table-columns="${jsonAttribute(columns)}" data-pdf-table-row-template="${jsonAttribute(rowTemplate)}" data-pdf-table-row-height="${rowHeight}">
+      ${content.title ? `<p style="margin:0 0 4px 0">${htmlEscape(content.title)}</p>` : ''}
+      <div class="pdf-canvas-table-grid" style="${cssText({ border: `${cssValue(style.borderWidth, 0.7)}px solid ${style.borderColor || '#d8e5f7'}`, borderRadius: '8px', overflow: 'hidden', background: '#fff' })}">
+        <div class="pdf-canvas-table-head" style="${cssText({ display: 'grid', gridTemplateColumns: gridTemplate, minHeight: `${rowHeight}px`, background: style.headerBackgroundColor || style.accentColor || '#0f2a52', color: style.headerTextColor || '#fff' })}">
+          ${columns.slice(0, 6).map((column) => `<span style="${cellStyle}">${htmlEscape(column)}</span>`).join('')}
+        </div>
+        ${rows.map((row, rowIndex) => `<div class="pdf-canvas-table-row" style="${cssText({ display: 'grid', gridTemplateColumns: gridTemplate, minHeight: `${rowHeight}px`, background: rowIndex % 2 ? (style.alternateRowBackgroundColor || '#f8fafc') : (style.rowBackgroundColor || '#fff') })}">${(Array.isArray(row) ? row : [row]).slice(0, columns.length).map((cell) => `<span style="${cellStyle}">${htmlEscape(cell)}</span>`).join('')}</div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function publishedElementBody(element = {}) {
+  const content = element.content || {};
+  const style = element.style || {};
+  if (element.type === 'table') return publishedTableHtml(element);
+  if (element.type === 'icon') {
+    const variant = content.variant || content.iconName || 'generic';
+    return `<div class="pdf-canvas-icon is-vector is-${htmlEscape(variant)} is-symbol-only" style="width:100%;height:100%;display:grid;place-items:center">${publishedIconSvg(variant)}</div>`;
+  }
+  if (element.type === 'divider') {
+    const vertical = style.orientation === 'vertical' || Number(style.rotate) === 90 || cssValue(element.height) > cssValue(element.width);
+    return `<div class="pdf-canvas-divider ${vertical ? 'is-vertical' : ''}" style="${cssText({ width: '100%', height: '100%', borderTop: vertical ? '0' : `${cssValue(style.dividerThickness, 1)}px ${style.dividerStyle || 'solid'} ${style.accentColor || '#082a73'}`, borderLeft: vertical ? `${cssValue(style.dividerThickness, 1)}px ${style.dividerStyle || 'solid'} ${style.accentColor || '#082a73'}` : '0' })}"></div>`;
+  }
+  if (element.type === 'image') {
+    const mode = content.imageMode || (/watermark|logo-icon/i.test(content.assetPath || '') ? 'watermark' : 'logo');
+    return `<div class="pdf-canvas-image has-image is-${htmlEscape(mode)}" style="width:100%;height:100%;display:block;overflow:hidden"><img src="${imageSourceForPublishedElement(element)}" alt="" draggable="false" style="width:100%;height:100%;display:block;object-fit:${content.objectFit || 'contain'};object-position:${content.objectPosition || 'center center'}"/></div>`;
+  }
+  if (element.type === 'card') {
+    if (content.boxOnly) return '<div class="pdf-canvas-card-box" style="width:100%;height:100%"></div>';
+    return `<div class="pdf-canvas-card" style="width:100%;height:100%;display:block;white-space:pre-wrap;overflow:hidden;overflow-wrap:anywhere">${content.title ? `<p style="margin:0 0 4px 0">${htmlEscape(content.title)}</p>` : ''}${content.body ? `<span>${htmlEscape(content.body)}</span>` : ''}</div>`;
+  }
+  return `<div class="pdf-canvas-text" style="width:100%;height:100%;display:block;white-space:pre-wrap;overflow:hidden;overflow-wrap:anywhere">${htmlEscape(content.text || element.content || '')}</div>`;
+}
+
+function publishedElementHtml(element = {}) {
+  if (element.visible === false || element.enabled === false) return '';
+  const background = element.backgroundElement === true || element.content?.backgroundElement === true || /watermark/i.test(element.id || '');
+  return `<div class="pdf-builder-element is-${htmlEscape(element.type || 'text')} ${background ? 'is-background-element' : ''}" data-pdf-layer-id="${htmlEscape(element.id)}" data-pdf-layer-kind="${background ? 'background' : 'element'}" style="${publishedElementStyle(element)}">${publishedElementBody(element)}</div>`;
+}
+
+function currentLayoutDesignFor(key = '', config = {}) {
+  const manifest = buildPdfTemplateManifest(key, config, { company: COMPANY });
+  const elements = (Array.isArray(manifest.elements) ? manifest.elements : []).map((element, index) => sanitizeDesignElement({
+    ...element,
+    id: element.id || `${key}.element${index + 1}`,
+    pageId: element.pageId || `page-${element.page || 1}`,
+    locked: element.locked === true,
+    manifestSource: manifest.source || 'current-pdf-layout',
+    manifestSemanticId: element.manifest?.semanticId || element.id || '',
+    sourceKey: element.manifest?.semanticId || element.id || '',
+    designGenerated: true
+  }, index));
+  const pages = Array.isArray(manifest.pages) && manifest.pages.length
+    ? manifest.pages.map((page, index) => sanitizeDesignPage({
+      id: page.id || `page-${index + 1}`,
+      name: page.name || `Page ${index + 1}`,
+      elements: Array.isArray(page.elements)
+        ? page.elements
+        : elements.filter((element) => (element.pageId || 'page-1') === (page.id || `page-${index + 1}`)).map((element) => element.id)
+    }, index, Number.POSITIVE_INFINITY))
+    : [sanitizeDesignPage({ id: 'page-1', name: 'Page 1', elements: elements.map((element) => element.id) }, 0, Number.POSITIVE_INFINITY)];
+  return {
+    mode: 'manifest',
+    enabled: true,
+    confirmed: true,
+    published: true,
+    previewDraft: false,
+    baseTemplateVersion: 1,
+    overrides: {},
+    lockedDefaultSections: true,
+    blank: false,
+    freeLayoutMode: true,
+    visualElementMode: true,
+    snapToGrid: true,
+    manifestKey: manifest.key || key,
+    manifestSource: manifest.source || 'current-pdf-layout',
+    manifestLabel: manifest.label || 'Current PDF layout',
+    canvas: { size: 'A4', orientation: 'portrait', zoom: 'fit-width', gridSize: 8, snap: true },
+    page: { size: 'A4', orientation: 'portrait', margin: 28, backgroundColor: '#ffffff' },
+    colors: { accentColor: config.header?.accentColor || config.colorAccent || '#0f2a52', cardBackground: '#ffffff', textColor: '#0f172a', borderColor: '#d8e5f7', noticeBackground: '#f1f7ff' },
+    sections: [],
+    elements,
+    customElements: elements,
+    pages,
+    savedTemplates: [],
+    sectionOptions: {}
+  };
+}
+
+function publishedSnapshotForDesign(key = '', design = {}) {
+  const elements = Array.isArray(design.elements) ? design.elements : [];
+  const pages = Array.isArray(design.pages) && design.pages.length ? design.pages : [{ id: 'page-1', name: 'Page 1', elements: elements.map((element) => element.id) }];
+  const htmlPages = pages.map((page, index) => {
+    const pageElements = elements
+      .filter((element) => (element.pageId || 'page-1') === (page.id || 'page-1'))
+      .sort((a, b) => Number(a.zIndex || 0) - Number(b.zIndex || 0));
+    return `<section class="design-print-page" data-pdf-print-page="true" data-pdf-page-id="${htmlEscape(page.id || `page-${index + 1}`)}" data-pdf-page-index="${index + 1}" style="position:relative;width:${INVOICE_CANVAS_WIDTH}px;height:${INVOICE_CANVAS_HEIGHT}px;margin:0;padding:0;overflow:hidden;background:#fff;break-after:${index === pages.length - 1 ? 'auto' : 'page'};page-break-after:${index === pages.length - 1 ? 'auto' : 'always'}"><div class="pdf-a4-page" data-pdf-print-page="true" data-pdf-page-id="${htmlEscape(page.id || `page-${index + 1}`)}" style="position:absolute;left:0;top:0;width:${INVOICE_CANVAS_WIDTH}px;height:${INVOICE_CANVAS_HEIGHT}px;margin:0;padding:0;overflow:hidden;background:#fff">${pageElements.map(publishedElementHtml).join('')}</div></section>`;
+  }).join('');
+  return {
+    publishedHtml: sanitizePublishedCanvasHtml(`<div class="design-print-document" data-pdf-print-document="true" style="width:${INVOICE_CANVAS_WIDTH}px;margin:0;padding:0;background:#fff;overflow:visible">${htmlPages}</div>`),
+    publishedMeta: {
+      width: INVOICE_CANVAS_WIDTH,
+      height: INVOICE_CANVAS_HEIGHT,
+      templateKey: key,
+      elementCount: elements.length,
+      pageCount: pages.length
+    }
+  };
+}
+
+function cleanCurrentLayoutConfig(key = '', config = {}) {
+  const base = sanitizeConfig(config || {}, key);
+  const design = currentLayoutDesignFor(key, base);
+  const snapshot = publishedSnapshotForDesign(key, design);
+  const next = sanitizeConfig({
+    ...base,
+    editMode: 'design',
+    advancedEnabled: true,
+    structured: {
+      ...(base.structured || {}),
+      designModeEnabled: true
+    },
+    design: {
+      ...design,
+      publishedHtml: snapshot.publishedHtml,
+      publishedMeta: snapshot.publishedMeta
+    }
+  }, key);
+  delete next.designDraft;
+  return next;
+}
+
+function helperLabelValue(value = '') {
+  const text = String(value || '').trim();
+  return HELPER_LABELS.has(text);
+}
+
+function designElementsFromState(design = {}) {
+  return [
+    ...(Array.isArray(design.elements) ? design.elements : []),
+    ...(Array.isArray(design.customElements) ? design.customElements : []),
+    ...(Array.isArray(design.sections) ? design.sections : [])
+  ].filter(Boolean);
+}
+
+function isPlaceholderDesignState(design = {}) {
+  const elements = designElementsFromState(design);
+  return design.manifestSource === 'placeholder-adapter'
+    || design.manifest?.source === 'placeholder-adapter'
+    || elements.some((element) => (
+      element?.manifestSource === 'placeholder-adapter'
+      || element?.manifest?.source === 'placeholder-adapter'
+      || String(element?.id || '').includes('safePlaceholder')
+      || String(element?.manifestSemanticId || '').includes('safePlaceholder')
+    ));
+}
+
+function hasGenericBuilderDesignForKey(design = {}, key = '') {
+  const elements = designElementsFromState(design).filter((element) => element.visible !== false && element.enabled !== false);
+  if (!elements.length) return false;
+  const prefix = designPrefixByKey[key] || key;
+  const hasCurrentElement = elements.some(isCurrentLayoutDesignElement);
+  const hasTemplateElement = elements.some((element) => String(element.id || element.sourceKey || element.manifestSemanticId || '').startsWith(`${prefix}.`));
+  return !hasCurrentElement && !hasTemplateElement;
+}
+
+function hasHelperLabelElement(design = {}) {
+  return designElementsFromState(design).some((element) => {
+    const content = element?.content || {};
+    return helperLabelValue(content.label)
+      || helperLabelValue(content.text)
+      || helperLabelValue(content.title)
+      || helperLabelValue(content.body);
+  });
+}
+
+function hasNarrowContactTextFrame(design = {}) {
+  return designElementsFromState(design).some((element) => {
+    if (element?.type !== 'text') return false;
+    const text = String(element.content?.text || element.text || '');
+    if (!text || text.length <= 3 || text === ':') return false;
+    const marker = `${element.id || ''} ${element.sourceKey || ''} ${element.manifestSemanticId || ''} ${text}`.toLowerCase();
+    if (!/(phone|address|email|website|footer|contact|whatsapp|company_)/.test(marker)) return false;
+    const width = Number(element.width || 0);
+    const height = Number(element.height || 0);
+    return width > 0 && width < 32 && height > width * 1.5;
+  });
+}
+
+function hasPublishedSnapshotCorruption(config = {}, key = '') {
+  const design = config?.design || {};
+  const html = String(design.publishedHtml || '');
+  const meta = design.publishedMeta || null;
+  if (design.published === true || html || meta) {
+    if (!html.trim() || !meta || meta.templateKey !== key || Math.round(Number(meta.width || 0)) !== INVOICE_CANVAS_WIDTH || Math.round(Number(meta.height || 0)) !== INVOICE_CANVAS_HEIGHT) return true;
+    if (!/\bdesign-print-document\b/.test(html) || !/\bdesign-print-page\b/.test(html)) return true;
+  }
+  helperLabelPattern.lastIndex = 0;
+  helperNodePattern.lastIndex = 0;
+  const corrupted = helperLabelPattern.test(html) || helperNodePattern.test(html);
+  helperLabelPattern.lastIndex = 0;
+  helperNodePattern.lastIndex = 0;
+  return corrupted;
+}
+
+function currentLayoutRepairReasons(config = {}, key = '') {
+  if (!CURRENT_LAYOUT_REPAIR_KEYS.has(key)) return [];
+  const reasons = [];
+  const design = config?.design || {};
+  const draft = config?.designDraft || null;
+  if (isPlaceholderDesignState(design) || (draft && isPlaceholderDesignState(draft))) reasons.push('placeholder-adapter');
+  if (hasGenericBuilderDesignForKey(design, key) || (draft && hasGenericBuilderDesignForKey(draft, key))) reasons.push('generic-builder-layout');
+  if (hasHelperLabelElement(design) || (draft && hasHelperLabelElement(draft))) reasons.push('helper-label-elements');
+  if (hasNarrowContactTextFrame(design) || (draft && hasNarrowContactTextFrame(draft))) reasons.push('narrow-contact-text');
+  if (hasPublishedSnapshotCorruption(config, key)) reasons.push('published-snapshot');
+  return [...new Set(reasons)];
+}
+
+async function autoRepairCurrentLayoutTemplates() {
+  const templates = await PdfTemplate.find({ key: { $in: [...CURRENT_LAYOUT_REPAIR_KEYS] } });
+  for (const template of templates) {
+    const key = template.key;
+    const before = template.config || {};
+    const reasons = currentLayoutRepairReasons(before, key);
+    if (!reasons.length) continue;
+    addVersionSnapshot(template, 'auto_repaired_current_layout');
+    template.config = cleanCurrentLayoutConfig(key, before);
+    template.version = (template.version || 1) + 1;
+    await template.save();
+    await logAudit({
+      userId: null,
+      action: 'pdf_template_auto_repaired_current_layout',
+      module: 'pdf_template',
+      recordId: template._id,
+      before,
+      after: { key, version: template.version, reasons }
+    }).catch(() => null);
+  }
+}
+
 async function ensurePdfTemplates() {
   await Promise.all(PDF_TEMPLATE_DEFINITIONS.map((definition) => PdfTemplate.findOneAndUpdate(
     { key: definition.key },
@@ -1143,6 +1584,7 @@ async function ensurePdfTemplates() {
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   )));
+  await autoRepairCurrentLayoutTemplates();
 }
 
 function userSummary(user) {
@@ -1319,17 +1761,17 @@ export async function updatePdfTemplate(key, payload = {}, user = null) {
   const before = sanitizeConfig(template.config || {}, normalized);
   const rawConfig = payload.config || payload;
   let nextConfigPayload = rawConfig;
-  if (normalized === 'invoice') {
-    const existingDesign = isPlainObject(before.design) ? before.design : {};
-    const incomingDesign = isPlainObject(rawConfig?.design) ? rawConfig.design : {};
+  const existingDesign = isPlainObject(before.design) ? before.design : {};
+  const incomingDesign = isPlainObject(rawConfig?.design) ? rawConfig.design : {};
+  if (Object.keys(existingDesign).length || Object.keys(incomingDesign).length) {
     nextConfigPayload = {
       ...rawConfig,
       design: {
         ...existingDesign,
         ...incomingDesign,
         published: existingDesign.published === true ? true : incomingDesign.published,
-        publishedHtml: existingDesign.publishedHtml,
-        publishedMeta: existingDesign.publishedMeta
+        publishedHtml: incomingDesign.publishedHtml ?? existingDesign.publishedHtml,
+        publishedMeta: incomingDesign.publishedMeta ?? existingDesign.publishedMeta
       }
     };
     if (rawConfig?.designDraft === undefined && before.designDraft) {
@@ -1389,13 +1831,11 @@ export async function publishInvoiceDesign(key, payload = {}, user = null) {
   const template = await findTemplate(normalized);
   if (!template) throw appError('PDF template not found', 404);
   const before = sanitizeConfig(template.config || {}, normalized);
-  const publishedSnapshot = normalized === 'invoice'
-    ? publishedCanvasSnapshotFrom({
-      publishedCanvasHtml: payload.publishedCanvasHtml,
-      publishedHtml: payload.publishedHtml,
-      publishedMeta: payload.publishedMeta
-    }, { strict: true })
-    : null;
+  const publishedSnapshot = publishedCanvasSnapshotFrom({
+    publishedCanvasHtml: payload.publishedCanvasHtml,
+    publishedHtml: payload.publishedHtml,
+    publishedMeta: payload.publishedMeta
+  }, { strict: true, key: normalized });
   const { config: incomingConfig, design: draftDesign } = draftConfigFromPayload(payload, normalized);
   const publishedDesign = forcePublishedDesignState(draftDesign);
   const backupConfig = sanitizeConfig({
@@ -1420,9 +1860,7 @@ export async function publishInvoiceDesign(key, payload = {}, user = null) {
     },
     design: publishedDesign
   }, normalized);
-  if (normalized === 'invoice') {
-    applyInvoicePublishedSnapshot(nextConfig, publishedSnapshot, { strict: true });
-  }
+  applyInvoicePublishedSnapshot(nextConfig, publishedSnapshot, { strict: true, key: normalized });
   delete nextConfig.designDraft;
   template.config = nextConfig;
   template.version = (template.version || 1) + 1;
@@ -1685,7 +2123,7 @@ function forceDefaultPreviewConfig(config = {}, key = '') {
 function liveGenerationConfig(config = {}, key = '') {
   const next = sanitizeConfig(config || {}, key);
   delete next.designDraft;
-  if (key === 'invoice' && !hasPublishedInvoiceHtml(next)) {
+  if ((key === 'invoice' || next.design?.published === true) && !hasPublishedDesignHtml(next, key)) {
     return forceDefaultPreviewConfig(next, key);
   }
   return next;
@@ -1693,7 +2131,7 @@ function liveGenerationConfig(config = {}, key = '') {
 
 function forcePublishedPreviewConfig(config = {}, key = '') {
   const next = liveGenerationConfig(config || {}, key);
-  if (next.design?.published !== true || (key === 'invoice' && !hasPublishedInvoiceHtml(next))) {
+  if (next.design?.published !== true || !hasPublishedDesignHtml(next, key)) {
     return forceDefaultPreviewConfig(next, key);
   }
   next.editMode = 'design';
@@ -1711,7 +2149,8 @@ function forcePublishedPreviewConfig(config = {}, key = '') {
 }
 
 export function canRenderPublishedInvoiceDom(template = {}) {
-  return template?.key === 'invoice' && hasPublishedInvoiceHtml(template.config || {});
+  const templateKey = clean(template?.key || '');
+  return definitionsByKey.has(templateKey) && hasPublishedDesignHtml(template.config || {}, templateKey);
 }
 
 export async function renderPublishedInvoiceDomTemplate(template = {}, context = {}, filenamePrefix = 'invoice-published-dom') {
@@ -1731,6 +2170,8 @@ export function buildTemplateContext(source = {}, company = COMPANY) {
   const quotationNumber = source.quotationNo || source.quotationNumber || source.quotationNumberDisplay || invoiceNumber;
   const workOrderId = source.workOrderNo || source.workOrderId || '-';
   const amcReference = source.amcContractNo || source.amcReference || source.contractNumber || '-';
+  const amcStart = source.amcStartDate || source.startDate || new Date();
+  const amcEnd = source.amcEndDate || source.endDate || new Date();
   const totalAmount = source.totalAmount ?? source.finalTotal ?? 0;
   const finalTotal = source.finalTotal ?? source.totalAmount ?? 0;
   const amountPaid = source.amountPaid ?? source.paidAmount ?? 0;
@@ -1763,6 +2204,7 @@ export function buildTemplateContext(source = {}, company = COMPANY) {
     invoice_number: invoiceNumber,
     invoice_date: formatDate(source.invoiceDate || new Date()),
     payment_status: source.paymentStatus || source.status || '-',
+    quotation_status: source.quotationStatus || source.status || 'Pending Approval',
     quotation_no: quotationNumber,
     quotation_number: quotationNumber,
     quotation_date: formatDate(source.quotationDate || source.invoiceDate || new Date()),
@@ -1770,6 +2212,13 @@ export function buildTemplateContext(source = {}, company = COMPANY) {
     work_order_id: workOrderId,
     amc_contract_no: amcReference,
     amc_reference: amcReference,
+    amc_status: source.amcStatus || source.status || 'Active',
+    visit_status: source.visitStatus || source.status || 'Completed',
+    renewal_status: source.renewalStatus || 'Renewal Due',
+    plan_name: source.planName || serviceName,
+    coverage_type: source.coverageType || 'Service Support',
+    covered_for: source.coveredFor || safeTemplateValue(source.device) || safeTemplateValue(source.deviceName) || '-',
+    renewal_period: source.renewalPeriod || `${formatDate(amcEnd)} to ${formatDate(source.renewalEndDate || new Date(new Date(amcEnd).getFullYear() + 1, new Date(amcEnd).getMonth(), new Date(amcEnd).getDate()))}`,
     service_name: serviceName,
     service_type: safeTemplateValue(source.serviceType) || serviceName,
     device: safeTemplateValue(source.device) || '-',
@@ -1786,14 +2235,16 @@ export function buildTemplateContext(source = {}, company = COMPANY) {
     amount_paid: formatAmount(amountPaid),
     balance_due: formatAmount(balanceDue),
     amount_in_words: resolvedAmountInWords(source, finalTotal),
+    footer_text: source.footerText || '-',
+    technician_notes: source.technicianNotes || source.notes || 'AMC visit completed successfully.',
     item_index: invoiceItems[0]?.item_index || '1',
     item_description: invoiceItems[0]?.item_description || '-',
     item_quantity: invoiceItems[0]?.item_quantity || '1',
     item_unit_price: invoiceItems[0]?.item_unit_price || formatAmount(0),
     item_total: invoiceItems[0]?.item_total || formatAmount(0),
     invoice_items: invoiceItems,
-    amc_start_date: formatDate(source.amcStartDate),
-    amc_end_date: formatDate(source.amcEndDate),
+    amc_start_date: formatDate(amcStart),
+    amc_end_date: formatDate(amcEnd),
     next_service_date: formatDate(source.nextServiceDate),
     current_date: formatDate(source.currentDate || new Date())
   };
@@ -1827,6 +2278,26 @@ export function workOrderTemplateContext(workOrder = {}, company = COMPANY) {
     : contract.contractValue != null
       ? Number(contract.contractValue || 0)
       : fallbackTotal;
+  const workOrderItems = [];
+  const serviceCharge = Number(workOrder.serviceCharge || 0);
+  if (serviceCharge > 0) {
+    workOrderItems.push({
+      description: `${workOrder.serviceType || workOrder.device || 'Service'} Charge`,
+      quantity: 1,
+      unitPrice: serviceCharge,
+      total: serviceCharge
+    });
+  }
+  (Array.isArray(workOrder.partsUsed) ? workOrder.partsUsed : []).forEach((part) => {
+    const quantity = Number(part.quantity || part.qty || 1);
+    const unitPrice = Number(part.unitPrice ?? part.price ?? part.rate ?? 0);
+    workOrderItems.push({
+      description: part.name || part.partName || part.description || 'Part',
+      quantity,
+      unitPrice,
+      total: Number(part.total ?? quantity * unitPrice)
+    });
+  });
   const brandModel = [workOrder.deviceBrand, workOrder.deviceModel].map((value) => String(value || '').trim()).filter(Boolean).join(' ')
     || workOrder.brandModel
     || workOrder.deviceModel
@@ -1837,8 +2308,16 @@ export function workOrderTemplateContext(workOrder = {}, company = COMPANY) {
     customerAddress: customer.address,
     invoiceNumber: invoice.invoiceNumber,
     invoiceDate: invoice.createdAt || new Date(),
+    quotationStatus: 'Pending Approval',
     workOrderId: workOrder.bookingId?.bookingCode || `WO-${String(workOrder._id || '').slice(-6).toUpperCase()}`,
     amcReference: contract.contractNumber || contract.amcReference || contract.referenceNo,
+    amcStatus: contract.status || 'Active',
+    visitStatus: 'Completed',
+    renewalStatus: 'Renewal Due',
+    planName: contract.planName || contract.contractType || 'Computer AMC Support',
+    coverageType: contract.coverageType || 'Service Support',
+    coveredFor: contract.coveredFor || workOrder.device || contract.contractType,
+    technicianNotes: workOrder.technicianNotes || workOrder.notes || 'AMC visit completed successfully.',
     serviceName: workOrder.serviceType || workOrder.device || contract.contractType,
     serviceType: workOrder.serviceType || contract.contractType,
     device: workOrder.device,
@@ -1851,7 +2330,11 @@ export function workOrderTemplateContext(workOrder = {}, company = COMPANY) {
     balanceDue: invoice.balance ?? contract.balance,
     amcStartDate: contract.startDate,
     amcEndDate: contract.endDate,
-    nextServiceDate: nextVisit?.scheduledDate
+    renewalPeriod: contract.endDate
+      ? `${formatDate(contract.endDate)} to ${formatDate(new Date(new Date(contract.endDate).getFullYear() + 1, new Date(contract.endDate).getMonth(), new Date(contract.endDate).getDate()))}`
+      : undefined,
+    nextServiceDate: nextVisit?.scheduledDate,
+    items: workOrderItems
   }, company);
 }
 
@@ -1863,6 +2346,17 @@ export function documentTemplateContext(document = {}, company = COMPANY) {
     || workOrder.brandModel
     || workOrder.deviceModel
     || workOrder.model;
+  const documentItems = [
+    ...(Number(document.serviceCharge || 0) > 0
+      ? [{ description: 'General Service', quantity: 1, unitPrice: document.serviceCharge, total: document.serviceCharge }]
+      : []),
+    ...(Array.isArray(document.items) ? document.items : []).map((item) => ({
+      description: item.name || item.description || 'Item',
+      quantity: item.quantity || 1,
+      unitPrice: item.price ?? item.unitPrice ?? 0,
+      total: item.subtotal ?? item.total ?? 0
+    }))
+  ];
   return buildTemplateContext({
     customerName: customer.name,
     customerPhone: customer.phone,
@@ -1880,7 +2374,8 @@ export function documentTemplateContext(document = {}, company = COMPANY) {
     totalAmount: document.totalAmount || invoice.total || 0,
     finalTotal: document.finalTotal || invoice.total || document.totalAmount || 0,
     amountPaid: document.amountPaid || invoice.amountPaid || invoice.paidAmount || 0,
-    balanceDue: document.balanceDue || invoice.balance || 0
+    balanceDue: document.balanceDue || invoice.balance || 0,
+    items: documentItems
   }, company);
 }
 
@@ -1895,9 +2390,17 @@ function sampleContextFor(key, company = COMPANY) {
     customerAddress: 'Mettur Dam, Salem',
     invoiceNumber: key === 'quotation' ? 'QUO-2026-0066' : 'INV-2026-0089',
     quotationNumber: 'QUO-2026-0066',
+    quotationStatus: 'Pending Approval',
     invoiceDate: now,
     workOrderId: 'WO-2026-0123',
     amcReference: 'AMC-2026-0012',
+    amcStatus: 'Active',
+    visitStatus: 'Completed',
+    renewalStatus: 'Renewal Due',
+    planName: 'Computer AMC Support',
+    coverageType: 'Service Support',
+    coveredFor: 'Desktop / Laptop / Computer System',
+    technicianNotes: 'AMC visit completed successfully.\nNo major issue found.',
     serviceName: key.startsWith('amc') ? 'Computer AMC Support' : 'Laptop Service',
     serviceType: key.startsWith('amc') ? 'AMC Support' : 'Laptop Service',
     device: 'Laptop',
@@ -2044,7 +2547,7 @@ export async function generatePdfTemplatePreview(key, options = {}) {
     return renderPublishedInvoiceDomTemplate(
       template,
       sampleContextFor(template.key, fallbackCompany(company)),
-      'invoice-published-template-preview'
+      `${template.key}-published-template-preview`
     );
   }
   fs.mkdirSync(PDF_DIR, { recursive: true });

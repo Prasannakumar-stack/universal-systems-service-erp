@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CalendarClock,
@@ -97,6 +97,7 @@ function getBookingErrorMessage(error) {
 
 export default function BookService() {
   const { settings, contact, booking } = usePublicWebsiteSettings();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const requestedService = searchParams.get('service')?.trim() || '';
   const servicesFromSettings = useMemo(() => visiblePublicServices(settings).map((service) => service.title), [settings]);
@@ -114,6 +115,8 @@ export default function BookService() {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const inputRef = useRef(null);
+  const bookingFormRef = useRef(null);
+  const customerNameInputRef = useRef(null);
   const { push } = useToast();
 
   const progress = useMemo(() => Math.round((step / totalSteps) * 100), [step]);
@@ -132,6 +135,29 @@ export default function BookService() {
       return nextErrors;
     });
   }, [queryServiceType]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const scrollToBookingForm = () => {
+      const target = bookingFormRef.current || document.getElementById('booking-customer-details');
+      if (!target) return;
+      const headerHeight = document.querySelector('.public-header')?.getBoundingClientRect?.().height || 0;
+      const top = Math.max(0, window.scrollY + target.getBoundingClientRect().top - headerHeight - 16);
+      window.scrollTo({ top, behavior: 'auto' });
+    };
+
+    let timeoutId = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      scrollToBookingForm();
+      timeoutId = window.setTimeout(scrollToBookingForm, 60);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [location.pathname, location.search]);
 
   function update(field, value) {
     setSubmitError('');
@@ -338,7 +364,7 @@ export default function BookService() {
           </div>
         </section>
 
-        <form className="booking-form-card" onSubmit={submit}>
+        <form id="booking-customer-details" ref={bookingFormRef} className="booking-form-card" onSubmit={submit}>
           <div className="booking-stepper-panel">
             <div className="booking-stepper" aria-label="Booking progress">
               {bookingSteps.map((label, index) => {
@@ -370,6 +396,7 @@ export default function BookService() {
                   <label className="label" htmlFor="booking-customer-name">Customer name</label>
                   <input
                     id="booking-customer-name"
+                    ref={customerNameInputRef}
                     className="input"
                     autoComplete="name"
                     aria-invalid={fieldErrors.customerName ? 'true' : 'false'}

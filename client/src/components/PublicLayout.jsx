@@ -303,9 +303,6 @@ function PublicLayoutShell() {
         </div>
         <div className="footer-copyright border-t border-[var(--line)] py-4 text-center text-xs muted">
           <span>&copy; 2026 Universal Systems. All rights reserved.</span>
-          <a className="footer-staff-link" href="/app" aria-label="Open Universal Systems staff app">
-            Staff App
-          </a>
         </div>
       </footer>
     </div>

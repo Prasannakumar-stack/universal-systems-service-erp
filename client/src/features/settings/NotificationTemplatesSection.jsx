@@ -43,6 +43,7 @@ const categoryOptions = ['All', 'Booking', 'Work Order', 'Quotation', 'Parts', '
 const statusFilterOptions = ['All', 'Enabled', 'Disabled'];
 const typeFilterOptions = ['All', 'Default', 'Custom'];
 const pageSizeOptions = [10, 25, 50];
+const MORE_VARIABLES_GROUP = '__more_variables__';
 
 const variableGroups = [
   {
@@ -85,6 +86,12 @@ const variableGroups = [
 
 const validVariables = variableGroups.flatMap((group) => group.variables);
 const validVariableSet = new Set(validVariables);
+const legacyVariableReplacementMap = {
+  phone: '{{customerPhone}}',
+  whatsapp: '{{companyWhatsApp}}',
+  email: '{{companyEmail}}',
+  address: '{{companyAddress}}'
+};
 const legacyVariableSuggestions = {
   '{{phone}}': ['{{customerPhone}}', '{{companyPhone}}'],
   '{{whatsapp}}': ['{{companyWhatsApp}}', '{{customerPhone}}'],
@@ -201,6 +208,13 @@ function smsMessage(message) {
   return message.length > 220 ? `${message.slice(0, 217)}...` : message;
 }
 
+function normalizeLegacyVariableAliases(value = '') {
+  return String(value || '').replace(/{{\s*([^{}]+?)\s*}}/g, (match, name) => {
+    const replacement = legacyVariableReplacementMap[String(name || '').trim()];
+    return replacement || match;
+  });
+}
+
 function templateFromSeed(item) {
   const [key, name, category, description, triggerEvent, audience, supportsAttachment, message, subject] = item;
   return {
@@ -278,6 +292,17 @@ function invalidVariableMessage(token) {
     : `Invalid variable ${token}. Use a variable from the panel.`;
 }
 
+function relevantVariableGroupsForCategory(category = '') {
+  const normalized = String(category || '').trim();
+  if (normalized === 'Booking') return ['Customer', 'Booking', 'Company'];
+  if (normalized === 'Work Order') return ['Customer', 'Technician / Work Order', 'Company'];
+  if (normalized === 'Quotation') return ['Customer', 'Quotation', 'Company'];
+  if (normalized === 'Billing' || normalized === 'Payment') return ['Customer', 'Billing / Invoice', 'Company'];
+  if (normalized === 'AMC') return ['Customer', 'AMC', 'Company'];
+  if (normalized === 'Warranty') return ['Customer', 'Warranty', 'Company'];
+  return ['Customer', 'Company'];
+}
+
 function normalizeTemplate(item = {}, fallback = {}) {
   const key = String(item.key || item.id || fallback.key || `custom_${Date.now()}`).trim();
   return {
@@ -292,16 +317,16 @@ function normalizeTemplate(item = {}, fallback = {}) {
     channels: {
       whatsapp: {
         enabled: item.channels?.whatsapp?.enabled ?? fallback.channels?.whatsapp?.enabled ?? true,
-        message: String(item.channels?.whatsapp?.message ?? item.whatsapp ?? fallback.channels?.whatsapp?.message ?? '')
+        message: normalizeLegacyVariableAliases(item.channels?.whatsapp?.message ?? item.whatsapp ?? fallback.channels?.whatsapp?.message ?? '')
       },
       sms: {
         enabled: item.channels?.sms?.enabled ?? fallback.channels?.sms?.enabled ?? true,
-        message: String(item.channels?.sms?.message ?? item.sms ?? fallback.channels?.sms?.message ?? '')
+        message: normalizeLegacyVariableAliases(item.channels?.sms?.message ?? item.sms ?? fallback.channels?.sms?.message ?? '')
       },
       email: {
         enabled: item.channels?.email?.enabled ?? fallback.channels?.email?.enabled ?? true,
-        subject: String(item.channels?.email?.subject ?? item.emailSubject ?? fallback.channels?.email?.subject ?? ''),
-        body: String(item.channels?.email?.body ?? item.channels?.email?.message ?? item.email ?? fallback.channels?.email?.body ?? '')
+        subject: normalizeLegacyVariableAliases(item.channels?.email?.subject ?? item.emailSubject ?? fallback.channels?.email?.subject ?? ''),
+        body: normalizeLegacyVariableAliases(item.channels?.email?.body ?? item.channels?.email?.message ?? item.email ?? fallback.channels?.email?.body ?? '')
       }
     },
     allowedVariables: Array.isArray(item.allowedVariables) && item.allowedVariables.length ? item.allowedVariables : (fallback.allowedVariables || validVariables),
@@ -432,8 +457,8 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
   const [menuKey, setMenuKey] = useState(null);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showIntegrations, setShowIntegrations] = useState(false);
-  const [variablesCollapsed, setVariablesCollapsed] = useState(false);
-  const [openVariableGroups, setOpenVariableGroups] = useState(() => new Set(variableGroups.map((group) => group.label)));
+  const [openVariableGroups, setOpenVariableGroups] = useState(() => new Set(['Customer', 'Company']));
+  const [variableSearch, setVariableSearch] = useState('');
   const whatsappRef = useRef(null);
   const smsRef = useRef(null);
   const emailSubjectRef = useRef(null);
@@ -454,6 +479,14 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
 
   const templates = draft.templates || [];
   const activeTemplate = templates.find((template) => template.key === editorKey) || null;
+  const activeTemplateKey = activeTemplate?.key || '';
+  const activeTemplateCategory = activeTemplate?.category || '';
+  const invalidTemplateMap = useMemo(() => new Map(templates.map((template) => [template.key, invalidVariablesForTemplate(template)])), [templates]);
+  const activeInvalidVariables = activeTemplate ? (invalidTemplateMap.get(activeTemplate.key) || []) : [];
+  const invalidTemplateCount = useMemo(() => Array.from(invalidTemplateMap.values()).filter((items) => items.length).length, [invalidTemplateMap]);
+  const channelsPending = channelOptions.filter((channel) => !providerConnected(channel.id)).length;
+  const readyTemplateCount = templates.filter((template) => template.enabled && !(invalidTemplateMap.get(template.key) || []).length).length;
+  const connectedChannelCount = channelOptions.length - channelsPending;
   const filteredTemplates = useMemo(() => {
     const query = search.trim().toLowerCase();
     return templates.filter((template) => {
@@ -471,6 +504,33 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
       return matchesSearch && matchesCategory && matchesStatus && matchesType;
     });
   }, [templates, search, categoryFilter, statusFilter, typeFilter]);
+  const summaryCards = [
+    { label: 'Total Templates', value: templates.length, tone: 'neutral', helper: `${filteredTemplates.length} matching current filters` },
+    { label: 'Ready', value: readyTemplateCount, tone: 'ready', helper: 'Enabled with supported variables' },
+    { label: 'Need Fix', value: invalidTemplateCount, tone: invalidTemplateCount ? 'warning' : 'ready', helper: invalidTemplateCount ? `${invalidTemplateCount} template${invalidTemplateCount === 1 ? '' : 's'} need variable fixes` : 'No invalid variables' },
+    { label: 'Channels Pending', value: channelsPending, tone: channelsPending ? 'pending' : 'ready', helper: channelsPending ? 'Integration setup pending' : 'All channels connected' }
+  ];
+  const variableSearchQuery = variableSearch.trim().toLowerCase();
+  const relevantVariableLabels = activeTemplate ? relevantVariableGroupsForCategory(activeTemplate.category) : ['Customer', 'Company'];
+  const filteredVariableGroups = useMemo(() => {
+    return variableGroups
+      .map((group) => ({
+        ...group,
+        variables: group.variables.filter((variable) => {
+          if (!variableSearchQuery) return true;
+          return `${group.label} ${variable}`.toLowerCase().includes(variableSearchQuery);
+        })
+      }))
+      .filter((group) => group.variables.length);
+  }, [variableSearchQuery]);
+  const primaryVariableGroups = filteredVariableGroups.filter((group) => relevantVariableLabels.includes(group.label));
+  const secondaryVariableGroups = filteredVariableGroups.filter((group) => !relevantVariableLabels.includes(group.label));
+
+  useEffect(() => {
+    if (!activeTemplateKey) return;
+    setVariableSearch('');
+    setOpenVariableGroups(new Set(relevantVariableGroupsForCategory(activeTemplateCategory)));
+  }, [activeTemplateKey, activeTemplateCategory]);
 
   const pageCount = Math.max(1, Math.ceil(filteredTemplates.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -500,6 +560,26 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
 
   function providerConnected(channelId) {
     return Boolean(draft.providers?.[channelId]?.connected);
+  }
+
+  function isVariableGroupOpen(groupLabel, hasMatches = true) {
+    if (variableSearchQuery) return hasMatches;
+    return openVariableGroups.has(groupLabel);
+  }
+
+  function toggleVariableGroup(groupLabel) {
+    setOpenVariableGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupLabel)) next.delete(groupLabel);
+      else next.add(groupLabel);
+      return next;
+    });
+  }
+
+  function templateStatus(template, invalidVariables = []) {
+    if (invalidVariables.length) return { label: 'Need Fix', tone: 'fix', title: 'Unsupported variable. Replace with a supported variable from the list.' };
+    if (!template.enabled) return { label: 'Disabled', tone: 'disabled', title: 'Template is disabled.' };
+    return { label: 'Ready', tone: 'ready', title: 'Template is ready.' };
   }
 
   function setChannelValue(templateKey, channelId, field, value) {
@@ -616,6 +696,22 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
     push('Notification templates reset to defaults', 'info');
   }
 
+  function resetActiveTemplateChanges() {
+    if (!activeTemplate) return;
+    const savedTemplate = saved.templates?.find((template) => template.key === activeTemplate.key);
+    const defaultTemplate = defaultNotificationState().templates.find((template) => template.key === activeTemplate.key);
+    const resetTemplate = savedTemplate || defaultTemplate;
+    if (!resetTemplate) {
+      push('No saved version is available for this custom template yet.', 'info');
+      return;
+    }
+    setDraft((current) => ({
+      ...current,
+      templates: current.templates.map((template) => template.key === activeTemplate.key ? clonePlain(resetTemplate) : template)
+    }));
+    push('Template changes reset', 'info');
+  }
+
   function deleteCustomTemplate(templateKey) {
     setDraft((current) => ({ ...current, templates: current.templates.filter((template) => template.key !== templateKey) }));
     if (editorKey === templateKey) setEditorKey(null);
@@ -680,6 +776,28 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
         <p className="notification-permission-warning">Only admin users with notification template permission can save changes.</p>
       ) : null}
 
+      <section className="notification-summary-grid" aria-label="Notification template summary">
+        {summaryCards.map((card) => (
+          <div key={card.label} className={`notification-summary-card is-${card.tone}`}>
+            <span>{card.label}</span>
+            <strong>{card.value}</strong>
+            <p>{card.helper}</p>
+          </div>
+        ))}
+      </section>
+
+      {invalidTemplateCount ? (
+        <div className="notification-soft-alert is-warning">
+          <AlertTriangle className="h-4 w-4" />
+          <span>{invalidTemplateCount} template{invalidTemplateCount === 1 ? '' : 's'} need variable fixes</span>
+        </div>
+      ) : (
+        <div className="notification-soft-alert is-calm">
+          <CheckCircle2 className="h-4 w-4" />
+          <span>No invalid variables</span>
+        </div>
+      )}
+
       <section className="notification-integration-row" aria-label="Notification integration status">
         {channelOptions.map(({ id, label, Icon }) => {
           const connected = providerConnected(id);
@@ -689,7 +807,7 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
                 <Icon className="h-4 w-4" />
                 <div>
                   <span>{label}</span>
-                  <strong>{connected ? 'Connected' : 'Not Connected'}</strong>
+                  <strong>{connected ? 'Connected' : 'Integration setup pending'}</strong>
                 </div>
               </div>
               <span className="notification-status-dot" aria-hidden="true" />
@@ -697,8 +815,11 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
           );
         })}
       </section>
+      {!connectedChannelCount ? (
+        <p className="notification-empty-note">No connected channels yet. Templates can still be prepared and saved while integrations are pending.</p>
+      ) : null}
 
-      <div className={`notification-workspace ${variablesCollapsed ? 'is-variables-collapsed' : ''}`}>
+      <div className="notification-workspace">
         <main className="notification-main">
           <section className="surface admin-control-card notification-toolbar">
             <label className="notification-search">
@@ -731,7 +852,8 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
                 {pageTemplates.map((template) => {
                   const meta = categoryMeta(template.category);
                   const Icon = meta.Icon;
-                  const invalidVariables = invalidVariablesForTemplate(template);
+                  const invalidVariables = invalidTemplateMap.get(template.key) || [];
+                  const status = templateStatus(template, invalidVariables);
                   const anyConnected = channelOptions.some((channel) => providerConnected(channel.id) && template.channels?.[channel.id]?.enabled);
                   const sendTestTitle = anyConnected ? 'Send a test notification' : 'Connect integration first.';
                   return (
@@ -742,29 +864,25 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
                           <div className="notification-row-title">
                             <h3>{template.name}</h3>
                             <span className="notification-category-badge">{template.category}</span>
-                            <span className={`notification-type-badge ${template.isCustom ? 'is-custom' : ''}`}>{template.isCustom ? 'Custom' : 'Default'}</span>
                           </div>
                           <p className="notification-row-preview">{previewText(template)}</p>
-                          <div className="notification-row-meta">
-                            <span>{template.description}</span>
-                            <span>{template.triggerEvent} {'->'} {template.audience}</span>
-                            <span>{formatLastEdited(template)}</span>
-                            {invalidVariables.length ? <span className="notification-inline-warning"><AlertTriangle className="h-3.5 w-3.5" /> {invalidVariables.length} invalid variable{invalidVariables.length === 1 ? '' : 's'}</span> : null}
-                          </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className={`notification-toggle ${template.enabled ? 'is-on' : 'is-off'}`}
-                        disabled={!canEdit || saving}
-                        aria-pressed={template.enabled}
-                        onClick={() => updateTemplate(template.key, { enabled: !template.enabled })}
-                      >
-                        <span aria-hidden="true" />
-                        <strong>{template.enabled ? 'Enabled' : 'Disabled'}</strong>
-                      </button>
+                      <div className="notification-row-status">
+                        <span className={`notification-status-badge is-${status.tone}`} title={status.title}>{status.label}</span>
+                        <button
+                          type="button"
+                          className={`notification-toggle ${template.enabled ? 'is-on' : 'is-off'}`}
+                          disabled={!canEdit || saving}
+                          aria-pressed={template.enabled}
+                          onClick={() => updateTemplate(template.key, { enabled: !template.enabled })}
+                        >
+                          <span aria-hidden="true" />
+                          <strong>{template.enabled ? 'Enabled' : 'Disabled'}</strong>
+                        </button>
+                      </div>
                       <div className="notification-row-actions">
-                        <button type="button" className="btn btn-secondary admin-table-button" onMouseDown={(event) => openEditorAction(event, template.key)} onClick={(event) => openEditorAction(event, template.key)}>
+                        <button type="button" className="btn btn-primary admin-table-button notification-row-edit-action" onMouseDown={(event) => openEditorAction(event, template.key)} onClick={(event) => openEditorAction(event, template.key)}>
                           <Edit3 className="h-4 w-4" />
                           Edit
                         </button>
@@ -820,59 +938,6 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
             </div>
           </section>
         </main>
-
-        <aside className={`surface admin-control-card notification-variables-panel ${variablesCollapsed ? 'is-collapsed' : ''}`}>
-          <div className="notification-variables-header">
-            <div>
-              <h3>Variables</h3>
-              <p>Click to insert into the active editor field.</p>
-            </div>
-            <button
-              type="button"
-              className="icon-button h-9 w-9 notification-variable-collapse"
-              onClick={() => setVariablesCollapsed((value) => !value)}
-              aria-label={variablesCollapsed ? 'Expand variables panel' : 'Collapse variables panel'}
-              title={variablesCollapsed ? 'Expand variables panel' : 'Collapse variables panel'}
-            >
-              {variablesCollapsed ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            </button>
-          </div>
-          {variablesCollapsed ? (
-            <div className="notification-variable-collapsed-icon" aria-hidden="true"><Hash className="h-5 w-5" /></div>
-          ) : (
-            <div className="notification-variable-accordions">
-              {variableGroups.map((group) => {
-                const open = openVariableGroups.has(group.label);
-                return (
-                  <section key={group.label} className="notification-variable-group">
-                    <button
-                      type="button"
-                      className="notification-variable-group-toggle"
-                      onClick={() => setOpenVariableGroups((current) => {
-                        const next = new Set(current);
-                        if (next.has(group.label)) next.delete(group.label);
-                        else next.add(group.label);
-                        return next;
-                      })}
-                    >
-                      <span>{group.label}</span>
-                      <ChevronDown className={`h-4 w-4 ${open ? 'rotate-180' : ''}`} />
-                    </button>
-                    {open ? (
-                      <div className="notification-variable-chip-list">
-                        {group.variables.map((variable) => (
-                          <button key={variable} type="button" className="notification-variable-chip" onClick={() => insertVariable(variable)}>
-                            {variable}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </section>
-                );
-              })}
-            </div>
-          )}
-        </aside>
       </div>
 
       {activeTemplate ? (
@@ -962,34 +1027,121 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
                     </label>
                   </div>
                 ) : null}
-                {invalidVariablesForTemplate(activeTemplate).length ? (
+                {activeInvalidVariables.length ? (
                   <div className="notification-invalid-box">
                     <AlertTriangle className="h-4 w-4" />
                     <div>
-                      {invalidVariablesForTemplate(activeTemplate).map((token) => <p key={token}>{invalidVariableMessage(token)}</p>)}
+                      <strong>Unsupported variable. Replace with a supported variable from the list.</strong>
+                      {activeInvalidVariables.map((token) => <p key={token}>{invalidVariableMessage(token)}</p>)}
                     </div>
                   </div>
-                ) : null}
-                <div className="notification-insert-row">
-                  <span>Insert variable</span>
-                  <div className="notification-inline-variable-list">
-                    {validVariables.slice(0, 8).map((variable) => (
-                      <button key={variable} type="button" className="notification-variable-chip" onClick={() => insertVariable(variable)}>{variable}</button>
-                    ))}
+                ) : (
+                  <div className="notification-invalid-box is-empty">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <div>
+                      <strong>No invalid variables</strong>
+                      <p>This template uses supported variable names.</p>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
-              <aside className="notification-live-preview">
-                <h4>Live Preview</h4>
-                <p>{activeChannel === 'email' ? replaceVariables(activeTemplate.channels.email.subject) : channelOptions.find((item) => item.id === activeChannel)?.label}</p>
-                <div>{replaceVariables(activeChannel === 'email' ? activeTemplate.channels.email.body : activeTemplate.channels[activeChannel].message)}</div>
+              <aside className="notification-editor-side">
+                <section className="notification-drawer-variables">
+                  <div className="notification-variables-header">
+                    <div>
+                      <h3>Variables</h3>
+                      <p>Search and click to insert into the active editor field.</p>
+                    </div>
+                  </div>
+                  <label className="notification-variable-search">
+                    <Search className="h-4 w-4" />
+                    <input value={variableSearch} onChange={(event) => setVariableSearch(event.target.value)} placeholder="Search variables..." />
+                  </label>
+                  <div className="notification-variable-accordions">
+                    {primaryVariableGroups.map((group) => {
+                      const open = isVariableGroupOpen(group.label, group.variables.length > 0);
+                      return (
+                        <section key={group.label} className="notification-variable-group">
+                          <button
+                            type="button"
+                            className="notification-variable-group-toggle"
+                            onClick={() => toggleVariableGroup(group.label)}
+                          >
+                            <span>{group.label}</span>
+                            <ChevronDown className={`h-4 w-4 ${open ? 'rotate-180' : ''}`} />
+                          </button>
+                          {open ? (
+                            <div className="notification-variable-chip-grid">
+                              {group.variables.map((variable) => (
+                                <button key={variable} type="button" className="notification-variable-chip" onClick={() => insertVariable(variable)}>
+                                  {variable}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </section>
+                      );
+                    })}
+                    {secondaryVariableGroups.length ? (
+                      <section className="notification-variable-group notification-more-variable-group">
+                        <button
+                          type="button"
+                          className="notification-variable-group-toggle"
+                          onClick={() => toggleVariableGroup(MORE_VARIABLES_GROUP)}
+                        >
+                          <span>More variables</span>
+                          <ChevronDown className={`h-4 w-4 ${isVariableGroupOpen(MORE_VARIABLES_GROUP, secondaryVariableGroups.length > 0) ? 'rotate-180' : ''}`} />
+                        </button>
+                        {isVariableGroupOpen(MORE_VARIABLES_GROUP, secondaryVariableGroups.length > 0) ? (
+                          <div className="notification-more-variable-list">
+                            {secondaryVariableGroups.map((group) => {
+                              const open = isVariableGroupOpen(group.label, group.variables.length > 0);
+                              return (
+                                <section key={group.label} className="notification-variable-subgroup">
+                                  <button
+                                    type="button"
+                                    className="notification-variable-group-toggle notification-variable-subgroup-toggle"
+                                    onClick={() => toggleVariableGroup(group.label)}
+                                  >
+                                    <span>{group.label}</span>
+                                    <ChevronDown className={`h-4 w-4 ${open ? 'rotate-180' : ''}`} />
+                                  </button>
+                                  {open ? (
+                                    <div className="notification-variable-chip-grid">
+                                      {group.variables.map((variable) => (
+                                        <button key={variable} type="button" className="notification-variable-chip" onClick={() => insertVariable(variable)}>
+                                          {variable}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </section>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </section>
+                    ) : null}
+                    {!primaryVariableGroups.length && !secondaryVariableGroups.length ? (
+                      <div className="notification-variable-empty-state">
+                        <Hash className="h-4 w-4" />
+                        <span>No variables found</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
+                <section className="notification-live-preview">
+                  <h4>Live Preview</h4>
+                  <p>{activeChannel === 'email' ? replaceVariables(activeTemplate.channels.email.subject) : channelOptions.find((item) => item.id === activeChannel)?.label}</p>
+                  <div>{replaceVariables(activeChannel === 'email' ? activeTemplate.channels.email.body : activeTemplate.channels[activeChannel].message)}</div>
+                </section>
               </aside>
             </div>
 
             <div className="notification-editor-actions-bar">
               <button type="button" className="btn btn-secondary" onClick={() => setEditorKey(null)}>Cancel</button>
               <button type="button" className="btn btn-secondary" onClick={() => setPreviewState({ template: activeTemplate, channelId: activeChannel })}><Eye className="h-4 w-4" /> Preview</button>
-              <button type="button" className="btn btn-secondary" disabled={!providerConnected(activeChannel)} title={providerConnected(activeChannel) ? 'Send test' : 'Connect WhatsApp/SMS/Email integration first.'} onClick={() => providerConnected(activeChannel) ? push('Test sending is ready for connected provider configuration. No test was sent from this screen.', 'info') : sendTestBlocked(activeChannel)}><Send className="h-4 w-4" /> Send Test</button>
+              <button type="button" className="btn btn-secondary" onClick={resetActiveTemplateChanges}><RotateCcw className="h-4 w-4" /> Reset changes</button>
               <button type="submit" className="btn btn-primary" disabled={!dirty || !canEdit || saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Template</button>
             </div>
           </section>
@@ -1054,7 +1206,7 @@ export function NotificationTemplatesSection({ onDirtyChange = null }) {
             {channelOptions.map((channel) => (
               <div key={channel.id} className="notification-provider-row">
                 <span>{channel.label}</span>
-                <strong>{providerConnected(channel.id) ? 'Connected' : 'Not Connected'}</strong>
+                <strong>{providerConnected(channel.id) ? 'Connected' : 'Integration setup pending'}</strong>
               </div>
             ))}
           </div>

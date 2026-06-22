@@ -15,6 +15,8 @@ const DESIGN_TEMPLATE_KEYS = new Set([
   'amc-service-visit',
   'amc-renewal-reminder'
 ]);
+const PRINT_HELPER_LABEL_PATTERN = />\s*(Divider|dot|phone|address|shield|handshake|Icon|Image \/ Logo|Locked)\s*</g;
+const PRINT_HELPER_NODE_PATTERN = /<[^>]+class=(["'])[^"']*(?:pdf-element-lock|pdf-element-grip|pdf-resize-handle|pdf-element-hit-area|pdf-page-break-guide|canvas-debug-label|design-helper|pdf-builder-helper)[^"']*\1[^>]*>[\s\S]*?<\/[^>]+>/gi;
 
 function byteLength(value = '') {
   return Buffer.byteLength(String(value || ''), 'utf8');
@@ -32,6 +34,14 @@ function stripUnsafeHtml(html = '') {
     .replace(/\s+on[a-z]+\s*=\s*'[^']*'/gi, '')
     .replace(/\s+on[a-z]+\s*=\s*[^\s>]+/gi, '')
     .replace(/javascript:/gi, '');
+}
+
+function stripPrintHelperHtml(html = '') {
+  PRINT_HELPER_LABEL_PATTERN.lastIndex = 0;
+  PRINT_HELPER_NODE_PATTERN.lastIndex = 0;
+  return String(html || '')
+    .replace(PRINT_HELPER_NODE_PATTERN, '')
+    .replace(PRINT_HELPER_LABEL_PATTERN, '><');
 }
 
 function validateCanvasRequest({ key, canvasHtml, meta, label = 'Invoice DOM preview' }) {
@@ -81,7 +91,7 @@ function normalizePrintHtml(canvasHtml = '') {
 }
 
 function previewHtmlDocument(canvasHtml = '', context = {}) {
-  const safeHtml = stripUnsafeHtml(normalizePrintHtml(renderTemplateVariables(canvasHtml, context)));
+  const safeHtml = stripPrintHelperHtml(stripUnsafeHtml(normalizePrintHtml(renderTemplateVariables(canvasHtml, context))));
   const serverBase = `http://localhost:${PORT}`;
   return `<!doctype html>
 <html>
@@ -180,9 +190,8 @@ function previewHtmlDocument(canvasHtml = '', context = {}) {
 }
 
 async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
-  if (key !== 'invoice') return null;
   const invoiceItems = Array.isArray(context.invoice_items) ? context.invoice_items : [];
-  return page.evaluate(({ invoiceItems: items, templateContext }) => {
+  return page.evaluate(({ invoiceItems: items, templateContext, templateKey }) => {
     function decodeJsonAttribute(node, name, fallback) {
       const raw = node?.getAttribute?.(name);
       if (!raw) return fallback;
@@ -662,6 +671,18 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       return { nextPage, nextContent, targetTop };
     }
 
+    function normalizeAllPageWatermarks() {
+      let normalizedCount = 0;
+      [...document.querySelectorAll('.design-print-page')].forEach((pageNode) => {
+        const pageContent = pageNode.querySelector(':scope > .pdf-a4-page') || pageNode;
+        const sourceNode = pageNode.querySelector(':scope > .pdf-page-watermark') || [...pageContent.children].find(isWatermarkNode);
+        if (!sourceNode) return;
+        normalizePageWatermark(pageNode, pageContent, sourceNode);
+        normalizedCount += 1;
+      });
+      return normalizedCount;
+    }
+
     const renderedTablePadding = 3;
     function frameHeightForRows(rowsHeight) {
       return Math.max(
@@ -670,10 +691,11 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       );
     }
 
-    const tableShells = [...document.querySelectorAll('.pdf-canvas-table[data-pdf-invoice-table="true"]')];
+    const normalizedWatermarkCount = normalizeAllPageWatermarks();
+    const tableShells = [...document.querySelectorAll('.pdf-canvas-table')];
     const tableShell = tableShells.find((table) => table.getAttribute('data-pdf-table-dynamic-rows') !== 'false') || tableShells[0];
     if (!tableShell) {
-      return { reason: 'no-invoice-table', itemRowCount: items.length, rowsPerPage: 0, continuationPageCount: 0, finalPageCount: document.querySelectorAll('.design-print-page').length };
+      return { reason: 'no-design-table', itemRowCount: items.length, rowsPerPage: 0, continuationPageCount: 0, finalPageCount: document.querySelectorAll('.design-print-page').length, normalizedWatermarkCount };
     }
 
     const frame = tableShell.closest('.pdf-builder-element');
@@ -698,7 +720,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       };
     }
 
-    const dynamicRows = tableShell.getAttribute('data-pdf-table-dynamic-rows') !== 'false';
+    const dynamicRows = tableShell.getAttribute('data-pdf-table-dynamic-rows') !== 'false' && ['invoice', 'quotation'].includes(templateKey);
     const rowTemplate = decodeJsonAttribute(tableShell, 'data-pdf-table-row-template', []);
     const sourceRows = dynamicRows && items.length
       ? items.map((item, index) => (Array.isArray(rowTemplate) && rowTemplate.length ? rowTemplate : ['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}']).map((template) => valueForTemplate(template, item, index)))
@@ -720,7 +742,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
     const tableTemplateFrame = frame.cloneNode(true);
     const rowHeights = measureRowHeights(pageContent, tableTemplateFrame, sourceRows).map((height) => height || rowHeight);
 
-    const sourceWatermark = [...pageContent.children].find(isWatermarkNode);
+    const sourceWatermark = pageNode.querySelector(':scope > .pdf-page-watermark') || [...pageContent.children].find(isWatermarkNode);
     const watermarkSource = normalizePageWatermark(pageNode, pageContent, sourceWatermark);
     const pageChildren = [...pageContent.children];
     const repeatedNodes = pageChildren.filter((node) => node !== frame && !isWatermarkNode(node) && isSafeRepeatedNode(node));
@@ -733,6 +755,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
     const safeBottomMargin = 36;
     const finalPlacementBottomMargin = 16;
     const finalSectionGap = 20;
+    const finalPlacementGap = 12;
     const firstPageFrameHeight = Math.max(
       rowHeight + titleHeight + headerHeight + 4,
       842 - tableTop - safeBottomMargin
@@ -772,7 +795,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       const neededFrameHeight = Math.min(firstPageFinalFrameHeight, frameHeightForRows(neededRowsHeight));
       setContinuationFrameBounds(frame, tableTop, neededFrameHeight);
       let finalSectionsPlacement = 'same-page';
-      const finalPlacement = placeFinalNodesBelowTable(finalNodes, frame, finalSectionGap, 842, finalPlacementBottomMargin);
+      const finalPlacement = placeFinalNodesBelowTable(finalNodes, frame, finalPlacementGap, 842, finalPlacementBottomMargin);
       const finalPlacementDebug = finalPlacementDebugFor(finalPlacement);
       if (finalNodes.length && !finalPlacement.fits) {
         const finalClones = finalNodes.map((node) => node.cloneNode(true));
@@ -849,7 +872,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       const neededFrameHeight = Math.min(firstPageFrameHeight, frameHeightForRows(neededRowsHeight));
       setContinuationFrameBounds(frame, tableTop, neededFrameHeight);
       let finalSectionsPlacement = 'same-page';
-      const finalPlacement = placeFinalNodesBelowTable(finalNodes, frame, finalSectionGap, 842, finalPlacementBottomMargin);
+      const finalPlacement = placeFinalNodesBelowTable(finalNodes, frame, finalPlacementGap, 842, finalPlacementBottomMargin);
       const finalPlacementDebug = finalPlacementDebugFor(finalPlacement);
       if (finalNodes.length && !finalPlacement.fits) {
         const finalClones = finalNodes.map((node) => node.cloneNode(true));
@@ -900,7 +923,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       }
       insertAfter.after(nextPage);
       if (isFinalRenderedChunk) {
-        const finalPlacement = placeFinalNodesBelowTable(finalClones, tableClone, finalSectionGap, 842, finalPlacementBottomMargin);
+        const finalPlacement = placeFinalNodesBelowTable(finalClones, tableClone, finalPlacementGap, 842, finalPlacementBottomMargin);
         finalPlacementDebug = finalPlacementDebugFor(finalPlacement);
         if (finalClones.length && !finalPlacement.fits) {
           const { nextPage: finalOnlyPage } = makeFinalOnlyPage(pageNode, pageContent, repeatedNodes, watermarkSource, finalClones, firstFinalTop, 842, finalPlacementBottomMargin, continuationTop);
@@ -929,7 +952,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       finalPlacementDebug,
       pageTableDebug: [...document.querySelectorAll('.design-print-page')].map((node) => tableDebugForPage(node))
     };
-  }, { invoiceItems, templateContext: context });
+  }, { invoiceItems, templateContext: context, templateKey: key });
 }
 
 async function renderInvoiceCanvasDomPdf({ key, canvasHtml, meta, context = {}, filenamePrefix = 'invoice-dom-preview', label = 'Invoice DOM preview' }) {
@@ -950,6 +973,86 @@ async function renderInvoiceCanvasDomPdf({ key, canvasHtml, meta, context = {}, 
     });
     await page.setContent(previewHtmlDocument(html, context), { waitUntil: 'networkidle' });
     const paginationMetrics = await paginateInvoiceTablesForPrint(page, { key, context });
+    const blankPageCleanup = await page.evaluate(() => {
+      function nodeClassText(node) {
+        return String(node?.getAttribute?.('class') || node?.className || '').toLowerCase();
+      }
+
+      function ignoredNode(node) {
+        const classText = nodeClassText(node);
+        return Boolean(node.closest?.('.pdf-page-watermark'))
+          || Boolean(node.closest?.('[data-pdf-layer-kind="background"], .is-background-element, .pdf-canvas-image.is-watermark, .is-watermark'))
+          || classText.includes('watermark');
+      }
+
+      function parsedRgb(value = '') {
+        const match = String(value || '').trim().match(/^rgba?\(([^)]+)\)$/i);
+        if (!match) return null;
+        const parts = match[1].split(',').map((part) => Number.parseFloat(part.trim()));
+        if (parts.length < 3 || parts.slice(0, 3).some((part) => !Number.isFinite(part))) return null;
+        return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 && Number.isFinite(parts[3]) ? parts[3] : 1 };
+      }
+
+      function colorPainted(value = '', ignoreWhite = false) {
+        const color = String(value || '').trim().toLowerCase();
+        if (!color || color === 'transparent' || color === 'none') return false;
+        const rgb = parsedRgb(color);
+        if (!rgb) return true;
+        if (rgb.a <= 0) return false;
+        if (ignoreWhite && rgb.r >= 248 && rgb.g >= 248 && rgb.b >= 248) return false;
+        return true;
+      }
+
+      function borderPainted(style, side) {
+        const width = Number.parseFloat(style.getPropertyValue(`border-${side}-width`) || '0');
+        const borderStyle = style.getPropertyValue(`border-${side}-style`);
+        const color = style.getPropertyValue(`border-${side}-color`);
+        return width > 0 && borderStyle !== 'none' && colorPainted(color, true);
+      }
+
+      function directTextPainted(node, style) {
+        if (!colorPainted(style.color)) return false;
+        return [...(node.childNodes || [])].some((child) => child.nodeType === Node.TEXT_NODE && String(child.textContent || '').trim());
+      }
+
+      function nodePainted(node) {
+        if (!node?.getBoundingClientRect || ignoredNode(node)) return false;
+        const tag = String(node.tagName || '').toLowerCase();
+        const classText = nodeClassText(node);
+        if (classText.includes('design-print-page') || classText.includes('design-print-document') || classText.includes('pdf-a4-page')) return false;
+        const style = window.getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || 1) === 0) return false;
+        const rect = node.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return false;
+        if (['img', 'svg', 'canvas', 'path', 'rect', 'circle', 'line', 'polyline', 'polygon'].includes(tag)) return true;
+        if (directTextPainted(node, style)) return true;
+        if (colorPainted(style.backgroundColor, true)) return true;
+        if (style.boxShadow && style.boxShadow !== 'none') return true;
+        return ['top', 'right', 'bottom', 'left'].some((side) => borderPainted(style, side));
+      }
+
+      function pageHasContent(pageNode) {
+        const content = pageNode.querySelector?.(':scope > .pdf-a4-page') || pageNode;
+        return [content, ...(content.querySelectorAll?.('*') || [])].some(nodePainted);
+      }
+
+      let removed = 0;
+      [...document.querySelectorAll('.design-print-page')].forEach((pageNode) => {
+        const pagesLeft = document.querySelectorAll('.design-print-page').length;
+        if (pagesLeft <= 1) return;
+        if (pageHasContent(pageNode)) return;
+        pageNode.remove();
+        removed += 1;
+      });
+      const pages = [...document.querySelectorAll('.design-print-page')];
+      pages.forEach((pageNode, index) => {
+        if (index === pages.length - 1) {
+          pageNode.style.breakAfter = 'auto';
+          pageNode.style.pageBreakAfter = 'auto';
+        }
+      });
+      return { removed, finalPageCount: pages.length };
+    });
     if (process.env.PDF_DOM_PAGINATION_DEBUG === '1' && paginationMetrics) {
       console.info('[pdf-dom-pagination]', JSON.stringify({
         key,
@@ -960,6 +1063,7 @@ async function renderInvoiceCanvasDomPdf({ key, canvasHtml, meta, context = {}, 
         totalRowsRendered: paginationMetrics.totalRowsRendered,
         continuationPageCount: paginationMetrics.continuationPageCount,
         finalPageCount: paginationMetrics.finalPageCount,
+        blankPageCleanup,
         finalPlacementDebug: paginationMetrics.finalPlacementDebug || null,
         pageTableDebug: paginationMetrics.pageTableDebug || []
       }));

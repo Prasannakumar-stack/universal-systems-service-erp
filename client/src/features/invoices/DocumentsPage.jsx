@@ -204,8 +204,13 @@ export function DocumentsPage() {
   async function downloadDocumentPdf(document, regenerate = false) {
     try {
       const response = await fetch(`${apiBase}/documents/${document.id}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(response.status === 401 || response.status === 403
+          ? 'Please login again'
+          : data.message || 'PDF download failed. Please try again.');
+      }
       const blob = await response.blob();
-      if (!response.ok) throw new Error('PDF download failed');
       const url = URL.createObjectURL(blob);
       const anchor = window.document.createElement('a');
       anchor.href = url;
@@ -381,8 +386,13 @@ export function DocumentPreviewPage() {
     try {
       await preserveScroll(async () => {
         const response = await fetch(`${apiBase}/documents/${id}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(response.status === 401 || response.status === 403
+            ? 'Please login again'
+            : data.message || 'PDF download failed. Please try again.');
+        }
         const blob = await response.blob();
-        if (!response.ok) throw new Error('PDF download failed');
         const url = URL.createObjectURL(blob);
         const anchor = window.document.createElement('a');
         anchor.href = url;
@@ -404,8 +414,13 @@ export function DocumentPreviewPage() {
     try {
       await preserveScroll(async () => {
         const response = await fetch(`${apiBase}/documents/${id}/pdf?preview=true`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(response.status === 401 || response.status === 403
+            ? 'PDF preview failed. Please login again.'
+            : data.message || 'PDF preview failed. Please try again.');
+        }
         const blob = await response.blob();
-        if (!response.ok) throw new Error('PDF preview failed');
         const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
         window.open(url, '_blank', 'noopener,noreferrer');
         setTimeout(() => URL.revokeObjectURL(url), 60000);

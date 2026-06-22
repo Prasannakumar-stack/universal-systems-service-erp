@@ -187,7 +187,7 @@ export async function generateDocumentPdf(id, user = null) {
     getBusinessSettings().catch(() => null)
   ]);
   const context = documentTemplateContext(document, company);
-  if (document.type === 'invoice' && canRenderPublishedInvoiceDom(template)) {
+  if (canRenderPublishedInvoiceDom(template)) {
     return renderPublishedInvoiceDomTemplate(
       template,
       context,

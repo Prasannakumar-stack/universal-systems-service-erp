@@ -1312,7 +1312,9 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      throw new Error(data.message || 'PDF download failed');
+      throw new Error(response.status === 401 || response.status === 403
+        ? 'Please login again'
+        : data.message || 'PDF download failed. Please try again.');
     }
     const blob = await response.blob();
     const disposition = response.headers.get('content-disposition') || '';
@@ -1348,7 +1350,12 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         const response = await fetch(`${apiBase}/work-orders/${id}/pdf/${flow.type}?preview=true`, {
           headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
         });
-        if (!response.ok) throw new Error('PDF preview failed');
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(response.status === 401 || response.status === 403
+            ? 'PDF preview failed. Please login again.'
+            : data.message || 'PDF preview failed. Please try again.');
+        }
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
         window.open(blobUrl, '_blank', 'noopener,noreferrer');
@@ -1356,7 +1363,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       });
     } catch (err) {
       console.error('PDF preview error:', err);
-      push('PDF preview failed. Please login again.', 'error');
+      push(err.message || 'PDF preview failed. Please try again.', 'error');
     }
   }
 

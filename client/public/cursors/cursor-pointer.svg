@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" fill="none">
+  <path d="M7.82 3.25C7.33 2.78 6.51 3.13 6.51 3.81V20.46C6.51 21.32 7.64 21.62 8.06 20.87L10.45 16.59C10.76 16.04 11.47 15.89 11.97 16.28L16.34 19.68C17.01 20.2 17.93 19.53 17.66 18.72L15.98 13.64C15.79 13.08 16.14 12.48 16.72 12.36L21.69 11.34C22.51 11.17 22.76 10.13 22.08 9.63L7.82 3.25Z" fill="url(#pointerSide)"/>
+  <path d="M8.21 4.9C7.91 4.62 7.43 4.83 7.43 5.24V19.26C7.43 19.79 8.12 19.98 8.39 19.52L10.66 15.63C11.08 14.9 12.04 14.72 12.71 15.24L16.49 18.17C16.91 18.49 17.49 18.08 17.32 17.58L15.81 13.03C15.53 12.18 16.05 11.28 16.93 11.1L20.82 10.3C21.33 10.2 21.49 9.55 21.06 9.24L8.21 4.9Z" fill="url(#pointerFace)"/>
+  <path d="M8.62 5.83L14.66 11.72C15 12.05 15.47 12.2 15.94 12.14L19.14 11.71L8.62 5.83Z" fill="url(#pointerHighlight)" opacity="0.9"/>
+  <path d="M8.25 18.14L10.07 14.97C10.63 13.99 11.93 13.75 12.82 14.44L15.68 16.65L14.66 13.59C14.23 12.32 15.02 10.97 16.33 10.71L19.04 10.16L8.3 6.44L8.25 18.14Z" stroke="url(#pointerStroke)" stroke-width="0.95" stroke-linejoin="round"/>
+  <path d="M8.88 6.76L13.73 11.48" stroke="white" stroke-opacity="0.56" stroke-width="1" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="pointerFace" x1="7.46" y1="4.78" x2="19.07" y2="19.29" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C7F2FF"/>
+      <stop offset="0.32" stop-color="#4FC3FF"/>
+      <stop offset="0.72" stop-color="#177DFF"/>
+      <stop offset="1" stop-color="#0754CF"/>
+    </linearGradient>
+    <linearGradient id="pointerSide" x1="6.44" y1="3.03" x2="20.68" y2="20.47" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563EB"/>
+      <stop offset="0.62" stop-color="#073B9D"/>
+      <stop offset="1" stop-color="#03194D"/>
+    </linearGradient>
+    <linearGradient id="pointerHighlight" x1="8.53" y1="5.76" x2="17.6" y2="12.83" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.56" stop-color="#DBF7FF" stop-opacity="0.68"/>
+      <stop offset="1" stop-color="#7DD3FC" stop-opacity="0.18"/>
+    </linearGradient>
+    <linearGradient id="pointerStroke" x1="7.94" y1="5.98" x2="17.81" y2="17.77" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E5FAFF"/>
+      <stop offset="0.5" stop-color="#5EC8FF"/>
+      <stop offset="1" stop-color="#02347F"/>
+    </linearGradient>
+  </defs>
+</svg>

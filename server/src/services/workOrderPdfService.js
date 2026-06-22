@@ -663,9 +663,11 @@ export async function generateWorkOrderPdf({ workOrderId, type, user }) {
     getCompanyIdentity(),
     getBusinessSettings().catch(() => null)
   ]);
-  if (type === 'work' && canRenderPublishedInvoiceDom(template)) {
+  if (canRenderPublishedInvoiceDom(template)) {
     const context = workOrderTemplateContext(workOrder, company);
-    const invoiceContext = invoiceDomContextForWorkOrder(context, invoicePayloadForWorkOrder(workOrder, context));
+    const invoiceContext = template.key === 'invoice'
+      ? invoiceDomContextForWorkOrder(context, invoicePayloadForWorkOrder(workOrder, context))
+      : context;
     const pdf = await renderPublishedInvoiceDomTemplate(
       template,
       invoiceContext,

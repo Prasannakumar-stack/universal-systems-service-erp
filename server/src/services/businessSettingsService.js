@@ -67,6 +67,13 @@ const NOTIFICATION_LEGACY_VARIABLES = Object.freeze({
   '{{bookingId}}': '{{bookingId}}'
 });
 
+const NOTIFICATION_LEGACY_VARIABLE_ALIASES = Object.freeze({
+  phone: '{{customerPhone}}',
+  whatsapp: '{{companyWhatsApp}}',
+  email: '{{companyEmail}}',
+  address: '{{companyAddress}}'
+});
+
 const NOTIFICATION_TEMPLATE_CATALOG = Object.freeze([
   ['bookingReceived', 'Booking received', 'Booking', 'New service request received.', 'booking.received', 'customer', false, 'Hello {{customerName}}, your booking {{bookingId}} has been received by {{companyName}}. We will contact you shortly.', 'Booking {{bookingId}} received'],
   ['bookingConfirmed', 'Booking confirmed', 'Booking', 'Booking confirmation message.', 'booking.confirmed', 'customer', false, 'Hello {{customerName}}, your booking {{bookingId}} is confirmed for {{bookingDate}} {{bookingTime}}. Contact: {{companyPhone}}', 'Booking {{bookingId}} confirmed'],
@@ -236,6 +243,13 @@ function cleanText(value, fallback = '', max = 2000) {
   return text.length > max ? text.slice(0, max) : text;
 }
 
+function normalizeNotificationVariableAliases(value = '') {
+  return String(value || '').replace(/{{\s*([^{}]+?)\s*}}/g, (match, name) => {
+    const replacement = NOTIFICATION_LEGACY_VARIABLE_ALIASES[String(name || '').trim()];
+    return replacement || match;
+  });
+}
+
 function boolValue(value, fallback = false) {
   if (value === undefined || value === null) return Boolean(fallback);
   return Boolean(value);
@@ -250,13 +264,13 @@ function cleanNotificationChannel(channel = {}, fallback = {}, type = 'whatsapp'
   if (type === 'email') {
     return {
       enabled: boolValue(channel.enabled, fallback.enabled ?? true),
-      subject: cleanText(channel.subject, fallback.subject || '', 300),
-      body: cleanText(channel.body ?? channel.message, fallback.body || fallback.message || '', 5000)
+      subject: normalizeNotificationVariableAliases(cleanText(channel.subject, fallback.subject || '', 300)),
+      body: normalizeNotificationVariableAliases(cleanText(channel.body ?? channel.message, fallback.body || fallback.message || '', 5000))
     };
   }
   return {
     enabled: boolValue(channel.enabled, fallback.enabled ?? true),
-    message: cleanText(channel.message ?? channel.body, fallback.message || fallback.body || '', 2500)
+    message: normalizeNotificationVariableAliases(cleanText(channel.message ?? channel.body, fallback.message || fallback.body || '', 2500))
   };
 }
 
