@@ -53,6 +53,7 @@ const amcContractSchema = new mongoose.Schema(
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    deleteExpiresAt: { type: Date, default: null },
     archivedAt: { type: Date, default: null },
     archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     visits: [visitSchema]

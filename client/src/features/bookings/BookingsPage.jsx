@@ -144,6 +144,7 @@ import {
 } from '../../shared/phase1Shared.jsx';
 import { FileImage, ImageUp, UploadCloud } from 'lucide-react';
 import { ADMIN_ASSIGNMENT_LABEL } from '../../utils/assignment.js';
+import { whatsappHref } from '../../utils/phone.js';
 import { can, normalizeRole } from '../../utils/roles.js';
 import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 
@@ -206,6 +207,19 @@ function dateTimeLocalValue(value) {
   if (Number.isNaN(date.getTime())) return '';
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function enquiryServiceInterest(booking = {}) {
+  return booking.serviceType || booking.device || 'your service enquiry';
+}
+
+function enquiryWhatsappHref(booking = {}) {
+  const message = `Hello ${booking.customerName || 'Customer'}, this is Universal Systems. We received your enquiry for ${enquiryServiceInterest(booking)}. How can we help you?`;
+  return whatsappHref(booking.phone, message);
+}
+
+function shouldAutoMarkContacted(status) {
+  return ['New', 'New Enquiry', 'Pending', 'Pending Enquiry'].includes(String(status || '').trim());
 }
 
 function BookingSourceBadge({ source }) {
@@ -321,6 +335,17 @@ export function BookingsPage({ role = 'admin' }) {
       return false;
     } finally {
       setDetailsSaving(false);
+    }
+  }
+
+  async function markEnquiryContacted(bookingId) {
+    try {
+      await request(`/bookings/${bookingId}`, { method: 'PATCH', body: JSON.stringify({ status: 'Contacted' }) });
+      reload({ silent: true });
+      return true;
+    } catch (err) {
+      push(err.message, 'error');
+      return false;
     }
   }
 
@@ -496,6 +521,7 @@ export function BookingsPage({ role = 'admin' }) {
           saving={detailsSaving}
           onClose={() => setDetailsBooking(null)}
           onSave={saveEnquiryDetails}
+          onMarkContacted={markEnquiryContacted}
           onConvert={convert}
         />
       ) : null}
@@ -543,7 +569,8 @@ function bookingDeviceBrandModel(booking = {}) {
   return [booking.deviceBrand, booking.deviceModel].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
 }
 
-function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert, canAssignTechnician, saving, onClose, onSave, onConvert }) {
+function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert, canAssignTechnician, saving, onClose, onSave, onMarkContacted, onConvert }) {
+  const { push } = useToast();
   const [form, setForm] = useState(() => ({
     status: displayBookingStatus(booking),
     adminNote: booking.adminNote || '',
@@ -553,11 +580,13 @@ function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert
   const [technicianId, setTechnicianId] = useState(booking.technicianId?.id || '');
   const isContact = isContactFormBooking(booking);
   const workOrderId = recordId(booking.workOrderId);
-  const currentStatus = displayBookingStatus(booking);
+  const currentStatus = form.status || displayBookingStatus(booking);
   const isConverted = currentStatus === 'Converted' || Boolean(workOrderId);
   const priority = enquiryPriority(booking);
   const detailTypeLabel = isContact ? 'Enquiry Details' : 'Booking Details';
   const showUrgentPriority = priority === 'Urgent';
+  const phone = String(booking.phone || '').trim();
+  const phoneAvailable = Boolean(phone);
 
   useEffect(() => {
     setForm({
@@ -579,6 +608,17 @@ function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert
   async function convertFromDrawer() {
     const converted = await onConvert(booking.id, technicianId);
     if (converted) onClose();
+  }
+
+  async function markContactedFromQuickAction() {
+    if (!isContact || isConverted || !shouldAutoMarkContacted(currentStatus)) return;
+    const updated = await onMarkContacted?.(booking.id);
+    if (updated) update('status', 'Contacted');
+  }
+
+  async function copyEnquiryPhone() {
+    if (await copyTextToClipboard(phone)) push('Phone number copied.');
+    else push('Phone number not available.', 'error');
   }
 
   return (
@@ -609,7 +649,49 @@ function EnquiryDetailsDrawer({ booking, technicians, workOrdersBase, canConvert
           <div className="booking-enquiry-drawer-body min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
             <div className="grid gap-3 sm:grid-cols-2">
               <DetailPill label="Booking / Enquiry ID" value={booking.bookingCode || booking.id} />
-              <DetailPill label="Phone number" value={booking.phone || '-'} />
+              <div className="rounded-2xl border border-white/10 bg-slate-950/25 p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Phone number</p>
+                <p className="mt-1 break-words text-sm font-bold text-slate-100">{phone || '-'}</p>
+                {isContact ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a
+                      className={`btn btn-secondary booking-modal-action ${phoneAvailable ? '' : 'pointer-events-none opacity-50'}`}
+                      href={callHref(phone)}
+                      aria-disabled={!phoneAvailable}
+                      onClick={() => { void markContactedFromQuickAction(); }}
+                    >
+                      <PhoneCallIcon className="h-4 w-4" />
+                      Call
+                    </a>
+                    <a
+                      className={`btn btn-secondary booking-modal-action ${phoneAvailable ? '' : 'pointer-events-none opacity-50'}`}
+                      href={phoneAvailable ? enquiryWhatsappHref(booking) : undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-disabled={!phoneAvailable}
+                      onClick={(event) => {
+                        if (!phoneAvailable) {
+                          event.preventDefault();
+                          return;
+                        }
+                        void markContactedFromQuickAction();
+                      }}
+                    >
+                      <Send className="h-4 w-4" />
+                      WhatsApp
+                    </a>
+                    <button
+                      type="button"
+                      className={`btn btn-secondary booking-modal-action ${phoneAvailable ? '' : 'pointer-events-none opacity-50'}`}
+                      aria-disabled={!phoneAvailable}
+                      onClick={copyEnquiryPhone}
+                    >
+                      <ClipboardList className="h-4 w-4" />
+                      Copy Number
+                    </button>
+                  </div>
+                ) : null}
+              </div>
               <DetailPill label="Service interest" value={booking.serviceType || booking.device || 'General Service'} />
               <DetailPill label="Created" value={formatDate(booking.createdAt)} />
               <DetailPill label="Device / Asset" value={booking.device || '-'} />
@@ -791,7 +873,16 @@ function TechnicianBookingMobileCard({ booking, workOrdersBase, onCopyPhone }) {
       </div>
       <div className="technician-mobile-contact-row">
         <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
-        <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={phone ? customerWhatsAppHref({ name: booking.customerName, phone }) : '#'} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+        <a
+          className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`}
+          href={phone ? customerWhatsAppHref({ name: booking.customerName, phone }) : undefined}
+          aria-disabled={!phone}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => {
+            if (!phone) event.preventDefault();
+          }}
+        ><Send className="h-4 w-4" />WhatsApp</a>
         <button type="button" className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} onClick={() => onCopyPhone(phone)}><ClipboardList className="h-4 w-4" />Copy</button>
       </div>
       <div className="technician-mobile-card-footer">

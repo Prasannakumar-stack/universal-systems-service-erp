@@ -88,7 +88,7 @@ if (WHATSAPP_PDF_PUBLIC_BASE_URL) {
 }
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, company: COMPANY.name, time: new Date().toISOString() });
+  res.json({ ok: true, status: 'OK', company: COMPANY.name, time: new Date().toISOString() });
 });
 
 app.get('/api/public/website-settings', asyncHandler(publicSettings));

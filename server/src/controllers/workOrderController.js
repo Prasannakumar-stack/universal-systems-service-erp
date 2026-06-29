@@ -2,6 +2,7 @@ import {
   addImages,
   addNote,
   addPart,
+  archiveWorkOrder,
   autoAssignWorkOrder,
   createWorkOrder,
   deleteWorkOrder,
@@ -14,6 +15,9 @@ import {
   approvePartRequest,
   rejectPartRequest,
   movePartRequestToUsed,
+  moveWorkOrderToTrash,
+  permanentlyDeleteWorkOrder,
+  restoreWorkOrder,
   updateApproval,
   updateAssignment,
   updateServiceCharge,
@@ -32,8 +36,8 @@ export async function create(req, res) {
 
 export async function list(req, res) {
   try {
-    const { workOrders, pagination } = await listWorkOrders(req.query, req.user);
-    res.json({ success: true, data: workOrders, workOrders, pagination });
+    const { workOrders, pagination, lifecycleCounts } = await listWorkOrders(req.query, req.user);
+    res.json({ success: true, data: workOrders, workOrders, pagination, lifecycleCounts });
   } catch (error) {
     console.error('Work order list failed', error);
     res.status(500).json({ success: false, message: 'Unable to load work orders right now' });
@@ -117,14 +121,50 @@ export async function patchAssignment(req, res) {
 
 export async function remove(req, res) {
   const result = await deleteWorkOrder(req.params.id, req.user);
-  res.json({ success: true, ...result, message: 'Work order deleted' });
+  res.json({ success: true, ...result });
+}
+
+export async function archive(req, res) {
+  const result = await archiveWorkOrder(req.params.id, req.user);
+  res.json({ success: true, ...result });
+}
+
+export async function moveToTrash(req, res) {
+  const result = await moveWorkOrderToTrash(req.params.id, req.user);
+  res.json({ success: true, ...result });
+}
+
+export async function restore(req, res) {
+  const result = await restoreWorkOrder(req.params.id, req.user);
+  res.json({ success: true, ...result });
+}
+
+export async function removePermanently(req, res) {
+  const result = await permanentlyDeleteWorkOrder(req.params.id, req.user);
+  res.json({ success: true, ...result });
 }
 
 export async function downloadPdf(req, res) {
-  const pdf = await generateWorkOrderPdf({ workOrderId: req.params.id, type: req.params.type, user: req.user });
-  res.set('Cache-Control', 'no-store, max-age=0');
-  res.set('Pragma', 'no-cache');
-  res.download(pdf.filePath, pdf.filename);
+  try {
+    const pdf = await generateWorkOrderPdf({ workOrderId: req.params.id, type: req.params.type, user: req.user });
+    res.set('Cache-Control', 'no-store, max-age=0');
+    res.set('Pragma', 'no-cache');
+    res.download(pdf.filePath, pdf.filename, (error) => {
+      if (!error) return;
+      console.error('[Work order PDF] Download stream failed.', error?.stack || error);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'Unable to download the PDF right now. Please try again.' });
+      }
+    });
+  } catch (error) {
+    console.error('[Work order PDF] PDF preparation failed.', error?.stack || error);
+    if (res.headersSent) return;
+    const status = Number(error?.statusCode || error?.status || 500);
+    res.status(status).json({
+      success: false,
+      message: status >= 500 ? 'Unable to prepare the PDF right now. Please try again.' : error.message
+    });
+  }
 }
 
 export async function postSendPdfWhatsapp(req, res) {

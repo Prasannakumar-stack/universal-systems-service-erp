@@ -198,7 +198,16 @@ function customerActions(jobOrCustomer) {
         <PhoneCallIcon className="h-4 w-4" />
         Call
       </a>
-      <a className={`btn btn-secondary py-2 ${disabled}`} href={phone ? whatsappHref : '#'} target="_blank" rel="noreferrer">
+      <a
+        className={`btn btn-secondary py-2 ${disabled}`}
+        href={phone ? whatsappHref : undefined}
+        aria-disabled={!phone}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(event) => {
+          if (!phone) event.preventDefault();
+        }}
+      >
         <Send className="h-4 w-4" />
         WhatsApp
       </a>

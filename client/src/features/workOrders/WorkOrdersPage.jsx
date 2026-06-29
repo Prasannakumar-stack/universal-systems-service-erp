@@ -129,7 +129,6 @@ import {
   useMemo,
   useNavigate,
   useParams,
-  useRef,
   useResource,
   UserRound,
   Users,
@@ -144,7 +143,9 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
-import { MoreHorizontal, Search, X } from 'lucide-react';
+import { Archive, MoreHorizontal, RotateCcw, Search, X } from 'lucide-react';
+import { FloatingRowActionMenu } from '../../components/FloatingRowActionMenu.jsx';
+import { LifecycleTabs } from '../../components/LifecycleTabs.jsx';
 import { ADMIN_ASSIGNMENT_LABEL, technicianNameOrAdmin } from '../../utils/assignment.js';
 import { can, normalizeRole } from '../../utils/roles.js';
 import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
@@ -227,6 +228,12 @@ const workOrdersClearBtnClass =
   `inline-flex h-12 w-full min-w-[170px] items-center justify-center rounded-xl border border-sky-400/40 bg-sky-500/15 px-6 text-sm font-semibold text-sky-100 transition hover:border-sky-300/70 hover:bg-sky-500/25 hover:shadow-[0_0_22px_rgba(56,189,248,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 ${workOrdersFocusRing}`;
 const workOrdersDetailsBtnClass =
   `inline-flex h-10 min-h-[38px] min-w-[64px] items-center justify-center rounded-xl border border-sky-400/25 bg-slate-800/80 px-3 text-sm font-semibold text-slate-100 transition hover:border-sky-300/60 hover:bg-sky-500/15 hover:text-white hover:shadow-[0_0_18px_rgba(56,189,248,0.16)] ${workOrdersFocusRing}`;
+const workOrderLifecycleTabs = [
+  { value: 'active', label: 'Active' },
+  { value: 'archived', label: 'Archived' },
+  { value: 'trash', label: 'Trash' },
+  { value: 'all', label: 'All' }
+];
 
 function WorkOrdersBadgeCell({ children, justify = 'justify-start' }) {
   return (
@@ -240,12 +247,26 @@ function workOrderDeviceBrandModel(order = {}) {
   return [order.deviceBrand, order.deviceModel].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
 }
 
+function workOrderLifecycleState(order = {}) {
+  if (order.lifecycleState) return order.lifecycleState;
+  if (order.isDeleted || order.deletedAt) return 'trash';
+  if (order.isArchived || order.archivedAt) return 'archived';
+  return 'active';
+}
+
+function lifecycleDaysLeftLabel(daysLeft) {
+  if (daysLeft === null || daysLeft === undefined) return '';
+  const days = Math.max(0, Number(daysLeft) || 0);
+  return `${days} day${days === 1 ? '' : 's'} left`;
+}
+
 export function WorkOrdersPage({ role = 'admin' }) {
   const { request, user } = useAuth();
   const { push } = useToast();
   const location = useLocation();
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
+  const isAdminUser = ['admin', 'super_admin'].includes(normalizeRole(effectiveRole));
   const permissionSubject = user || effectiveRole;
   const canAssignTechnician = can(permissionSubject, 'assign_technician');
   const canDeleteWorkOrder = can(permissionSubject, 'delete_work_order');
@@ -265,11 +286,14 @@ export function WorkOrdersPage({ role = 'admin' }) {
   const [serviceType, setServiceType] = useState('');
   const [source, setSource] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [archiveStatus, setArchiveStatus] = useState('active');
   const [technicians, setTechnicians] = useState([]);
   const [assignOrder, setAssignOrder] = useState(null);
   const [deleteOrder, setDeleteOrder] = useState(null);
+  const [deleteOrderAction, setDeleteOrderAction] = useState('');
   const [deleteOrderBusy, setDeleteOrderBusy] = useState(false);
   const [actionMenuId, setActionMenuId] = useState('');
+  const [actionMenuTrigger, setActionMenuTrigger] = useState(null);
   const [page, setPage] = useState(1);
   const limit = 10;
   const debouncedSearch = useDebouncedValue(search);
@@ -283,8 +307,9 @@ export function WorkOrdersPage({ role = 'admin' }) {
     if (serviceType) params.set('serviceType', serviceType);
     if (source) params.set('source', normalizeSourceLabel(source));
     if (priorityFilter) params.set('priority', priorityFilter);
+    params.set('lifecycle', archiveStatus);
     return params.toString() ? `?${params}` : '';
-  }, [canAssignTechnician, dateFrom, dateTo, debouncedSearch, limit, page, priorityFilter, serviceType, source, status, technicianId]);
+  }, [archiveStatus, canAssignTechnician, dateFrom, dateTo, debouncedSearch, limit, page, priorityFilter, serviceType, source, status, technicianId]);
   const { data, loading, error, reload } = useResource(() => request(`/work-orders${query}`), [request, query]);
   const base = isTechnician ? '/app/tech/work-orders' : '/app/admin/work-orders';
 
@@ -316,7 +341,32 @@ export function WorkOrdersPage({ role = 'admin' }) {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, status, dateFrom, dateTo, technicianId, serviceType, source, priorityFilter]);
+  }, [archiveStatus, debouncedSearch, status, dateFrom, dateTo, technicianId, serviceType, source, priorityFilter]);
+
+  function closeActionMenu() {
+    setActionMenuId('');
+    setActionMenuTrigger(null);
+  }
+
+  function toggleActionMenu(orderId, event) {
+    if (actionMenuId === orderId) {
+      closeActionMenu();
+      return;
+    }
+    setActionMenuId(orderId);
+    setActionMenuTrigger(event.currentTarget);
+  }
+
+  function startWorkOrderLifecycleAction(order, action) {
+    setDeleteOrder(order);
+    setDeleteOrderAction(action);
+    closeActionMenu();
+  }
+
+  function clearWorkOrderLifecycleAction() {
+    setDeleteOrder(null);
+    setDeleteOrderAction('');
+  }
 
   async function saveAssignment(order, nextTechnicianId) {
     if (!canAssignTechnician) {
@@ -330,7 +380,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
           body: JSON.stringify({ technicianId: nextTechnicianId || null })
         });
         push(nextTechnicianId ? 'Work order assigned' : 'Work order assigned to Admin');
-        setActionMenuId('');
+        closeActionMenu();
         reload({ silent: true });
         emitSidebarBadgesUpdated();
       });
@@ -340,19 +390,28 @@ export function WorkOrdersPage({ role = 'admin' }) {
     }
   }
 
-  async function confirmDeleteWorkOrder() {
+  async function confirmWorkOrderLifecycleAction() {
     if (!deleteOrder || deleteOrderBusy) return;
     if (!canDeleteWorkOrder) {
-      push('You do not have permission to delete work orders', 'error');
+      push('You do not have permission to update work order lifecycle', 'error');
       return;
     }
     setDeleteOrderBusy(true);
     try {
       await preserveScroll(async () => {
-        await request(`/work-orders/${recordId(deleteOrder)}`, { method: 'DELETE' });
-        push('Work order deleted');
-        setDeleteOrder(null);
-        setActionMenuId('');
+        const id = recordId(deleteOrder);
+        if (deleteOrderAction === 'archive') {
+          await request(`/work-orders/${id}/archive`, { method: 'PATCH' });
+          push('Work order archived successfully. History is preserved.');
+        } else if (deleteOrderAction === 'trash') {
+          await request(`/work-orders/${id}/move-to-trash`, { method: 'PATCH' });
+          push('Work order moved to Trash. It can be restored for 30 days.');
+        } else if (deleteOrderAction === 'permanent') {
+          await request(`/work-orders/${id}/permanent`, { method: 'DELETE' });
+          push('Work order permanently deleted');
+        }
+        clearWorkOrderLifecycleAction();
+        closeActionMenu();
         reload({ silent: true });
         emitSidebarBadgesUpdated();
       });
@@ -360,6 +419,24 @@ export function WorkOrdersPage({ role = 'admin' }) {
       push(err.message, 'error');
     } finally {
       setDeleteOrderBusy(false);
+    }
+  }
+
+  async function restoreWorkOrder(order) {
+    if (!canDeleteWorkOrder) {
+      push('You do not have permission to restore work orders', 'error');
+      return;
+    }
+    try {
+      await preserveScroll(async () => {
+        await request(`/work-orders/${recordId(order)}/restore`, { method: 'POST' });
+        push('Work order restored successfully');
+        closeActionMenu();
+        reload({ silent: true });
+        emitSidebarBadgesUpdated();
+      });
+    } catch (err) {
+      push(err.message, 'error');
     }
   }
 
@@ -372,6 +449,7 @@ export function WorkOrdersPage({ role = 'admin' }) {
     setDateFrom('');
     setDateTo('');
     setTechnicianId('');
+    setArchiveStatus('active');
     setPage(1);
   }
 
@@ -431,6 +509,15 @@ export function WorkOrdersPage({ role = 'admin' }) {
       </header>
 
       <section className="work-orders-filter-bar surface min-w-0 border border-white/10 bg-[#0b172a]/60 p-4 shadow-lg backdrop-blur-md">
+        {!isTechnician ? (
+          <LifecycleTabs
+            tabs={workOrderLifecycleTabs}
+            value={archiveStatus}
+            onChange={setArchiveStatus}
+            counts={data?.lifecycleCounts}
+            note={archiveStatus === 'trash' ? 'Items in Trash are kept for 30 days before permanent cleanup.' : 'Archived records are hidden from active lists but can be restored.'}
+          />
+        ) : null}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-12">
           <div className="work-orders-filter-search search-input-shell relative min-w-0 md:col-span-2 lg:col-span-4">
             <span className="search-input-icon pointer-events-none text-slate-400" aria-hidden="true">
@@ -520,10 +607,18 @@ export function WorkOrdersPage({ role = 'admin' }) {
             </thead>
             <tbody className="divide-y divide-[var(--line)]">
               {visibleWorkOrders.map((order) => {
-                const canShowAssignmentAction = canAssignTechnician && !isTechnician;
-                const canShowDeleteAction = canDeleteWorkOrder;
-                const hasMoreActions = canShowAssignmentAction || canShowDeleteAction;
+                const lifecycleState = workOrderLifecycleState(order);
+                const isArchivedOrder = lifecycleState === 'archived';
+                const isTrashedOrder = lifecycleState === 'trash';
+                const isActiveOrder = lifecycleState === 'active';
+                const canShowAssignmentAction = canAssignTechnician && !isTechnician && isActiveOrder;
+                const canShowArchiveAction = canDeleteWorkOrder && isActiveOrder;
+                const canShowMoveToTrashAction = canDeleteWorkOrder && !isTrashedOrder;
+                const canShowRestoreAction = canDeleteWorkOrder && !isActiveOrder;
+                const canShowPermanentDeleteAction = canDeleteWorkOrder && isTrashedOrder && isAdminUser;
+                const hasMoreActions = canShowAssignmentAction || canShowArchiveAction || canShowMoveToTrashAction || canShowRestoreAction || canShowPermanentDeleteAction;
                 const brandModel = workOrderDeviceBrandModel(order);
+                const trashDaysLabel = isTrashedOrder ? lifecycleDaysLeftLabel(order.trashDaysLeft) : '';
 
                 return (
                 <tr
@@ -539,6 +634,8 @@ export function WorkOrdersPage({ role = 'admin' }) {
                       )}
                       <span className="mt-0.5 block truncate text-xs text-slate-300" title={order.customerId?.phone}>{order.customerId?.phone || '-'}</span>
                       <span className="mt-1 block truncate font-mono text-[11px] font-semibold text-slate-500" title={getWorkOrderDisplayId(order)}>{getWorkOrderDisplayId(order)}</span>
+                      {isArchivedOrder ? <span className="mt-1 inline-flex rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-100">Archived</span> : null}
+                      {isTrashedOrder ? <span className="mt-1 inline-flex rounded-full border border-rose-300/20 bg-rose-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-rose-100">Trash{trashDaysLabel ? ` - ${trashDaysLabel}` : ''}</span> : null}
                       <span className="booking-source-inline mt-1.5"><WorkOrderSourceBadge source={order} /></span>
                     </div>
                   </td>
@@ -575,22 +672,45 @@ export function WorkOrdersPage({ role = 'admin' }) {
                           <button
                             type="button"
                             className="work-orders-more-button"
-                            onClick={() => setActionMenuId((current) => current === recordId(order) ? '' : recordId(order))}
+                            onClick={(event) => toggleActionMenu(recordId(order), event)}
                             aria-label="More work order actions"
+                            aria-haspopup="menu"
+                            aria-expanded={actionMenuId === recordId(order)}
                           >
                             <MoreHorizontal className="h-4 w-4" />
                           </button>
-                          {actionMenuId === recordId(order) ? (
-                            <div className="work-orders-more-menu">
-                              {canShowAssignmentAction ? <button type="button" onClick={() => { setAssignOrder(order); setActionMenuId(''); }}>
-                                {order.technicianId ? 'Reassign' : 'Assign'}
+                          <FloatingRowActionMenu
+                            open={actionMenuId === recordId(order)}
+                            triggerElement={actionMenuTrigger}
+                            onClose={closeActionMenu}
+                            className="work-orders-more-menu"
+                            width={236}
+                          >
+                              <Link className="row-action-menu-item" role="menuitem" to={`${base}/${order.id}`} onClick={closeActionMenu}>
+                                <FileText className="h-4 w-4" />
+                                <span>Details</span>
+                              </Link>
+                              {canShowAssignmentAction ? <button type="button" role="menuitem" className="row-action-menu-item" onClick={() => { setAssignOrder(order); closeActionMenu(); }}>
+                                <Users className="h-4 w-4" />
+                                <span>{order.technicianId ? 'Reassign' : 'Assign'}</span>
                               </button> : null}
-                              {canShowDeleteAction ? <button type="button" className="work-orders-danger-menu-item" onClick={() => { setDeleteOrder(order); setActionMenuId(''); }}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                                Delete
+                              {canShowArchiveAction ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--warning work-orders-warning-menu-item" onClick={() => startWorkOrderLifecycleAction(order, 'archive')}>
+                                <Archive className="h-4 w-4" />
+                                <span>Archive Work Order</span>
                               </button> : null}
-                            </div>
-                          ) : null}
+                              {canShowRestoreAction ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--restore" onClick={() => restoreWorkOrder(order)}>
+                                <RotateCcw className="h-4 w-4" />
+                                <span>Restore</span>
+                              </button> : null}
+                              {canShowMoveToTrashAction ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--danger work-orders-danger-menu-item" onClick={() => startWorkOrderLifecycleAction(order, 'trash')}>
+                                <Trash2 className="h-4 w-4" />
+                                <span>Move to Trash</span>
+                              </button> : null}
+                              {canShowPermanentDeleteAction ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--danger work-orders-danger-menu-item" onClick={() => startWorkOrderLifecycleAction(order, 'permanent')}>
+                                <Trash2 className="h-4 w-4" />
+                                <span>Delete Permanently</span>
+                              </button> : null}
+                          </FloatingRowActionMenu>
                         </div>
                       ) : null}
                     </div>
@@ -614,15 +734,77 @@ export function WorkOrdersPage({ role = 'admin' }) {
       ) : null}
       {canDeleteWorkOrder && deleteOrder ? (
         <ConfirmModal
-          title="Delete work order permanently?"
-          message={`${getWorkOrderDisplayId(deleteOrder)} will be permanently deleted only if it has no linked bookings, invoices, payments, AMC visits, or parts history. Linked records are protected and will block deletion.`}
-          confirmLabel="Delete Permanently"
+          title={deleteOrderAction === 'archive' ? 'Archive this work order?' : deleteOrderAction === 'trash' ? 'Move this work order to Trash?' : 'Delete work order permanently?'}
+          message={deleteOrderAction === 'archive'
+            ? `${getWorkOrderDisplayId(deleteOrder)} will move to Archived. Linked invoices, payments, parts, photos, documents, and timeline history stay preserved.`
+            : deleteOrderAction === 'trash'
+              ? `${getWorkOrderDisplayId(deleteOrder)} will move to Trash and can be restored for 30 days. Linked records and history stay preserved.`
+              : `${getWorkOrderDisplayId(deleteOrder)} will be permanently deleted only if the backend allows it. This action is separate from Trash.`}
+          confirmLabel={deleteOrderAction === 'archive' ? 'Archive Work Order' : deleteOrderAction === 'trash' ? 'Move to Trash' : 'Delete Permanently'}
           loading={deleteOrderBusy}
-          loadingLabel="Deleting..."
-          onCancel={() => setDeleteOrder(null)}
-          onConfirm={confirmDeleteWorkOrder}
+          loadingLabel={deleteOrderAction === 'archive' ? 'Archiving...' : deleteOrderAction === 'trash' ? 'Moving...' : 'Deleting...'}
+          onCancel={clearWorkOrderLifecycleAction}
+          onConfirm={confirmWorkOrderLifecycleAction}
         />
       ) : null}
+    </div>
+  );
+}
+
+function LinkedArchiveModal({
+  title,
+  itemLabel,
+  message,
+  confirmLabel,
+  categories = [],
+  fallbackCategories = [],
+  categoryFallbackLabel = 'Protected link types checked',
+  note = 'Archived records are hidden from active lists but can be restored.',
+  loading = false,
+  loadingLabel = '',
+  onCancel,
+  onConfirm
+}) {
+  const visibleCategories = categories.length ? categories : fallbackCategories;
+  const categoryLabel = categories.length ? 'Linked records detected' : categoryFallbackLabel;
+  const busyLabel = loadingLabel || `${confirmLabel}...`;
+
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
+      <div className="surface w-full max-w-lg p-5">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-card border border-amber-300/25 bg-amber-400/10 text-amber-100">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-lg font-black">{title}</h2>
+            <p className="mt-1 truncate text-sm font-semibold text-slate-300" title={itemLabel}>{itemLabel}</p>
+          </div>
+        </div>
+        <p className="mt-4 text-sm leading-6 muted">{message}</p>
+        {visibleCategories.length ? (
+          <div className="mt-4 rounded-card border border-white/10 bg-white/[0.035] p-3">
+            <p className="text-xs font-black uppercase tracking-wide text-slate-400">{categoryLabel}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {visibleCategories.map((category) => (
+                <span key={category} className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-100">
+                  {category}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <p className="mt-4 rounded-card border border-sky-300/15 bg-sky-400/10 p-3 text-sm font-semibold text-sky-100">
+          {note}
+        </p>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button type="button" className="btn btn-secondary" disabled={loading} onClick={onCancel}>Cancel</button>
+          <button type="button" className="btn btn-primary" disabled={loading} onClick={onConfirm}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {loading ? busyLabel : confirmLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

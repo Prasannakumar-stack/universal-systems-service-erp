@@ -143,28 +143,42 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
+import { normalizeRole } from '../../utils/roles.js';
 
 export function AuditLogsPage() {
-  const { request } = useAuth();
+  const { request, token, user } = useAuth();
+  const { push } = useToast();
   const [moduleName, setModuleName] = useState('');
   const [actionName, setActionName] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedLog, setSelectedLog] = useState(null);
+  const [cleanupAction, setCleanupAction] = useState(null);
+  const [cleanupBusy, setCleanupBusy] = useState(false);
+  const [clearAllText, setClearAllText] = useState('');
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 20;
   const debouncedSearch = useDebouncedValue(userSearch);
-  const query = useMemo(() => {
-    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  const filterQuery = useMemo(() => {
+    const params = new URLSearchParams();
     if (moduleName) params.set('module', moduleName);
     if (actionName) params.set('action', actionName);
     if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
+    const text = params.toString();
+    return text ? `?${text}` : '';
+  }, [actionName, dateFrom, dateTo, debouncedSearch, moduleName]);
+  const query = useMemo(() => {
+    const params = new URLSearchParams(filterQuery ? filterQuery.slice(1) : '');
+    params.set('page', String(page));
+    params.set('limit', String(limit));
     return `?${params}`;
-  }, [actionName, dateFrom, dateTo, debouncedSearch, limit, moduleName, page]);
-  const { data, loading, error } = useResource(() => request(`/audit-logs${query}`), [request, query]);
+  }, [filterQuery, limit, page]);
+  const { data, loading, error, reload } = useResource(() => request(`/audit-logs${query}`), [request, query]);
+  const { data: statsData, reload: reloadStats } = useResource(() => request(`/audit-logs/stats${filterQuery}`), [request, filterQuery]);
 
   useEffect(() => {
     setPage(1);
@@ -178,6 +192,67 @@ export function AuditLogsPage() {
     setUserSearch('');
     setDateFrom('');
     setDateTo('');
+  }
+
+  const canMaintainAuditLogs = ['admin', 'super_admin'].includes(normalizeRole(user?.role));
+
+  async function exportAuditCsv() {
+    setExporting(true);
+    try {
+      const response = await fetch(`${apiBase}/audit-logs/export.csv${filterQuery}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!response.ok) throw new Error('Export failed');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      push('Audit logs exported successfully.', 'success');
+    } catch {
+      push('Unable to export audit logs.', 'error');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function openCleanup(action) {
+    setCleanupAction(action);
+    setClearAllText('');
+  }
+
+  function closeCleanup() {
+    if (cleanupBusy) return;
+    setCleanupAction(null);
+    setClearAllText('');
+  }
+
+  async function confirmCleanup() {
+    if (!cleanupAction || cleanupBusy) return;
+    setCleanupBusy(true);
+    try {
+      if (cleanupAction.type === 'all') {
+        await request('/audit-logs/all', {
+          method: 'DELETE',
+          body: JSON.stringify({ confirmation: clearAllText })
+        });
+      } else {
+        await request(`/audit-logs/older-than/${cleanupAction.days}`, { method: 'DELETE' });
+      }
+      push('Audit logs cleared successfully.', 'success');
+      setCleanupAction(null);
+      setClearAllText('');
+      reload({ silent: true });
+      reloadStats({ silent: true });
+    } catch {
+      push('Unable to clear audit logs.', 'error');
+    } finally {
+      setCleanupBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -200,14 +275,7 @@ export function AuditLogsPage() {
       return emptyText;
     }
   };
-  const logs = (data.logs || data.data || []).filter((log) => {
-    const userText = `${log.userId?.name || ''} ${log.userId?.username || ''}`.toLowerCase();
-    const matchesUser = !debouncedSearch.trim() || userText.includes(debouncedSearch.trim().toLowerCase());
-    const created = new Date(log.createdAt);
-    const matchesFrom = !dateFrom || created >= new Date(dateFrom);
-    const matchesTo = !dateTo || created <= new Date(`${dateTo}T23:59:59`);
-    return matchesUser && matchesFrom && matchesTo;
-  });
+  const logs = data?.logs || data?.data || [];
   const pagination = paginationFrom(data, logs.length, limit);
   const auditSummary = {
     total: data?.pagination?.total || logs.length,
@@ -216,6 +284,9 @@ export function AuditLogsPage() {
     billing: logs.filter((log) => ['invoice', 'payment', 'document'].includes(log.module)).length,
     inventory: logs.filter((log) => log.module === 'inventory').length
   };
+  const totalLogCount = Number(statsData?.total ?? auditSummary.total ?? 0);
+  const filteredLogCount = Number(statsData?.filteredTotal ?? auditSummary.total ?? 0);
+  const oldestLogDate = statsData?.oldestLogDate ? formatDate(statsData.oldestLogDate) : 'No logs yet';
 
   return (
     <div className="admin-control-page audit-logs-page">
@@ -244,6 +315,46 @@ export function AuditLogsPage() {
         <DateFilterInput value={dateTo} onChange={setDateTo} placeholder="To date" ariaLabel="Audit log to date" />
         <button type="button" className="btn btn-secondary admin-compact-button" disabled={!hasActiveFilters} onClick={resetFilters}>Reset Filters</button>
       </div>
+
+      <section className="audit-maintenance-card surface mb-5">
+        <div className="audit-maintenance-main">
+          <div className="audit-maintenance-icon">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-wide text-[var(--brand)]">Audit Log Maintenance</p>
+            <h2 className="mt-1 text-lg font-black">Audit Log Maintenance</h2>
+            <p className="mt-1 text-sm muted">Audit logs help track important system activity. Old logs can be exported and cleared safely.</p>
+            <div className="audit-maintenance-stats">
+              <span><b>{totalLogCount}</b><small>Total logs</small></span>
+              <span><b>{oldestLogDate}</b><small>Oldest log date</small></span>
+              {hasActiveFilters ? <span><b>{filteredLogCount}</b><small>Filtered logs</small></span> : null}
+            </div>
+          </div>
+        </div>
+        <div className="audit-maintenance-actions">
+          <button type="button" className="btn btn-secondary admin-compact-button" disabled={exporting} onClick={exportAuditCsv}>
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Export CSV
+          </button>
+          {canMaintainAuditLogs ? (
+            <>
+              <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => openCleanup({ type: 'older', days: 90 })}>
+                Clear logs older than 90 days
+              </button>
+              <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => openCleanup({ type: 'older', days: 180 })}>
+                Clear logs older than 180 days
+              </button>
+              <div className="audit-maintenance-danger">
+                <span>Danger Zone</span>
+                <button type="button" className="btn btn-danger admin-compact-button" onClick={() => openCleanup({ type: 'all' })}>
+                  Clear all audit logs
+                </button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </section>
 
       <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <AdminMetricCard icon={ReceiptText} label="Total Logs" value={auditSummary.total} helper="Visible audit records" tone="blue" />
@@ -326,6 +437,65 @@ export function AuditLogsPage() {
           </div>
         </div>
       ) : null}
+      {cleanupAction?.type === 'older' ? (
+        <ConfirmModal
+          title="Clear old audit logs?"
+          message="This will permanently remove audit logs older than the selected period. Business data will not be affected."
+          confirmLabel="Clear Old Logs"
+          loading={cleanupBusy}
+          loadingLabel="Clearing..."
+          onCancel={closeCleanup}
+          onConfirm={confirmCleanup}
+        />
+      ) : null}
+      {cleanupAction?.type === 'all' ? (
+        <AuditClearAllModal
+          value={clearAllText}
+          loading={cleanupBusy}
+          onChange={setClearAllText}
+          onCancel={closeCleanup}
+          onConfirm={confirmCleanup}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function AuditClearAllModal({ value, loading, onChange, onCancel, onConfirm }) {
+  const enabled = value === 'CLEAR AUDIT LOGS';
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/60 p-4">
+      <div className="surface audit-clear-all-modal w-full max-w-md p-5">
+        <div className="flex items-start gap-3">
+          <div className="audit-clear-all-icon"><AlertTriangle className="h-5 w-5" /></div>
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-rose-200">Danger Zone</p>
+            <h2 className="mt-1 text-lg font-black">Clear all audit logs?</h2>
+            <p className="mt-2 text-sm leading-6 muted">
+              This permanently removes all audit history. Business data will not be affected, but activity history cannot be restored.
+            </p>
+          </div>
+        </div>
+        <label className="mt-5 block">
+          <span className="label">Type CLEAR AUDIT LOGS to confirm</span>
+          <input
+            className="input mt-2"
+            value={value}
+            disabled={loading}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder="CLEAR AUDIT LOGS"
+          />
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className="btn btn-secondary" disabled={loading} onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="btn btn-danger" disabled={loading || !enabled} onClick={onConfirm}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Clear all audit logs
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -352,6 +522,18 @@ function humanActionLabel(action = '') {
     stock_movement: 'Stock Movement',
     amc_visit_work_order_created: 'AMC Visit Job Created',
     amc_contract_created: 'AMC Contract Created',
+    amc_contract_archived: 'AMC Contract Archived',
+    amc_contract_moved_to_trash: 'AMC Contract Moved To Trash',
+    amc_contract_restored: 'AMC Contract Restored',
+    amc_contract_permanently_deleted: 'AMC Contract Permanently Deleted',
+    inventory_part_disabled: 'Inventory Part Disabled',
+    inventory_part_moved_to_trash: 'Inventory Part Moved To Trash',
+    inventory_part_restored: 'Inventory Part Restored',
+    inventory_part_permanently_deleted: 'Inventory Part Permanently Deleted',
+    work_order_archived: 'Work Order Archived',
+    work_order_moved_to_trash: 'Work Order Moved To Trash',
+    work_order_restored: 'Work Order Restored',
+    work_order_permanently_deleted: 'Work Order Permanently Deleted',
     payment_recorded: 'Payment Recorded',
     booking_created: 'Booking Created',
     auto_assigned: 'Auto Assigned',

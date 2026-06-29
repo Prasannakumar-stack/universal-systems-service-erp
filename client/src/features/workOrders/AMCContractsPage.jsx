@@ -136,8 +136,9 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
-import { createPortal } from 'react-dom';
-import { MoreHorizontal } from 'lucide-react';
+import { Archive, MoreHorizontal, RotateCcw } from 'lucide-react';
+import { FloatingRowActionMenu } from '../../components/FloatingRowActionMenu.jsx';
+import { LifecycleTabs } from '../../components/LifecycleTabs.jsx';
 import {
   amcCoverageFlags,
   amcCoverageTypes,
@@ -184,6 +185,26 @@ function amcDeviceBrandModel(contract = {}) {
   return [contract.deviceBrand, contract.deviceModel].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
 }
 
+const amcLifecycleTabs = [
+  { value: 'active', label: 'Active' },
+  { value: 'archived', label: 'Archived' },
+  { value: 'trash', label: 'Trash' },
+  { value: 'all', label: 'All' }
+];
+
+function amcLifecycleState(contract = {}) {
+  if (contract.lifecycleState) return contract.lifecycleState;
+  if (contract.isDeleted || contract.deletedAt) return 'trash';
+  if (contract.archivedAt) return 'archived';
+  return 'active';
+}
+
+function lifecycleDaysLeftLabel(daysLeft) {
+  if (daysLeft === null || daysLeft === undefined) return '';
+  const days = Math.max(0, Number(daysLeft) || 0);
+  return `${days} day${days === 1 ? '' : 's'} left`;
+}
+
 export function AMCContractsPage({ role = 'admin' }) {
   const { request, user } = useAuth();
   const { push } = useToast();
@@ -191,6 +212,7 @@ export function AMCContractsPage({ role = 'admin' }) {
   const location = useLocation();
   const effectiveRole = user?.role || role;
   const isTechnician = normalizeRole(effectiveRole) === 'technician';
+  const isAdminUser = ['admin', 'super_admin'].includes(normalizeRole(effectiveRole));
   const permissionSubject = user || effectiveRole;
   const canCreateAmc = can(permissionSubject, 'create_amc');
   const canRenewAmc = can(permissionSubject, 'renew_amc');
@@ -203,47 +225,23 @@ export function AMCContractsPage({ role = 'admin' }) {
   const [customers, setCustomers] = useState([]);
   const [technicians, setTechnicians] = useState([]);
   const [actionMenuId, setActionMenuId] = useState('');
-  const [actionMenuPosition, setActionMenuPosition] = useState(null);
+  const [actionMenuTrigger, setActionMenuTrigger] = useState(null);
   const [detailsContract, setDetailsContract] = useState(null);
   const [reassignContract, setReassignContract] = useState(null);
   const [deleteContract, setDeleteContract] = useState(null);
+  const [deleteContractAction, setDeleteContractAction] = useState('');
   const [deleteContractBusy, setDeleteContractBusy] = useState(false);
-  const actionMenuRef = useRef(null);
-  const actionTriggerRefs = useRef(new Map());
   const [search, setSearch] = useState('');
+  const [amcLifecycle, setAmcLifecycle] = useState('active');
   const debouncedSearch = useDebouncedValue(search);
   const handledRenewalRef = useRef('');
-  const { data, loading, error, reload } = useResource(() => request('/amc/contracts'), [request]);
-
-  useEffect(() => {
-    if (!actionMenuId) return undefined;
-    function closeActionMenu(event) {
-      if (actionMenuRef.current?.contains(event.target)) return;
-      if (actionTriggerRefs.current.get(actionMenuId)?.contains(event.target)) return;
-      setActionMenuId('');
-      setActionMenuPosition(null);
-    }
-    function closeOnEscape(event) {
-      if (event.key === 'Escape') {
-        setActionMenuId('');
-        setActionMenuPosition(null);
-      }
-    }
-    function closeOnViewportChange() {
-      setActionMenuId('');
-      setActionMenuPosition(null);
-    }
-    document.addEventListener('mousedown', closeActionMenu);
-    document.addEventListener('keydown', closeOnEscape);
-    window.addEventListener('scroll', closeOnViewportChange, true);
-    window.addEventListener('resize', closeOnViewportChange);
-    return () => {
-      document.removeEventListener('mousedown', closeActionMenu);
-      document.removeEventListener('keydown', closeOnEscape);
-      window.removeEventListener('scroll', closeOnViewportChange, true);
-      window.removeEventListener('resize', closeOnViewportChange);
-    };
-  }, [actionMenuId]);
+  const query = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set('lifecycle', amcLifecycle);
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+    return `?${params}`;
+  }, [amcLifecycle, debouncedSearch]);
+  const { data, loading, error, reload } = useResource(() => request(`/amc/contracts${query}`), [request, query]);
 
   useEffect(() => {
     request('/customers?limit=100').then((result) => setCustomers(result.customers || [])).catch(() => setCustomers([]));
@@ -271,11 +269,7 @@ export function AMCContractsPage({ role = 'admin' }) {
 
   const contracts = data?.contracts || [];
   const summary = data?.summary || {};
-  const visibleContracts = contracts.filter((contract) => {
-    const text = `${contract.contractId} ${contract.customerName} ${contract.phone} ${contract.contractType} ${contract.coverageType} ${contract.coveredService} ${contract.coveredDevices} ${contract.deviceBrand || ''} ${contract.deviceModel || ''}`.toLowerCase();
-    const searchText = debouncedSearch.trim().toLowerCase();
-    return !searchText || text.includes(searchText);
-  });
+  const visibleContracts = contracts;
   const hasContractSearch = Boolean(search.trim());
   const contractKpis = [
     { icon: FileText, label: 'Active AMC Contracts', value: summary.activeContracts || 0, helper: 'Live service agreements under coverage.', tone: 'green' },
@@ -284,55 +278,29 @@ export function AMCContractsPage({ role = 'admin' }) {
     { icon: AlertTriangle, label: 'Expired Contracts', value: summary.expiredContracts || 0, helper: 'Coverage ended and should be renewed.', tone: 'red' }
   ];
 
-  function setActionTriggerRef(contractId, node) {
-    if (!node) {
-      actionTriggerRefs.current.delete(contractId);
+  function toggleActionMenu(contractId, event) {
+    if (actionMenuId === contractId) {
+      closeActionMenu();
       return;
     }
-    actionTriggerRefs.current.set(contractId, node);
-  }
-
-  function actionMenuCoords(contractId) {
-    const trigger = actionTriggerRefs.current.get(contractId);
-    if (!trigger || typeof window === 'undefined') return null;
-    const rect = trigger.getBoundingClientRect();
-    const menuWidth = 228;
-    const estimatedMenuHeight = 236;
-    const gap = 8;
-    const margin = 12;
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const opensUp = rect.bottom + gap + estimatedMenuHeight > viewportHeight - margin;
-    const rawTop = opensUp ? rect.top - estimatedMenuHeight - gap : rect.bottom + gap;
-    const leftOpening = rect.right + menuWidth > viewportWidth - margin;
-    const rawLeft = leftOpening ? rect.right - menuWidth : rect.left;
-    return {
-      top: Math.min(Math.max(margin, rawTop), Math.max(margin, viewportHeight - estimatedMenuHeight - margin)),
-      left: Math.min(Math.max(margin, rawLeft), Math.max(margin, viewportWidth - menuWidth - margin)),
-      width: menuWidth,
-      placement: opensUp ? 'top' : 'bottom'
-    };
-  }
-
-  function toggleActionMenu(contractId) {
-    setActionMenuId((current) => {
-      if (current === contractId) {
-        setActionMenuPosition(null);
-        return '';
-      }
-      const nextPosition = actionMenuCoords(contractId);
-      if (!nextPosition) {
-        setActionMenuPosition(null);
-        return '';
-      }
-      setActionMenuPosition(nextPosition);
-      return contractId;
-    });
+    setActionMenuId(contractId);
+    setActionMenuTrigger(event.currentTarget);
   }
 
   function closeActionMenu() {
     setActionMenuId('');
-    setActionMenuPosition(null);
+    setActionMenuTrigger(null);
+  }
+
+  function startContractLifecycleAction(contract, action) {
+    setDeleteContract(contract);
+    setDeleteContractAction(action);
+    closeActionMenu();
+  }
+
+  function clearContractLifecycleAction() {
+    setDeleteContract(null);
+    setDeleteContractAction('');
   }
 
   function selectCustomer(customerId) {
@@ -467,14 +435,22 @@ export function AMCContractsPage({ role = 'admin' }) {
     }
   }
 
-  async function confirmDeleteOrArchiveContract() {
+  async function confirmContractLifecycleAction() {
     if (!deleteContract || !canDeleteAmc || deleteContractBusy) return;
     setDeleteContractBusy(true);
     try {
       await preserveScroll(async () => {
-        const result = await request(`/amc/contracts/${recordId(deleteContract)}`, { method: 'DELETE' });
-        push(result.message || (deleteContract.lifecycleAction === 'archive' ? 'AMC contract archived' : 'AMC contract moved to deleted records'));
-        setDeleteContract(null);
+        const id = recordId(deleteContract);
+        let result = null;
+        if (deleteContractAction === 'archive') {
+          result = await request(`/amc/contracts/${id}/archive`, { method: 'PATCH' });
+        } else if (deleteContractAction === 'trash') {
+          result = await request(`/amc/contracts/${id}/move-to-trash`, { method: 'PATCH' });
+        } else if (deleteContractAction === 'permanent') {
+          result = await request(`/amc/contracts/${id}/permanent`, { method: 'DELETE' });
+        }
+        push(result?.message || 'AMC contract updated');
+        clearContractLifecycleAction();
         closeActionMenu();
         await reload({ silent: true });
         emitSidebarBadgesUpdated();
@@ -483,6 +459,21 @@ export function AMCContractsPage({ role = 'admin' }) {
       push(err.message, 'error');
     } finally {
       setDeleteContractBusy(false);
+    }
+  }
+
+  async function restoreContract(contract) {
+    if (!canDeleteAmc) return;
+    try {
+      await preserveScroll(async () => {
+        const result = await request(`/amc/contracts/${recordId(contract)}/restore`, { method: 'POST' });
+        push(result?.message || 'AMC contract restored');
+        closeActionMenu();
+        await reload({ silent: true });
+        emitSidebarBadgesUpdated();
+      });
+    } catch (err) {
+      push(err.message, 'error');
     }
   }
 
@@ -678,12 +669,19 @@ export function AMCContractsPage({ role = 'admin' }) {
             </AmcFormSection>
           </div>
           <div className="mt-5 flex justify-end">
-            <button className="btn btn-primary h-10 px-4"><Save className="h-4 w-4" />Save AMC Contract</button>
+            <button type="submit" className="btn btn-primary h-10 px-4"><Save className="h-4 w-4" />Save AMC Contract</button>
           </div>
         </form>
       ) : null}
 
       <div className="surface amc-table-card mt-6 p-5">
+        <LifecycleTabs
+          tabs={amcLifecycleTabs}
+          value={amcLifecycle}
+          onChange={setAmcLifecycle}
+          counts={data?.lifecycleCounts}
+          note={amcLifecycle === 'trash' ? 'Items in Trash are kept for 30 days before permanent cleanup.' : 'Archived contracts are hidden from active lists but can be restored.'}
+        />
         <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
           <SearchBox value={search} onChange={setSearch} placeholder="Search contract, customer, phone, service" />
           <Link className="btn btn-secondary" to={`${base}/amc-renewals`}><AlertTriangle className="h-4 w-4" />Renewals</Link>
@@ -704,17 +702,17 @@ export function AMCContractsPage({ role = 'admin' }) {
                   key={recordId(contract)}
                   contract={contract}
                   menuOpen={actionMenuId === recordId(contract)}
-                  actionMenuPosition={actionMenuPosition}
-                  actionMenuRef={actionMenuRef}
-                  setActionTriggerRef={setActionTriggerRef}
+                  actionMenuTrigger={actionMenuTrigger}
                   toggleActionMenu={toggleActionMenu}
                   closeActionMenu={closeActionMenu}
                   canCreateAmcJob={canCreateAmcJob}
                   canAssignTechnician={canAssignTechnician}
                   canDeleteAmc={canDeleteAmc}
+                  isAdminUser={isAdminUser}
                   setDetailsContract={setDetailsContract}
                   setReassignContract={setReassignContract}
-                  setDeleteContract={setDeleteContract}
+                  startContractLifecycleAction={startContractLifecycleAction}
+                  restoreContract={restoreContract}
                   createJob={createJob}
                   navigate={navigate}
                   base={base}
@@ -739,6 +737,11 @@ export function AMCContractsPage({ role = 'admin' }) {
                 const payment = amcPaymentSummary(contract);
                 const extra = extraChargeSummary(contract);
                 const brandModel = amcDeviceBrandModel(contract);
+                const lifecycleState = amcLifecycleState(contract);
+                const isActiveContract = lifecycleState === 'active';
+                const isArchivedContract = lifecycleState === 'archived';
+                const isTrashedContract = lifecycleState === 'trash';
+                const trashDaysLabel = isTrashedContract ? lifecycleDaysLeftLabel(contract.trashDaysLeft) : '';
                 return (
                   <tr className="amc-contracts-row" key={recordId(contract)}>
                     <td>
@@ -752,6 +755,8 @@ export function AMCContractsPage({ role = 'admin' }) {
                       <div className="amc-plan-cell">
                         <span className="amc-plan-title" title={contract.contractType || '-'}>{contract.contractType || '-'}</span>
                         <span className="amc-muted-badge" title={normalizeAmcCoverageType(contract.coverageType)}>{normalizeAmcCoverageType(contract.coverageType)}</span>
+                        {isArchivedContract ? <span className="amc-muted-badge">Archived</span> : null}
+                        {isTrashedContract ? <span className="amc-muted-badge">Trash{trashDaysLabel ? ` - ${trashDaysLabel}` : ''}</span> : null}
                         <span className="amc-plan-service" title={contract.coveredService || contract.coveredDevices || '-'}>{contract.coveredService || contract.coveredDevices || '-'}</span>
                         {brandModel ? <span className="amc-plan-service" title={brandModel}>Brand / Model: {brandModel}</span> : null}
                         {contract.warrantyIncluded ? <span className="amc-warranty-line">{amcWarrantyLine(contract)}</span> : null}
@@ -789,71 +794,70 @@ export function AMCContractsPage({ role = 'admin' }) {
                         <div className="relative">
                           <button
                             type="button"
-                            ref={(node) => setActionTriggerRef(recordId(contract), node)}
                             className="work-orders-more-button amc-actions-more-button"
-                            onClick={() => toggleActionMenu(recordId(contract))}
+                            onClick={(event) => toggleActionMenu(recordId(contract), event)}
                             aria-haspopup="menu"
                             aria-expanded={actionMenuId === recordId(contract)}
                             aria-label="More AMC contract actions"
                           >
                             <MoreHorizontal className="h-4 w-4" />
                           </button>
-                        {actionMenuId === recordId(contract) && actionMenuPosition ? createPortal(
-                          <div
-                            ref={actionMenuRef}
-                            className={`work-orders-more-menu amc-row-action-menu is-portal is-${actionMenuPosition.placement}`}
-                            role="menu"
-                            style={{
-                              position: 'fixed',
-                              top: `${actionMenuPosition.top}px`,
-                              left: `${actionMenuPosition.left}px`,
-                              width: `${actionMenuPosition.width}px`
-                            }}
-                          >
-                            <button
+                        <FloatingRowActionMenu
+                          open={actionMenuId === recordId(contract)}
+                          triggerElement={actionMenuTrigger}
+                          onClose={closeActionMenu}
+                          className="work-orders-more-menu amc-row-action-menu"
+                          width={256}
+                        >
+                            {isActiveContract ? <button
                               type="button"
                               role="menuitem"
+                              className="row-action-menu-item"
                               disabled={!canCreateAmcJob}
                               title={canCreateAmcJob ? 'Create service job from this AMC contract' : 'You do not have permission to create AMC jobs'}
                               onClick={() => { closeActionMenu(); createJob(contract); }}
                             >
-                              <Wrench className="h-3.5 w-3.5" />
-                              Create Job
+                              <Wrench className="h-4 w-4" />
+                              <span>Create Job</span>
+                            </button> : null}
+                            <button type="button" role="menuitem" className="row-action-menu-item" onClick={() => { setDetailsContract(contract); closeActionMenu(); }}>
+                              <FileText className="h-4 w-4" />
+                              <span>View Details</span>
                             </button>
-                            <button type="button" role="menuitem" onClick={() => { setDetailsContract(contract); closeActionMenu(); }}>
-                              <FileText className="h-3.5 w-3.5" />
-                              View Details
-                            </button>
-                            {canAssignTechnician ? (
-                              <button type="button" role="menuitem" onClick={() => { setReassignContract(contract); closeActionMenu(); }}>
-                                <Users className="h-3.5 w-3.5" />
-                                Reassign
+                            {canAssignTechnician && isActiveContract ? (
+                              <button type="button" role="menuitem" className="row-action-menu-item" onClick={() => { setReassignContract(contract); closeActionMenu(); }}>
+                                <Users className="h-4 w-4" />
+                                <span>Reassign</span>
                               </button>
                             ) : null}
                             <button
                               type="button"
                               role="menuitem"
+                              className="row-action-menu-item"
                               disabled={!invoiceId}
                               title={invoiceId ? 'Open related payments' : 'Create an invoice before opening payments'}
                               onClick={() => { closeActionMenu(); navigate(`${base}/payments?invoiceId=${invoiceId}`); }}
                             >
-                              <CreditCard className="h-3.5 w-3.5" />
-                              Go to Payments
+                              <CreditCard className="h-4 w-4" />
+                              <span>Go to Payments</span>
                             </button>
-                            {canDeleteAmc ? (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={contract.lifecycleAction === 'delete' ? 'work-orders-danger-menu-item' : 'work-orders-warning-menu-item'}
-                                onClick={() => { setDeleteContract(contract); closeActionMenu(); }}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                {contract.lifecycleAction === 'delete' ? 'Delete' : 'Archive'}
-                              </button>
-                            ) : null}
-                          </div>,
-                          document.body
-                        ) : null}
+                            {canDeleteAmc && isActiveContract ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--warning work-orders-warning-menu-item" onClick={() => startContractLifecycleAction(contract, 'archive')}>
+                              <Archive className="h-4 w-4" />
+                              <span>Archive AMC Contract</span>
+                            </button> : null}
+                            {canDeleteAmc && !isActiveContract ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--restore" onClick={() => restoreContract(contract)}>
+                              <RotateCcw className="h-4 w-4" />
+                              <span>Restore</span>
+                            </button> : null}
+                            {canDeleteAmc && !isTrashedContract ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--danger work-orders-danger-menu-item" onClick={() => startContractLifecycleAction(contract, 'trash')}>
+                              <Trash2 className="h-4 w-4" />
+                              <span>Move to Trash</span>
+                            </button> : null}
+                            {canDeleteAmc && isTrashedContract && isAdminUser ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--danger work-orders-danger-menu-item" onClick={() => startContractLifecycleAction(contract, 'permanent')}>
+                              <Trash2 className="h-4 w-4" />
+                              <span>Delete Permanently</span>
+                            </button> : null}
+                        </FloatingRowActionMenu>
                         </div>
                       </div>
                     </td>
@@ -877,15 +881,17 @@ export function AMCContractsPage({ role = 'admin' }) {
       ) : null}
       {deleteContract ? (
         <ConfirmModal
-          title={deleteContract.lifecycleAction === 'delete' ? 'Delete AMC contract permanently?' : 'Archive AMC contract?'}
-          message={deleteContract.lifecycleAction === 'delete'
-            ? 'Delete this AMC contract only if it has no linked jobs, invoices, payments, or visits.'
-            : 'This hides the contract from active lists but keeps history, payments, and jobs safe.'}
-          confirmLabel={deleteContract.lifecycleAction === 'delete' ? 'Delete Permanently' : 'Archive Contract'}
+          title={deleteContractAction === 'archive' ? 'Archive this AMC contract?' : deleteContractAction === 'trash' ? 'Move this AMC contract to Trash?' : 'Delete AMC contract permanently?'}
+          message={deleteContractAction === 'archive'
+            ? 'This moves the AMC contract to Archived while preserving visits, renewals, invoices, payments, linked work orders, and history.'
+            : deleteContractAction === 'trash'
+              ? 'This moves the AMC contract to Trash for 30 days. Visits, renewals, invoices, payments, linked work orders, and history stay preserved.'
+              : 'This permanently deletes the AMC contract only if the backend allows it. This action is separate from Trash.'}
+          confirmLabel={deleteContractAction === 'archive' ? 'Archive AMC Contract' : deleteContractAction === 'trash' ? 'Move to Trash' : 'Delete Permanently'}
           loading={deleteContractBusy}
-          loadingLabel={deleteContract.lifecycleAction === 'delete' ? 'Deleting...' : 'Archiving...'}
-          onCancel={() => setDeleteContract(null)}
-          onConfirm={confirmDeleteOrArchiveContract}
+          loadingLabel={deleteContractAction === 'archive' ? 'Archiving...' : deleteContractAction === 'trash' ? 'Moving...' : 'Deleting...'}
+          onCancel={clearContractLifecycleAction}
+          onConfirm={confirmContractLifecycleAction}
         />
       ) : null}
     </div>
@@ -1065,17 +1071,17 @@ function TechnicianAmcContractMobileCard({ contract, base }) {
 function AmcContractCompactCard({
   contract,
   menuOpen,
-  actionMenuPosition,
-  actionMenuRef,
-  setActionTriggerRef,
+  actionMenuTrigger,
   toggleActionMenu,
   closeActionMenu,
   canCreateAmcJob,
   canAssignTechnician,
   canDeleteAmc,
+  isAdminUser,
   setDetailsContract,
   setReassignContract,
-  setDeleteContract,
+  startContractLifecycleAction,
+  restoreContract,
   createJob,
   navigate,
   base
@@ -1086,6 +1092,11 @@ function AmcContractCompactCard({
   const payment = amcPaymentSummary(contract);
   const extra = extraChargeSummary(contract);
   const brandModel = amcDeviceBrandModel(contract);
+  const lifecycleState = amcLifecycleState(contract);
+  const isActiveContract = lifecycleState === 'active';
+  const isArchivedContract = lifecycleState === 'archived';
+  const isTrashedContract = lifecycleState === 'trash';
+  const trashDaysLabel = isTrashedContract ? lifecycleDaysLeftLabel(contract.trashDaysLeft) : '';
 
   return (
     <article className="technician-mobile-card amc-responsive-card">
@@ -1104,6 +1115,8 @@ function AmcContractCompactCard({
           <p>{normalizeAmcCoverageType(contract.coverageType)} | {contract.coveredService || contract.coveredDevices || '-'}</p>
           {brandModel ? <p>Brand / Model: {brandModel}</p> : null}
           {contract.warrantyIncluded ? <p>{amcWarrantyLine(contract)}</p> : null}
+          {isArchivedContract ? <p>Archived</p> : null}
+          {isTrashedContract ? <p>Trash{trashDaysLabel ? ` - ${trashDaysLabel}` : ''}</p> : null}
         </div>
         <div>
           <span>Period</span>
@@ -1126,71 +1139,70 @@ function AmcContractCompactCard({
         <div className="relative ml-auto">
           <button
             type="button"
-            ref={(node) => setActionTriggerRef(contractId, node)}
             className="work-orders-more-button amc-actions-more-button"
-            onClick={() => toggleActionMenu(contractId)}
+            onClick={(event) => toggleActionMenu(contractId, event)}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-label="More AMC contract actions"
           >
             <MoreHorizontal className="h-4 w-4" />
           </button>
-          {menuOpen && actionMenuPosition ? createPortal(
-            <div
-              ref={actionMenuRef}
-              className={`work-orders-more-menu amc-row-action-menu is-portal is-${actionMenuPosition.placement}`}
-              role="menu"
-              style={{
-                position: 'fixed',
-                top: `${actionMenuPosition.top}px`,
-                left: `${actionMenuPosition.left}px`,
-                width: `${actionMenuPosition.width}px`
-              }}
-            >
-              <button
+          <FloatingRowActionMenu
+            open={menuOpen}
+            triggerElement={actionMenuTrigger}
+            onClose={closeActionMenu}
+            className="work-orders-more-menu amc-row-action-menu"
+            width={256}
+          >
+              {isActiveContract ? <button
                 type="button"
                 role="menuitem"
+                className="row-action-menu-item"
                 disabled={!canCreateAmcJob}
                 title={canCreateAmcJob ? 'Create service job from this AMC contract' : 'You do not have permission to create AMC jobs'}
                 onClick={() => { closeActionMenu(); createJob(contract); }}
               >
-                <Wrench className="h-3.5 w-3.5" />
-                Create Job
+                <Wrench className="h-4 w-4" />
+                <span>Create Job</span>
+              </button> : null}
+              <button type="button" role="menuitem" className="row-action-menu-item" onClick={() => { setDetailsContract(contract); closeActionMenu(); }}>
+                <FileText className="h-4 w-4" />
+                <span>View Details</span>
               </button>
-              <button type="button" role="menuitem" onClick={() => { setDetailsContract(contract); closeActionMenu(); }}>
-                <FileText className="h-3.5 w-3.5" />
-                View Details
-              </button>
-              {canAssignTechnician ? (
-                <button type="button" role="menuitem" onClick={() => { setReassignContract(contract); closeActionMenu(); }}>
-                  <Users className="h-3.5 w-3.5" />
-                  Reassign
+              {canAssignTechnician && isActiveContract ? (
+                <button type="button" role="menuitem" className="row-action-menu-item" onClick={() => { setReassignContract(contract); closeActionMenu(); }}>
+                  <Users className="h-4 w-4" />
+                  <span>Reassign</span>
                 </button>
               ) : null}
               <button
                 type="button"
                 role="menuitem"
+                className="row-action-menu-item"
                 disabled={!invoiceId}
                 title={invoiceId ? 'Open related payments' : 'Create an invoice before opening payments'}
                 onClick={() => { closeActionMenu(); navigate(`${base}/payments?invoiceId=${invoiceId}`); }}
               >
-                <CreditCard className="h-3.5 w-3.5" />
-                Go to Payments
+                <CreditCard className="h-4 w-4" />
+                <span>Go to Payments</span>
               </button>
-              {canDeleteAmc ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={contract.lifecycleAction === 'delete' ? 'work-orders-danger-menu-item' : 'work-orders-warning-menu-item'}
-                  onClick={() => { setDeleteContract(contract); closeActionMenu(); }}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {contract.lifecycleAction === 'delete' ? 'Delete' : 'Archive'}
-                </button>
-              ) : null}
-            </div>,
-            document.body
-          ) : null}
+              {canDeleteAmc && isActiveContract ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--warning work-orders-warning-menu-item" onClick={() => startContractLifecycleAction(contract, 'archive')}>
+                <Archive className="h-4 w-4" />
+                <span>Archive AMC Contract</span>
+              </button> : null}
+              {canDeleteAmc && !isActiveContract ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--restore" onClick={() => restoreContract(contract)}>
+                <RotateCcw className="h-4 w-4" />
+                <span>Restore</span>
+              </button> : null}
+              {canDeleteAmc && !isTrashedContract ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--danger work-orders-danger-menu-item" onClick={() => startContractLifecycleAction(contract, 'trash')}>
+                <Trash2 className="h-4 w-4" />
+                <span>Move to Trash</span>
+              </button> : null}
+              {canDeleteAmc && isTrashedContract && isAdminUser ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--danger work-orders-danger-menu-item" onClick={() => startContractLifecycleAction(contract, 'permanent')}>
+                <Trash2 className="h-4 w-4" />
+                <span>Delete Permanently</span>
+              </button> : null}
+          </FloatingRowActionMenu>
         </div>
       </div>
     </article>

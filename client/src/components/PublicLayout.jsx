@@ -210,7 +210,7 @@ function PublicLayoutShell() {
           <div className="public-header-zone public-header-zone-actions hidden lg:flex">
             {bookingLink ? <NavItems links={[bookingLink]} /> : null}
           </div>
-          <button className="icon-button h-10 w-10 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
+          <button type="button" className="icon-button h-10 w-10 lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </button>
         </div>
@@ -223,7 +223,7 @@ function PublicLayoutShell() {
               <span className="public-header-logo-link inline-flex items-center">
                 <PublicHeaderLogo branding={branding} />
               </span>
-              <button className="icon-button h-9 w-9" onClick={() => setOpen(false)} aria-label="Close menu">
+              <button type="button" className="icon-button h-9 w-9" onClick={() => setOpen(false)} aria-label="Close menu">
                 <X className="h-5 w-5" />
               </button>
             </div>

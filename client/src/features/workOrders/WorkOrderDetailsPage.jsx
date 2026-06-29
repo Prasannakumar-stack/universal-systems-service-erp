@@ -147,6 +147,7 @@ import {
   YAxis
 } from '../../shared/phase1Shared.jsx';
 import { technicianNameOrAdmin } from '../../utils/assignment.js';
+import { downloadPdfBlob, navigateShell, openPdfShell, showPdfInShell, showPdfShellError } from '../../utils/pdfDelivery.js';
 import {
   autoAmcPartChargeType,
   autoAmcPartChargeMode,
@@ -1304,7 +1305,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     }
   }
 
-  async function downloadPdfFile(type, fallbackFilename) {
+  async function downloadPdfFile(type, fallbackFilename, fallbackWindow = null) {
     const response = await fetch(`${apiBase}/work-orders/${id}/pdf/${type}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -1317,24 +1318,19 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     const blob = await response.blob();
     const disposition = response.headers.get('content-disposition') || '';
     const filename = disposition.match(/filename="?([^"]+)"?/i)?.[1] || fallbackFilename;
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+    downloadPdfBlob(blob, filename, fallbackWindow);
   }
 
   async function downloadWorkflowPdf(flow, regenerate = false) {
+    const downloadWindow = openPdfShell(regenerate ? 'Preparing fresh PDF' : 'Preparing PDF download');
     try {
       await preserveScroll(async () => {
         setPdfBusy(`${regenerate ? 'regenerate' : 'download'}-${flow.type}`);
-        await downloadPdfFile(flow.type, flow.filename);
+        await downloadPdfFile(flow.type, flow.filename, downloadWindow);
         push(regenerate ? `${flow.title} regenerated as a fresh PDF without replacing old files` : `${flow.title} generated`);
       });
     } catch (err) {
+      showPdfShellError(downloadWindow, err.message || 'PDF download failed. Please try again.');
       push(err.message, 'error');
     } finally {
       setPdfBusy('');
@@ -1342,6 +1338,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   }
 
   async function previewWorkflowPdf(flow) {
+    const previewWindow = openPdfShell('Preparing PDF preview');
     try {
       await preserveScroll(async () => {
         const authToken = token;
@@ -1355,12 +1352,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             : data.message || 'PDF preview failed. Please try again.');
         }
         const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-        window.open(blobUrl, '_blank', 'noopener,noreferrer');
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        showPdfInShell(previewWindow, blob, 'PDF preview');
       });
     } catch (err) {
       console.error('PDF preview error:', err);
+      showPdfShellError(previewWindow, err.message || 'PDF preview failed. Please try again.');
       push(err.message || 'PDF preview failed. Please try again.', 'error');
     }
   }
@@ -1376,18 +1372,22 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       return;
     }
 
+    const whatsappWindow = openPdfShell('Preparing WhatsApp PDF');
     try {
       await preserveScroll(async () => {
         setPdfBusy(`send-${flow.type}`);
         const result = await request(`/work-orders/${id}/pdf/${flow.type}/send-whatsapp`, { method: 'POST' });
         if (result.sentViaApi) {
+          if (whatsappWindow && !whatsappWindow.closed) whatsappWindow.close();
           push(result.message || `${getPdfLabel(flow.type)} sent via WhatsApp`);
           await reloadSidebarAware();
           return;
         }
-        await downloadPdfFile(flow.type, flow.filename);
+        await downloadPdfFile(flow.type, result.pdfFilename || flow.filename, whatsappWindow);
         if (result.whatsappUrl) {
-          window.open(result.whatsappUrl, '_blank', 'noopener,noreferrer');
+          navigateShell(whatsappWindow, result.whatsappUrl);
+        } else if (whatsappWindow && !whatsappWindow.closed) {
+          whatsappWindow.close();
         }
         push(
           result.fallbackNote ||
@@ -1395,6 +1395,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         );
       });
     } catch (err) {
+      showPdfShellError(whatsappWindow, err.message || 'WhatsApp PDF action failed. Please try again.');
       push(err.message, 'error');
     } finally {
       setPdfBusy('');

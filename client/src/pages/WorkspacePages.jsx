@@ -169,7 +169,7 @@ function AdminQuickActionsPanel({ setActiveTab }) {
                 <div className="min-w-0">
                   <h2 className="text-lg font-black text-[var(--text)]">{item.title}</h2>
                   <p className="mt-2 text-sm leading-6 muted">{item.text}</p>
-                  <button className="btn btn-primary mt-4" onClick={() => setActiveTab(item.tab)}>
+                  <button type="button" className="btn btn-primary mt-4" onClick={() => setActiveTab(item.tab)}>
                     Open
                   </button>
                 </div>
@@ -287,7 +287,7 @@ export function BookingsPage({ role = 'admin', mode = 'bookings' }) {
         eyebrow={role === 'admin' ? 'Admin' : 'Technician'}
         action={
           role === 'admin' && mode !== 'billing' ? (
-            <button className="btn btn-primary" onClick={() => setManualOpen(true)}>
+            <button type="button" className="btn btn-primary" onClick={() => setManualOpen(true)}>
               <Plus className="h-4 w-4" />
               Add Booking
             </button>
@@ -445,7 +445,7 @@ function ManualBookingModal({ onClose, onSaved }) {
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn btn-primary" disabled={loading}>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
             <Save className="h-4 w-4" />
             Save Booking
           </button>
@@ -625,7 +625,7 @@ export function BookingDetailPage({ role = 'admin' }) {
         title={booking.booking_code}
         eyebrow={role === 'admin' ? 'Booking Details' : 'My Booking Details'}
         action={
-          <button className="btn btn-secondary" onClick={() => navigate(detailBase)}>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate(detailBase)}>
             Back
           </button>
         }
@@ -673,11 +673,11 @@ export function BookingDetailPage({ role = 'admin' }) {
                   <div className="grid h-56 place-items-center rounded-card bg-[var(--surface-2)] text-sm muted">Image available</div>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button className="btn btn-secondary" onClick={openImage}>
+                  <button type="button" className="btn btn-secondary" onClick={openImage}>
                     <Eye className="h-4 w-4" />
                     Open Full Image
                   </button>
-                  <button className="btn btn-secondary" onClick={downloadImage}>
+                  <button type="button" className="btn btn-secondary" onClick={downloadImage}>
                     <Download className="h-4 w-4" />
                     Download Image
                   </button>
@@ -698,7 +698,7 @@ export function BookingDetailPage({ role = 'admin' }) {
                 ))}
               </select>
               <input className="input" placeholder="Work progress note" value={progress.note} onChange={(event) => setProgress((current) => ({ ...current, note: event.target.value }))} />
-              <button className="btn btn-primary">
+              <button type="submit" className="btn btn-primary">
                 <Save className="h-4 w-4" />
                 Update
               </button>
@@ -746,7 +746,7 @@ export function BookingDetailPage({ role = 'admin' }) {
                   onChange={(event) => setPartForm((current) => ({ ...current, unitPrice: event.target.value }))}
                 />
               </div>
-              <button className="btn btn-primary">
+              <button type="submit" className="btn btn-primary">
                 <PackagePlus className="h-4 w-4" />
                 Add Part
               </button>
@@ -761,7 +761,7 @@ export function BookingDetailPage({ role = 'admin' }) {
                     </div>
                     <div className="flex items-center gap-2">
                       <p className="font-black">{currency(part.total)}</p>
-                      <button className="icon-button h-8 w-8" onClick={() => setRemovePartCandidate(part)} aria-label="Remove part">
+                      <button type="button" className="icon-button h-8 w-8" onClick={() => setRemovePartCandidate(part)} aria-label="Remove part">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -796,7 +796,7 @@ export function BookingDetailPage({ role = 'admin' }) {
                 <span className="label">Bill notes</span>
                 <textarea className="input min-h-24" value={bill.billNotes} onChange={(event) => setBill((current) => ({ ...current, billNotes: event.target.value }))} />
               </label>
-              <button className="btn btn-primary">
+              <button type="submit" className="btn btn-primary">
                 <Save className="h-4 w-4" />
                 Save Bill
               </button>
@@ -807,7 +807,7 @@ export function BookingDetailPage({ role = 'admin' }) {
             <h2 className="text-xl font-black">PDF Documents</h2>
             <div className="mt-4 grid gap-2">
               {pdfTypes.map((type) => (
-                <button key={type.value} className="btn btn-secondary justify-start" onClick={() => generate(type.value)}>
+                <button key={type.value} type="button" className="btn btn-secondary justify-start" onClick={() => generate(type.value)}>
                   <FileText className="h-4 w-4" />
                   Generate {type.label}
                 </button>
@@ -816,7 +816,7 @@ export function BookingDetailPage({ role = 'admin' }) {
             <div className="mt-5 grid gap-2">
               {data.pdfs?.length ? (
                 data.pdfs.map((pdf) => (
-                  <button key={pdf.id} className="flex items-center justify-between gap-3 rounded-card bg-[var(--surface-2)] p-3 text-left text-sm" onClick={() => downloadPdf(pdf)}>
+                  <button key={pdf.id} type="button" className="flex items-center justify-between gap-3 rounded-card bg-[var(--surface-2)] p-3 text-left text-sm" onClick={() => downloadPdf(pdf)}>
                     <span>
                       <span className="font-bold">{pdf.type}</span>
                       <span className="block muted">{formatDate(pdf.created_at)} Â· {pdf.generated_by_name}</span>
@@ -902,7 +902,7 @@ export function CallRequestsPage() {
                       <option key={status}>{status}</option>
                     ))}
                   </select>
-                  <button className="btn btn-primary" onClick={() => convert(item)} disabled={item.status === 'Converted'}>
+                  <button type="button" className="btn btn-primary" onClick={() => convert(item)} disabled={item.status === 'Converted'}>
                     Convert
                   </button>
                 </div>
@@ -964,7 +964,7 @@ export function PartsPage() {
         <input className="input" type="number" min="0" step="0.01" placeholder="Selling price" value={form.sellingPrice} onChange={(event) => update('sellingPrice', event.target.value)} />
         <input className="input" type="number" min="0" step="0.01" placeholder="Available stock" value={form.availableStock} onChange={(event) => update('availableStock', event.target.value)} />
         <input className="input" type="number" min="0" step="0.01" placeholder="Low stock limit" value={form.lowStockLimit} onChange={(event) => update('lowStockLimit', event.target.value)} />
-        <button className="btn btn-primary md:col-span-3">
+        <button type="submit" className="btn btn-primary md:col-span-3">
           <Boxes className="h-4 w-4" />
           Save Part
         </button>
@@ -995,7 +995,7 @@ export function PartsPage() {
                   <td>{part.available_stock}</td>
                   <td>{part.low_stock_limit}</td>
                   <td>
-                    <button className="icon-button h-9 w-9" onClick={() => setConfirm(part)} aria-label="Delete part">
+                    <button type="button" className="icon-button h-9 w-9" onClick={() => setConfirm(part)} aria-label="Delete part">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -1067,7 +1067,7 @@ export function EmployeesPage() {
           <option value="admin">Admin</option>
         </select>
         <input className="input" placeholder="Phone" value={form.phone} onChange={(event) => update('phone', event.target.value)} />
-        <button className="btn btn-primary md:col-span-3">
+        <button type="submit" className="btn btn-primary md:col-span-3">
           <UserPlus className="h-4 w-4" />
           Create Employee
         </button>
@@ -1094,7 +1094,7 @@ export function EmployeesPage() {
                 <td>{item.phone || '-'}</td>
                 <td>{item.active ? 'Active' : 'Inactive'}</td>
                 <td>
-                  <button className="btn btn-secondary py-2" onClick={() => toggle(item)}>
+                  <button type="button" className="btn btn-secondary py-2" onClick={() => toggle(item)}>
                     {item.active ? 'Disable' : 'Enable'}
                   </button>
                 </td>
@@ -1162,7 +1162,7 @@ export function PdfManagementPage() {
                   <td>{pdf.generated_by_name}</td>
                   <td>{formatDate(pdf.created_at)}</td>
                   <td>
-                    <button className="btn btn-secondary py-2" onClick={() => download(pdf)}>
+                    <button type="button" className="btn btn-secondary py-2" onClick={() => download(pdf)}>
                       <Download className="h-4 w-4" />
                       Download
                     </button>
@@ -1252,14 +1252,14 @@ export function SettingsPage() {
               </label>
             ))}
           </div>
-          <button className="btn btn-primary mt-4">
+          <button type="submit" className="btn btn-primary mt-4">
             <Save className="h-4 w-4" />
             Save Settings
           </button>
         </form>
         <div className="surface p-5">
           <h2 className="text-xl font-black">Backup & Restore</h2>
-          <button className="btn btn-primary mt-4" onClick={exportBackup}>
+          <button type="button" className="btn btn-primary mt-4" onClick={exportBackup}>
             <Download className="h-4 w-4" />
             Export Backup
           </button>
@@ -1267,7 +1267,7 @@ export function SettingsPage() {
             <span className="label">Restore backup JSON</span>
             <textarea className="input min-h-44" value={restoreText} onChange={(event) => setRestoreText(event.target.value)} />
           </label>
-          <button className="btn btn-secondary mt-3" onClick={restoreBackup} disabled={!restoreText.trim()}>
+          <button type="button" className="btn btn-secondary mt-3" onClick={restoreBackup} disabled={!restoreText.trim()}>
             <ArchiveRestore className="h-4 w-4" />
             Restore Backup
           </button>
@@ -1314,7 +1314,7 @@ export function TechnicianProfilePage() {
             <input className="input" type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
           </label>
         </div>
-        <button className="btn btn-primary mt-5">
+        <button type="submit" className="btn btn-primary mt-5">
           <Save className="h-4 w-4" />
           Save Profile
         </button>

@@ -722,7 +722,7 @@ function AdminSidebar({ close, collapsed = false, onToggleCollapse = null }) {
             </div>
           )}
         </div>
-        <button className={`btn btn-secondary ${collapsed ? 'enterprise-sidebar-logout-collapsed' : 'w-full justify-start'}`} onClick={handleLogout} title="Logout" aria-label="Logout">
+        <button type="button" className={`btn btn-secondary ${collapsed ? 'enterprise-sidebar-logout-collapsed' : 'w-full justify-start'}`} onClick={handleLogout} title="Logout" aria-label="Logout">
           <LogOut className="h-4 w-4 shrink-0" />
           {collapsed ? null : <span>Logout</span>}
         </button>
@@ -844,7 +844,7 @@ function TechnicianSidebar({ close, collapsed = false, onToggleCollapse = null }
             </div>
           )}
         </div>
-        <button className={`btn btn-secondary ${collapsed ? 'enterprise-sidebar-logout-collapsed' : 'w-full justify-start'}`} onClick={handleLogout} title="Logout" aria-label="Logout">
+        <button type="button" className={`btn btn-secondary ${collapsed ? 'enterprise-sidebar-logout-collapsed' : 'w-full justify-start'}`} onClick={handleLogout} title="Logout" aria-label="Logout">
           <LogOut className="h-4 w-4 shrink-0" />
           {collapsed ? null : <span>Logout</span>}
         </button>
@@ -1237,7 +1237,7 @@ function AdminTopBar({ role, openSidebar }) {
       <header className="enterprise-topbar">
         <div className="enterprise-topbar-inner">
           <div className="enterprise-topbar-search">
-            <button className="icon-button enterprise-top-icon h-11 w-11 xl:hidden" onClick={openSidebar} aria-label={`Open ${isTechnician ? 'technician' : 'admin'} menu`}>
+            <button type="button" className="icon-button enterprise-top-icon h-11 w-11 xl:hidden" onClick={openSidebar} aria-label={`Open ${isTechnician ? 'technician' : 'admin'} menu`}>
               <Menu className="h-5 w-5" />
             </button>
             <GlobalSearch role={userRole} permissionSubject={permissionSubject} />
@@ -1322,7 +1322,7 @@ export default function DashboardLayout({ role }) {
           <div className="fixed inset-0 z-[70] bg-black/55 xl:hidden" onClick={() => setOpen(false)}>
             <div className="h-full w-[292px] max-w-[88vw]" onClick={(event) => event.stopPropagation()}>
               <AdminSidebar close={() => setOpen(false)} />
-              <button className="absolute right-4 top-4 icon-button h-9 w-9 bg-[var(--surface)]" onClick={() => setOpen(false)} aria-label="Close admin menu">
+              <button type="button" className="absolute right-4 top-4 icon-button h-9 w-9 bg-[var(--surface)]" onClick={() => setOpen(false)} aria-label="Close admin menu">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -1345,7 +1345,7 @@ export default function DashboardLayout({ role }) {
         <div className="fixed inset-0 z-[70] bg-black/55 xl:hidden" onClick={() => setOpen(false)}>
           <div className="h-full w-[292px] max-w-[88vw]" onClick={(event) => event.stopPropagation()}>
             <TechnicianSidebar close={() => setOpen(false)} />
-            <button className="absolute right-4 top-4 icon-button h-9 w-9 bg-[var(--surface)]" onClick={() => setOpen(false)} aria-label="Close technician menu">
+            <button type="button" className="absolute right-4 top-4 icon-button h-9 w-9 bg-[var(--surface)]" onClick={() => setOpen(false)} aria-label="Close technician menu">
               <X className="h-5 w-5" />
             </button>
           </div>

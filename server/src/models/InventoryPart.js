@@ -18,7 +18,14 @@ const inventoryPartSchema = new mongoose.Schema(
     onHand: { type: Number, min: 0, default: 0 },
     reserved: { type: Number, min: 0, default: 0 },
     available: { type: Number, min: 0, default: 0 },
-    lowStockLimit: { type: Number, min: 0, default: 0 }
+    lowStockLimit: { type: Number, min: 0, default: 0 },
+    isDisabled: { type: Boolean, default: false },
+    disabledAt: { type: Date, default: null },
+    disabledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    deleteExpiresAt: { type: Date, default: null }
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );

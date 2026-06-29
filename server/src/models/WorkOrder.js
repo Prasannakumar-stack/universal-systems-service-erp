@@ -96,7 +96,13 @@ const workOrderSchema = new mongoose.Schema(
       }
     ],
     approvalStatus: { type: String, enum: ['pending', 'approved', 'denied'], default: 'pending' },
-    invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null }
+    invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
+    archivedAt: { type: Date, default: null },
+    archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    deleteExpiresAt: { type: Date, default: null }
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );

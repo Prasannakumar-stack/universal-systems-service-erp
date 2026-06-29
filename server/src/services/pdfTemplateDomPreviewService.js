@@ -284,6 +284,44 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       return classText.includes('pdf-builder-element') || classText.includes('pdf-builder-section');
     }
 
+    const tableToFinalGap = 36;
+    const amountToNextGap = 24;
+    const sectionToSectionGap = 8;
+    const termsToFooterGap = 24;
+
+    function nodeLayoutRole(node) {
+      const marker = [
+        node?.getAttribute?.('data-pdf-layer-role'),
+        node?.getAttribute?.('data-pdf-layer-kind'),
+        node?.getAttribute?.('data-pdf-layer-id'),
+        node?.getAttribute?.('data-pdf-table-element-id'),
+        node?.getAttribute?.('aria-label'),
+        node?.getAttribute?.('title'),
+        nodeClassText(node),
+        String(node?.textContent || '').slice(0, 240)
+      ].filter(Boolean).join(' ').toLowerCase();
+      if (marker.includes('footer') || marker.includes('thank you') || marker.includes('bottom strip')) return 'footer';
+      if (marker.includes('amount') || marker.includes('summary') || marker.includes('total') || marker.includes('balance')) return 'amount';
+      if (marker.includes('term') || marker.includes('condition') || marker.includes('warranty')) return 'terms';
+      if (marker.includes('signature') || marker.includes('acknowledgement')) return 'signature';
+      if (marker.includes('notice') || marker.includes('note') || marker.includes('message')) return 'notice';
+      return 'section';
+    }
+
+    function gapBetweenFinalNodes(previousRole, currentRole) {
+      if (!previousRole) return 0;
+      if (previousRole === currentRole) return 0;
+      if (currentRole === 'footer') return termsToFooterGap;
+      if (previousRole === 'amount') return amountToNextGap;
+      return sectionToSectionGap;
+    }
+
+    function compactGapBetweenFinalNodes(previousRole, currentRole) {
+      if (!previousRole) return 0;
+      if (previousRole === currentRole) return 0;
+      return 1;
+    }
+
     function rowsFromDom(rowNodes) {
       return rowNodes.map((row) => [...row.children].map((cell) => String(cell.textContent || '').trim()));
     }
@@ -502,12 +540,12 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
     }
 
     function nodeTopWithinParent(node) {
-      const styleTop = Number.parseFloat(node?.style?.top);
-      if (Number.isFinite(styleTop)) return styleTop;
       const parentRect = node?.parentElement?.getBoundingClientRect?.();
       const rect = node?.getBoundingClientRect?.();
-      if (!parentRect || !rect) return 0;
-      return rect.top - parentRect.top;
+      if (parentRect && rect && rect.width > 0 && rect.height > 0) return rect.top - parentRect.top;
+      const styleTop = Number.parseFloat(node?.style?.top);
+      if (Number.isFinite(styleTop)) return styleTop;
+      return 0;
     }
 
     function nodeVisualHeight(node) {
@@ -589,11 +627,13 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
     function finalGroupMetrics(nodes) {
       const positionedNodes = nodes.filter(isPositionedFrame);
       if (!positionedNodes.length) return null;
-      const metrics = positionedNodes.map((node) => {
-        const top = nodeTopWithinParent(node);
-        return { node, top, height: nodeVisualHeight(node) };
-      });
       const parentRect = positionedNodes[0]?.parentElement?.getBoundingClientRect?.();
+      const metrics = positionedNodes.map((node) => {
+        const paintedNodeBounds = paintedBoundsForNodes([node]);
+        const top = paintedNodeBounds && parentRect ? paintedNodeBounds.top - parentRect.top : nodeTopWithinParent(node);
+        const height = paintedNodeBounds ? paintedNodeBounds.height : nodeVisualHeight(node);
+        return { node, top, height, role: nodeLayoutRole(node), painted: Boolean(paintedNodeBounds) };
+      });
       const painted = paintedBoundsForNodes(positionedNodes);
       const fallbackTop = Math.min(...metrics.map((metric) => metric.top));
       const fallbackBottom = Math.max(...metrics.map((metric) => metric.top + metric.height));
@@ -609,34 +649,145 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       };
     }
 
-    function moveNodeGroupToTop(nodes, targetTop) {
-      const group = finalGroupMetrics(nodes);
-      if (!group || !Number.isFinite(targetTop)) return group;
-      const delta = targetTop - group.originalTop;
-      group.metrics.forEach(({ node, top }) => {
+    function moveMetricsGroupToTop(metrics, originalTop, targetTop) {
+      if (!Array.isArray(metrics) || !metrics.length || !Number.isFinite(targetTop)) return { delta: 0 };
+      const delta = targetTop - originalTop;
+      metrics.forEach(({ node, top }) => {
         node.style.top = `${Math.max(0, Math.round(top + delta))}px`;
       });
-      return { ...group, targetTop, delta };
+      return { targetTop, delta };
+    }
+
+    function mergedGroupRole(metrics = []) {
+      const roles = new Set(metrics.map((metric) => metric.role).filter(Boolean));
+      if (roles.has('footer')) return 'footer';
+      if (roles.has('terms')) return 'terms';
+      if (roles.has('signature')) return 'signature';
+      if (roles.has('notice')) return 'notice';
+      if (roles.has('amount')) return 'amount';
+      return 'section';
+    }
+
+    function finalVerticalGroups(metrics = []) {
+      const sorted = metrics
+        .slice()
+        .sort((a, b) => a.top - b.top || String(a.role).localeCompare(String(b.role)));
+      const groups = [];
+      sorted.forEach((metric) => {
+        const metricBottom = metric.top + metric.height;
+        const previous = groups[groups.length - 1];
+        const sameVisualBand = previous
+          && metric.top <= previous.originalBottom - 1
+          && (metric.role === previous.role || Math.abs(metric.top - previous.originalTop) <= 36);
+        if (sameVisualBand) {
+          previous.metrics.push(metric);
+          previous.originalTop = Math.min(previous.originalTop, metric.top);
+          previous.originalBottom = Math.max(previous.originalBottom, metricBottom);
+          previous.groupHeight = previous.originalBottom - previous.originalTop;
+          previous.role = mergedGroupRole(previous.metrics);
+          return;
+        }
+        groups.push({
+          metrics: [metric],
+          originalTop: metric.top,
+          originalBottom: metricBottom,
+          groupHeight: metric.height,
+          role: metric.role || 'section'
+        });
+      });
+      return groups;
+    }
+
+    function moveGroupedFinalNodes(groupedMetrics, minimumTop, pageHeight, bottomMargin) {
+      const pageLimit = pageHeight - bottomMargin;
+      function buildPlacements(gapFor) {
+        let previousRole = '';
+        let previousBottom = null;
+        let finalBottom = 0;
+        let overflowIndex = -1;
+        const placements = groupedMetrics.map((group, index) => {
+          const requiredTop = index === 0
+            ? minimumTop
+            : (previousBottom ?? minimumTop) + gapFor(previousRole, group.role);
+          const targetTop = Math.max(group.originalTop, requiredTop);
+          const targetBottom = targetTop + group.groupHeight;
+          if (overflowIndex < 0 && targetBottom > pageLimit + 0.5) overflowIndex = index;
+          previousRole = group.role;
+          previousBottom = targetBottom;
+          finalBottom = Math.max(finalBottom, targetBottom);
+          return { ...group, targetTop, targetBottom };
+        });
+        return { placements, overflowIndex, finalBottom };
+      }
+
+      const strictPlan = buildPlacements(gapBetweenFinalNodes);
+      const compactPlan = strictPlan.overflowIndex < 0
+        ? strictPlan
+        : buildPlacements(compactGapBetweenFinalNodes);
+      const activePlan = compactPlan.overflowIndex < 0 ? compactPlan : strictPlan;
+      const { placements, overflowIndex, finalBottom } = activePlan;
+
+      const groupsToPlace = overflowIndex < 0 ? placements : placements.slice(0, overflowIndex);
+      groupsToPlace.forEach((group) => moveMetricsGroupToTop(group.metrics, group.originalTop, group.targetTop));
+
+      const overflowGroups = overflowIndex < 0 ? [] : placements.slice(overflowIndex);
+      return {
+        fits: overflowIndex < 0,
+        placed: true,
+        targetTop: minimumTop,
+        finalBottom: overflowIndex < 0
+          ? finalBottom
+          : Math.max(0, ...groupsToPlace.map((group) => group.targetBottom)),
+        pageLimit,
+        overflowNodes: overflowGroups.flatMap((group) => group.metrics.map((metric) => metric.node)),
+        placedNodes: groupsToPlace.flatMap((group) => group.metrics.map((metric) => metric.node)),
+        verticalGroupCount: groupedMetrics.length,
+        overflowGroupCount: overflowGroups.length,
+        compactSpacing: activePlan === compactPlan && strictPlan.overflowIndex >= 0
+      };
+    }
+
+    function positionFinalNodesWithGaps(nodes, minimumTop, pageHeight, bottomMargin) {
+      const group = finalGroupMetrics(nodes);
+      if (!group || !Number.isFinite(minimumTop)) return { fits: true, placed: false, groupHeight: 0 };
+      return {
+        ...group,
+        ...moveGroupedFinalNodes(finalVerticalGroups(group.metrics), minimumTop, pageHeight, bottomMargin)
+      };
+    }
+
+    function visibleRectBottomWithinParent(node, parentRect) {
+      if (!node?.getBoundingClientRect || !parentRect) return null;
+      const style = window.getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || 1) === 0) return null;
+      const rect = node.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return null;
+      return rect.bottom - parentRect.top;
     }
 
     function tableBottomForFrame(frameNode) {
       const parentRect = frameNode?.parentElement?.getBoundingClientRect?.();
-      const rect = frameNode?.getBoundingClientRect?.();
-      if (!parentRect || !rect) return 0;
-      return rect.bottom - parentRect.top;
+      if (!parentRect) return 0;
+      const table = frameNode?.querySelector?.('.pdf-canvas-table');
+      const grid = frameNode?.querySelector?.('.pdf-canvas-table-grid');
+      const rowBottoms = [...(grid?.querySelectorAll?.('.pdf-canvas-table-row') || [])]
+        .map((row) => visibleRectBottomWithinParent(row, parentRect))
+        .filter((bottom) => Number.isFinite(bottom));
+      const structuralBottoms = [grid, table]
+        .map((node) => visibleRectBottomWithinParent(node, parentRect))
+        .filter((bottom) => Number.isFinite(bottom));
+      const measuredBottoms = rowBottoms.length ? [...rowBottoms, ...structuralBottoms] : structuralBottoms;
+      if (measuredBottoms.length) return Math.max(...measuredBottoms);
+      const frameBottom = visibleRectBottomWithinParent(frameNode, parentRect);
+      return Number.isFinite(frameBottom) ? frameBottom : 0;
     }
 
     function placeFinalNodesBelowTable(nodes, tableFrame, gap, pageHeight, bottomMargin) {
       if (!nodes?.length) return { fits: true, placed: false, groupHeight: 0 };
-      const group = finalGroupMetrics(nodes);
-      if (!group) return { fits: true, placed: false, groupHeight: 0 };
-      const pageLimit = pageHeight - bottomMargin;
       const tableBottom = tableBottomForFrame(tableFrame);
       const afterTableTop = tableBottom + gap;
-      if (afterTableTop + group.groupHeight > pageLimit + 0.5) {
-        return { fits: false, placed: false, tableBottom, targetTop: afterTableTop, ...group };
-      }
-      return { fits: true, placed: true, tableBottom, ...moveNodeGroupToTop(nodes, afterTableTop) };
+      const placement = positionFinalNodesWithGaps(nodes, afterTableTop, pageHeight, bottomMargin);
+      return { ...placement, tableBottom, targetTop: afterTableTop };
     }
 
     function finalPlacementDebugFor(placement) {
@@ -649,8 +800,9 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
         targetTop: Math.round(Number(placement.targetTop ?? placement.originalTop ?? 0)),
         originalTop: Math.round(Number(placement.originalTop || 0)),
         originalBottom: Math.round(Number(placement.originalBottom || 0)),
+        finalBottom: Math.round(Number(placement.finalBottom || placement.originalBottom || 0)),
         groupHeight: Math.round(Number(placement.groupHeight || 0)),
-        pageLimit: 842 - finalPlacementBottomMargin
+        pageLimit: Math.round(Number(placement.pageLimit || 842 - finalPlacementBottomMargin))
       };
     }
 
@@ -666,7 +818,8 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       finalNodes.forEach((node) => nextContent.appendChild(node));
       const group = finalGroupMetrics(finalNodes);
       const targetTop = finalOnlyTopForGroup(group, preferredTop, pageHeight, bottomMargin, minTop);
-      moveNodeGroupToTop(finalNodes, targetTop);
+      const placement = positionFinalNodesWithGaps(finalNodes, targetTop, pageHeight, bottomMargin);
+      if (!placement.fits) positionFinalNodesWithGaps(finalNodes, minTop, pageHeight, bottomMargin);
       nextPage.setAttribute('data-pdf-final-sections-page', 'true');
       return { nextPage, nextContent, targetTop };
     }
@@ -720,7 +873,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       };
     }
 
-    const dynamicRows = tableShell.getAttribute('data-pdf-table-dynamic-rows') !== 'false' && ['invoice', 'quotation'].includes(templateKey);
+    const dynamicRows = tableShell.getAttribute('data-pdf-table-dynamic-rows') !== 'false';
     const rowTemplate = decodeJsonAttribute(tableShell, 'data-pdf-table-row-template', []);
     const sourceRows = dynamicRows && items.length
       ? items.map((item, index) => (Array.isArray(rowTemplate) && rowTemplate.length ? rowTemplate : ['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}']).map((template) => valueForTemplate(template, item, index)))
@@ -752,10 +905,10 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       const nodeTop = node.getBoundingClientRect().top - pageRect.top;
       return nodeTop >= tableBottom - 1;
     });
-    const safeBottomMargin = 36;
-    const finalPlacementBottomMargin = 16;
-    const finalSectionGap = 20;
-    const finalPlacementGap = 12;
+    const safeBottomMargin = 56;
+    const finalPlacementBottomMargin = 0;
+    const finalSectionGap = tableToFinalGap;
+    const finalPlacementGap = tableToFinalGap;
     const firstPageFrameHeight = Math.max(
       rowHeight + titleHeight + headerHeight + 4,
       842 - tableTop - safeBottomMargin
@@ -798,8 +951,11 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       const finalPlacement = placeFinalNodesBelowTable(finalNodes, frame, finalPlacementGap, 842, finalPlacementBottomMargin);
       const finalPlacementDebug = finalPlacementDebugFor(finalPlacement);
       if (finalNodes.length && !finalPlacement.fits) {
-        const finalClones = finalNodes.map((node) => node.cloneNode(true));
-        finalNodes.forEach((node) => node.remove());
+        const overflowNodes = Array.isArray(finalPlacement.overflowNodes) && finalPlacement.overflowNodes.length
+          ? finalPlacement.overflowNodes
+          : finalNodes;
+        const finalClones = overflowNodes.map((node) => node.cloneNode(true));
+        overflowNodes.forEach((node) => node.remove());
         const { nextPage: finalOnlyPage } = makeFinalOnlyPage(pageNode, pageContent, repeatedNodes, watermarkSource, finalClones, firstFinalTop, 842, finalPlacementBottomMargin, continuationTop);
         pageNode.after(finalOnlyPage);
         finalSectionsPlacement = 'separate-page';
@@ -875,8 +1031,11 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       const finalPlacement = placeFinalNodesBelowTable(finalNodes, frame, finalPlacementGap, 842, finalPlacementBottomMargin);
       const finalPlacementDebug = finalPlacementDebugFor(finalPlacement);
       if (finalNodes.length && !finalPlacement.fits) {
-        const finalClones = finalNodes.map((node) => node.cloneNode(true));
-        finalNodes.forEach((node) => node.remove());
+        const overflowNodes = Array.isArray(finalPlacement.overflowNodes) && finalPlacement.overflowNodes.length
+          ? finalPlacement.overflowNodes
+          : finalNodes;
+        const finalClones = overflowNodes.map((node) => node.cloneNode(true));
+        overflowNodes.forEach((node) => node.remove());
         const { nextPage: finalOnlyPage } = makeFinalOnlyPage(pageNode, pageContent, repeatedNodes, watermarkSource, finalClones, firstFinalTop, 842, finalPlacementBottomMargin, continuationTop);
         pageNode.after(finalOnlyPage);
         finalSectionsPlacement = 'separate-page';
@@ -926,7 +1085,10 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
         const finalPlacement = placeFinalNodesBelowTable(finalClones, tableClone, finalPlacementGap, 842, finalPlacementBottomMargin);
         finalPlacementDebug = finalPlacementDebugFor(finalPlacement);
         if (finalClones.length && !finalPlacement.fits) {
-          const { nextPage: finalOnlyPage } = makeFinalOnlyPage(pageNode, pageContent, repeatedNodes, watermarkSource, finalClones, firstFinalTop, 842, finalPlacementBottomMargin, continuationTop);
+          const overflowNodes = Array.isArray(finalPlacement.overflowNodes) && finalPlacement.overflowNodes.length
+            ? finalPlacement.overflowNodes
+            : finalClones;
+          const { nextPage: finalOnlyPage } = makeFinalOnlyPage(pageNode, pageContent, repeatedNodes, watermarkSource, overflowNodes, firstFinalTop, 842, finalPlacementBottomMargin, continuationTop);
           nextPage.after(finalOnlyPage);
           insertAfter = finalOnlyPage;
           finalSectionsPlacement = 'separate-page';

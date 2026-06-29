@@ -744,6 +744,33 @@ function sanitizeDesignColor(value, fallback = '#0f2a52') {
   return sanitizeColor(text || fallback, fallback);
 }
 
+const vectorIconNameAliases = {
+  'badge-check': 'completion',
+  'check-badge': 'completion',
+  'check-circle': 'check',
+  'circle-check': 'check',
+  calendar: 'date',
+  mail: 'email',
+  file: 'document',
+  'file-text': 'document',
+  clipboard: 'work',
+  'clipboard-check': 'work',
+  credit: 'status',
+  'credit-card': 'status',
+  map: 'address',
+  'map-pin': 'address',
+  location: 'address',
+  globe: 'website',
+  web: 'website',
+  message: 'whatsapp',
+  support: 'headset'
+};
+
+function normalizeVectorIconName(value = '') {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+  return vectorIconNameAliases[normalized] || normalized;
+}
+
 function sanitizeDesignContent(type = 'text', content = {}, element = {}) {
   const currentLayoutElement = isCurrentLayoutDesignElement(element);
   const source = isPlainObject(content) ? content : { text: cleanText(content, '', 5000) };
@@ -757,7 +784,8 @@ function sanitizeDesignContent(type = 'text', content = {}, element = {}) {
     name: cleanText(source.name ?? element.personName, '', 160),
     designation: cleanText(source.designation, '', 160),
     iconName: cleanText(source.iconName ?? element.iconName, '', 80),
-    iconMode: ['vector', 'emoji'].includes(source.iconMode || element.iconMode) ? (source.iconMode || element.iconMode) : 'vector',
+    iconDisplay: ['vector', 'emoji'].includes(source.iconDisplay || source.iconMode || element.iconDisplay || element.iconMode) ? (source.iconDisplay || source.iconMode || element.iconDisplay || element.iconMode) : 'vector',
+    iconMode: ['vector', 'emoji'].includes(source.iconMode || source.iconDisplay || element.iconMode || element.iconDisplay) ? (source.iconMode || source.iconDisplay || element.iconMode || element.iconDisplay) : 'vector',
     emoji: cleanText(source.emoji ?? element.emoji, '✅', 16),
     variant: cleanText(source.variant ?? element.variant, '', 80),
     qrType: ['payment', 'contact', 'company', 'custom'].includes(source.qrType || element.qrType) ? (source.qrType || element.qrType) : 'payment',
@@ -805,6 +833,11 @@ function sanitizeDesignStyle(style = {}, element = {}) {
     shadow: boolValue(source.shadow, false),
     opacity: clampNumber(source.opacity, 1, 0, 1),
     fontSize: clampNumber(source.fontSize, 13, currentLayoutElement ? 4 : 8, 32),
+    ...(element.type === 'icon' ? {
+      iconColor: sanitizeDesignColor(source.iconColor || source.accentColor || element.iconColor || element.accentColor, '#0284c7'),
+      iconSize: source.iconSize === undefined || source.iconSize === null ? undefined : clampNumber(source.iconSize, 18, 4, 96),
+      strokeWidth: clampNumber(source.strokeWidth, 2, 0.5, 8)
+    } : {}),
     fontWeight: clampNumber(source.fontWeight, 700, 300, 950),
     alignment: ['left', 'center', 'right'].includes(source.alignment || element.alignment) ? (source.alignment || element.alignment) : 'left',
     rowHeight: clampNumber(source.rowHeight, 18, 12, 34),
@@ -997,16 +1030,26 @@ function publishedCanvasSnapshotFrom(source = {}, { strict = false, key = 'invoi
   const rawMeta = source.publishedMeta || {};
   if (!rawHtml) {
     if (strict) throw appError('PDF publish requires a captured design canvas', 400);
-    return { publishedHtml: '', publishedMeta: null };
+    return { publishedHtml: '', publishedMeta: null, reason: 'missing-html' };
   }
   if (byteLength(rawHtml) > MAX_INVOICE_PUBLISHED_HTML_BYTES) {
-    throw appError('Published design canvas is too large', 413);
+    if (strict) throw appError('Published design canvas is too large', 413);
+    return { publishedHtml: '', publishedMeta: null, reason: 'html-too-large' };
   }
   const meta = {
     width: Number(rawMeta.width),
     height: Number(rawMeta.height),
     templateKey: cleanText(rawMeta.templateKey, templateKey, 40),
-    elementCount: clampNumber(rawMeta.elementCount, 0, 0, 2000)
+    elementCount: clampNumber(rawMeta.elementCount, 0, 0, 2000),
+    pageCount: clampNumber(rawMeta.pageCount, 1, 1, 100),
+    pages: Array.isArray(rawMeta.pages)
+      ? rawMeta.pages.slice(0, 100).map((page, index) => ({
+        id: cleanText(page?.id, `page-${index + 1}`, 80),
+        name: cleanText(page?.name, `Page ${index + 1}`, 120),
+        index: clampNumber(page?.index, index + 1, 1, 100),
+        elementCount: clampNumber(page?.elementCount, 0, 0, 2000)
+      }))
+      : []
   };
   if (
     meta.templateKey !== templateKey
@@ -1014,9 +1057,22 @@ function publishedCanvasSnapshotFrom(source = {}, { strict = false, key = 'invoi
     || Math.round(meta.height) !== INVOICE_CANVAS_HEIGHT
   ) {
     if (strict) throw appError('Published design canvas metadata is invalid', 400);
-    return { publishedHtml: '', publishedMeta: null };
+    return { publishedHtml: '', publishedMeta: null, reason: 'invalid-meta' };
   }
   return { publishedHtml: rawHtml, publishedMeta: meta };
+}
+
+function safePublishedCanvasSnapshotFrom(source = {}, key = 'invoice') {
+  try {
+    const snapshot = publishedCanvasSnapshotFrom(source, { strict: false, key });
+    if (!snapshot.publishedHtml) {
+      console.warn(`[PDF template publish] Published canvas snapshot ignored for "${key}": ${snapshot.reason || 'invalid snapshot'}. Design JSON will still be published.`);
+    }
+    return snapshot;
+  } catch (error) {
+    console.error(`[PDF template publish] Published canvas snapshot failed for "${key}". Design JSON will still be published.`, error?.stack || error);
+    return { publishedHtml: '', publishedMeta: null, reason: 'snapshot-error' };
+  }
 }
 
 function applyInvoicePublishedSnapshot(config = {}, source = {}, options = {}) {
@@ -1272,7 +1328,7 @@ function publishedElementStyle(element = {}) {
     width: `${Math.max(0.1, cssValue(element.width, 1))}px`,
     height: `${Math.max(0.1, cssValue(element.height, 1))}px`,
     zIndex: cssValue(element.zIndex, 20),
-    color: element.type === 'icon' ? (style.accentColor || style.textColor || '#082a73') : (style.textColor || '#1e293b'),
+    color: element.type === 'icon' ? (style.iconColor || style.accentColor || style.textColor || '#082a73') : (style.textColor || '#1e293b'),
     background: isDivider ? 'transparent' : (style.backgroundColor || 'transparent'),
     borderStyle: borderWidth > 0 ? 'solid' : 'none',
     borderColor: style.borderColor || 'transparent',
@@ -1290,18 +1346,24 @@ function publishedElementStyle(element = {}) {
   });
 }
 
-function publishedIconSvg(variant = '') {
-  const name = String(variant || '').toLowerCase();
+function publishedIconSvg(variant = '', strokeWidth = 2) {
+  const name = normalizeVectorIconName(variant);
+  const stroke = Math.max(0.5, Math.min(8, Number(strokeWidth) || 2));
   if (name === 'dot') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg>';
-  if (name === 'check' || name === 'completion') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  if (name === 'rupee') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5h10M7 9h10M9 9c6 0 6 8 0 8l7 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  if (name === 'calendar' || name === 'date') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 3v4M16 3v4M4 10h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-  if (name === 'phone' || name === 'whatsapp' || name === 'headset') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5l3 4-2 2c2 4 5 6 9 7l2-3 4 2c-1 3-3 4-6 3C9 19 4 14 3 7c0-3 1-5 4-6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
-  if (name === 'email') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 7l8 6 8-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
-  if (name === 'address') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s7-6 7-12a7 7 0 10-14 0c0 6 7 12 7 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="9" r="2.5" fill="currentColor"/></svg>';
-  if (name === 'shield') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l8 3v6c0 5-3 8-8 10-5-2-8-5-8-10V6l8-3z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 12l3 3 5-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
-  if (name === 'handshake') return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12l4-5 4 3 4-3 4 5-6 7-2-2-2 2-6-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
-  return '<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v10M7 12h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  if (name === 'check' || name === 'completion') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  if (name === 'star') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1-4.4-4.3 6.1-.9L12 3z" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linejoin="round"/></svg>`;
+  if (name === 'rupee') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5h10M7 9h10M9 9c6 0 6 8 0 8l7 4" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  if (name === 'calendar' || name === 'date') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="5" width="16" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="${stroke}"/><path d="M8 3v4M16 3v4M4 10h16" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round"/></svg>`;
+  if (name === 'phone' || name === 'whatsapp' || name === 'headset') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5l3 4-2 2c2 4 5 6 9 7l2-3 4 2c-1 3-3 4-6 3C9 19 4 14 3 7c0-3 1-5 4-6z" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linejoin="round"/></svg>`;
+  if (name === 'email') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="${stroke}"/><path d="M4 7l8 6 8-6" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linejoin="round"/></svg>`;
+  if (name === 'website') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="${stroke}"/><path d="M4 12h16M12 4c2.4 2.7 2.4 13.3 0 16M12 4c-2.4 2.7-2.4 13.3 0 16" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round"/></svg>`;
+  if (name === 'address') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21s7-6 7-12a7 7 0 10-14 0c0 6 7 12 7 12z" fill="none" stroke="currentColor" stroke-width="${stroke}"/><circle cx="12" cy="9" r="2.5" fill="currentColor"/></svg>`;
+  if (name === 'document' || name === 'invoice') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 3h8l4 4v14H7z" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linejoin="round"/><path d="M15 3v4h4M9.5 11h6.5M9.5 15h6.5M9.5 18h4.5" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round"/></svg>`;
+  if (name === 'work' || name === 'status') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="5" width="14" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="${stroke}"/><path d="M9 4h6v3H9zM8.5 13l2.2 2.2L15.8 10" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linejoin="round"/></svg>`;
+  if (name === 'shield') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l8 3v6c0 5-3 8-8 10-5-2-8-5-8-10V6l8-3z" fill="none" stroke="currentColor" stroke-width="${stroke}"/><path d="M8 12l3 3 5-6" fill="none" stroke="currentColor" stroke-width="${stroke}"/></svg>`;
+  if (name === 'bell') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 17h12l-1.5-2.5V10a4.5 4.5 0 10-9 0v4.5L6 17zM10 20h4" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  if (name === 'handshake') return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12l4-5 4 3 4-3 4 5-6 7-2-2-2 2-6-7z" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linejoin="round"/></svg>`;
+  return `<svg class="pdf-canvas-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="${stroke}"/><path d="M12 7v10M7 12h10" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round"/></svg>`;
 }
 
 function publishedTableHtml(element = {}) {
@@ -1343,7 +1405,12 @@ function publishedElementBody(element = {}) {
   if (element.type === 'table') return publishedTableHtml(element);
   if (element.type === 'icon') {
     const variant = content.variant || content.iconName || 'generic';
-    return `<div class="pdf-canvas-icon is-vector is-${htmlEscape(variant)} is-symbol-only" style="width:100%;height:100%;display:grid;place-items:center">${publishedIconSvg(variant)}</div>`;
+    if (content.iconMode === 'emoji') {
+      return `<div class="pdf-canvas-icon is-emoji is-symbol-only" style="width:100%;height:100%;display:grid;place-items:center"><span class="pdf-canvas-emoji-icon">${htmlEscape(content.emoji || '✅')}</span></div>`;
+    }
+    const iconSize = Number(style.iconSize || 0);
+    const sizeStyle = Number.isFinite(iconSize) && iconSize > 0 ? `font-size:${iconSize}px;` : '';
+    return `<div class="pdf-canvas-icon is-vector is-${htmlEscape(variant)} is-symbol-only" style="width:100%;height:100%;display:grid;place-items:center;${sizeStyle}">${publishedIconSvg(variant, style.strokeWidth)}</div>`;
   }
   if (element.type === 'divider') {
     const vertical = style.orientation === 'vertical' || Number(style.rotate) === 90 || cssValue(element.height) > cssValue(element.width);
@@ -1529,6 +1596,17 @@ function hasPublishedSnapshotCorruption(config = {}, key = '') {
   helperLabelPattern.lastIndex = 0;
   helperNodePattern.lastIndex = 0;
   return corrupted;
+}
+
+function publishedSnapshotMatchesDesign(config = {}, key = '') {
+  if (!hasPublishedDesignHtml(config, key) || hasPublishedSnapshotCorruption(config, key)) return false;
+  const design = config?.design || {};
+  const meta = design.publishedMeta || {};
+  const elementCount = Array.isArray(design.elements) ? design.elements.length : 0;
+  const pageCount = Array.isArray(design.pages) && design.pages.length ? design.pages.length : 1;
+  if (Number.isFinite(Number(meta.elementCount)) && Number(meta.elementCount) !== elementCount) return false;
+  if (Number.isFinite(Number(meta.pageCount)) && Number(meta.pageCount) !== pageCount) return false;
+  return true;
 }
 
 function currentLayoutRepairReasons(config = {}, key = '') {
@@ -1831,11 +1909,11 @@ export async function publishInvoiceDesign(key, payload = {}, user = null) {
   const template = await findTemplate(normalized);
   if (!template) throw appError('PDF template not found', 404);
   const before = sanitizeConfig(template.config || {}, normalized);
-  const publishedSnapshot = publishedCanvasSnapshotFrom({
+  const clientPublishedSnapshot = safePublishedCanvasSnapshotFrom({
     publishedCanvasHtml: payload.publishedCanvasHtml,
     publishedHtml: payload.publishedHtml,
     publishedMeta: payload.publishedMeta
-  }, { strict: true, key: normalized });
+  }, normalized);
   const { config: incomingConfig, design: draftDesign } = draftConfigFromPayload(payload, normalized);
   const publishedDesign = forcePublishedDesignState(draftDesign);
   const backupConfig = sanitizeConfig({
@@ -1860,7 +1938,14 @@ export async function publishInvoiceDesign(key, payload = {}, user = null) {
     },
     design: publishedDesign
   }, normalized);
-  applyInvoicePublishedSnapshot(nextConfig, publishedSnapshot, { strict: true, key: normalized });
+  const serverPublishedSnapshot = hasVisualDesignContent(nextConfig)
+    ? publishedSnapshotForDesign(normalized, nextConfig.design)
+    : null;
+  applyInvoicePublishedSnapshot(
+    nextConfig,
+    clientPublishedSnapshot?.publishedHtml ? clientPublishedSnapshot : serverPublishedSnapshot,
+    { strict: false, key: normalized }
+  );
   delete nextConfig.designDraft;
   template.config = nextConfig;
   template.version = (template.version || 1) + 1;
@@ -1940,7 +2025,7 @@ export async function resetPdfTemplate(key, user = null) {
   const template = await findTemplate(normalized);
   if (!template) throw appError('PDF template not found', 404);
   const before = sanitizeConfig(template.config || {}, normalized);
-  addVersionSnapshot(template, 'reset');
+  addVersionSnapshot(template, 'before_reset_backup');
   template.config = sanitizeConfig(defaultConfigFor(normalized), normalized);
   template.version = (template.version || 1) + 1;
   template.lastEditedBy = user?._id || null;
@@ -2120,9 +2205,26 @@ function forceDefaultPreviewConfig(config = {}, key = '') {
   return sanitizeConfig(next, key);
 }
 
+function hasVisualDesignContent(config = {}) {
+  const design = config.design || {};
+  if (design.enabled !== true) return false;
+  const elementSource = Array.isArray(design.customElements) && design.customElements.length
+    ? design.customElements
+    : Array.isArray(design.elements)
+      ? design.elements
+      : [];
+  return [
+    ...(Array.isArray(design.sections) ? design.sections : []),
+    ...elementSource
+  ].some((element) => element && element.enabled !== false && element.visible !== false);
+}
+
 function liveGenerationConfig(config = {}, key = '') {
   const next = sanitizeConfig(config || {}, key);
   delete next.designDraft;
+  if (next.design?.published === true && hasVisualDesignContent(next)) {
+    return next;
+  }
   if ((key === 'invoice' || next.design?.published === true) && !hasPublishedDesignHtml(next, key)) {
     return forceDefaultPreviewConfig(next, key);
   }
@@ -2131,7 +2233,7 @@ function liveGenerationConfig(config = {}, key = '') {
 
 function forcePublishedPreviewConfig(config = {}, key = '') {
   const next = liveGenerationConfig(config || {}, key);
-  if (next.design?.published !== true || !hasPublishedDesignHtml(next, key)) {
+  if (next.design?.published !== true || (!hasPublishedDesignHtml(next, key) && !hasVisualDesignContent(next))) {
     return forceDefaultPreviewConfig(next, key);
   }
   next.editMode = 'design';
@@ -2150,15 +2252,34 @@ function forcePublishedPreviewConfig(config = {}, key = '') {
 
 export function canRenderPublishedInvoiceDom(template = {}) {
   const templateKey = clean(template?.key || '');
-  return definitionsByKey.has(templateKey) && hasPublishedDesignHtml(template.config || {}, templateKey);
+  const config = template.config || {};
+  return definitionsByKey.has(templateKey)
+    && (
+      hasPublishedDesignHtml(config, templateKey)
+      || (config?.design?.published === true && hasVisualDesignContent(config))
+    );
 }
 
 export async function renderPublishedInvoiceDomTemplate(template = {}, context = {}, filenamePrefix = 'invoice-published-dom') {
+  const templateKey = clean(template?.key || '');
   if (!canRenderPublishedInvoiceDom(template)) return null;
+  const config = sanitizeConfig(template.config || {}, templateKey);
+  const savedSnapshot = publishedSnapshotMatchesDesign(config, templateKey)
+    ? {
+      publishedHtml: config.design.publishedHtml,
+      publishedMeta: config.design.publishedMeta
+    }
+    : null;
+  const generatedSnapshot = !savedSnapshot && config.design?.published === true && hasVisualDesignContent(config)
+    ? publishedSnapshotForDesign(templateKey, forcePublishedDesignState(publishedDesignFor(config, templateKey)))
+    : null;
+  const publishedHtml = savedSnapshot?.publishedHtml || generatedSnapshot?.publishedHtml || config.design?.publishedHtml;
+  const publishedMeta = savedSnapshot?.publishedMeta || generatedSnapshot?.publishedMeta || config.design?.publishedMeta;
+  if (!publishedHtml || !publishedMeta) return null;
   return renderInvoicePublishedDomPdf({
-    key: template.key,
-    publishedHtml: template.config.design.publishedHtml,
-    publishedMeta: template.config.design.publishedMeta,
+    key: templateKey,
+    publishedHtml,
+    publishedMeta,
     context,
     filenamePrefix
   });
@@ -2261,6 +2382,13 @@ export function renderTemplateText(value = '', context = {}) {
 
 export function templateAccent(template, fallback = '#0f2a52') {
   return sanitizeColor(template?.config?.colorAccent, fallback);
+}
+
+function logPdfPreviewFallback(error, key, renderer) {
+  const label = renderer || 'PDF';
+  const templateKey = clean(key || 'unknown') || 'unknown';
+  const details = error?.stack || error?.message || error;
+  console.error(`[PDF template preview] ${label} renderer failed for "${templateKey}". Falling back to the safe sample renderer.`, details);
 }
 
 export function workOrderTemplateContext(workOrder = {}, company = COMPANY) {
@@ -2520,14 +2648,40 @@ function drawPreviewPdf(doc, template, company = COMPANY, businessSettings = nul
   doc.fontSize(8).fillColor('#64748b').text(renderTemplateText(config.footerText, context), 40, 778, { width: 515, align: 'center' });
 }
 
+async function renderStructuredTemplatePreviewPdf(template, company, businessSettings, filenameSuffix = 'template-preview') {
+  fs.mkdirSync(PDF_DIR, { recursive: true });
+  const filename = `${template.key}-${filenameSuffix}-${Date.now()}.pdf`;
+  const filePath = path.join(PDF_DIR, filename);
+  await new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
+    const stream = fs.createWriteStream(filePath);
+    doc.pipe(stream);
+    try {
+      drawPreviewPdf(doc, template, company, businessSettings);
+      doc.end();
+    } catch (error) {
+      doc.end();
+      reject(error);
+      return;
+    }
+    stream.on('finish', resolve);
+    stream.on('error', reject);
+  });
+  return { filePath, filename };
+}
+
 export async function generatePdfTemplatePreview(key, options = {}) {
   const previewIntent = String(options.previewIntent || '').toLowerCase();
   if (previewIntent === 'draft') {
-    return renderInvoiceDraftDomPreviewPdf({
-      key,
-      draftCanvasHtml: options.draftCanvasHtml,
-      draftMeta: options.draftMeta
-    });
+    try {
+      return await renderInvoiceDraftDomPreviewPdf({
+        key,
+        draftCanvasHtml: options.draftCanvasHtml,
+        draftMeta: options.draftMeta
+      });
+    } catch (error) {
+      logPdfPreviewFallback(error, key, 'Draft design');
+    }
   }
   const publishedPreview = previewIntent === 'published' || previewIntent === 'live';
   const template = await getPdfTemplate(key);
@@ -2544,23 +2698,28 @@ export async function generatePdfTemplatePreview(key, options = {}) {
     getBusinessSettings().catch(() => null)
   ]);
   if (publishedPreview && canRenderPublishedInvoiceDom(template)) {
-    return renderPublishedInvoiceDomTemplate(
-      template,
-      sampleContextFor(template.key, fallbackCompany(company)),
-      `${template.key}-published-template-preview`
-    );
+    try {
+      const publishedPdf = await renderPublishedInvoiceDomTemplate(
+        template,
+        sampleContextFor(template.key, fallbackCompany(company)),
+        `${template.key}-published-template-preview`
+      );
+      if (publishedPdf) return publishedPdf;
+    } catch (error) {
+      logPdfPreviewFallback(error, template.key, 'Published design');
+      template.config = hasVisualDesignContent(template.config || {})
+        ? forcePublishedPreviewConfig(template.config || {}, template.key)
+        : forceDefaultPreviewConfig(template.config || {}, template.key);
+    }
   }
-  fs.mkdirSync(PDF_DIR, { recursive: true });
-  const filename = `${template.key}-template-preview-${Date.now()}.pdf`;
-  const filePath = path.join(PDF_DIR, filename);
-  await new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
-    const stream = fs.createWriteStream(filePath);
-    doc.pipe(stream);
-    drawPreviewPdf(doc, template, company, businessSettings);
-    doc.end();
-    stream.on('finish', resolve);
-    stream.on('error', reject);
-  });
-  return { filePath, filename };
+  try {
+    return await renderStructuredTemplatePreviewPdf(template, company, businessSettings);
+  } catch (error) {
+    logPdfPreviewFallback(error, template.key, 'Structured sample');
+    const fallbackTemplate = {
+      ...template,
+      config: forceDefaultPreviewConfig({}, template.key)
+    };
+    return renderStructuredTemplatePreviewPdf(fallbackTemplate, company, businessSettings, 'default-template-preview');
+  }
 }

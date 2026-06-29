@@ -30,7 +30,7 @@ export function ToastProvider({ children }) {
             <div key={toast.id} className={`toast ${toast.type === 'error' ? 'toast-error' : ''}`}>
               <Icon className="h-5 w-5 shrink-0" />
               <span className="text-sm font-medium">{toast.message}</span>
-              <button className="icon-button ml-auto h-7 w-7" onClick={() => remove(toast.id)} aria-label="Dismiss toast">
+              <button type="button" className="icon-button ml-auto h-7 w-7" onClick={() => remove(toast.id)} aria-label="Dismiss toast">
                 <X className="h-4 w-4" />
               </button>
             </div>

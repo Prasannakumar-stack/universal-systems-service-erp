@@ -683,7 +683,7 @@ function EditUserRoleModal({ user, saving, onClose, onSave }) {
         </label>
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={saving}>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
             <Save className="h-4 w-4" />
             {saving ? 'Saving...' : 'Save Role'}
           </button>
@@ -1264,7 +1264,7 @@ export function TechnicianAccountModal({ title, submitLabel, technician = null, 
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn btn-primary" disabled={saving}>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
             <Save className="h-4 w-4" />
             {saving ? 'Saving...' : submitLabel}
           </button>
@@ -1319,7 +1319,7 @@ export function ResetPasswordModal({ technician, onClose, onSubmit }) {
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn btn-primary" disabled={saving}>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
             <KeyRound className="h-4 w-4" />
             {saving ? 'Saving...' : 'Update Password'}
           </button>
@@ -2254,7 +2254,7 @@ function AdminProfileSection({ onDirtyChange = null }) {
           {passwordValidation ? <p className="admin-profile-warning">{passwordValidation}</p> : null}
 
           <div className="admin-profile-password-actions">
-            <button className="btn btn-secondary" disabled={!canUpdatePassword}>
+            <button type="submit" className="btn btn-secondary" disabled={!canUpdatePassword}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
               Update Password
             </button>
@@ -2892,7 +2892,7 @@ function BackupStorageSection({ onDirtyChange = null, onOpenTab = null }) {
               </div>
               <div className="flex flex-col-reverse gap-2 lg:col-span-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm muted">Save changes after updating automatic backup preferences.</p>
-                <button className="btn btn-primary" disabled={!canEdit || !dirty || saving}>
+                <button type="submit" className="btn btn-primary" disabled={!canEdit || !dirty || saving}>
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Save Backup Settings
                 </button>

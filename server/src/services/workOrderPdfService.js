@@ -30,6 +30,10 @@ const fontPath = 'C:\\Windows\\Fonts\\arial.ttf';
 const boldFontPath = 'C:\\Windows\\Fonts\\arialbd.ttf';
 
 const pdfTypes = ['quotation', 'work', 'service-completed', 'amc-contract', 'amc-service-visit', 'amc-invoice', 'amc-renewal-reminder'];
+const LEGACY_CONTENT_TOP = 52;
+const LEGACY_FOOTER_Y = 770;
+const LEGACY_FOOTER_CLEARANCE = 24;
+const LEGACY_TABLE_TO_SUMMARY_GAP = 36;
 
 function fontExists(filePath) {
   return fs.existsSync(filePath);
@@ -39,6 +43,12 @@ function registerFonts(doc) {
   if (fontExists(fontPath)) doc.registerFont('Body', fontPath);
   if (fontExists(boldFontPath)) doc.registerFont('BodyBold', boldFontPath);
   doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica');
+}
+
+function ensureLegacyVerticalSpace(doc, y, requiredHeight = 0, top = LEGACY_CONTENT_TOP) {
+  if (y + requiredHeight <= LEGACY_FOOTER_Y - LEGACY_FOOTER_CLEARANCE) return y;
+  doc.addPage();
+  return top;
 }
 
 function money(value) {
@@ -282,14 +292,23 @@ function table(doc, rows, startY, lastColumnLabel) {
     { label: 'Price', x: 376, width: 74 },
     { label: lastColumnLabel, x: 456, width: 88 }
   ];
-  let y = startY;
-  doc.roundedRect(48, y, 500, 24, 2).fill('#eaf1fb');
-  doc.fillColor('#0f2a52').font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(9);
-  columns.forEach((col) => doc.text(col.label, col.x, y + 8, { width: col.width }));
-  y += 24;
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#1e293b');
+  const headerHeight = 24;
+  let y = ensureLegacyVerticalSpace(doc, startY, headerHeight + 28);
+  const drawHeader = () => {
+    doc.roundedRect(48, y, 500, headerHeight, 2).fill('#eaf1fb');
+    doc.fillColor('#0f2a52').font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(9);
+    columns.forEach((col) => doc.text(col.label, col.x, y + 8, { width: col.width }));
+    y += headerHeight;
+    doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fillColor('#1e293b');
+  };
+  drawHeader();
   rows.forEach((row) => {
     const rowHeight = Math.max(28, doc.heightOfString(row.description, { width: 240 }) + 14);
+    const nextY = ensureLegacyVerticalSpace(doc, y, rowHeight);
+    if (nextY !== y) {
+      y = nextY;
+      drawHeader();
+    }
     doc.rect(48, y, 500, rowHeight).strokeColor('#d7dee8').stroke();
     doc.text(row.description, 52, y + 9, { width: 250 });
     doc.text(String(row.quantity), 310, y + 9, { width: 60 });
@@ -297,7 +316,7 @@ function table(doc, rows, startY, lastColumnLabel) {
     doc.text(money(row.total), 456, y + 9, { width: 88 });
     y += rowHeight;
   });
-  return y + 18;
+  return ensureLegacyVerticalSpace(doc, y + LEGACY_TABLE_TO_SUMMARY_GAP, 58);
 }
 
 function footer(doc, message = '', template = null, context = {}, company = COMPANY) {
@@ -315,9 +334,12 @@ function footer(doc, message = '', template = null, context = {}, company = COMP
 function templateBlock(doc, label, value, x, y, width, template, context) {
   const text = renderTemplateText(value || '', context).trim();
   if (!text) return y;
-  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(10).fillColor('#0f172a').text(label, x, y);
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#334155').text(text, x, y + 16, { width, lineGap: 4 });
-  return y + Math.max(42, doc.heightOfString(text, { width }) + 30);
+  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9);
+  const blockHeight = Math.max(42, doc.heightOfString(text, { width, lineGap: 4 }) + 30);
+  const startY = ensureLegacyVerticalSpace(doc, y, blockHeight);
+  doc.font(fontExists(boldFontPath) ? 'BodyBold' : 'Helvetica-Bold').fontSize(10).fillColor('#0f172a').text(label, x, startY);
+  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#334155').text(text, x, startY + 16, { width, lineGap: 4 });
+  return startY + blockHeight;
 }
 
 function addTemplateNotes(doc, y, template, context, options = {}) {
@@ -336,10 +358,11 @@ function addTemplateSignature(doc, y, template, context, options = {}) {
   const config = template?.config || {};
   const label = renderTemplateText(config.signatureSection || '', context).trim();
   if (!label) return;
+  const startY = ensureLegacyVerticalSpace(doc, y, 42);
   const left = options.left ?? 360;
   const right = options.right ?? 520;
-  doc.strokeColor('#94a3b8').lineWidth(0.7).moveTo(left, y).lineTo(right, y).stroke();
-  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#334155').text(label, left + 20, y + 8, { width: right - left - 20, align: 'center' });
+  doc.strokeColor('#94a3b8').lineWidth(0.7).moveTo(left, startY).lineTo(right, startY).stroke();
+  doc.font(fontExists(fontPath) ? 'Body' : 'Helvetica').fontSize(9).fillColor('#334155').text(label, left + 20, startY + 8, { width: right - left - 20, align: 'center' });
 }
 
 function quotationApprovalStatus(workOrder) {
@@ -651,31 +674,7 @@ export function pdfCaption(type, workOrder, company = COMPANY) {
   return `Hello ${customer.name || 'Customer'}, your service has been completed successfully. Thank you for choosing ${currentCompany.name}.`;
 }
 
-export async function generateWorkOrderPdf({ workOrderId, type, user }) {
-  if (!hasPermission(user, 'view_documents') && !hasPermission(user, 'download_invoice_pdf')) {
-    throw appError('You do not have permission to access this resource', 403);
-  }
-  if (!pdfTypes.includes(type)) throw appError('Invalid PDF type');
-  const workOrder = await getPdfWorkOrder(workOrderId, user);
-  if (!isAllowed(type, workOrder)) throw appError('Available after status change', 409);
-  const template = await getTemplateByPdfType(type);
-  const [company, businessSettings] = await Promise.all([
-    getCompanyIdentity(),
-    getBusinessSettings().catch(() => null)
-  ]);
-  if (canRenderPublishedInvoiceDom(template)) {
-    const context = workOrderTemplateContext(workOrder, company);
-    const invoiceContext = template.key === 'invoice'
-      ? invoiceDomContextForWorkOrder(context, invoicePayloadForWorkOrder(workOrder, context))
-      : context;
-    const pdf = await renderPublishedInvoiceDomTemplate(
-      template,
-      invoiceContext,
-      `${customerId(workOrder)}-${cleanFilePart(type)}-published-design`
-    );
-    return { ...pdf, workOrder, caption: pdfCaption(type, workOrder, company) };
-  }
-
+async function renderWorkOrderPdfKit({ type, workOrder, template, company, businessSettings, caption }) {
   fs.mkdirSync(PDF_DIR, { recursive: true });
   const filename = `${customerId(workOrder)}-${cleanFilePart(type)}-${Date.now()}.pdf`;
   const filePath = path.join(PDF_DIR, filename);
@@ -690,5 +689,38 @@ export async function generateWorkOrderPdf({ workOrderId, type, user }) {
     stream.on('error', reject);
   });
 
-  return { filePath, filename, workOrder, caption: pdfCaption(type, workOrder, company) };
+  return { filePath, filename, workOrder, caption };
+}
+
+export async function generateWorkOrderPdf({ workOrderId, type, user }) {
+  if (!hasPermission(user, 'view_documents') && !hasPermission(user, 'download_invoice_pdf')) {
+    throw appError('You do not have permission to access this resource', 403);
+  }
+  if (!pdfTypes.includes(type)) throw appError('Invalid PDF type');
+  const workOrder = await getPdfWorkOrder(workOrderId, user);
+  if (!isAllowed(type, workOrder)) throw appError('Available after status change', 409);
+  const template = await getTemplateByPdfType(type);
+  const [company, businessSettings] = await Promise.all([
+    getCompanyIdentity(),
+    getBusinessSettings().catch(() => null)
+  ]);
+  const caption = pdfCaption(type, workOrder, company);
+  if (canRenderPublishedInvoiceDom(template)) {
+    try {
+      const context = workOrderTemplateContext(workOrder, company);
+      const invoiceContext = template.key === 'invoice'
+        ? invoiceDomContextForWorkOrder(context, invoicePayloadForWorkOrder(workOrder, context))
+        : context;
+      const pdf = await renderPublishedInvoiceDomTemplate(
+        template,
+        invoiceContext,
+        `${customerId(workOrder)}-${cleanFilePart(type)}-published-design`
+      );
+      return { ...pdf, workOrder, caption };
+    } catch (error) {
+      console.error(`[Work order PDF] Published design renderer failed for "${type}". Falling back to PDFKit renderer.`, error?.stack || error);
+    }
+  }
+
+  return renderWorkOrderPdfKit({ type, workOrder, template, company, businessSettings, caption });
 }

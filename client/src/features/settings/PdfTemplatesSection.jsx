@@ -6,7 +6,10 @@ import {
   ArrowUp,
   Bell,
   Box,
+  BadgeCheck,
   CalendarDays,
+  Check,
+  Circle,
   ChevronDown,
   ChevronUp,
   ClipboardCheck,
@@ -51,6 +54,7 @@ import {
   Signature,
   SlidersHorizontal,
   Square,
+  Star,
   Trash2,
   Type,
   Undo2,
@@ -72,6 +76,7 @@ import {
   useState,
   useToast
 } from '../../shared/phase1Shared.jsx';
+import { downloadPdfBlob, openPdfShell, showPdfInShell, showPdfShellError } from '../../utils/pdfDelivery.js';
 import { can, hasRole } from '../../utils/roles.js';
 
 const placeholders = [
@@ -123,7 +128,59 @@ const placeholders = [
 
 const sectionLabels = {
   service: 'Service Documents',
-  amc: 'AMC Documents'
+  amc: 'AMC Documents',
+  future: 'Future Categories'
+};
+
+const sectionDescriptions = {
+  service: 'Invoices, quotations and service completion documents.',
+  amc: 'Contract, visit and renewal related documents.',
+  future: 'Additional document groups will appear here as the library grows.'
+};
+
+const templateGalleryCopy = {
+  invoice: {
+    summary: 'Service billing and payment-ready invoice.',
+    usage: 'Used when a job is complete and ready to bill.'
+  },
+  quotation: {
+    summary: 'Quotation and approval request for the customer.',
+    usage: 'Used before work approval and pricing confirmation.'
+  },
+  'service-completed': {
+    summary: 'Thank-you and completion document.',
+    usage: 'Used after the work is delivered to close the job on a polished note.'
+  },
+  'amc-contract': {
+    summary: 'AMC contract with coverage and term details.',
+    usage: 'Used to define service coverage, duration, and contract terms.'
+  },
+  'amc-service-visit': {
+    summary: 'AMC visit report with service notes.',
+    usage: 'Used after each scheduled AMC visit.'
+  },
+  'amc-renewal-reminder': {
+    summary: 'AMC renewal reminder before expiry.',
+    usage: 'Used to prompt renewal before coverage lapses.'
+  }
+};
+
+const templateCategoryMeta = {
+  service: {
+    title: sectionLabels.service,
+    description: sectionDescriptions.service,
+    icon: ReceiptText
+  },
+  amc: {
+    title: sectionLabels.amc,
+    description: sectionDescriptions.amc,
+    icon: ShieldCheck
+  },
+  future: {
+    title: sectionLabels.future,
+    description: sectionDescriptions.future,
+    icon: LayoutGrid
+  }
 };
 
 const pageBreakFields = [
@@ -188,18 +245,94 @@ const iconVariantOptions = [
   ['check', 'Check'],
   ['dot', 'Dot'],
   ['completion', 'Completion badge'],
+  ['star', 'Star'],
   ['rupee', 'Rupee'],
   ['document', 'Document'],
   ['address', 'Address'],
   ['phone', 'Phone'],
   ['email', 'Email'],
   ['website', 'Website'],
+  ['whatsapp', 'WhatsApp'],
   ['invoice', 'Invoice'],
   ['work', 'Work'],
   ['date', 'Date'],
   ['status', 'Status'],
-  ['handshake', 'Handshake']
+  ['handshake', 'Handshake'],
+  ['shield', 'Shield'],
+  ['bell', 'Bell'],
+  ['headset', 'Headset']
 ];
+
+const vectorIconRegistry = [
+  { value: 'generic', label: 'Generic', icon: Box, aliases: 'box default square' },
+  { value: 'check', label: 'Check', icon: Check, aliases: 'tick done complete success' },
+  { value: 'dot', label: 'Dot', icon: Circle, aliases: 'circle bullet status' },
+  { value: 'completion', label: 'Completion badge', icon: BadgeCheck, aliases: 'badge complete approved verified work completion' },
+  { value: 'star', label: 'Star', icon: Star, aliases: 'rating favorite highlight' },
+  { value: 'rupee', label: 'Rupee', icon: IndianRupee, aliases: 'payment amount money inr' },
+  { value: 'document', label: 'Document', icon: FileText, aliases: 'file pdf paper' },
+  { value: 'address', label: 'Address', icon: MapPin, aliases: 'location map pin place' },
+  { value: 'phone', label: 'Phone', icon: Phone, aliases: 'call mobile contact' },
+  { value: 'email', label: 'Email', icon: Mail, aliases: 'mail message contact' },
+  { value: 'website', label: 'Website', icon: Globe, aliases: 'web globe url' },
+  { value: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, aliases: 'chat message' },
+  { value: 'invoice', label: 'Invoice', icon: ReceiptText, aliases: 'bill receipt payment' },
+  { value: 'work', label: 'Work', icon: ClipboardCheck, aliases: 'job service checklist' },
+  { value: 'date', label: 'Date', icon: CalendarDays, aliases: 'calendar schedule' },
+  { value: 'status', label: 'Status', icon: CreditCard, aliases: 'state payment card' },
+  { value: 'handshake', label: 'Handshake', icon: Handshake, aliases: 'agreement amc service' },
+  { value: 'shield', label: 'Shield', icon: ShieldCheck, aliases: 'warranty protection security' },
+  { value: 'bell', label: 'Bell', icon: Bell, aliases: 'alert notification reminder' },
+  { value: 'headset', label: 'Headset', icon: Headphones, aliases: 'support help service' }
+];
+
+const vectorIconPresetOptions = vectorIconRegistry.map((item) => [item.value, item.label]);
+
+const vectorIconNameAliases = {
+  'badge-check': 'completion',
+  'check-badge': 'completion',
+  'check-circle': 'check',
+  'circle-check': 'check',
+  calendar: 'date',
+  mail: 'email',
+  file: 'document',
+  'file-text': 'document',
+  clipboard: 'work',
+  'clipboard-check': 'work',
+  credit: 'status',
+  'credit-card': 'status',
+  map: 'address',
+  'map-pin': 'address',
+  location: 'address',
+  globe: 'website',
+  web: 'website',
+  message: 'whatsapp',
+  support: 'headset'
+};
+
+const defaultEmojiIcon = '\u2705';
+
+const vectorIconStyleDefaults = {
+  iconSize: 18,
+  fontSize: 18,
+  strokeWidth: 2,
+  iconColor: '#0284c7',
+  accentColor: '#0284c7',
+  textColor: '#0284c7',
+  backgroundColor: 'transparent',
+  borderColor: 'transparent',
+  borderWidth: 0
+};
+
+function normalizedVectorIconName(value = '') {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+  const canonical = vectorIconNameAliases[normalized] || normalized;
+  return vectorIconRegistry.some((item) => item.value === canonical) ? canonical : '';
+}
+
+function vectorIconExists(value = '') {
+  return Boolean(normalizedVectorIconName(value));
+}
 
 const iconModeOptions = [
   ['vector', 'Vector icon'],
@@ -212,6 +345,8 @@ const emojiIconOptions = [
   ['✉️', '✉️ Email'],
   ['🌐', '🌐 Website'],
   ['✅', '✅ Check'],
+  ['⭐', '⭐ Star'],
+  ['📄', '📄 Document'],
   ['₹', '₹ Rupee']
 ];
 
@@ -305,6 +440,42 @@ const defaultElementStyles = {
 
 function editedBy(template) {
   return template?.lastEditedBy?.name || template?.lastEditedBy?.username || 'System default';
+}
+
+function templateCategoryLabel(category = '') {
+  if (category === 'service') return 'Service';
+  if (category === 'amc') return 'AMC';
+  return 'Future';
+}
+
+function templateGalleryCopyFor(template = {}) {
+  return templateGalleryCopy[template.key] || {
+    summary: template.description || 'Professional PDF template for the Universal Systems workflow.',
+    usage: 'Used across the Universal Systems document workflow.'
+  };
+}
+
+function templateCardIconFor(template = {}) {
+  switch (template.key) {
+    case 'invoice':
+      return ReceiptText;
+    case 'quotation':
+      return FileText;
+    case 'service-completed':
+      return BadgeCheck;
+    case 'amc-contract':
+      return ShieldCheck;
+    case 'amc-service-visit':
+      return ClipboardCheck;
+    case 'amc-renewal-reminder':
+      return Bell;
+    default:
+      return FileText;
+  }
+}
+
+function templateSectionMeta(category = '') {
+  return templateCategoryMeta[category] || templateCategoryMeta.future;
 }
 
 function getPath(source, path, fallback = '') {
@@ -1215,7 +1386,7 @@ function contentDefaultsForElement(type = 'text') {
     rowTemplate: ['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}'],
     rows: [['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}']]
   };
-  if (type === 'icon') return { label: 'Icon', iconName: 'star', iconMode: 'vector', emoji: '✅' };
+  if (type === 'icon') return { label: 'Icon', iconName: 'star', iconMode: 'vector', iconDisplay: 'vector', emoji: defaultEmojiIcon };
   if (type === 'card') return { title: 'Card title', body: 'Add details here', twoColumn: false };
   if (type === 'qr') return { label: 'QR CODE', qrType: 'payment', helperText: 'Payment / contact QR placeholder' };
   if (type === 'signature') return { label: 'Authorized Signature', name: '', designation: '' };
@@ -1258,7 +1429,7 @@ function isInvoiceManifestElement(element = {}) {
 
 function contentDefaultsForInvoiceElement(type = 'text') {
   if (type === 'table') return { ...contentDefaultsForElement('table'), title: '' };
-  if (type === 'icon') return { label: '', iconName: '', variant: '', iconMode: 'vector', emoji: '✅' };
+  if (type === 'icon') return { label: '', iconName: '', variant: '', iconMode: 'vector', iconDisplay: 'vector', emoji: defaultEmojiIcon };
   if (type === 'card') return { boxOnly: false, twoColumn: false, title: '', body: '' };
   if (type === 'divider' || type === 'spacer') return { label: '' };
   if (type === 'image') return { label: '', imageMode: '', assetPath: '', fitToFrame: true };
@@ -1269,6 +1440,7 @@ function contentDefaultsForInvoiceElement(type = 'text') {
 
 function styleDefaultsForInvoiceElement(type = 'text') {
   const isTable = type === 'table';
+  const isIcon = type === 'icon';
   return {
     ...defaultElementStyles,
     backgroundColor: ['text', 'icon', 'divider', 'image'].includes(type) ? 'transparent' : defaultElementStyles.backgroundColor,
@@ -1279,7 +1451,8 @@ function styleDefaultsForInvoiceElement(type = 'text') {
     padding: 0,
     paddingX: isTable ? defaultElementStyles.paddingX : 0,
     paddingY: isTable ? defaultElementStyles.paddingY : 0,
-    lineHeight: 1.16
+    lineHeight: 1.16,
+    ...(isIcon ? vectorIconStyleDefaults : {})
   };
 }
 
@@ -1340,17 +1513,17 @@ function imagePreviewSource(content = {}) {
   return '';
 }
 
-function CanvasIconPreview({ variant = '', mode = 'vector', emoji = '' }) {
+function CanvasIconPreview({ variant = '', mode = 'vector', emoji = '', strokeWidth = 2 }) {
   if (mode === 'emoji') {
-    return <span className="pdf-canvas-emoji-icon" aria-hidden="true">{emoji || '✅'}</span>;
+    return <span className="pdf-canvas-emoji-icon" aria-hidden="true">{emoji || defaultEmojiIcon}</span>;
   }
-  const normalized = String(variant || '').toLowerCase();
+  const normalized = normalizedVectorIconName(variant) || 'generic';
   if (normalized === 'dot') return <span className="pdf-canvas-dot" />;
   if (normalized === 'check') {
     return (
       <svg className="pdf-canvas-check-dot" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
         <circle cx="4" cy="4" r="4" fill="currentColor" />
-        <path d="M2.2 4 3.8 5.8 6.4 2.4" fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.05" />
+        <path d="M2.2 4 3.8 5.8 6.4 2.4" fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round" strokeWidth={Math.max(0.6, Number(strokeWidth || 2) * 0.52)} />
       </svg>
     );
   }
@@ -1358,33 +1531,15 @@ function CanvasIconPreview({ variant = '', mode = 'vector', emoji = '' }) {
     return (
       <svg className="pdf-canvas-completion-badge" viewBox="0 0 34 48" aria-hidden="true" focusable="false">
         <circle cx="17" cy="17" r="17" fill="currentColor" />
-        <path d="M9.4 17.2 14.8 22.5 25.5 11.6" fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" />
+        <path d="M9.4 17.2 14.8 22.5 25.5 11.6" fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round" strokeWidth={Math.max(1, Number(strokeWidth || 2))} />
         <path d="M7 30 1 48 12 43Z" fill="currentColor" />
         <path d="M26.5 30 34 48 21.5 43Z" fill="currentColor" />
       </svg>
     );
   }
 
-  const iconMap = {
-    address: MapPin,
-    phone: Phone,
-    email: Mail,
-    website: Globe,
-    whatsapp: MessageCircle,
-    invoice: ReceiptText,
-    work: ClipboardCheck,
-    date: CalendarDays,
-    calendar: CalendarDays,
-    status: CreditCard,
-    document: FileText,
-    handshake: Handshake,
-    shield: ShieldCheck,
-    bell: Bell,
-    headset: Headphones,
-    rupee: IndianRupee
-  };
-  const Icon = iconMap[normalized] || Box;
-  return <Icon className="h-4 w-4 pdf-canvas-icon-svg" />;
+  const Icon = vectorIconRegistry.find((item) => item.value === normalized)?.icon || Box;
+  return <Icon className="pdf-canvas-icon-svg" strokeWidth={Math.max(0.5, Number(strokeWidth || 2))} />;
 }
 
 function formatTableColumns(columns = []) {
@@ -1471,7 +1626,7 @@ function makeBuilderElement(type = 'text', pageId = 'page-1', index = 0) {
     printSafe: true,
     zIndex: index + 20,
     content: contentDefaultsForElement(normalizedType),
-    style: { ...defaultElementStyles }
+    style: { ...(normalizedType === 'icon' ? { ...defaultElementStyles, ...vectorIconStyleDefaults } : defaultElementStyles) }
   };
 }
 
@@ -1486,7 +1641,14 @@ function normalizeBuilderElement(element = {}, index = 0) {
     ? element.content
     : { ...contentDefaults, text: String(element.content || '') };
   const content = { ...contentDefaults, ...rawContent };
-  const styleDefaults = invoiceManifestElement ? styleDefaultsForInvoiceElement(type) : defaultElementStyles;
+  if (type === 'icon') {
+    const iconDisplay = ['vector', 'emoji'].includes(content.iconDisplay || content.iconMode) ? (content.iconDisplay || content.iconMode) : 'vector';
+    content.iconDisplay = iconDisplay;
+    content.iconMode = ['vector', 'emoji'].includes(content.iconMode || iconDisplay) ? (content.iconMode || iconDisplay) : iconDisplay;
+  }
+  const styleDefaults = invoiceManifestElement
+    ? styleDefaultsForInvoiceElement(type)
+    : (type === 'icon' ? { ...defaultElementStyles, ...vectorIconStyleDefaults } : defaultElementStyles);
   const style = {
     ...styleDefaults,
     ...(element.style || {}),
@@ -1734,7 +1896,7 @@ function styleForBuilderElement(element = {}, selected = false) {
   const invoiceManifestElement = isInvoiceManifestElement(element);
   const borderWidth = clampBuilderNumber(style.borderWidth, 1, 0, 8);
   const elementColor = element.type === 'icon'
-    ? (style.accentColor || style.textColor || '#0284c7')
+    ? (style.iconColor || style.accentColor || style.textColor || '#0284c7')
     : (style.textColor || '#0f172a');
   return {
     left: element.x,
@@ -2041,7 +2203,13 @@ function buildDraftCanvasSnapshot(paper, design = {}, templateKey = 'invoice') {
     height: builderCanvas.height,
     templateKey,
     elementCount: (Array.isArray(design.elements) ? design.elements.length : 0) + (Array.isArray(design.sections) ? design.sections.length : 0),
-    pageCount: pages.length
+    pageCount: pages.length,
+    pages: pages.map((page, index) => ({
+      id: page.id || `page-${index + 1}`,
+      name: page.name || `Page ${index + 1}`,
+      index: index + 1,
+      elementCount: Array.isArray(page.elements) ? page.elements.length : 0
+    }))
   };
   if (!paper || typeof document === 'undefined') {
     return { draftCanvasHtml: '', draftMeta: meta };
@@ -2058,6 +2226,16 @@ function buildDraftCanvasSnapshot(paper, design = {}, templateKey = 'invoice') {
   const clonedPages = clone.querySelectorAll('.design-print-page');
   const pageCount = Math.max(1, clonedPages.length);
   meta.pageCount = pageCount;
+  meta.pages = [...clonedPages].map((page, index) => {
+    const pageId = page.getAttribute('data-pdf-page-id') || `page-${index + 1}`;
+    const designPage = pages.find((item) => item.id === pageId) || {};
+    return {
+      id: pageId,
+      name: designPage.name || `Page ${index + 1}`,
+      index: index + 1,
+      elementCount: page.querySelectorAll('[data-pdf-layer-id]').length
+    };
+  });
   clone.style.width = `${builderCanvas.width}px`;
   clone.style.height = 'auto';
   clone.style.transform = 'none';
@@ -2110,8 +2288,28 @@ function buildDraftCanvasSnapshot(paper, design = {}, templateKey = 'invoice') {
   }
 }
 
+function hasUsableDraftSnapshot(snapshot = {}) {
+  const html = String(snapshot.draftCanvasHtml || '');
+  return Boolean(
+    html
+    && html.includes('design-print-document')
+    && html.includes('design-print-page')
+    && html.includes('pdf-a4-page')
+    && Number(snapshot.draftMeta?.pageCount || 0) > 0
+  );
+}
+
 function TemplateStatusPill({ status = 'Active' }) {
-  return <span className="inline-flex rounded-full border border-emerald-400/25 bg-emerald-500/15 px-2.5 py-1 text-xs font-black text-emerald-100">{status}</span>;
+  return <span className="pdf-template-status-pill">{status}</span>;
+}
+
+function TemplateMetaChip({ label, value }) {
+  return (
+    <div className="pdf-template-meta-chip">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
 }
 
 function TemplateCard({ template, canEdit, busyKey, onEdit, onPreview, onDownload, onReset }) {
@@ -2119,56 +2317,106 @@ function TemplateCard({ template, canEdit, busyKey, onEdit, onPreview, onDownloa
   const downloadBusy = String(busyKey || '').startsWith(`download-${template.key}`);
   const resetBusy = busyKey === `reset-${template.key}`;
   const busy = Boolean(busyKey);
-  const publishedDesignAvailable = template.config?.design?.published === true
-    && template.config?.design?.publishedMeta?.templateKey === template.key;
+  const publishedDesignAvailable = template.config?.design?.published === true;
   const livePreviewOptions = publishedDesignAvailable ? { intent: 'published' } : undefined;
   const livePreviewTitle = publishedDesignAvailable ? 'Shows the current published design.' : undefined;
+  const CardIcon = templateCardIconFor(template);
+  const copy = templateGalleryCopyFor(template);
+  const categoryLabel = templateCategoryLabel(template.category);
   return (
-    <article className="surface admin-control-card flex h-full flex-col p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="admin-control-icon"><FileText className="h-5 w-5" /></div>
-          <div className="min-w-0">
-            <h3 className="text-lg font-black text-slate-50">{template.name}</h3>
-            <p className="mt-2 text-sm leading-6 muted">{template.description}</p>
+    <article className="surface admin-control-card pdf-template-card flex h-full flex-col" data-template-category={template.category || 'future'}>
+      <div className="pdf-template-card-shell">
+        <div className="pdf-template-card-header">
+          <div className="pdf-template-card-icon">
+            <CardIcon className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="pdf-template-card-title-row">
+              <div className="min-w-0">
+                <h3 className="pdf-template-card-title">{template.name}</h3>
+                <div className="pdf-template-card-tag-row">
+                  <span className="pdf-template-category-pill">{categoryLabel}</span>
+                  <TemplateStatusPill status={template.status} />
+                </div>
+              </div>
+            </div>
+            <p className="pdf-template-card-summary">{copy.summary}</p>
+            <p className="pdf-template-card-usage">{copy.usage}</p>
           </div>
         </div>
-        <TemplateStatusPill status={template.status} />
-      </div>
-      <div className="mt-5 grid gap-3 rounded-card border border-white/10 bg-white/[0.035] p-3 text-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="font-bold text-slate-300">Last edited</span>
-          <span className="font-semibold text-slate-100">{template.lastEditedDate ? formatDate(template.lastEditedDate) : 'Not edited yet'}</span>
+
+        <div className="pdf-template-meta-grid" aria-label={`${template.name} metadata`}>
+          <TemplateMetaChip label="Last Updated" value={template.lastEditedDate ? formatDate(template.lastEditedDate) : 'Not edited yet'} />
+          <TemplateMetaChip label="Updated By" value={editedBy(template)} />
+          <TemplateMetaChip label="Version" value={`v${template.version || 1}`} />
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="font-bold text-slate-300">Last edited by</span>
-          <span className="font-semibold text-slate-100">{editedBy(template)}</span>
+
+        <div className="pdf-template-card-actions">
+          <button type="button" className="btn btn-primary min-h-11 pdf-template-action-primary" disabled={!canEdit || busy} onClick={() => onEdit(template)}>
+            <Edit3 className="h-4 w-4" />
+            Edit Design
+          </button>
+          <button type="button" className="btn btn-secondary min-h-11 pdf-template-action-secondary" disabled={busy} onClick={() => onPreview(template, null, livePreviewOptions)} title={livePreviewTitle}>
+            {previewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+            {previewBusy ? 'Loading...' : 'Preview PDF'}
+          </button>
+          <button type="button" className="btn btn-secondary min-h-11 pdf-template-action-secondary" disabled={busy} onClick={() => onDownload(template, null, livePreviewOptions)} title={livePreviewTitle}>
+            {downloadBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {downloadBusy ? 'Downloading...' : 'Download Sample PDF'}
+          </button>
+          <button type="button" className="btn btn-secondary min-h-11 pdf-template-reset-button" disabled={!canEdit || busy} onClick={() => onReset(template)}>
+            {resetBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+            {resetBusy ? 'Resetting...' : 'Reset to Default Design'}
+          </button>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="font-bold text-slate-300">Version</span>
-          <span className="font-semibold text-slate-100">v{template.version || 1}</span>
-        </div>
+
+        {!canEdit ? <p className="pdf-template-readonly-note">Admin role required to edit or reset templates.</p> : null}
       </div>
-      <div className="mt-5 grid gap-2 sm:grid-cols-2">
-        <button type="button" className="btn btn-primary min-h-11" disabled={!canEdit || busy} onClick={() => onEdit(template)}>
-          <Edit3 className="h-4 w-4" />
-          Edit Design
-        </button>
-        <button type="button" className="btn btn-secondary min-h-11" disabled={busy} onClick={() => onPreview(template, null, livePreviewOptions)} title={livePreviewTitle}>
-          {previewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-          {previewBusy ? 'Loading...' : 'Preview PDF'}
-        </button>
-        <button type="button" className="btn btn-secondary min-h-11" disabled={busy} onClick={() => onDownload(template, null, livePreviewOptions)} title={livePreviewTitle}>
-          {downloadBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          {downloadBusy ? 'Downloading...' : 'Download Sample PDF'}
-        </button>
-        <button type="button" className="btn btn-secondary min-h-11" disabled={!canEdit || busy} onClick={() => onReset(template)}>
-          {resetBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          Reset to Default Design
-        </button>
-      </div>
-      {!canEdit ? <p className="mt-3 text-xs font-semibold text-amber-100">Admin role required to edit or reset templates.</p> : null}
     </article>
+  );
+}
+
+function TemplateSectionBlock({
+  category,
+  items,
+  canEdit,
+  busyKey,
+  onEdit,
+  onPreview,
+  onDownload,
+  onReset
+}) {
+  const meta = templateSectionMeta(category);
+  const Icon = meta.icon || FileText;
+  return (
+    <section className="surface admin-control-card pdf-template-section-panel p-5">
+      <div className="pdf-template-section-head">
+        <div className="pdf-template-section-copy">
+          <div className="pdf-template-section-icon">
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h3>{meta.title}</h3>
+            <p>{meta.description}</p>
+          </div>
+        </div>
+        <span className="pdf-template-section-count">{items.length} templates</span>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-3">
+        {items.map((template) => (
+          <TemplateCard
+            key={template.key}
+            template={template}
+            canEdit={canEdit}
+            busyKey={busyKey}
+            onEdit={onEdit}
+            onPreview={onPreview}
+            onDownload={onDownload}
+            onReset={onReset}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -2198,6 +2446,8 @@ function TemplateVariablesModal({ onClose }) {
 
 function versionActionLabel(action = '') {
   switch (action) {
+    case 'before_reset_backup':
+      return 'Before Reset Backup';
     case 'before_publish_backup':
       return 'Before Publish Backup';
     case 'published_backup':
@@ -2216,6 +2466,11 @@ function versionActionLabel(action = '') {
     default:
       return action ? action.replace(/_/g, ' ') : 'Saved Version';
   }
+}
+
+function resetDefaultDesignMessage(template = {}) {
+  const name = template.name || 'this PDF template';
+  return `This will reset only the selected PDF template: ${name}. Existing customer, invoice, work order, AMC, payment, and inventory data will not be affected. Current custom design will be saved in Saved Versions before reset, if possible. Uploads, storage, and other PDF templates will not be changed.`;
 }
 
 function formatVersionDateTime(value) {
@@ -2780,6 +3035,7 @@ function DesignModeWorkspace({
   onPublishDesign,
   onShowVariables
 }) {
+  const { push } = useToast();
   const disabled = !canEdit || saving;
   const normalizedDesign = useMemo(() => normalizeDesignState(designDraft), [designDraft]);
   const canvasDesign = useMemo(
@@ -2801,6 +3057,7 @@ function DesignModeWorkspace({
   const [variableQuery, setVariableQuery] = useState('');
   const [activeInspectorTab, setActiveInspectorTab] = useState('content');
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [vectorPickerFocusSignal, setVectorPickerFocusSignal] = useState(0);
   const [rightInspectorOpen, setRightInspectorOpen] = useState(false);
   const [fullScreenEditor, setFullScreenEditor] = useState(true);
   const [showReferenceLayer, setShowReferenceLayer] = useState(false);
@@ -3011,14 +3268,25 @@ function DesignModeWorkspace({
     applyDefaultTemplateLayout();
   }
 
+  function captureDraftSnapshot() {
+    const snapshot = buildDraftCanvasSnapshot(printSnapshotRef.current, canvasDesign, template.key);
+    if (!hasUsableDraftSnapshot(snapshot)) {
+      push('PDF design snapshot is not ready. Please wait a moment and try again.', 'error');
+      return null;
+    }
+    return snapshot;
+  }
+
   function previewDraftPdf() {
     // Draft preview intentionally sets design.previewDraft without publishing the design.
-    const snapshot = buildDraftCanvasSnapshot(printSnapshotRef.current || paperRef.current, canvasDesign, template.key);
+    const snapshot = captureDraftSnapshot();
+    if (!snapshot) return;
     onPreview(template, previewConfig, { intent: 'draft', ...snapshot });
   }
 
   function downloadDraftPdf() {
-    const snapshot = buildDraftCanvasSnapshot(printSnapshotRef.current || paperRef.current, canvasDesign, template.key);
+    const snapshot = captureDraftSnapshot();
+    if (!snapshot) return;
     onDownload(template, previewConfig, { intent: 'draft', ...snapshot });
   }
 
@@ -4434,6 +4702,7 @@ function DesignModeWorkspace({
             onPatch={(patch) => patchElement(selectedElement.id, patch)}
             onOpenVariables={() => setActiveRail('variables')}
             onRememberCursor={(target, value, event) => rememberVariableCursor('element', selectedElement.id, target, value, event)}
+            vectorPickerFocusSignal={vectorPickerFocusSignal}
           />
         );
       }
@@ -4702,6 +4971,10 @@ function DesignModeWorkspace({
               <History className="h-4 w-4" />
               Saved Versions
             </button>
+            <button type="button" className={`btn admin-compact-button ${rightInspectorOpen ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setRightInspectorOpen((value) => !value)}>
+              <Settings2 className="h-4 w-4" />
+              Advanced Inspector
+            </button>
           <div className="pdf-builder-more-menu-wrap">
             <button type="button" className={`btn admin-compact-button ${toolbarMoreOpen ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setToolbarMoreOpen((value) => !value)} aria-expanded={toolbarMoreOpen}>
               <SlidersHorizontal className="h-4 w-4" />
@@ -4712,10 +4985,6 @@ function DesignModeWorkspace({
                 <button type="button" onClick={() => { confirmApplyDefaultTemplateLayout(); setToolbarMoreOpen(false); }} disabled={disabled || manifestState.loading}>
                   {manifestState.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LayoutGrid className="h-4 w-4" />}
                   Reset to Default Design
-                </button>
-                <button type="button" className={rightInspectorOpen ? 'is-active' : ''} onClick={() => { setRightInspectorOpen((value) => !value); setToolbarMoreOpen(false); }}>
-                  <Settings2 className="h-4 w-4" />
-                  Advanced Inspector
                 </button>
                 <span className="pdf-more-menu-divider" />
                 <button type="button" className={activeRail === 'templates' ? 'is-active' : ''} onClick={() => { toggleRailDrawer('templates'); setToolbarMoreOpen(false); }}>
@@ -4976,10 +5245,11 @@ function DesignModeWorkspace({
                       if (selectedElement) patchElement(selectedElement.id, patch);
                       else if (selectedSection) patchSection(selectedSection.id, patch);
                     }}
-                    onOpenInspector={(tab = 'content') => {
+                    onOpenInspector={(tab = 'content', options = {}) => {
                       setRightInspectorOpen(true);
                       setInspectorCollapsed(false);
                       setActiveInspectorTab(tab);
+                      if (options.focusVectorPicker) setVectorPickerFocusSignal((value) => value + 1);
                     }}
                   />
                 ) : null}
@@ -5018,8 +5288,9 @@ function DesignModeWorkspace({
         confirmLabel="Publish Design"
         onCancel={() => setPublishConfirmOpen(false)}
         onConfirm={() => {
+          const snapshot = captureDraftSnapshot();
+          if (!snapshot) return;
           setPublishConfirmOpen(false);
-          const snapshot = buildDraftCanvasSnapshot(printSnapshotRef.current || paperRef.current, canvasDesign, template.key);
           onPublishDesign?.(canvasDesign, {
             publishedCanvasHtml: snapshot.draftCanvasHtml,
             publishedMeta: snapshot.draftMeta
@@ -5178,9 +5449,9 @@ function BuilderCanvasElement({
   const doubleClickEditable = inlineEditable || element.type === 'table' || element.type === 'divider' || element.type === 'image';
   const inlineTarget = element.type === 'card' ? 'body' : element.type === 'icon' ? 'label' : 'text';
   const iconMode = content.iconMode === 'emoji' ? 'emoji' : 'vector';
-  const iconVariant = content.variant || content.iconName || 'generic';
+  const iconVariant = iconMode === 'emoji' ? (content.variant || content.iconName || 'generic') : (normalizedVectorIconName(content.variant || content.iconName) || 'generic');
   const iconLabel = content.label || (content.variant ? '' : content.iconName) || '';
-  const iconEmoji = content.emoji || '✅';
+  const iconEmoji = content.emoji || defaultEmojiIcon;
   const imagePreviewSrc = element.type === 'image' ? imagePreviewSource(content) : '';
   const imageMode = isWatermarkImageElement(element) ? 'watermark' : (content.imageMode || (imagePreviewSrc.includes('logo-icon') ? 'watermark' : 'logo'));
   const tablePaddingX = clampBuilderNumber(element.style?.paddingX, 4, 0, 24);
@@ -5286,7 +5557,7 @@ function BuilderCanvasElement({
         </div>
       ) : element.type === 'icon' ? (
         <div className={`pdf-canvas-icon is-${iconMode} is-${iconVariant} ${iconLabel ? 'has-label' : 'is-symbol-only'}`}>
-          <CanvasIconPreview variant={iconVariant} mode={iconMode} emoji={iconEmoji} />
+          <CanvasIconPreview variant={iconVariant} mode={iconMode} emoji={iconEmoji} strokeWidth={element.style?.strokeWidth ?? vectorIconStyleDefaults.strokeWidth} />
           {iconLabel ? <span>{iconLabel}</span> : null}
         </div>
       ) : element.type === 'qr' ? (
@@ -5543,13 +5814,13 @@ function FloatingLayerToolbar({
         <>
           <label className="pdf-floating-color" title="Stroke / accent color">
             <Palette className="h-3.5 w-3.5" />
-            <input type="color" value={style.accentColor || '#0284c7'} disabled={locked} onChange={(event) => patchStyle({ accentColor: event.target.value, textColor: event.target.value })} />
+            <input type="color" value={style.iconColor || style.accentColor || '#0284c7'} disabled={locked} onChange={(event) => patchStyle({ iconColor: event.target.value, accentColor: event.target.value, textColor: event.target.value })} />
           </label>
           <label className="pdf-floating-mini-field" title={element.type === 'divider' ? 'Stroke' : 'Size'}>
             <span>{element.type === 'divider' ? 'Stroke' : 'Size'}</span>
-            <input type="number" min="1" max="42" value={element.type === 'divider' ? style.dividerThickness ?? 2 : style.fontSize ?? 13} disabled={locked} onChange={(event) => patchStyle(element.type === 'divider' ? { dividerThickness: Number(event.target.value) } : { fontSize: Number(event.target.value) })} />
+            <input type="number" min="1" max="64" value={element.type === 'divider' ? style.dividerThickness ?? 2 : style.iconSize ?? style.fontSize ?? 13} disabled={locked} onChange={(event) => patchStyle(element.type === 'divider' ? { dividerThickness: Number(event.target.value) } : { iconSize: Number(event.target.value), fontSize: Number(event.target.value) })} />
           </label>
-          <button type="button" className="pdf-floating-tool" disabled={locked} onClick={() => onOpenInspector?.('content')} title={element.type === 'icon' ? 'Replace icon' : 'More options'}>
+          <button type="button" className="pdf-floating-tool" disabled={locked} onClick={() => onOpenInspector?.('content', element.type === 'icon' ? { focusVectorPicker: true } : {})} title={element.type === 'icon' ? 'Replace icon' : 'More options'}>
             <Box className="h-3.5 w-3.5" />
             <span>{element.type === 'icon' ? 'Replace Icon' : 'Options'}</span>
           </button>
@@ -5697,15 +5968,89 @@ function BuilderSelect({ label, value, options, disabled, onChange }) {
   );
 }
 
-function ElementContentControls({ element, disabled, onPatch, onOpenVariables, onRememberCursor = null }) {
+function VectorIconPicker({ value, disabled, onChange, focusSignal = 0 }) {
+  const [query, setQuery] = useState('');
+  const searchInputRef = useRef(null);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const activeValue = normalizedVectorIconName(value) || 'generic';
+  const normalizedQuery = query.trim().toLowerCase();
+  const options = vectorIconRegistry.filter((item) => {
+    if (!normalizedQuery) return true;
+    return `${item.value} ${item.label} ${item.aliases}`.toLowerCase().includes(normalizedQuery);
+  });
+  useEffect(() => {
+    if (!focusSignal || disabled) return;
+    const timer = window.setTimeout(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [focusSignal, disabled]);
+  return (
+    <div className="pdf-field-full">
+      <BuilderSelect label="Icon preset" value={activeValue} options={vectorIconPresetOptions} disabled={disabled} onChange={onChange} />
+      <details className="pdf-icon-browser" open={browseOpen} onToggle={(event) => setBrowseOpen(event.currentTarget.open)}>
+        <summary>Browse icons</summary>
+        <label className="pdf-control-field">
+          <span className="label">Search icons</span>
+          <span className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input ref={searchInputRef} className="input pl-9" value={query} disabled={disabled} placeholder="Search icons" onChange={(event) => setQuery(event.target.value)} />
+          </span>
+        </label>
+        <div className="pdf-icon-browser-grid">
+          {options.map((item) => {
+            const Icon = item.icon;
+            const selected = item.value === activeValue;
+            return (
+              <button
+                key={item.value}
+                type="button"
+                className={`btn ${selected ? 'btn-primary' : 'btn-secondary'} justify-start gap-2 px-3 py-2 text-xs`}
+                disabled={disabled}
+                onClick={() => onChange(item.value)}
+                title={item.label}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function VectorIconInspectorPreview({ iconName, iconMode = 'vector', emoji = defaultEmojiIcon, style = {}, isFallback = false }) {
+  const color = style.iconColor || style.accentColor || style.textColor || vectorIconStyleDefaults.accentColor;
+  const iconSize = style.iconSize ?? style.fontSize ?? vectorIconStyleDefaults.iconSize;
+  const strokeWidth = style.strokeWidth ?? vectorIconStyleDefaults.strokeWidth;
+  return (
+    <div className="pdf-vector-preview pdf-field-full">
+      <div className="pdf-vector-preview-icon" style={{ color, fontSize: `${iconSize}px` }}>
+        <CanvasIconPreview variant={iconName} mode={iconMode} emoji={emoji} strokeWidth={strokeWidth} />
+      </div>
+      <div>
+        <span>Live icon preview</span>
+        <p>{isFallback ? 'Using generic fallback until this name matches a supported vector icon.' : iconName || 'generic'}</p>
+      </div>
+    </div>
+  );
+}
+
+function ElementContentControls({ element, disabled, onPatch, onOpenVariables, onRememberCursor = null, vectorPickerFocusSignal = 0 }) {
   const content = element.content || {};
+  const style = element.style || defaultElementStyles;
   const remember = (target, value) => (event) => onRememberCursor?.(target, value, event);
   const tableDefaults = contentDefaultsForElement('table');
   const tableColumns = Array.isArray(content.columns) && content.columns.length ? content.columns : tableDefaults.columns;
   const tableWidths = parseTableColumnWidths(formatTableColumnWidths(content.columnWidths), tableColumns.length);
   const tableTemplate = Array.isArray(content.rowTemplate) && content.rowTemplate.length ? content.rowTemplate : tableDefaults.rowTemplate;
   const tablePreviewRows = Array.isArray(content.rows) && content.rows.length ? content.rows : tableDefaults.rows;
-  const iconVariantValue = content.variant || content.iconName || 'generic';
+  const iconVariantValue = content.variant || normalizedVectorIconName(content.iconName) || 'generic';
+  const customVectorIconName = content.iconName || iconVariantValue;
+  const customVectorIconIsValid = !String(customVectorIconName || '').trim() || vectorIconExists(customVectorIconName);
   const iconOptions = iconVariantOptions.some(([value]) => value === iconVariantValue)
     ? iconVariantOptions
     : [[iconVariantValue, iconVariantValue], ...iconVariantOptions];
@@ -5749,6 +6094,20 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
       columnWidths: tableWidths.filter((_width, widthIndex) => widthIndex !== index),
       rowTemplate: tableTemplate.filter((_cell, cellIndex) => cellIndex !== index),
       rows: tablePreviewRows.map((row) => (Array.isArray(row) ? row : [row]).filter((_cell, cellIndex) => cellIndex !== index))
+    });
+  }
+
+  function resetVectorIconStyle() {
+    onPatch({ style: vectorIconStyleDefaults });
+  }
+
+  function patchVectorIconName(value) {
+    const normalized = normalizedVectorIconName(value);
+    onPatch({
+      content: {
+        iconName: value,
+        variant: normalized || 'generic'
+      }
     });
   }
 
@@ -5848,29 +6207,50 @@ function ElementContentControls({ element, disabled, onPatch, onOpenVariables, o
             value={content.iconMode === 'emoji' ? 'emoji' : 'vector'}
             options={iconModeOptions}
             disabled={disabled}
-            onChange={(value) => onPatch({ content: { iconMode: value } })}
+            onChange={(value) => onPatch({ content: { iconMode: value, iconDisplay: value } })}
           />
           {content.iconMode === 'emoji' ? (
             <>
               <BuilderSelect
                 label="Emoji preset"
-                value={content.emoji || '✅'}
+                value={content.emoji || defaultEmojiIcon}
                 options={emojiIconOptions}
                 disabled={disabled}
                 onChange={(value) => onPatch({ content: { emoji: value } })}
               />
-              <BuilderTextInput label="Custom emoji" value={content.emoji || '✅'} disabled={disabled} onChange={(value) => onPatch({ content: { emoji: value } })} onCursor={remember('emoji', content.emoji || '✅')} />
+              <BuilderTextInput label="Custom emoji" value={content.emoji || defaultEmojiIcon} disabled={disabled} onChange={(value) => onPatch({ content: { emoji: value } })} onCursor={remember('emoji', content.emoji || defaultEmojiIcon)} />
               <BuilderHint tone="info">Draft preview PDFs render these emoji through Chromium; the browser may use a monochrome substitute if color emoji glyphs are unavailable.</BuilderHint>
             </>
-          ) : null}
-          <BuilderSelect
-            label="Icon variant"
-            value={iconVariantValue}
-            options={iconOptions}
-            disabled={disabled || content.iconMode === 'emoji'}
-            onChange={(value) => onPatch({ content: { variant: value === 'generic' ? '' : value, iconName: value === 'generic' ? '' : value } })}
-          />
-          <BuilderTextInput label="Icon name" value={content.iconName} disabled={disabled || content.iconMode === 'emoji'} onChange={(value) => onPatch({ content: { iconName: value } })} onCursor={remember('iconName', content.iconName)} />
+          ) : (
+            <>
+              <VectorIconPicker
+                value={iconVariantValue}
+                disabled={disabled}
+                focusSignal={vectorPickerFocusSignal}
+                onChange={(value) => onPatch({ content: { variant: value, iconName: value } })}
+              />
+              <BuilderTextInput
+                label="Custom vector icon name"
+                value={customVectorIconName}
+                disabled={disabled}
+                onChange={patchVectorIconName}
+                onCursor={remember('iconName', customVectorIconName)}
+              />
+              <VectorIconInspectorPreview iconName={customVectorIconIsValid ? iconVariantValue : 'generic'} style={style} isFallback={!customVectorIconIsValid} />
+              {!customVectorIconIsValid ? (
+                <BuilderHint tone="warning">Icon name not found. The PDF will use a generic fallback icon safely.</BuilderHint>
+              ) : null}
+              <BuilderNumberInput label="Icon size" value={style.iconSize ?? style.fontSize ?? vectorIconStyleDefaults.iconSize} min={4} max={64} step={1} disabled={disabled} onChange={(value) => onPatch({ style: { iconSize: value, fontSize: value } })} />
+              <BuilderNumberInput label="Stroke width" value={style.strokeWidth ?? vectorIconStyleDefaults.strokeWidth} min={0.5} max={8} step={0.25} disabled={disabled} onChange={(value) => onPatch({ style: { strokeWidth: value } })} />
+              <ColorControl label="Icon color" value={style.iconColor || style.accentColor || style.textColor || vectorIconStyleDefaults.accentColor} disabled={disabled} onChange={(value) => onPatch({ style: { iconColor: value, accentColor: value, textColor: value } })} />
+              <ColorControl label="Background color" value={style.backgroundColor || vectorIconStyleDefaults.backgroundColor} disabled={disabled} onChange={(value) => onPatch({ style: { backgroundColor: value } })} />
+              <ColorControl label="Border color" value={style.borderColor || vectorIconStyleDefaults.borderColor} disabled={disabled} onChange={(value) => onPatch({ style: { borderColor: value } })} />
+              <button type="button" className="btn btn-secondary admin-compact-button pdf-field-full justify-center" disabled={disabled} onClick={resetVectorIconStyle}>
+                <RotateCcw className="h-4 w-4" />
+                Reset icon style
+              </button>
+            </>
+          )}
         </>
       ) : element.type === 'qr' ? (
         <>
@@ -5998,10 +6378,10 @@ function ElementStyleControls({ element, disabled, onPatch }) {
   const style = element.style || defaultElementStyles;
   const invoiceManifestElement = isInvoiceManifestElement(element);
   const patchAccentColor = (value) => {
-    onPatch({ style: element.type === 'icon' ? { accentColor: value, textColor: value } : { accentColor: value } });
+    onPatch({ style: element.type === 'icon' ? { iconColor: value, accentColor: value, textColor: value } : { accentColor: value } });
   };
   const patchTextColor = (value) => {
-    onPatch({ style: element.type === 'icon' ? { textColor: value, accentColor: value } : { textColor: value } });
+    onPatch({ style: element.type === 'icon' ? { iconColor: value, textColor: value, accentColor: value } : { textColor: value } });
   };
   return (
     <div className="pdf-inspector-grid">
@@ -6013,7 +6393,7 @@ function ElementStyleControls({ element, disabled, onPatch }) {
       <BuilderNumberInput label="Border" value={style.borderWidth ?? 1} max={8} step={element.type === 'table' ? 0.1 : 1} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { borderWidth: value } })} />
       <BuilderToggle label="Shadow" checked={style.shadow === true} disabled={disabled || element.type === 'divider'} onChange={(checked) => onPatch({ style: { shadow: checked } })} />
       <BuilderNumberInput label="Opacity" value={style.opacity ?? 1} min={0} max={1} step={0.01} disabled={disabled} onChange={(value) => onPatch({ style: { opacity: value } })} />
-      <BuilderNumberInput label={element.type === 'icon' ? 'Icon size' : 'Font size'} value={style.fontSize ?? 13} min={invoiceManifestElement ? 4 : 8} max={32} step={invoiceManifestElement ? 0.1 : 1} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontSize: value } })} />
+      <BuilderNumberInput label={element.type === 'icon' ? 'Icon size' : 'Font size'} value={element.type === 'icon' ? (style.iconSize ?? style.fontSize ?? 13) : (style.fontSize ?? 13)} min={invoiceManifestElement || element.type === 'icon' ? 4 : 8} max={element.type === 'icon' ? 64 : 32} step={invoiceManifestElement ? 0.1 : 1} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: element.type === 'icon' ? { fontSize: value, iconSize: value } : { fontSize: value } })} />
       <BuilderSelect label="Font weight" value={String(style.fontWeight || 700)} options={[['400', 'Regular'], ['600', 'Semi bold'], ['700', 'Bold'], ['800', 'Extra bold']]} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { fontWeight: Number(value) } })} />
       <BuilderNumberInput label="Line height" value={style.lineHeight ?? 1.16} min={0.85} max={2.4} step={0.01} disabled={disabled || element.type === 'divider'} onChange={(value) => onPatch({ style: { lineHeight: value } })} />
       {element.type === 'table' ? (
@@ -7020,10 +7400,17 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
   const activeTemplate = templates.find((template) => template.key === editingKey) || null;
   const activeEditorConfig = activeTemplate ? editorConfigForTemplate(activeTemplate) : {};
   const editorDirty = Boolean(activeTemplate && stableJson(draft) !== stableJson(activeEditorConfig)) || designEditorDirty;
-  const grouped = useMemo(() => ({
-    service: templates.filter((template) => template.category === 'service'),
-    amc: templates.filter((template) => template.category === 'amc')
-  }), [templates]);
+  const templateSections = useMemo(() => {
+    const knownCategories = new Set(['service', 'amc']);
+    const service = templates.filter((template) => template.category === 'service');
+    const amc = templates.filter((template) => template.category === 'amc');
+    const future = templates.filter((template) => !knownCategories.has(template.category));
+    return [
+      { key: 'service', items: service },
+      { key: 'amc', items: amc },
+      ...(future.length ? [{ key: 'future', items: future }] : [])
+    ];
+  }, [templates]);
 
   useEffect(() => {
     onDirtyChange?.(editorDirty);
@@ -7093,13 +7480,13 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
 
   async function previewTemplate(template, config = null, options = {}) {
     const intent = previewIntentForConfig(config, options.intent || '');
+    const previewWindow = openPdfShell('Preparing PDF preview');
     setBusyKey(`preview-${template.key}-${intent}`);
     try {
       const blob = await fetchTemplatePdf(template, config, { ...options, intent });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank', 'noopener,noreferrer');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      showPdfInShell(previewWindow, blob, 'PDF preview');
     } catch (err) {
+      showPdfShellError(previewWindow, err.message || 'PDF preview failed. Please try again.');
       push(err.message, 'error');
     } finally {
       setBusyKey('');
@@ -7108,18 +7495,13 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
 
   async function downloadTemplate(template, config = null, options = {}) {
     const intent = previewIntentForConfig(config, options.intent || '');
+    const downloadWindow = openPdfShell('Preparing PDF download');
     setBusyKey(`download-${template.key}-${intent}`);
     try {
       const blob = await fetchTemplatePdf(template, config, { ...options, intent });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `${template.key}-sample.pdf`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      downloadPdfBlob(blob, `${template.key}-sample.pdf`, downloadWindow);
     } catch (err) {
+      showPdfShellError(downloadWindow, err.message || 'PDF download failed. Please try again.');
       push(err.message, 'error');
     } finally {
       setBusyKey('');
@@ -7220,12 +7602,12 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
     setBusyKey(`reset-${template.key}`);
     try {
       const result = await request(`/pdf-templates/${template.key}/reset`, { method: 'POST' });
-      push(result.message || 'PDF template reset');
+      push(result.message || 'Default design restored.');
       await reload({ silent: true });
       if (editingKey === template.key) setDraft(result.template ? editorConfigForTemplate(result.template) : {});
       if (editingKey === template.key) setDesignEditorDirty(false);
     } catch (err) {
-      push(err.message, 'error');
+      push('Could not reset design. Please try again.', 'error');
     } finally {
       setBusyKey('');
     }
@@ -7330,9 +7712,9 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
         {variablesOpen ? <TemplateVariablesModal onClose={() => setVariablesOpen(false)} /> : null}
         {resetCandidate ? (
           <ConfirmModal
-            title="Reset template?"
-            message={`Reset ${resetCandidate.name} to the default text and styling. Existing generated PDFs will not be changed.`}
-            confirmLabel="Reset Template"
+            title="Reset to Default Design?"
+            message={resetDefaultDesignMessage(resetCandidate)}
+            confirmLabel="Reset to Default Design"
             loading={busyKey === `reset-${resetCandidate.key}`}
             loadingLabel="Resetting..."
             onCancel={() => setResetCandidate(null)}
@@ -7411,34 +7793,25 @@ export function PdfTemplatesSection({ onDirtyChange = null, onDesignModeChange =
         </div>
       </section>
 
-      {Object.entries(grouped).map(([category, items]) => (
-        <section key={category} className="grid gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-xl font-black">{sectionLabels[category]}</h3>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-black text-slate-200">{items.length} templates</span>
-          </div>
-          <div className="grid gap-4 xl:grid-cols-3">
-            {items.map((template) => (
-              <TemplateCard
-                key={template.key}
-                template={template}
-                canEdit={canEdit}
-                busyKey={busyKey}
-                onEdit={startEdit}
-                onPreview={previewTemplate}
-                onDownload={downloadTemplate}
-                onReset={(item) => setResetCandidate(item)}
-              />
-            ))}
-          </div>
-        </section>
+      {templateSections.map(({ key, items }) => (
+        <TemplateSectionBlock
+          key={key}
+          category={key}
+          items={items}
+          canEdit={canEdit}
+          busyKey={busyKey}
+          onEdit={startEdit}
+          onPreview={previewTemplate}
+          onDownload={downloadTemplate}
+          onReset={(item) => setResetCandidate(item)}
+        />
       ))}
       {variablesOpen ? <TemplateVariablesModal onClose={() => setVariablesOpen(false)} /> : null}
       {resetCandidate ? (
         <ConfirmModal
-          title="Reset template?"
-          message={`Reset ${resetCandidate.name} to the default text and styling. Existing generated PDFs will not be changed.`}
-          confirmLabel="Reset Template"
+          title="Reset to Default Design?"
+          message={resetDefaultDesignMessage(resetCandidate)}
+          confirmLabel="Reset to Default Design"
           loading={busyKey === `reset-${resetCandidate.key}`}
           loadingLabel="Resetting..."
           onCancel={() => setResetCandidate(null)}

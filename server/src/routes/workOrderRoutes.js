@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { authenticate } from '../auth.js';
+import { authenticate, requireRole } from '../auth.js';
 import { requireAnyPermission, requirePermission } from '../permissions.js';
 import { handleUploadErrors, workOrderUpload } from '../upload.js';
-import { create, deletePart, downloadPdf, getById, list, patchApproval, patchApprovePartRequest, patchAssignment, patchDocumentSent, patchMovePartRequestToUsed, patchPart, patchPriority, patchRejectPartRequest, patchServiceCharge, patchStatus, postAutoAssign, postImages, postNote, postPart, postPartRequest, postSendPdfWhatsapp, remove } from '../controllers/workOrderController.js';
+import { archive, create, deletePart, downloadPdf, getById, list, moveToTrash, patchApproval, patchApprovePartRequest, patchAssignment, patchDocumentSent, patchMovePartRequestToUsed, patchPart, patchPriority, patchRejectPartRequest, patchServiceCharge, patchStatus, postAutoAssign, postImages, postNote, postPart, postPartRequest, postSendPdfWhatsapp, remove, removePermanently, restore } from '../controllers/workOrderController.js';
 import { asyncHandler } from '../utils/http.js';
 
 const router = Router();
@@ -13,6 +13,10 @@ router.get('/', requirePermission('view_work_orders'), asyncHandler(list));
 router.get('/:id', requirePermission('view_work_orders'), asyncHandler(getById));
 router.post('/:id/auto-assign', requirePermission('assign_technician'), asyncHandler(postAutoAssign));
 router.patch('/:id/assignment', requirePermission('assign_technician'), asyncHandler(patchAssignment));
+router.patch('/:id/archive', requirePermission('delete_work_order'), asyncHandler(archive));
+router.patch('/:id/move-to-trash', requirePermission('delete_work_order'), asyncHandler(moveToTrash));
+router.post('/:id/restore', requirePermission('delete_work_order'), asyncHandler(restore));
+router.delete('/:id/permanent', requireRole('admin', 'super_admin'), requirePermission('delete_work_order'), asyncHandler(removePermanently));
 router.delete('/:id', requirePermission('delete_work_order'), asyncHandler(remove));
 router.get('/:id/pdf/:type', requireAnyPermission('view_documents', 'download_invoice_pdf'), asyncHandler(downloadPdf));
 router.post('/:id/pdf/:type/send-whatsapp', requirePermission('send_pdf_whatsapp'), asyncHandler(postSendPdfWhatsapp));

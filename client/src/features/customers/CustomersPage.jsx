@@ -393,7 +393,16 @@ function TechnicianCustomerMobileCard({ customer, metrics, devices, base }) {
       </div>
       <div className="technician-mobile-contact-row">
         <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={callHref(phone)}><PhoneCallIcon className="h-4 w-4" />Call</a>
-        <a className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`} href={phone ? customerWhatsAppHref(customer) : '#'} target="_blank" rel="noreferrer"><Send className="h-4 w-4" />WhatsApp</a>
+        <a
+          className={`btn btn-secondary ${phone ? '' : 'pointer-events-none opacity-50'}`}
+          href={phone ? customerWhatsAppHref(customer) : undefined}
+          aria-disabled={!phone}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => {
+            if (!phone) event.preventDefault();
+          }}
+        ><Send className="h-4 w-4" />WhatsApp</a>
       </div>
       <div className="technician-mobile-card-footer">
         <Link className="btn btn-primary" to={`${base}/customers/${customer.id}`}>Details</Link>

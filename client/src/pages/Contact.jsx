@@ -457,7 +457,7 @@ export default function Contact() {
               </div>
             ) : null}
 
-            <button className="btn btn-primary shine-button contact-submit-button" disabled={loading} aria-busy={loading}>
+            <button type="submit" className="btn btn-primary shine-button contact-submit-button" disabled={loading} aria-busy={loading}>
               <Send className="h-4 w-4" />
               {loading ? 'Sending...' : 'Submit Request'}
             </button>

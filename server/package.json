@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/index.js",
+    "seed:demo": "node src/seed/seedDemo.js",
+    "seed:live": "node src/seed/seedLive.js",
     "seed:phase2": "node src/seed/phase2Seed.js",
     "seed:phase4": "node src/seed/phase4Seed.js",
     "seed:purchases": "node src/seed/purchaseImportSeed.js",
+    "db:clean-client": "node src/seed/cleanClientData.js",
     "start": "node src/index.js"
   },
   "dependencies": {

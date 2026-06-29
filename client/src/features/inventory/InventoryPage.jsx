@@ -127,7 +127,6 @@ import {
   useMemo,
   useNavigate,
   useParams,
-  useRef,
   useResource,
   UserRound,
   Users,
@@ -143,15 +142,36 @@ import {
   XAxis,
   YAxis
 } from '../../shared/phase1Shared.jsx';
-import { createPortal } from 'react-dom';
-import { MoreHorizontal } from 'lucide-react';
-import { can } from '../../utils/roles.js';
+import { Archive, MoreHorizontal, RotateCcw } from 'lucide-react';
+import { FloatingRowActionMenu } from '../../components/FloatingRowActionMenu.jsx';
+import { LifecycleTabs } from '../../components/LifecycleTabs.jsx';
+import { can, normalizeRole } from '../../utils/roles.js';
 import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
 import { AddStockChoiceModal, InventoryModuleTabs, PurchaseImportModal, PurchaseRegisterTab, SuppliersTab } from './PurchaseImportComponents.jsx';
 import { StockMovementsPage } from './StockMovementsPage.jsx';
 
 const inventoryUnitTypes = ['Piece', 'Box', 'Meter', 'Pack'];
 const missingInventoryValue = '\u2014';
+const inventoryProtectedCategories = ['Work Orders', 'Stock Movements', 'Reserved Stock', 'Purchases', 'Invoices'];
+const inventoryArchiveFilters = [
+  { value: 'active', label: 'Active' },
+  { value: 'disabled', label: 'Disabled' },
+  { value: 'trash', label: 'Trash' },
+  { value: 'all', label: 'All' }
+];
+
+function inventoryPartLifecycleState(part = {}) {
+  if (part.lifecycleState) return part.lifecycleState;
+  if (part.isDeleted || part.deletedAt) return 'trash';
+  if (part.isDisabled || part.disabledAt) return 'disabled';
+  return 'active';
+}
+
+function lifecycleDaysLeftLabel(daysLeft) {
+  if (daysLeft === null || daysLeft === undefined) return '';
+  const days = Math.max(0, Number(daysLeft) || 0);
+  return `${days} day${days === 1 ? '' : 's'} left`;
+}
 
 export function InventoryPage({ role = 'admin' }) {
   const { request, user } = useAuth();
@@ -166,19 +186,20 @@ export function InventoryPage({ role = 'admin' }) {
   const [category, setCategory] = useState('');
   const [stockStatus, setStockStatus] = useState('');
   const [sortBy, setSortBy] = useState('name');
+  const [archiveStatus, setArchiveStatus] = useState('active');
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState(null);
   const [quickStockPart, setQuickStockPart] = useState(null);
   const [stockChoicePart, setStockChoicePart] = useState(null);
   const [purchasePart, setPurchasePart] = useState(null);
   const [deletePart, setDeletePart] = useState(null);
+  const [deletePartAction, setDeletePartAction] = useState('');
   const [deletePartBusy, setDeletePartBusy] = useState(false);
   const [actionMenuId, setActionMenuId] = useState('');
-  const [actionMenuPosition, setActionMenuPosition] = useState(null);
-  const actionMenuRef = useRef(null);
-  const actionTriggerRefs = useRef(new Map());
+  const [actionMenuTrigger, setActionMenuTrigger] = useState(null);
   const limit = 10;
   const isTechnician = role === 'technician';
+  const isAdminUser = ['admin', 'super_admin'].includes(normalizeRole(user?.role || role));
   const requestedTab = useMemo(() => new URLSearchParams(location.search).get('tab') || '', [location.search]);
   const activeTab = useMemo(() => {
     if (isTechnician) return canViewStockMovements && requestedTab === 'stock-movements' ? 'stock-movements' : 'parts';
@@ -193,79 +214,38 @@ export function InventoryPage({ role = 'admin' }) {
     if (category) params.set('category', category);
     if (stockStatus) params.set('stockStatus', stockStatus);
     if (sortBy) params.set('sortBy', sortBy);
+    params.set('lifecycle', archiveStatus);
     return `?${params}`;
-  }, [category, debouncedSearch, limit, page, sortBy, stockStatus]);
+  }, [archiveStatus, category, debouncedSearch, limit, page, sortBy, stockStatus]);
   const { data, loading, error, reload } = useResource(() => request(`/inventory${query}`), [request, query]);
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, category, stockStatus, sortBy]);
+  }, [archiveStatus, debouncedSearch, category, stockStatus, sortBy]);
 
-  useEffect(() => {
-    if (!actionMenuId) return undefined;
-    function closeActionMenu(event) {
-      if (actionMenuRef.current?.contains(event.target)) return;
-      if (actionTriggerRefs.current.get(actionMenuId)?.contains(event.target)) return;
-      setActionMenuId('');
-      setActionMenuPosition(null);
-    }
-    function closeOnEscape(event) {
-      if (event.key === 'Escape') {
-        setActionMenuId('');
-        setActionMenuPosition(null);
-      }
-    }
-    function closeOnViewportChange() {
-      setActionMenuId('');
-      setActionMenuPosition(null);
-    }
-    document.addEventListener('mousedown', closeActionMenu);
-    document.addEventListener('keydown', closeOnEscape);
-    window.addEventListener('scroll', closeOnViewportChange, true);
-    window.addEventListener('resize', closeOnViewportChange);
-    return () => {
-      document.removeEventListener('mousedown', closeActionMenu);
-      document.removeEventListener('keydown', closeOnEscape);
-      window.removeEventListener('scroll', closeOnViewportChange, true);
-      window.removeEventListener('resize', closeOnViewportChange);
-    };
-  }, [actionMenuId]);
+  function closeActionMenu() {
+    setActionMenuId('');
+    setActionMenuTrigger(null);
+  }
 
-  function setActionTriggerRef(partId, node) {
-    if (!node) {
-      actionTriggerRefs.current.delete(partId);
+  function toggleActionMenu(partId, event) {
+    if (actionMenuId === partId) {
+      closeActionMenu();
       return;
     }
-    actionTriggerRefs.current.set(partId, node);
+    setActionMenuId(partId);
+    setActionMenuTrigger(event.currentTarget);
   }
 
-  function actionMenuCoords(partId) {
-    const trigger = actionTriggerRefs.current.get(partId);
-    if (!trigger || typeof window === 'undefined') return null;
-    const rect = trigger.getBoundingClientRect();
-    const menuWidth = 216;
-    const estimatedMenuHeight = 196;
-    const gap = 10;
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const fitsBelow = rect.bottom + gap + estimatedMenuHeight <= viewportHeight - 12;
-    return {
-      top: fitsBelow ? rect.bottom + gap : Math.max(12, rect.top - estimatedMenuHeight - gap),
-      left: Math.min(Math.max(12, rect.right - menuWidth), Math.max(12, viewportWidth - menuWidth - 12)),
-      width: menuWidth,
-      placement: fitsBelow ? 'bottom' : 'top'
-    };
+  function startPartLifecycleAction(part, action) {
+    setDeletePart(part);
+    setDeletePartAction(action);
+    closeActionMenu();
   }
 
-  function toggleActionMenu(partId) {
-    setActionMenuId((current) => {
-      if (current === partId) {
-        setActionMenuPosition(null);
-        return '';
-      }
-      setActionMenuPosition(actionMenuCoords(partId));
-      return partId;
-    });
+  function clearPartLifecycleAction() {
+    setDeletePart(null);
+    setDeletePartAction('');
   }
 
   const parts = data?.parts || data?.data || [];
@@ -292,7 +272,7 @@ export function InventoryPage({ role = 'admin' }) {
     totalUnits: parts.reduce((sum, part) => sum + Number(part.onHand || 0), 0),
     reserved: parts.reduce((sum, part) => sum + Number(part.reserved || 0), 0)
   }), [data?.summary, parts]);
-  const hasActiveFilters = Boolean(search || category || stockStatus || sortBy !== 'name');
+  const hasActiveFilters = Boolean(search || category || stockStatus || sortBy !== 'name' || archiveStatus !== 'active');
   const inventoryKpis = [
     { label: 'Total Parts', value: totals.totalParts, helper: 'Products tracked in inventory', icon: PackagePlus, tone: 'blue' },
     { label: 'Total Units', value: totals.totalUnits, helper: 'Current on-hand quantity', icon: Boxes, tone: 'blue' },
@@ -342,18 +322,27 @@ export function InventoryPage({ role = 'admin' }) {
     }
   }
 
-  async function confirmDeletePart() {
+  async function confirmPartLifecycleAction() {
     if (!deletePart || deletePartBusy) return;
     if (!canDeletePart) {
-      push('You do not have permission to delete parts', 'error');
+      push('You do not have permission to update part lifecycle', 'error');
       return;
     }
     setDeletePartBusy(true);
     try {
       await preserveScroll(async () => {
-        await request(`/inventory/${deletePart.id}`, { method: 'DELETE' });
-        push('Inventory part deleted');
-        setDeletePart(null);
+        const id = deletePart.id || deletePart._id;
+        if (deletePartAction === 'disable') {
+          await request(`/inventory/${id}/disable`, { method: 'PATCH' });
+          push('Inventory part disabled successfully. History is preserved.');
+        } else if (deletePartAction === 'trash') {
+          await request(`/inventory/${id}/move-to-trash`, { method: 'PATCH' });
+          push('Inventory part moved to Trash. It can be restored for 30 days.');
+        } else if (deletePartAction === 'permanent') {
+          await request(`/inventory/${id}/permanent`, { method: 'DELETE' });
+          push('Inventory part permanently deleted');
+        }
+        clearPartLifecycleAction();
         reload({ silent: true });
         emitSidebarBadgesUpdated();
       });
@@ -361,6 +350,24 @@ export function InventoryPage({ role = 'admin' }) {
       push(err.message, 'error');
     } finally {
       setDeletePartBusy(false);
+    }
+  }
+
+  async function restorePart(part) {
+    if (!canDeletePart) {
+      push('You do not have permission to restore parts', 'error');
+      return;
+    }
+    try {
+      await preserveScroll(async () => {
+        await request(`/inventory/${part.id || part._id}/restore`, { method: 'POST' });
+        push('Inventory part restored successfully');
+        closeActionMenu();
+        reload({ silent: true });
+        emitSidebarBadgesUpdated();
+      });
+    } catch (err) {
+      push(err.message, 'error');
     }
   }
 
@@ -427,6 +434,13 @@ export function InventoryPage({ role = 'admin' }) {
       <div className="inventory-kpi-grid mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         {inventoryKpis.map((item) => <InventoryMetricCard key={item.label} {...item} />)}
       </div>
+      <LifecycleTabs
+        tabs={inventoryArchiveFilters}
+        value={archiveStatus}
+        onChange={setArchiveStatus}
+        counts={data?.lifecycleCounts}
+        note={archiveStatus === 'trash' ? 'Items in Trash are kept for 30 days before permanent cleanup.' : 'Disabled parts are hidden from normal selection but can be restored.'}
+      />
       <div className="surface inventory-filter-bar mb-5 grid gap-3 p-4 xl:grid-cols-[minmax(320px,1fr)_180px_180px_190px_auto]">
         <div className="min-w-0">
           <SearchBox value={search} onChange={setSearch} placeholder="Search part name, category, SKU, brand" />
@@ -455,6 +469,7 @@ export function InventoryPage({ role = 'admin' }) {
             setCategory('');
             setStockStatus('');
             setSortBy('name');
+            setArchiveStatus('active');
           }}
         >
           Reset Filters
@@ -466,7 +481,7 @@ export function InventoryPage({ role = 'admin' }) {
           icon={PackagePlus}
           title={hasActiveFilters ? 'No parts match your filters' : 'No inventory items found'}
           message={hasActiveFilters ? 'Try changing the search or filters.' : 'Add your first part to start tracking stock availability and value.'}
-          action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setCategory(''); setStockStatus(''); setSortBy('name'); }}>Reset Filters</button> : canCreatePart ? <button type="button" className="btn btn-primary" onClick={() => setEditor({})}>Add Part</button> : null}
+          action={hasActiveFilters ? <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setCategory(''); setStockStatus(''); setSortBy('name'); setArchiveStatus('active'); }}>Reset Filters</button> : canCreatePart ? <button type="button" className="btn btn-primary" onClick={() => setEditor({})}>Add Part</button> : null}
         />
       ) : (
         <>
@@ -488,6 +503,15 @@ export function InventoryPage({ role = 'admin' }) {
             <tbody className="divide-y divide-[var(--line)]">
               {filteredParts.map((part) => {
                 const partId = part.id || part._id;
+                const lifecycleState = inventoryPartLifecycleState(part);
+                const isDisabledPart = lifecycleState === 'disabled';
+                const isTrashedPart = lifecycleState === 'trash';
+                const isActivePart = lifecycleState === 'active';
+                const canShowDisableAction = canDeletePart && isActivePart;
+                const canShowMoveToTrashAction = canDeletePart && !isTrashedPart;
+                const canShowRestoreAction = canDeletePart && !isActivePart;
+                const canShowPermanentDeleteAction = canDeletePart && isTrashedPart && isAdminUser;
+                const trashDaysLabel = isTrashedPart ? lifecycleDaysLeftLabel(part.trashDaysLeft) : '';
                 const stockValue = Number(part.onHand || 0) * Number(part.costPrice || 0);
                 const reservedQuantity = Number(part.reserved || 0);
                 const availableQuantity = Number(part.available || 0);
@@ -497,6 +521,8 @@ export function InventoryPage({ role = 'admin' }) {
                     <td className="font-bold inventory-product-cell">
                       <span className="block truncate text-slate-50" title={part.partName}>{part.partName}</span>
                       {part.sku ? <span className="block truncate text-xs font-normal muted" title={part.sku}>{part.sku}</span> : null}
+                      {isDisabledPart ? <span className="mt-1 inline-flex rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-100">Disabled</span> : null}
+                      {isTrashedPart ? <span className="mt-1 inline-flex rounded-full border border-rose-300/20 bg-rose-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-rose-100">Trash{trashDaysLabel ? ` - ${trashDaysLabel}` : ''}</span> : null}
                     </td>
                     <td><span className="inventory-category-badge" title={part.category || 'General'}>{part.category || 'General'}</span></td>
                     <td>
@@ -553,34 +579,30 @@ export function InventoryPage({ role = 'admin' }) {
                       ) : canEditStock || canViewStockMovements || canDeletePart ? <div className="inventory-action-menu-wrap">
                         <button
                           type="button"
-                          ref={(node) => setActionTriggerRef(partId, node)}
                           className="inventory-row-menu-trigger"
-                          onClick={() => toggleActionMenu(partId)}
+                          onClick={(event) => toggleActionMenu(partId, event)}
                           aria-haspopup="menu"
                           aria-expanded={actionMenuId === partId}
                           aria-label={`Open actions for ${part.partName}`}
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
-                        {actionMenuId === partId && actionMenuPosition ? createPortal(
-                          <div
-                            ref={actionMenuRef}
-                            className={`inventory-row-action-menu is-portal is-${actionMenuPosition.placement}`}
-                            role="menu"
-                            style={{
-                              position: 'fixed',
-                              top: `${actionMenuPosition.top}px`,
-                              left: `${actionMenuPosition.left}px`,
-                              width: `${actionMenuPosition.width}px`
-                            }}
-                          >
-                            {canEditStock ? <button type="button" role="menuitem" onClick={() => { setStockChoicePart(part); setActionMenuId(''); setActionMenuPosition(null); }}><PackagePlus className="h-4 w-4" />Add Stock</button> : null}
-                            {canEditStock ? <button type="button" role="menuitem" onClick={() => { setEditor(part); setActionMenuId(''); setActionMenuPosition(null); }}><Edit3 className="h-4 w-4" />Edit Part</button> : null}
-                            {canViewStockMovements ? <Link role="menuitem" to={`/app/admin/parts?tab=stock-movements&partId=${partId}`} onClick={() => { setActionMenuId(''); setActionMenuPosition(null); }}><ClipboardList className="h-4 w-4" />View Movements</Link> : null}
-                            {canDeletePart ? <button type="button" role="menuitem" className="inventory-row-menu-danger" onClick={() => { setDeletePart(part); setActionMenuId(''); setActionMenuPosition(null); }}><Trash2 className="h-4 w-4" />Delete</button> : null}
-                          </div>,
-                          document.body
-                        ) : null}
+                        <FloatingRowActionMenu
+                          open={actionMenuId === partId}
+                          triggerElement={actionMenuTrigger}
+                          onClose={closeActionMenu}
+                          className="inventory-row-action-menu"
+                          width={236}
+                          gap={10}
+                        >
+                            {canEditStock && isActivePart ? <button type="button" role="menuitem" className="row-action-menu-item" onClick={() => { setStockChoicePart(part); closeActionMenu(); }}><PackagePlus className="h-4 w-4" /><span>Add Stock</span></button> : null}
+                            {canEditStock && isActivePart ? <button type="button" role="menuitem" className="row-action-menu-item" onClick={() => { setEditor(part); closeActionMenu(); }}><Edit3 className="h-4 w-4" /><span>Edit Part</span></button> : null}
+                            {canViewStockMovements ? <Link className="row-action-menu-item" role="menuitem" to={`/app/admin/parts?tab=stock-movements&partId=${partId}`} onClick={closeActionMenu}><ClipboardList className="h-4 w-4" /><span>View Movements</span></Link> : null}
+                            {canShowDisableAction ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--warning" onClick={() => startPartLifecycleAction(part, 'disable')}><Archive className="h-4 w-4" /><span>Disable Part</span></button> : null}
+                            {canShowRestoreAction ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--restore" onClick={() => restorePart(part)}><RotateCcw className="h-4 w-4" /><span>{isDisabledPart ? 'Enable Part' : 'Restore'}</span></button> : null}
+                            {canShowMoveToTrashAction ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--danger inventory-row-menu-danger" onClick={() => startPartLifecycleAction(part, 'trash')}><Trash2 className="h-4 w-4" /><span>Move to Trash</span></button> : null}
+                            {canShowPermanentDeleteAction ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--danger inventory-row-menu-danger" onClick={() => startPartLifecycleAction(part, 'permanent')}><Trash2 className="h-4 w-4" /><span>Delete Permanently</span></button> : null}
+                        </FloatingRowActionMenu>
                       </div> : <span className="inventory-not-specified">{missingInventoryValue}</span>}
                     </td>
                   </tr>
@@ -624,15 +646,77 @@ export function InventoryPage({ role = 'admin' }) {
       ) : null}
       {canDeletePart && deletePart ? (
         <ConfirmModal
-          title="Delete inventory part permanently?"
-          message={`Delete ${deletePart.partName}? If this part is used in existing records, the system will block deletion and ask you to archive or disable it instead.`}
-          confirmLabel="Delete Permanently"
+          title={deletePartAction === 'disable' ? 'Disable this part?' : deletePartAction === 'trash' ? 'Move this part to Trash?' : 'Delete inventory part permanently?'}
+          message={deletePartAction === 'disable'
+            ? `${deletePart.partName || 'This part'} will move to Disabled. Stock, purchase history, work order links, and movements stay preserved.`
+            : deletePartAction === 'trash'
+              ? `${deletePart.partName || 'This part'} will move to Trash and can be restored for 30 days. Linked records and history stay preserved.`
+              : `${deletePart.partName || 'This part'} will be permanently deleted only if the backend allows it. This action is separate from Trash.`}
+          confirmLabel={deletePartAction === 'disable' ? 'Disable Part' : deletePartAction === 'trash' ? 'Move to Trash' : 'Delete Permanently'}
           loading={deletePartBusy}
-          loadingLabel="Deleting..."
-          onCancel={() => setDeletePart(null)}
-          onConfirm={confirmDeletePart}
+          loadingLabel={deletePartAction === 'disable' ? 'Disabling...' : deletePartAction === 'trash' ? 'Moving...' : 'Deleting...'}
+          onCancel={clearPartLifecycleAction}
+          onConfirm={confirmPartLifecycleAction}
         />
       ) : null}
+    </div>
+  );
+}
+
+function LinkedArchiveModal({
+  title,
+  itemLabel,
+  message,
+  confirmLabel,
+  categories = [],
+  fallbackCategories = [],
+  categoryFallbackLabel = 'Protected link types checked',
+  note = 'Archived records are hidden from active lists but can be restored.',
+  loading = false,
+  loadingLabel = '',
+  onCancel,
+  onConfirm
+}) {
+  const visibleCategories = categories.length ? categories : fallbackCategories;
+  const categoryLabel = categories.length ? 'Linked records detected' : categoryFallbackLabel;
+  const busyLabel = loadingLabel || `${confirmLabel}...`;
+
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-black/50 p-4">
+      <div className="surface w-full max-w-lg p-5">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-card border border-amber-300/25 bg-amber-400/10 text-amber-100">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-lg font-black">{title}</h2>
+            <p className="mt-1 truncate text-sm font-semibold text-slate-300" title={itemLabel}>{itemLabel}</p>
+          </div>
+        </div>
+        <p className="mt-4 text-sm leading-6 muted">{message}</p>
+        {visibleCategories.length ? (
+          <div className="mt-4 rounded-card border border-white/10 bg-white/[0.035] p-3">
+            <p className="text-xs font-black uppercase tracking-wide text-slate-400">{categoryLabel}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {visibleCategories.map((category) => (
+                <span key={category} className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-100">
+                  {category}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <p className="mt-4 rounded-card border border-sky-300/15 bg-sky-400/10 p-3 text-sm font-semibold text-sky-100">
+          {note}
+        </p>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button type="button" className="btn btn-secondary" disabled={loading} onClick={onCancel}>Cancel</button>
+          <button type="button" className="btn btn-primary" disabled={loading} onClick={onConfirm}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {loading ? busyLabel : confirmLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

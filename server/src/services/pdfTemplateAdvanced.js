@@ -7,6 +7,11 @@ const PAGE_X = 34;
 const PAGE_RIGHT = 561;
 const CONTENT_WIDTH = PAGE_RIGHT - PAGE_X;
 const FOOTER_SAFE_Y = 770;
+const PAGE_BOTTOM_SAFE_Y = PAGE_HEIGHT - 8;
+const TABLE_TO_FINAL_GAP = 36;
+const AMOUNT_TO_NEXT_GAP = 24;
+const SECTION_TO_SECTION_GAP = 8;
+const TERMS_TO_FOOTER_GAP = 24;
 
 const CARD_LABELS = {
   text: 'Text',
@@ -812,10 +817,10 @@ function tableRowsForElement(content = {}, context = {}) {
   const rowTemplate = Array.isArray(content.rowTemplate) && content.rowTemplate.length
     ? content.rowTemplate
     : ['{{item_index}}', '{{item_description}}', '{{item_quantity}}', '{{item_unit_price}}', '{{item_total}}'];
-  return context.invoice_items.slice(0, 24).map((item) => rowTemplate.map((cell) => renderText(cell, { ...context, ...item })));
+  return context.invoice_items.map((item) => rowTemplate.map((cell) => renderText(cell, { ...context, ...item })));
 }
 
-function drawTableElement(doc, element, frame, context) {
+function drawTableElement(doc, element, frame, context, options = {}) {
   const style = element.style || {};
   const content = contentForElement(element);
   const invoiceElement = isInvoiceManifestElement(element);
@@ -823,7 +828,7 @@ function drawTableElement(doc, element, frame, context) {
   const headerBackground = style.headerBackgroundColor || accent;
   const headerTextColor = style.headerTextColor || '#ffffff';
   const columns = Array.isArray(content.columns) && content.columns.length ? content.columns.slice(0, 6) : ['Description', 'Qty', 'Rate', 'Total'];
-  const rows = tableRowsForElement(content, context);
+  const rows = Array.isArray(options.rows) ? options.rows : tableRowsForElement(content, context);
   const outerPaddingX = clampNumber(style.tablePaddingX ?? style.outerPaddingX ?? style.padding ?? 0, 0, 0, 48);
   const outerPaddingY = clampNumber(style.tablePaddingY ?? style.outerPaddingY ?? style.padding ?? 0, 0, 0, 48);
   const cellPaddingX = clampNumber(style.paddingX, 4, 0, 24);
@@ -883,6 +888,283 @@ function drawTableElement(doc, element, frame, context) {
   }
 }
 
+function visibleTableRowCapacity(element, frame) {
+  const style = element.style || {};
+  const content = contentForElement(element);
+  const invoiceElement = isInvoiceManifestElement(element);
+  const tableTitle = printableText(content.title, '', { suppressHelpers: invoiceElement });
+  const titleHeight = tableTitle ? 16 : 0;
+  const outerPaddingY = clampNumber(style.tablePaddingY ?? style.outerPaddingY ?? style.padding ?? 0, 0, 0, 48);
+  const rowHeight = clampNumber(style.rowHeight, 18, 12, 34);
+  const tableY = frame.y + outerPaddingY + titleHeight;
+  const rowsTop = tableY + rowHeight;
+  const rowsBottom = frame.y + frame.height - 6;
+  return Math.max(1, Math.floor((rowsBottom - rowsTop) / rowHeight));
+}
+
+function continuationTableFrame(sourceFrame) {
+  const top = Math.max(96, Math.min(sourceFrame.y, 140));
+  return {
+    x: sourceFrame.x,
+    y: top,
+    width: sourceFrame.width,
+    height: Math.max(120, FOOTER_SAFE_Y - top)
+  };
+}
+
+function continuationChunksForTable(element, frame, context) {
+  const content = contentForElement(element);
+  if (content.dynamicRows !== true) return [];
+  const rows = tableRowsForElement(content, context);
+  const firstCapacity = visibleTableRowCapacity(element, frame);
+  if (rows.length <= firstCapacity) return [];
+  const nextFrame = continuationTableFrame(frame);
+  const nextCapacity = visibleTableRowCapacity(element, nextFrame);
+  const chunks = [];
+  for (let cursor = firstCapacity; cursor < rows.length; cursor += nextCapacity) {
+    chunks.push({
+      rows: rows.slice(cursor, cursor + nextCapacity),
+      frame: nextFrame
+    });
+  }
+  return chunks;
+}
+
+function visualElementRole(element = {}) {
+  const content = contentForElement(element);
+  const marker = [
+    element.role,
+    element.layoutRole,
+    element.id,
+    element.name,
+    element.title,
+    element.sourceKey,
+    element.manifestSemanticId,
+    content.kind,
+    content.title,
+    content.label,
+    content.text
+  ].filter(Boolean).join(' ').toLowerCase();
+  if (element.type === 'table' || marker.includes('table') || marker.includes('item') || marker.includes('parts')) return 'table';
+  if (marker.includes('footer') || marker.includes('thank you') || marker.includes('bottom strip')) return 'footer';
+  if (marker.includes('amount') || marker.includes('summary') || marker.includes('total') || marker.includes('balance')) return 'amount';
+  if (marker.includes('term') || marker.includes('condition') || marker.includes('warranty')) return 'terms';
+  if (marker.includes('signature') || marker.includes('acknowledgement')) return 'signature';
+  if (marker.includes('notice') || marker.includes('note') || marker.includes('message')) return 'notice';
+  return 'section';
+}
+
+function visualGapBetween(previousRole, currentRole) {
+  if (!previousRole) return 0;
+  if (previousRole === currentRole) return 0;
+  if (currentRole === 'footer') return TERMS_TO_FOOTER_GAP;
+  if (previousRole === 'amount') return AMOUNT_TO_NEXT_GAP;
+  return SECTION_TO_SECTION_GAP;
+}
+
+function tableRenderedBottom(element, frame, rows = []) {
+  const style = element.style || {};
+  const content = contentForElement(element);
+  const invoiceElement = isInvoiceManifestElement(element);
+  const tableTitle = printableText(content.title, '', { suppressHelpers: invoiceElement });
+  const titleHeight = tableTitle ? 16 : 0;
+  const outerPaddingY = clampNumber(style.tablePaddingY ?? style.outerPaddingY ?? style.padding ?? 0, 0, 0, 48);
+  const rowHeight = clampNumber(style.rowHeight, 18, 12, 34);
+  return frame.y + outerPaddingY + titleHeight + rowHeight * ((Array.isArray(rows) ? rows.length : 0) + 1);
+}
+
+function elementWithFrame(element = {}, frame = {}, extra = {}) {
+  return {
+    ...element,
+    ...extra,
+    x: frame.x,
+    y: frame.y,
+    width: frame.width,
+    height: frame.height
+  };
+}
+
+function tableElementForRows(element, frame, rows, idSuffix = '') {
+  const bottom = tableRenderedBottom(element, frame, rows);
+  const nextFrame = {
+    ...frame,
+    height: Math.max(frame.height, bottom - frame.y + 6)
+  };
+  return elementWithFrame(element, nextFrame, {
+    id: idSuffix ? `${element.id || 'table'}-${idSuffix}` : element.id,
+    __pdfRows: rows
+  });
+}
+
+function fitRowsForFrame(element, frame, rows, startIndex = 0) {
+  const capacity = Math.max(1, visibleTableRowCapacity(element, frame));
+  const endIndex = Math.min(rows.length, startIndex + capacity);
+  return {
+    rows: rows.slice(startIndex, endIndex),
+    nextIndex: endIndex,
+    capacity
+  };
+}
+
+function layoutLowerElementsForPage(elements = [], startY, pageLimit = PAGE_BOTTOM_SAFE_Y, preserveOriginal = true) {
+  if (!elements.length) return { elements: [], fits: true, bottom: startY };
+  let previousRole = '';
+  let cursor = startY;
+  let bottom = startY;
+  let fits = true;
+  const planned = elements
+    .map((element) => ({ element, frame: designElementFrame(element), role: visualElementRole(element) }))
+    .sort((a, b) => a.frame.y - b.frame.y || Number(a.element.zIndex || 0) - Number(b.element.zIndex || 0))
+    .map(({ element, frame, role }) => {
+      const minTop = cursor + visualGapBetween(previousRole, role);
+      const y = preserveOriginal ? Math.max(frame.y, minTop) : Math.max(startY, minTop);
+      const nextFrame = { ...frame, y };
+      const elementBottom = y + frame.height;
+      if (elementBottom > pageLimit + 0.5) fits = false;
+      cursor = elementBottom;
+      bottom = Math.max(bottom, elementBottom);
+      previousRole = role;
+      return elementWithFrame(element, nextFrame);
+    });
+  return { elements: planned, fits, bottom };
+}
+
+function paginateLowerElements(elements = [], startY, pageLimit = PAGE_BOTTOM_SAFE_Y) {
+  if (!elements.length) return [];
+  const pages = [];
+  let current = [];
+  let previousRole = '';
+  let cursor = startY;
+  elements
+    .map((element) => ({ element, frame: designElementFrame(element), role: visualElementRole(element) }))
+    .sort((a, b) => a.frame.y - b.frame.y || Number(a.element.zIndex || 0) - Number(b.element.zIndex || 0))
+    .forEach(({ element, frame, role }) => {
+      const gap = visualGapBetween(previousRole, role);
+      let y = current.length ? cursor + gap : startY;
+      if (current.length && y + frame.height > pageLimit + 0.5) {
+        pages.push(current);
+        current = [];
+        previousRole = '';
+        cursor = startY;
+        y = startY;
+      }
+      const nextFrame = { ...frame, y: Math.max(startY, y) };
+      current.push(elementWithFrame(element, nextFrame));
+      cursor = nextFrame.y + frame.height;
+      previousRole = role;
+    });
+  if (current.length) pages.push(current);
+  return pages;
+}
+
+function sortForDrawing(elements = []) {
+  return elements.slice().sort((a, b) => Number(a.zIndex || 0) - Number(b.zIndex || 0));
+}
+
+function planVisualPageRender(elements = [], context = {}) {
+  const sortedElements = sortForDrawing(elements);
+  const dynamicTable = sortedElements.find((element) => {
+    const content = contentForElement(element);
+    return element?.type === 'table' && content.dynamicRows === true;
+  });
+  if (!dynamicTable) return [{ elements: sortedElements }];
+
+  const tableFrame = designElementFrame(dynamicTable);
+  const tableBottom = tableFrame.y + tableFrame.height;
+  const lowerElements = sortedElements.filter((element) => {
+    if (element === dynamicTable) return false;
+    if (shouldRepeatOnTableContinuation(element, tableFrame)) return false;
+    return designElementFrame(element).y >= tableBottom - 1;
+  });
+  const lowerSet = new Set(lowerElements);
+  const upperElements = sortedElements.filter((element) => element !== dynamicTable && !lowerSet.has(element));
+  const repeatedElements = sortedElements.filter((element) => shouldRepeatOnTableContinuation(element, tableFrame));
+  const rows = tableRowsForElement(contentForElement(dynamicTable), context);
+  if (!rows.length) return [{ elements: sortedElements }];
+
+  const firstLowerTop = lowerElements.length
+    ? Math.min(...lowerElements.map((element) => designElementFrame(element).y))
+    : PAGE_BOTTOM_SAFE_Y;
+  const firstFrameBottom = Math.max(
+    tableFrame.y + 40,
+    Math.min(FOOTER_SAFE_Y, firstLowerTop - TABLE_TO_FINAL_GAP)
+  );
+  const firstFrame = {
+    ...tableFrame,
+    height: Math.max(40, firstFrameBottom - tableFrame.y)
+  };
+  const pages = [];
+  const firstChunk = fitRowsForFrame(dynamicTable, firstFrame, rows, 0);
+  pages.push({
+    elements: sortForDrawing([
+      ...upperElements,
+      tableElementForRows(dynamicTable, firstFrame, firstChunk.rows)
+    ])
+  });
+
+  let rowCursor = firstChunk.nextIndex;
+  let finalTableFrame = firstFrame;
+  let finalTableRows = firstChunk.rows;
+  let finalPageIndex = 0;
+
+  while (rowCursor < rows.length) {
+    const continuationFrame = continuationTableFrame(tableFrame);
+    const chunk = fitRowsForFrame(dynamicTable, continuationFrame, rows, rowCursor);
+    finalTableFrame = continuationFrame;
+    finalTableRows = chunk.rows;
+    finalPageIndex = pages.length;
+    pages.push({
+      elements: sortForDrawing([
+        ...repeatedElements,
+        tableElementForRows(dynamicTable, continuationFrame, chunk.rows, `continued-${pages.length}`)
+      ])
+    });
+    rowCursor = chunk.nextIndex;
+  }
+
+  const finalTableBottom = tableRenderedBottom(dynamicTable, finalTableFrame, finalTableRows);
+  const lowerStart = finalTableBottom + TABLE_TO_FINAL_GAP;
+  const finalLower = layoutLowerElementsForPage(lowerElements, lowerStart, PAGE_BOTTOM_SAFE_Y, true);
+  if (lowerElements.length && finalLower.fits) {
+    pages[finalPageIndex] = {
+      elements: sortForDrawing([
+        ...pages[finalPageIndex].elements,
+        ...finalLower.elements
+      ])
+    };
+  } else if (lowerElements.length) {
+    const lowerPageTop = Math.max(96, Math.min(firstLowerTop, 140));
+    paginateLowerElements(lowerElements, lowerPageTop, PAGE_BOTTOM_SAFE_Y).forEach((lowerPage) => {
+      pages.push({ elements: sortForDrawing([...repeatedElements, ...lowerPage]) });
+    });
+  }
+  return pages;
+}
+
+function shouldRepeatOnTableContinuation(element, tableFrame) {
+  if (!element || element.type === 'table') return false;
+  if (element.backgroundElement || element.content?.backgroundElement) return true;
+  const frame = designElementFrame(element);
+  return frame.y + frame.height <= tableFrame.y - 4;
+}
+
+function logSkippedDesignElement(error, element = {}, context = 'visual design') {
+  const id = element.id || element.name || element.type || 'unknown';
+  console.error(`[PDF ${context}] Skipped invalid element "${id}".`, error?.stack || error);
+}
+
+function drawDesignElementSafely(doc, element, context, company, label = 'visual design') {
+  try {
+    if (element?.type === 'table' && Array.isArray(element.__pdfRows)) {
+      drawTableElement(doc, element, designElementFrame(element), context, { rows: element.__pdfRows });
+      return;
+    }
+    drawDesignElement(doc, element, context, company);
+  } catch (error) {
+    logSkippedDesignElement(error, element, label);
+  }
+}
+
 function drawScaledIcon(doc, frame, baseSize, draw) {
   const size = Math.max(1, Math.min(frame.width, frame.height));
   const scale = size / baseSize;
@@ -895,9 +1177,21 @@ function drawScaledIcon(doc, frame, baseSize, draw) {
   doc.restore();
 }
 
-function drawContactVariantIcon(doc, type, frame, color) {
+function iconFrameForStyle(frame, style = {}) {
+  const explicitSize = Number(style.iconSize || 0);
+  if (!Number.isFinite(explicitSize) || explicitSize <= 0) return frame;
+  const size = Math.max(4, Math.min(explicitSize, frame.width, frame.height));
+  return {
+    x: frame.x + Math.max(0, (frame.width - size) / 2),
+    y: frame.y + Math.max(0, (frame.height - size) / 2),
+    width: size,
+    height: size
+  };
+}
+
+function drawContactVariantIcon(doc, type, frame, color, strokeWidth = 1.15) {
   drawScaledIcon(doc, frame, 18, () => {
-    doc.lineWidth(1.15).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
+    doc.lineWidth(strokeWidth).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
     if (type === 'address') {
       doc.circle(7, 6.5, 4.8).stroke();
       doc.circle(7, 6.5, 1.2).fill();
@@ -918,9 +1212,9 @@ function drawContactVariantIcon(doc, type, frame, color) {
   });
 }
 
-function drawSmallVariantIcon(doc, type, frame, color) {
+function drawSmallVariantIcon(doc, type, frame, color, strokeWidth = 1.05) {
   drawScaledIcon(doc, frame, 18, () => {
-    doc.lineWidth(1.05).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
+    doc.lineWidth(strokeWidth).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
     if (type === 'invoice') {
       doc.roundedRect(2, 1.5, 12.5, 16, 1.2).stroke();
       doc.moveTo(5, 6).lineTo(11.5, 6).stroke();
@@ -943,7 +1237,7 @@ function drawSmallVariantIcon(doc, type, frame, color) {
   });
 }
 
-function drawCheckDotIcon(doc, frame, color) {
+function drawCheckDotIcon(doc, frame, color, strokeWidth = 1.05) {
   const scale = Math.max(0.1, Math.min(frame.width / 8, frame.height / 8));
   const x = frame.x + Math.max(0, (frame.width - 8 * scale) / 2);
   const y = frame.y + Math.max(0, (frame.height - 8 * scale) / 2);
@@ -951,7 +1245,7 @@ function drawCheckDotIcon(doc, frame, color) {
   doc.translate(x, y);
   doc.scale(scale);
   doc.circle(4, 4, 4).fillColor(color).fill();
-  doc.strokeColor('#ffffff').lineWidth(1.05).lineCap('round').lineJoin('round')
+  doc.strokeColor('#ffffff').lineWidth(strokeWidth).lineCap('round').lineJoin('round')
     .moveTo(2.2, 4)
     .lineTo(3.8, 5.8)
     .lineTo(6.4, 2.4)
@@ -959,7 +1253,7 @@ function drawCheckDotIcon(doc, frame, color) {
   doc.restore();
 }
 
-function drawCompletionBadgeIcon(doc, frame, color) {
+function drawCompletionBadgeIcon(doc, frame, color, strokeWidth = 2.1) {
   const scale = Math.max(0.1, Math.min(frame.width / 34, frame.height / 48));
   const x = frame.x + Math.max(0, (frame.width - 34 * scale) / 2);
   const y = frame.y + Math.max(0, (frame.height - 48 * scale) / 2);
@@ -967,7 +1261,7 @@ function drawCompletionBadgeIcon(doc, frame, color) {
   doc.translate(x, y);
   doc.scale(scale);
   doc.circle(17, 17, 17).fillColor(color).fill();
-  doc.strokeColor('#ffffff').lineWidth(2.1).lineCap('round').lineJoin('round')
+  doc.strokeColor('#ffffff').lineWidth(strokeWidth).lineCap('round').lineJoin('round')
     .moveTo(9.4, 17.2)
     .lineTo(14.8, 22.5)
     .lineTo(25.5, 11.6)
@@ -989,20 +1283,91 @@ function iconVariantForEmoji(value = '') {
   return '';
 }
 
-function drawRupeeIcon(doc, frame, color) {
+function drawRupeeIcon(doc, frame, color, strokeWidth = 1.7) {
   const size = Math.min(frame.width, frame.height);
   const x = frame.x + Math.max(0, (frame.width - size) / 2);
   const y = frame.y + Math.max(0, (frame.height - size) / 2);
-  doc.circle(x + size / 2, y + size / 2, Math.max(0.1, size / 2 - 1)).strokeColor(color).lineWidth(1.7).stroke();
+  doc.circle(x + size / 2, y + size / 2, Math.max(0.1, size / 2 - 1)).strokeColor(color).lineWidth(strokeWidth).stroke();
   useFont(doc, 'BodyBold', 'Helvetica-Bold');
   doc.fontSize(Math.max(12, size * 0.62)).fillColor(color).text('Rs', x, y + size * 0.24, { width: size, align: 'center' });
 }
 
-function drawGenericEmojiFallbackIcon(doc, frame, color) {
+function drawGenericEmojiFallbackIcon(doc, frame, color, strokeWidth = 1.1) {
   drawScaledIcon(doc, frame, 18, () => {
-    doc.lineWidth(1.1).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
+    doc.lineWidth(strokeWidth).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
     doc.circle(9, 9, 6.2).stroke();
     doc.moveTo(5.6, 9).lineTo(8, 11.4).lineTo(12.6, 6.6).stroke();
+  });
+}
+
+const vectorIconNameAliases = {
+  'badge-check': 'completion',
+  'check-badge': 'completion',
+  'check-circle': 'check',
+  'circle-check': 'check',
+  calendar: 'date',
+  mail: 'email',
+  file: 'document',
+  'file-text': 'document',
+  clipboard: 'work',
+  'clipboard-check': 'work',
+  credit: 'status',
+  'credit-card': 'status',
+  map: 'address',
+  'map-pin': 'address',
+  location: 'address',
+  globe: 'website',
+  web: 'website',
+  message: 'whatsapp',
+  support: 'headset'
+};
+
+function normalizeVectorIconName(value = '') {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+  return vectorIconNameAliases[normalized] || normalized;
+}
+
+function drawStarIcon(doc, frame, color, strokeWidth = 1.25) {
+  drawScaledIcon(doc, frame, 24, () => {
+    doc.lineWidth(strokeWidth).strokeColor(color).fillColor(color).lineJoin('round');
+    doc.path('M12 3 L14.7 8.5 L20.8 9.4 L16.4 13.7 L17.4 19.8 L12 17 L6.6 19.8 L7.6 13.7 L3.2 9.4 L9.3 8.5 Z').stroke();
+  });
+}
+
+function drawShieldIcon(doc, frame, color, strokeWidth = 1.25) {
+  drawScaledIcon(doc, frame, 24, () => {
+    doc.lineWidth(strokeWidth).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
+    doc.path('M12 3 L20 6 V12 C20 17 17 20 12 22 C7 20 4 17 4 12 V6 Z').stroke();
+    doc.moveTo(8, 12).lineTo(11, 15).lineTo(16, 9).stroke();
+  });
+}
+
+function drawBellIcon(doc, frame, color, strokeWidth = 1.25) {
+  drawScaledIcon(doc, frame, 24, () => {
+    doc.lineWidth(strokeWidth).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
+    doc.path('M6 17 H18 L16.5 14.5 V10 C16.5 7.5 14.5 5.5 12 5.5 C9.5 5.5 7.5 7.5 7.5 10 V14.5 Z').stroke();
+    doc.moveTo(10, 20).lineTo(14, 20).stroke();
+  });
+}
+
+function drawHeadsetIcon(doc, frame, color, strokeWidth = 1.2) {
+  drawScaledIcon(doc, frame, 24, () => {
+    doc.lineWidth(strokeWidth).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
+    doc.path('M4 13 C4 8 7.5 4.5 12 4.5 C16.5 4.5 20 8 20 13').stroke();
+    doc.roundedRect(3.8, 12, 3.4, 5.5, 1.2).stroke();
+    doc.roundedRect(16.8, 12, 3.4, 5.5, 1.2).stroke();
+    doc.path('M20 16 C20 19 17 20.5 13.5 20.5').stroke();
+  });
+}
+
+function drawDocumentIcon(doc, frame, color, strokeWidth = 1.3) {
+  drawScaledIcon(doc, frame, 24, () => {
+    doc.lineWidth(strokeWidth).strokeColor(color).fillColor(color).lineCap('round').lineJoin('round');
+    doc.path('M7 3 H15 L19 7 V21 H7 Z').stroke();
+    doc.moveTo(15, 3).lineTo(15, 7).lineTo(19, 7).stroke();
+    doc.moveTo(9.5, 11).lineTo(16, 11).stroke();
+    doc.moveTo(9.5, 15).lineTo(16, 15).stroke();
+    doc.moveTo(9.5, 18).lineTo(14, 18).stroke();
   });
 }
 
@@ -1028,8 +1393,10 @@ function drawIconElement(doc, element, frame, context) {
   const style = element.style || {};
   const content = contentForElement(element);
   const invoiceElement = isInvoiceManifestElement(element);
-  const accent = style.accentColor || '#0284c7';
-  const variant = String(content.variant || content.iconName || '').toLowerCase();
+  const accent = style.iconColor || style.accentColor || '#0284c7';
+  const variant = normalizeVectorIconName(content.variant || content.iconName || '');
+  const strokeWidth = clampNumber(style.strokeWidth, 2, 0.5, 8);
+  const iconFrame = iconFrameForStyle(frame, style);
   const label = renderText(
     invoiceElement
       ? printableText(content.label, '', { suppressHelpers: true })
@@ -1038,70 +1405,65 @@ function drawIconElement(doc, element, frame, context) {
   );
   drawElementShell(doc, element, frame);
   if (content.iconMode === 'emoji') {
-    drawEmojiModeIcon(doc, content, frame, accent);
+    drawEmojiModeIcon(doc, content, iconFrame, accent);
     return;
   }
   if (invoiceElement && !variant && !label) return;
-  if (['address', 'phone', 'email', 'website'].includes(variant)) {
-    drawContactVariantIcon(doc, variant, frame, accent);
+  if (['address', 'phone', 'email', 'website', 'whatsapp'].includes(variant)) {
+    drawContactVariantIcon(doc, variant === 'whatsapp' ? 'phone' : variant, iconFrame, accent, strokeWidth);
     return;
   }
   if (['invoice', 'work', 'date', 'status'].includes(variant)) {
-    drawSmallVariantIcon(doc, variant, frame, accent);
+    drawSmallVariantIcon(doc, variant, iconFrame, accent, strokeWidth);
     return;
   }
   if (variant === 'dot') {
-    doc.circle(frame.x + frame.width / 2, frame.y + frame.height / 2, Math.min(frame.width, frame.height) / 2).fillColor(accent).fill();
+    doc.circle(iconFrame.x + iconFrame.width / 2, iconFrame.y + iconFrame.height / 2, Math.min(iconFrame.width, iconFrame.height) / 2).fillColor(accent).fill();
     return;
   }
   if (variant === 'check') {
-    drawCheckDotIcon(doc, frame, accent);
+    drawCheckDotIcon(doc, iconFrame, accent, strokeWidth);
     return;
   }
   if (variant === 'rupee') {
-    drawRupeeIcon(doc, frame, accent);
+    drawRupeeIcon(doc, iconFrame, accent, strokeWidth);
+    return;
+  }
+  if (variant === 'star') {
+    drawStarIcon(doc, iconFrame, accent, strokeWidth);
+    return;
+  }
+  if (variant === 'shield') {
+    drawShieldIcon(doc, iconFrame, accent, strokeWidth);
+    return;
+  }
+  if (variant === 'bell') {
+    drawBellIcon(doc, iconFrame, accent, strokeWidth);
+    return;
+  }
+  if (variant === 'headset') {
+    drawHeadsetIcon(doc, iconFrame, accent, strokeWidth);
     return;
   }
   if (variant === 'document') {
-    const size = Math.min(frame.width, frame.height);
-    const x = frame.x + Math.max(0, (frame.width - size) / 2);
-    const y = frame.y + Math.max(0, (frame.height - size) / 2);
-    doc.circle(x + size / 2, y + size / 2, size / 2 - 1).strokeColor(accent).lineWidth(0.8).stroke();
-    doc.roundedRect(x + size * 0.31, y + size * 0.24, size * 0.36, size * 0.52, 1.2).strokeColor(accent).lineWidth(1.3).stroke();
-    doc.moveTo(x + size * 0.4, y + size * 0.4).lineTo(x + size * 0.6, y + size * 0.4).stroke();
-    doc.moveTo(x + size * 0.4, y + size * 0.52).lineTo(x + size * 0.6, y + size * 0.52).stroke();
-    doc.moveTo(x + size * 0.4, y + size * 0.64).lineTo(x + size * 0.55, y + size * 0.64).stroke();
+    drawDocumentIcon(doc, iconFrame, accent, strokeWidth);
     return;
   }
   if (variant === 'completion' || variant === 'handshake') {
     if (variant === 'completion') {
-      drawCompletionBadgeIcon(doc, frame, accent);
+      drawCompletionBadgeIcon(doc, iconFrame, accent, strokeWidth);
       return;
     }
-    const size = Math.min(frame.width, frame.height);
-    const cx = frame.x + frame.width / 2;
-    const cy = frame.y + Math.min(frame.height / 2, size / 2 + 1);
+    const size = Math.min(iconFrame.width, iconFrame.height);
+    const cx = iconFrame.x + iconFrame.width / 2;
+    const cy = iconFrame.y + Math.min(iconFrame.height / 2, size / 2 + 1);
     doc.circle(cx, cy, size * 0.42).fillColor('#0d3b91').fill();
-    doc.strokeColor('#ffffff').lineWidth(Math.max(1, size * 0.06)).lineCap('round').lineJoin('round');
+    doc.strokeColor('#ffffff').lineWidth(Math.max(1, strokeWidth)).lineCap('round').lineJoin('round');
     doc.moveTo(cx - size * 0.22, cy).lineTo(cx - size * 0.05, cy - size * 0.12).lineTo(cx + size * 0.2, cy + size * 0.14).stroke();
     doc.moveTo(cx - size * 0.12, cy + size * 0.18).lineTo(cx + size * 0.12, cy + size * 0.18).stroke();
     return;
   }
-  const iconSize = Math.min(22, Math.max(12, frame.height - 14), Math.max(12, frame.width * 0.32));
-  const iconX = frame.x + 8;
-  const iconY = frame.y + Math.max(6, (frame.height - iconSize) / 2);
-  doc.roundedRect(iconX, iconY, iconSize, iconSize, Math.max(4, iconSize / 4)).fill(accent);
-  useFont(doc, 'BodyBold', 'Helvetica-Bold');
-  doc.fontSize(Math.max(7, iconSize * 0.42)).fillColor('#ffffff').text(label.slice(0, 1).toUpperCase(), iconX, iconY + iconSize * 0.32, {
-    width: iconSize,
-    align: 'center'
-  });
-  doc.fontSize(clampNumber(style.fontSize, 10, 8, 32)).fillColor(style.textColor || '#0f172a')
-    .text(label, iconX + iconSize + 7, frame.y + Math.max(5, frame.height / 2 - 5), {
-      width: Math.max(8, frame.width - iconSize - 22),
-      height: Math.max(8, frame.height - 10),
-      align: style.alignment || element.alignment || 'left'
-    });
+  drawGenericEmojiFallbackIcon(doc, iconFrame, accent, strokeWidth);
 }
 
 function drawDesignElement(doc, element, context, company) {
@@ -1134,20 +1496,27 @@ function drawDesignPdfPages(doc, options = {}) {
   const elements = options.elements || designElements(config);
   if (!elements.length) return 0;
   let pagesAdded = 0;
-  designPagesForElements(config, elements).forEach((page) => {
-    if (!page.elements.length) return;
-    if (pagesAdded > 0 || options.useCurrentPageForFirst !== true) {
-      doc.addPage({ size: 'A4', margin: 0 });
-    }
-    pagesAdded += 1;
-    doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT).fill(config.design?.page?.backgroundColor || '#ffffff');
+  const pageBackground = config.design?.page?.backgroundColor || '#ffffff';
+  const drawPageBackground = () => {
+    doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT).fill(pageBackground);
     if (config.design?.showPageBoundary === true) {
       doc.strokeColor('#e2e8f0').lineWidth(0.7).rect(18, 18, PAGE_WIDTH - 36, PAGE_HEIGHT - 36).stroke();
     }
-    page.elements
-      .slice()
-      .sort((a, b) => Number(a.zIndex || 0) - Number(b.zIndex || 0))
-      .forEach((element) => drawDesignElement(doc, element, context, company));
+  };
+  designPagesForElements(config, elements).forEach((page) => {
+    if (!page.elements.length) return;
+    const plannedPages = planVisualPageRender(page.elements, context);
+    plannedPages.forEach((plannedPage, plannedIndex) => {
+      if (pagesAdded > 0 || options.useCurrentPageForFirst !== true) {
+        doc.addPage({ size: 'A4', margin: 0 });
+      }
+      pagesAdded += 1;
+      drawPageBackground();
+      const label = plannedIndex > 0 ? 'visual design continuation' : 'visual design';
+      sortForDrawing(plannedPage.elements).forEach((element) => {
+        drawDesignElementSafely(doc, element, context, company, label);
+      });
+    });
   });
   return pagesAdded;
 }

@@ -28,9 +28,11 @@ if (!IS_PRODUCTION && !process.env.JWT_SECRET) {
 
 export const JWT_SECRET = process.env.JWT_SECRET || developmentJwtSecret;
 export const PORT = Number(process.env.PORT || 5050);
-export const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || (IS_PRODUCTION ? '' : 'http://localhost:5173');
+export const CLIENT_URL = process.env.CLIENT_URL || process.env.CLIENT_ORIGIN || '';
+export const CLIENT_ORIGIN = CLIENT_URL || (IS_PRODUCTION ? '' : 'http://localhost:5173');
 export const ALLOWED_ORIGINS = [
   ...(process.env.ALLOWED_ORIGINS || '').split(','),
+  process.env.CLIENT_URL,
   process.env.CLIENT_ORIGIN,
   process.env.ADMIN_ORIGIN
 ].map((origin) => origin?.trim()).filter(Boolean);

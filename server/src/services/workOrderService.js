@@ -1,12 +1,14 @@
 import Booking from '../models/Booking.js';
 import AMCContract from '../models/AMCContract.js';
+import AuditLog from '../models/AuditLog.js';
 import Customer from '../models/Customer.js';
+import Document from '../models/Document.js';
 import InventoryPart from '../models/InventoryPart.js';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import User from '../models/User.js';
 import WorkOrder from '../models/WorkOrder.js';
-import { assertPermission } from '../permissions.js';
+import { assertPermission, normalizeRole } from '../permissions.js';
 import { appError, clean, numberValue } from '../utils/http.js';
 import { addDateRange, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 import { logAudit } from './auditService.js';
@@ -49,6 +51,220 @@ const detailPopulateWorkOrder = [
 const pendingPartRequestStatuses = ['Pending', 'Requested', 'Reserved'];
 const WORK_ORDER_PRIORITIES = ['Low', 'Normal', 'High', 'Urgent'];
 const WORK_ORDER_IMAGE_TYPES = ['customer_problem', 'before_service', 'after_service'];
+const TRASH_RETENTION_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WORK_ORDER_LIFECYCLE_AUDIT_ACTIONS = [
+  'work_order_archived',
+  'work_order_moved_to_trash',
+  'work_order_restored',
+  'work_order_permanently_deleted'
+];
+const WORK_ORDER_CREATION_TIMELINE_MESSAGES = [
+  'Work order created',
+  'Booking converted to work order',
+  'AMC visit converted to service job'
+];
+const WORK_ORDER_HISTORY_STATUSES = ['In Progress', 'Awaiting Parts', 'Completed', 'Delivered', 'Returned'];
+const INVOICE_HISTORY_STATUSES = ['Pending', 'Partial', 'Paid', 'Void'];
+
+function isAdminUser(user) {
+  const role = normalizeRole(user?.role);
+  return role === 'admin' || role === 'super_admin';
+}
+
+function trashExpiryFrom(date) {
+  return new Date(date.getTime() + TRASH_RETENTION_DAYS * DAY_MS);
+}
+
+function trashDaysLeft(deleteExpiresAt) {
+  if (!deleteExpiresAt) return null;
+  const expiresAt = new Date(deleteExpiresAt);
+  if (Number.isNaN(expiresAt.getTime())) return null;
+  return Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / DAY_MS));
+}
+
+function workOrderLifecycleState(workOrder = {}) {
+  if (workOrder.isDeleted) return 'trash';
+  if (workOrder.archivedAt) return 'archived';
+  return 'active';
+}
+
+function workOrderLifecycleFilter(query = {}, user = null) {
+  if (!isAdminUser(user)) return { isDeleted: { $ne: true }, archivedAt: null };
+  const lifecycle = clean(query.lifecycle || query.archiveStatus).toLowerCase();
+  if (lifecycle === 'archived') return { isDeleted: { $ne: true }, archivedAt: { $type: 'date' } };
+  if (lifecycle === 'trash') return { isDeleted: true };
+  if (lifecycle === 'all') return {};
+  return { isDeleted: { $ne: true }, archivedAt: null };
+}
+
+function isCreationTimelineEntry(entry = {}) {
+  const message = clean(entry.message);
+  return WORK_ORDER_CREATION_TIMELINE_MESSAGES.includes(message);
+}
+
+function meaningfulTimelineCount(workOrder = {}) {
+  return (workOrder.timeline || []).filter((entry) => !isCreationTimelineEntry(entry)).length;
+}
+
+function emptyWorkOrderLinkedSummary(workOrder = {}) {
+  const invoiceStatus = clean(workOrder.invoiceId?.status || workOrder.invoiceStatus);
+  return {
+    bookingCount: workOrder.bookingId ? 1 : 0,
+    invoiceCount: workOrder.invoiceId ? 1 : 0,
+    invoiceStatusCount: INVOICE_HISTORY_STATUSES.includes(invoiceStatus) ? 1 : 0,
+    paymentCount: 0,
+    amcCount: workOrder.amcContractId || workOrder.amcVisitId ? 1 : 0,
+    partsUsageCount: (workOrder.partsUsed || []).length,
+    partRequestCount: (workOrder.partRequests || []).length,
+    photoCount: (workOrder.images || []).length,
+    documentCount: (workOrder.documentsSent || []).length,
+    noteCount: (workOrder.notes || []).length,
+    serviceStatusCount: WORK_ORDER_HISTORY_STATUSES.includes(clean(workOrder.status)) ? 1 : 0,
+    timelineCount: meaningfulTimelineCount(workOrder),
+    auditCount: 0,
+    hasLinkedRecords: false
+  };
+}
+
+function finalizeWorkOrderLinkedSummary(summary) {
+  summary.hasLinkedRecords = Boolean(
+    summary.bookingCount
+    || summary.invoiceCount
+    || summary.invoiceStatusCount
+    || summary.paymentCount
+    || summary.amcCount
+    || summary.partsUsageCount
+    || summary.partRequestCount
+    || summary.photoCount
+    || summary.documentCount
+    || summary.noteCount
+    || summary.serviceStatusCount
+    || summary.timelineCount
+    || summary.auditCount
+  );
+  summary.message = summary.hasLinkedRecords
+    ? 'Has linked payments/parts/history'
+    : 'No linked records';
+  return summary;
+}
+
+function serializeWorkOrderLifecycle(order, summary = null) {
+  const lifecycleState = workOrderLifecycleState(order);
+  const linkedRecordSummary = finalizeWorkOrderLinkedSummary(summary || emptyWorkOrderLinkedSummary(order));
+  const lifecycleAction = lifecycleState === 'active'
+    ? 'archive'
+    : lifecycleState === 'trash'
+      ? 'restore'
+      : 'restore';
+  return {
+    lifecycleState,
+    lifecycleAction,
+    linkedRecordSummary,
+    canMoveToTrash: lifecycleState !== 'trash',
+    canArchive: lifecycleState === 'active',
+    canRestore: lifecycleState !== 'active',
+    trashDaysLeft: lifecycleState === 'trash' ? trashDaysLeft(order.deleteExpiresAt) : null
+  };
+}
+
+async function workOrderLinkedRecordSummaries(workOrders = []) {
+  const rows = workOrders.map((order) => (typeof order.toObject === 'function' ? order.toObject() : order));
+  const ids = rows.map((order) => order._id).filter(Boolean);
+  const summaries = new Map(rows.map((order) => [String(order._id), emptyWorkOrderLinkedSummary(order)]));
+  if (!ids.length) return summaries;
+
+  const directBookingToOrder = new Map();
+  const directInvoiceToOrder = new Map();
+  rows.forEach((order) => {
+    if (order.bookingId) directBookingToOrder.set(String(order.bookingId?._id || order.bookingId), String(order._id));
+    if (order.invoiceId) directInvoiceToOrder.set(String(order.invoiceId?._id || order.invoiceId), String(order._id));
+  });
+
+  const directBookingIds = [...directBookingToOrder.keys()].filter(validObjectId);
+  const directInvoiceIds = [...directInvoiceToOrder.keys()].filter(validObjectId);
+
+  const [bookings, invoices, amcContracts, documentRows, auditRows] = await Promise.all([
+    Booking.find({
+      $or: [
+        { workOrderId: { $in: ids } },
+        ...(directBookingIds.length ? [{ _id: { $in: directBookingIds } }] : [])
+      ]
+    }).select('_id workOrderId').lean(),
+    Invoice.find({
+      $or: [
+        { workOrderId: { $in: ids } },
+        ...(directInvoiceIds.length ? [{ _id: { $in: directInvoiceIds } }] : [])
+      ]
+    }).select('_id workOrderId').lean(),
+    AMCContract.find({ 'visits.workOrderId': { $in: ids } }).select('_id visits.workOrderId').lean(),
+    Document.aggregate([
+      { $match: { workOrderId: { $in: ids } } },
+      { $group: { _id: '$workOrderId', count: { $sum: 1 } } }
+    ]),
+    AuditLog.aggregate([
+      {
+        $match: {
+          module: 'work_order',
+          recordId: { $in: ids },
+          action: { $nin: WORK_ORDER_LIFECYCLE_AUDIT_ACTIONS }
+        }
+      },
+      { $group: { _id: '$recordId', count: { $sum: 1 } } }
+    ])
+  ]);
+
+  bookings.forEach((booking) => {
+    const orderId = String(booking.workOrderId || directBookingToOrder.get(String(booking._id)) || '');
+    const summary = summaries.get(orderId);
+    if (summary) summary.bookingCount = Math.max(summary.bookingCount, 1);
+  });
+
+  const invoiceToOrder = new Map();
+  invoices.forEach((invoice) => {
+    const orderId = String(invoice.workOrderId || directInvoiceToOrder.get(String(invoice._id)) || '');
+    if (!orderId) return;
+    invoiceToOrder.set(String(invoice._id), orderId);
+    const summary = summaries.get(orderId);
+    if (summary) summary.invoiceCount += 1;
+  });
+
+  const invoiceIds = invoices.map((invoice) => invoice._id).filter(Boolean);
+  if (invoiceIds.length) {
+    const paymentRows = await Payment.aggregate([
+      { $match: { invoiceId: { $in: invoiceIds } } },
+      { $group: { _id: '$invoiceId', count: { $sum: 1 } } }
+    ]);
+    paymentRows.forEach((row) => {
+      const orderId = invoiceToOrder.get(String(row._id));
+      const summary = summaries.get(orderId);
+      if (summary) summary.paymentCount += Number(row.count || 0);
+    });
+  }
+
+  amcContracts.forEach((contract) => {
+    const seen = new Set();
+    (contract.visits || []).forEach((visit) => {
+      const orderId = String(visit.workOrderId || '');
+      if (!summaries.has(orderId) || seen.has(orderId)) return;
+      seen.add(orderId);
+      summaries.get(orderId).amcCount += 1;
+    });
+  });
+
+  documentRows.forEach((row) => {
+    const summary = summaries.get(String(row._id));
+    if (summary) summary.documentCount += Number(row.count || 0);
+  });
+
+  auditRows.forEach((row) => {
+    const summary = summaries.get(String(row._id));
+    if (summary) summary.auditCount += Number(row.count || 0);
+  });
+
+  summaries.forEach(finalizeWorkOrderLinkedSummary);
+  return summaries;
+}
 
 function assertPartsUnlocked(workOrder) {
   if (workOrder.invoiceId) {
@@ -311,22 +527,22 @@ export async function createWorkOrder(payload, user) {
 }
 
 export async function listWorkOrders(query, user) {
-  const filter = {};
+  const baseFilter = {};
   const clauses = [];
   const { page, limit, skip } = parsePagination(query);
-  if (clean(query.status)) filter.status = clean(query.status);
-  if (clean(query.priority)) filter.priority = clean(query.priority);
-  if (clean(query.serviceType)) filter.serviceType = searchRegex(query.serviceType);
+  if (clean(query.status)) baseFilter.status = clean(query.status);
+  if (clean(query.priority)) baseFilter.priority = clean(query.priority);
+  if (clean(query.serviceType)) baseFilter.serviceType = searchRegex(query.serviceType);
   if (clean(query.source)) {
     const source = searchRegex(query.source);
     clauses.push({ $or: [{ bookingSource: source }, { source }, { channel: source }] });
   }
-  if (clean(query.technicianId).toLowerCase() === 'admin') filter.technicianId = null;
-  else if (validObjectId(query.technicianId)) filter.technicianId = validObjectId(query.technicianId);
-  if (validObjectId(query.customerId)) filter.customerId = validObjectId(query.customerId);
+  if (clean(query.technicianId).toLowerCase() === 'admin') baseFilter.technicianId = null;
+  else if (validObjectId(query.technicianId)) baseFilter.technicianId = validObjectId(query.technicianId);
+  if (validObjectId(query.customerId)) baseFilter.customerId = validObjectId(query.customerId);
   const technicianScope = technicianWorkOrderScope(user);
   if (technicianScope) clauses.push(technicianScope);
-  addDateRange(filter, query);
+  addDateRange(baseFilter, query);
 
   const search = clean(query.search);
   const regex = searchRegex(search);
@@ -350,19 +566,48 @@ export async function listWorkOrders(query, user) {
     if (objectId) searchFields.push({ _id: objectId });
     clauses.push({ $or: searchFields });
   }
-  if (clauses.length) filter.$and = clauses;
+  if (clauses.length) baseFilter.$and = clauses;
 
-  const [total, rows] = await Promise.all([
+  const filter = { ...baseFilter, ...workOrderLifecycleFilter(query, user) };
+  const lifecycleCountQueries = {
+    active: { ...baseFilter, ...workOrderLifecycleFilter({ lifecycle: 'active' }, user) },
+    archived: { ...baseFilter, ...workOrderLifecycleFilter({ lifecycle: 'archived' }, user) },
+    trash: { ...baseFilter, ...workOrderLifecycleFilter({ lifecycle: 'trash' }, user) },
+    all: { ...baseFilter, ...workOrderLifecycleFilter({ lifecycle: 'all' }, user) }
+  };
+
+  const [total, rows, activeCount, archivedCount, trashCount, allCount] = await Promise.all([
     WorkOrder.countDocuments(filter),
-    WorkOrder.find(filter).populate(populateWorkOrder).sort({ createdAt: -1 }).skip(skip).limit(limit).lean()
+    WorkOrder.find(filter).populate(populateWorkOrder).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    WorkOrder.countDocuments(lifecycleCountQueries.active),
+    WorkOrder.countDocuments(lifecycleCountQueries.archived),
+    WorkOrder.countDocuments(lifecycleCountQueries.trash),
+    WorkOrder.countDocuments(lifecycleCountQueries.all)
   ]);
-  const workOrders = rows.map((order) => withNestedIds(order, ['customerId', 'technicianId', 'bookingId', 'amcContractId', 'invoiceId']));
-  return { workOrders, pagination: paginationMeta(page, limit, total) };
+  const linkedSummaries = await workOrderLinkedRecordSummaries(rows);
+  const workOrders = rows.map((order) => {
+    const lifecycle = serializeWorkOrderLifecycle(order, linkedSummaries.get(String(order._id)));
+    return {
+      ...withNestedIds(order, ['customerId', 'technicianId', 'bookingId', 'amcContractId', 'invoiceId']),
+      ...lifecycle
+    };
+  });
+  return {
+    workOrders,
+    pagination: paginationMeta(page, limit, total),
+    lifecycleCounts: {
+      active: activeCount,
+      archived: archivedCount,
+      trash: trashCount,
+      all: allCount
+    }
+  };
 }
 
 export async function getWorkOrder(id, user) {
   const workOrder = await WorkOrder.findById(id).populate(detailPopulateWorkOrder);
   if (!workOrder) throw appError('Work order not found', 404);
+  if (!isAdminUser(user) && (workOrder.isDeleted || workOrder.archivedAt)) throw appError('Work order not found', 404);
   if (!technicianCanAccessWorkOrder(workOrder, user)) throw appError('Work order not found', 404);
   return workOrder;
 }
@@ -967,22 +1212,147 @@ export async function updateAssignment(id, payload, user) {
   return getWorkOrder(id, user);
 }
 
-export async function deleteWorkOrder(id, user) {
-  assertPermission(user, 'delete_work_order', 'You do not have permission to delete work orders');
+export async function archiveWorkOrder(id, user) {
+  assertPermission(user, 'delete_work_order', 'You do not have permission to archive work orders');
   const workOrder = await WorkOrder.findById(id);
   if (!workOrder) throw appError('Work order not found', 404);
+  if (workOrder.isDeleted) throw appError('Restore the work order before archiving it', 409);
+  if (workOrder.archivedAt) throw appError('Work order is already archived', 409);
 
-  const invoiceCount = await Invoice.countDocuments({ workOrderId: workOrder._id });
-  const linkedInvoices = invoiceCount
-    ? await Invoice.find({ workOrderId: workOrder._id }).select('_id').lean()
-    : [];
-  const paymentCount = linkedInvoices.length
-    ? await Payment.countDocuments({ invoiceId: { $in: linkedInvoices.map((invoice) => invoice._id) } })
-    : 0;
-  if (workOrder.bookingId || workOrder.amcContractId || workOrder.amcVisitId || workOrder.invoiceId || invoiceCount || paymentCount) {
-    throw appError('This item is used in existing records. You can disable or archive it instead.', 409);
+  const linkedSummaries = await workOrderLinkedRecordSummaries([workOrder]);
+  const linkedRecordSummary = linkedSummaries.get(String(workOrder._id)) || finalizeWorkOrderLinkedSummary(emptyWorkOrderLinkedSummary(workOrder));
+  const before = {
+    customerId: workOrder.customerId,
+    technicianId: workOrder.technicianId || null,
+    status: workOrder.status,
+    bookingId: workOrder.bookingId || null,
+    amcContractId: workOrder.amcContractId || null,
+    amcVisitId: workOrder.amcVisitId || null,
+    archivedAt: workOrder.archivedAt || null,
+    linkedRecordSummary
+  };
+
+  workOrder.archivedAt = new Date();
+  workOrder.archivedBy = user?._id || null;
+  await workOrder.save();
+  await logAudit({
+    userId: user?._id || null,
+    action: 'work_order_archived',
+    module: 'work_order',
+    recordId: workOrder._id,
+    before,
+    after: { archivedAt: workOrder.archivedAt, linkedRecordSummary }
+  });
+  return {
+    id: String(workOrder._id),
+    action: 'archived',
+    message: 'Work order archived. You can restore it from Archived work orders.'
+  };
+}
+
+export async function moveWorkOrderToTrash(id, user) {
+  assertPermission(user, 'delete_work_order', 'You do not have permission to move work orders to Trash');
+  const workOrder = await WorkOrder.findById(id);
+  if (!workOrder) throw appError('Work order not found', 404);
+  if (workOrder.isDeleted) throw appError('Work order is already in Trash', 409);
+
+  const linkedSummaries = await workOrderLinkedRecordSummaries([workOrder]);
+  const linkedRecordSummary = linkedSummaries.get(String(workOrder._id)) || finalizeWorkOrderLinkedSummary(emptyWorkOrderLinkedSummary(workOrder));
+  const before = {
+    customerId: workOrder.customerId,
+    technicianId: workOrder.technicianId || null,
+    status: workOrder.status,
+    bookingId: workOrder.bookingId || null,
+    amcContractId: workOrder.amcContractId || null,
+    amcVisitId: workOrder.amcVisitId || null,
+    archivedAt: workOrder.archivedAt || null,
+    linkedRecordSummary
+  };
+
+  const deletedAt = new Date();
+  workOrder.isDeleted = true;
+  workOrder.deletedAt = deletedAt;
+  workOrder.deletedBy = user?._id || null;
+  workOrder.deleteExpiresAt = trashExpiryFrom(deletedAt);
+  await workOrder.save();
+  await logAudit({
+    userId: user?._id || null,
+    action: 'work_order_moved_to_trash',
+    module: 'work_order',
+    recordId: workOrder._id,
+    before,
+    after: { deletedAt: workOrder.deletedAt, deleteExpiresAt: workOrder.deleteExpiresAt }
+  });
+  return {
+    id: String(workOrder._id),
+    action: 'trashed',
+    message: 'Moved to Trash. You can restore this work order within 30 days from Trash.'
+  };
+}
+
+export async function deleteWorkOrder(id, user) {
+  return moveWorkOrderToTrash(id, user);
+}
+
+export async function restoreWorkOrder(id, user) {
+  assertPermission(user, 'delete_work_order', 'You do not have permission to restore work orders');
+  const workOrder = await WorkOrder.findById(id);
+  if (!workOrder) throw appError('Work order not found', 404);
+  if (!workOrder.isDeleted && !workOrder.archivedAt) throw appError('Work order is already active', 409);
+
+  const restoringFromTrash = Boolean(workOrder.isDeleted);
+  if (restoringFromTrash && workOrder.deleteExpiresAt && new Date(workOrder.deleteExpiresAt).getTime() < Date.now()) {
+    throw appError('Trash restore period has expired. Permanently delete it from Trash or contact an administrator.', 410);
   }
-  if ((workOrder.partsUsed || []).length || (workOrder.partRequests || []).length) {
+
+  const before = {
+    archivedAt: workOrder.archivedAt || null,
+    isDeleted: Boolean(workOrder.isDeleted),
+    deletedAt: workOrder.deletedAt || null,
+    deleteExpiresAt: workOrder.deleteExpiresAt || null
+  };
+
+  if (workOrder.isDeleted) {
+    workOrder.isDeleted = false;
+    workOrder.deletedAt = null;
+    workOrder.deletedBy = null;
+    workOrder.deleteExpiresAt = null;
+  } else {
+    workOrder.archivedAt = null;
+    workOrder.archivedBy = null;
+  }
+
+  await workOrder.save();
+  await logAudit({
+    userId: user?._id || null,
+    action: 'work_order_restored',
+    module: 'work_order',
+    recordId: workOrder._id,
+    before,
+    after: {
+      archivedAt: workOrder.archivedAt || null,
+      isDeleted: Boolean(workOrder.isDeleted),
+      deletedAt: workOrder.deletedAt || null,
+      deleteExpiresAt: workOrder.deleteExpiresAt || null
+    }
+  });
+
+  return {
+    id: String(workOrder._id),
+    action: 'restored',
+    message: 'Work order restored.'
+  };
+}
+
+export async function permanentlyDeleteWorkOrder(id, user) {
+  assertPermission(user, 'delete_work_order', 'You do not have permission to permanently delete work orders');
+  if (!isAdminUser(user)) throw appError('Only Admin users can permanently delete work orders', 403);
+  const workOrder = await WorkOrder.findOne({ _id: id, isDeleted: true });
+  if (!workOrder) throw appError('Work order not found in Trash', 404);
+
+  const linkedSummaries = await workOrderLinkedRecordSummaries([workOrder]);
+  const linkedRecordSummary = linkedSummaries.get(String(workOrder._id)) || finalizeWorkOrderLinkedSummary(emptyWorkOrderLinkedSummary(workOrder));
+  if (linkedRecordSummary.hasLinkedRecords) {
     throw appError('This item is used in existing records. You can disable or archive it instead.', 409);
   }
 
@@ -990,36 +1360,20 @@ export async function deleteWorkOrder(id, user) {
     customerId: workOrder.customerId,
     technicianId: workOrder.technicianId || null,
     status: workOrder.status,
-    bookingId: workOrder.bookingId || null,
-    amcContractId: workOrder.amcContractId || null,
-    amcVisitId: workOrder.amcVisitId || null
+    deletedAt: workOrder.deletedAt || null,
+    deleteExpiresAt: workOrder.deleteExpiresAt || null
   };
 
   await WorkOrder.deleteOne({ _id: workOrder._id });
-
-  if (workOrder.bookingId) {
-    await Booking.updateOne(
-      { _id: workOrder.bookingId },
-      { $set: { status: 'Pending', workOrderId: null } }
-    );
-  }
-
-  if (workOrder.amcContractId && workOrder.amcVisitId) {
-    await AMCContract.updateOne(
-      { _id: workOrder.amcContractId, 'visits._id': workOrder.amcVisitId },
-      { $set: { 'visits.$.status': 'Upcoming', 'visits.$.completedAt': null, 'visits.$.workOrderId': null } }
-    );
-  }
-
   await logAudit({
-    userId: user._id,
-    action: 'deleted',
+    userId: user?._id || null,
+    action: 'work_order_permanently_deleted',
     module: 'work_order',
     recordId: workOrder._id,
     before
   });
 
-  return { id: String(workOrder._id) };
+  return { id: String(workOrder._id), action: 'permanentlyDeleted', message: 'Work order permanently deleted.' };
 }
 
 export async function addImages(id, files, user, payload = {}) {

@@ -1,4 +1,16 @@
-import { createAmcContract, createWorkOrderFromAmc, deleteOrArchiveAmcContract, listAmcContracts, listAmcRenewals, listAmcSchedule, updateAmcContractAssignment } from '../services/amcService.js';
+import {
+  archiveAmcContract,
+  createAmcContract,
+  createWorkOrderFromAmc,
+  deleteOrArchiveAmcContract,
+  listAmcContracts,
+  listAmcRenewals,
+  listAmcSchedule,
+  moveAmcContractToTrash,
+  permanentlyDeleteAmcContract,
+  restoreAmcContract,
+  updateAmcContractAssignment
+} from '../services/amcService.js';
 import { required } from '../utils/http.js';
 
 export async function listContracts(req, res) {
@@ -34,5 +46,25 @@ export async function patchAssignment(req, res) {
 
 export async function removeContract(req, res) {
   const result = await deleteOrArchiveAmcContract(req.params.id, req.user);
+  res.json({ success: true, ...result });
+}
+
+export async function archiveContract(req, res) {
+  const result = await archiveAmcContract(req.params.id, req.user);
+  res.json({ success: true, ...result });
+}
+
+export async function moveContractToTrash(req, res) {
+  const result = await moveAmcContractToTrash(req.params.id, req.user);
+  res.json({ success: true, ...result });
+}
+
+export async function restoreContract(req, res) {
+  const result = await restoreAmcContract(req.params.id, req.user);
+  res.json({ success: true, ...result });
+}
+
+export async function removeContractPermanently(req, res) {
+  const result = await permanentlyDeleteAmcContract(req.params.id, req.user);
   res.json({ success: true, ...result });
 }

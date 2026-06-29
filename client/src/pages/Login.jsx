@@ -161,7 +161,7 @@ export default function Login({ role, appMode = false }) {
               </span>
             </label>
 
-            <button className="login-submit" disabled={loading} aria-busy={loading}>
+            <button type="submit" className="login-submit" disabled={loading} aria-busy={loading}>
               <ShieldCheck className="login-submit-shield" />
               <span>Access Dashboard</span>
               <ArrowRight className="login-submit-arrow" />

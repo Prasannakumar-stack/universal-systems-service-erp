@@ -5,7 +5,7 @@ import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import User from '../models/User.js';
 import WorkOrder from '../models/WorkOrder.js';
-import { assertPermission } from '../permissions.js';
+import { assertPermission, normalizeRole } from '../permissions.js';
 import { clean, appError, numberValue } from '../utils/http.js';
 import { validObjectId } from '../utils/pagination.js';
 import { upsertCustomer } from './customerService.js';
@@ -17,6 +17,13 @@ import { getTechnicianScope } from './technicianScopeService.js';
 const contractTypes = ['Basic AMC', 'Comprehensive AMC', 'CCTV AMC', 'Printer AMC', 'Networking AMC', 'Solar / UPS AMC', 'Custom'];
 const serviceFrequencies = ['Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
 const oneDay = 24 * 60 * 60 * 1000;
+const TRASH_RETENTION_DAYS = 30;
+const AMC_LIFECYCLE_AUDIT_ACTIONS = [
+  'amc_contract_archived',
+  'amc_contract_moved_to_trash',
+  'amc_contract_restored',
+  'amc_contract_permanently_deleted'
+];
 const activeContractFilter = (extra = {}) => ({ isDeleted: { $ne: true }, archivedAt: null, ...extra });
 
 const coveredServiceByType = {
@@ -40,6 +47,36 @@ function contractCode() {
   const now = new Date();
   const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
   return `AMC-${date}-${randomUUID().slice(0, 6).toUpperCase()}`;
+}
+
+function isAdminUser(user) {
+  const role = normalizeRole(user?.role);
+  return role === 'admin' || role === 'super_admin';
+}
+
+function trashExpiryFrom(date) {
+  return new Date(date.getTime() + TRASH_RETENTION_DAYS * oneDay);
+}
+
+function trashDaysLeft(deleteExpiresAt) {
+  if (!deleteExpiresAt) return null;
+  const expiresAt = new Date(deleteExpiresAt);
+  if (Number.isNaN(expiresAt.getTime())) return null;
+  return Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / oneDay));
+}
+
+function amcLifecycleState(contract = {}) {
+  if (contract.isDeleted) return 'trash';
+  if (contract.archivedAt) return 'archived';
+  return 'active';
+}
+
+function amcLifecycleFilter(query = {}) {
+  const lifecycle = clean(query.lifecycle || query.archiveStatus).toLowerCase();
+  if (lifecycle === 'archived') return { isDeleted: { $ne: true }, archivedAt: { $type: 'date' } };
+  if (lifecycle === 'trash') return { isDeleted: true };
+  if (lifecycle === 'all') return {};
+  return { isDeleted: { $ne: true }, archivedAt: null };
 }
 
 function normalizeDay(value) {
@@ -119,11 +156,17 @@ function serializeContract(contract) {
   const warrantyIncluded = Boolean(item.warrantyIncluded);
   const linked = item.linkedBusinessHistory || contract.linkedBusinessHistory || {};
   const hasLinkedBusinessHistory = Boolean(item.hasLinkedBusinessHistory || contract.hasLinkedBusinessHistory || linked.hasLinkedBusinessHistory);
+  const lifecycleState = amcLifecycleState(item);
   return {
     ...item,
     ...coverage,
     hasLinkedBusinessHistory,
-    lifecycleAction: hasLinkedBusinessHistory ? 'archive' : 'delete',
+    lifecycleState,
+    lifecycleAction: lifecycleState === 'active' ? 'archive' : 'restore',
+    canArchive: lifecycleState === 'active',
+    canMoveToTrash: lifecycleState !== 'trash',
+    canRestore: lifecycleState !== 'active',
+    trashDaysLeft: lifecycleState === 'trash' ? trashDaysLeft(item.deleteExpiresAt) : null,
     warrantyIncluded,
     warrantyStartDate: warrantyIncluded ? item.warrantyStartDate || null : null,
     warrantyEndDate: warrantyIncluded ? item.warrantyEndDate || null : null,
@@ -222,7 +265,7 @@ async function linkedBusinessHistorySummaries(contracts = []) {
       $match: {
         module: 'amc',
         recordId: { $in: ids },
-        action: { $nin: ['amc_contract_created'] }
+        action: { $nin: ['amc_contract_created', ...AMC_LIFECYCLE_AUDIT_ACTIONS] }
       }
     },
     { $group: { _id: '$recordId', count: { $sum: 1 } } }
@@ -310,12 +353,12 @@ export async function getAmcSummary(scope = null) {
 }
 
 export async function listAmcContracts(query = {}, user = null) {
-  const filter = activeContractFilter();
+  const baseFilter = {};
   const technicianScope = await getTechnicianScope(user);
-  if (technicianScope) filter._id = { $in: technicianScope.amcContractObjectIds };
+  if (technicianScope) baseFilter._id = { $in: technicianScope.amcContractObjectIds };
   const search = clean(query.search);
   if (search) {
-    filter.$or = [
+    baseFilter.$or = [
       { contractId: new RegExp(search, 'i') },
       { customerName: new RegExp(search, 'i') },
       { phone: new RegExp(search, 'i') },
@@ -324,8 +367,21 @@ export async function listAmcContracts(query = {}, user = null) {
       { coveredService: new RegExp(search, 'i') }
     ];
   }
+  const filter = { ...baseFilter, ...amcLifecycleFilter(query) };
+  const lifecycleCountQueries = {
+    active: { ...baseFilter, ...amcLifecycleFilter({ lifecycle: 'active' }) },
+    archived: { ...baseFilter, ...amcLifecycleFilter({ lifecycle: 'archived' }) },
+    trash: { ...baseFilter, ...amcLifecycleFilter({ lifecycle: 'trash' }) },
+    all: { ...baseFilter, ...amcLifecycleFilter({ lifecycle: 'all' }) }
+  };
 
-  const contracts = await AMCContract.find(filter).populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId').sort({ createdAt: -1 });
+  const [contracts, activeCount, archivedCount, trashCount, allCount] = await Promise.all([
+    AMCContract.find(filter).populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId').sort({ createdAt: -1 }),
+    AMCContract.countDocuments(lifecycleCountQueries.active),
+    AMCContract.countDocuments(lifecycleCountQueries.archived),
+    AMCContract.countDocuments(lifecycleCountQueries.trash),
+    AMCContract.countDocuments(lifecycleCountQueries.all)
+  ]);
   const extras = await extraChargeSummaries(contracts.map((contract) => contract._id));
   const linkedHistory = await linkedBusinessHistorySummaries(contracts);
   const serialized = contracts.map((contract) => {
@@ -336,7 +392,16 @@ export async function listAmcContracts(query = {}, user = null) {
     };
   });
   const summary = await getAmcSummary(technicianScope);
-  return { contracts: serialized, summary };
+  return {
+    contracts: serialized,
+    summary,
+    lifecycleCounts: {
+      active: activeCount,
+      archived: archivedCount,
+      trash: trashCount,
+      all: allCount
+    }
+  };
 }
 
 export async function createAmcContract(payload, user) {
@@ -503,14 +568,15 @@ export async function updateAmcContractAssignment(contractId, payload = {}, user
   return serializeContract(populated);
 }
 
-export async function deleteOrArchiveAmcContract(contractId, user) {
-  assertPermission(user, 'create_amc', 'You do not have permission to delete AMC contracts');
+export async function archiveAmcContract(contractId, user) {
+  assertPermission(user, 'create_amc', 'You do not have permission to archive AMC contracts');
   const contract = await AMCContract.findById(contractId).populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId');
-  if (!contract || contract.isDeleted || contract.archivedAt) throw appError('AMC contract not found', 404);
+  if (!contract) throw appError('AMC contract not found', 404);
+  if (contract.isDeleted) throw appError('Restore the AMC contract before archiving it', 409);
+  if (contract.archivedAt) throw appError('AMC contract is already archived', 409);
 
   const linked = await linkedBusinessHistorySummaries([contract]);
   const summary = linked.get(String(contract._id)) || {};
-  const hasLinkedBusinessHistory = Boolean(summary.hasLinkedBusinessHistory);
   const before = {
     contractId: contract.contractId,
     customerName: contract.customerName,
@@ -519,36 +585,162 @@ export async function deleteOrArchiveAmcContract(contractId, user) {
     linkedBusinessHistory: summary
   };
 
-  if (hasLinkedBusinessHistory) {
-    contract.archivedAt = new Date();
-    contract.archivedBy = user?._id || null;
-    await contract.save();
-  }
+  contract.archivedAt = new Date();
+  contract.archivedBy = user?._id || null;
+  await contract.save();
 
   await logAudit({
     userId: user?._id || null,
-    action: hasLinkedBusinessHistory ? 'amc_contract_archived' : 'amc_contract_deleted',
+    action: 'amc_contract_archived',
     module: 'amc',
     recordId: contract._id,
     before,
     after: {
       contractId: contract.contractId,
       customerName: contract.customerName,
-      deleted: !hasLinkedBusinessHistory,
       archivedAt: contract.archivedAt,
       linkedBusinessHistory: summary
     }
   });
 
-  if (!hasLinkedBusinessHistory) {
-    await AMCContract.deleteOne({ _id: contract._id });
-  }
+  return {
+    id: String(contract._id),
+    action: 'archived',
+    message: 'AMC contract archived'
+  };
+}
+
+export async function moveAmcContractToTrash(contractId, user) {
+  assertPermission(user, 'create_amc', 'You do not have permission to move AMC contracts to Trash');
+  const contract = await AMCContract.findById(contractId).populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId');
+  if (!contract) throw appError('AMC contract not found', 404);
+  if (contract.isDeleted) throw appError('AMC contract is already in Trash', 409);
+
+  const linked = await linkedBusinessHistorySummaries([contract]);
+  const summary = linked.get(String(contract._id)) || {};
+  const before = {
+    contractId: contract.contractId,
+    customerName: contract.customerName,
+    status: contract.status,
+    technicianId: contract.technicianId || null,
+    archivedAt: contract.archivedAt || null,
+    linkedBusinessHistory: summary
+  };
+
+  const deletedAt = new Date();
+  contract.isDeleted = true;
+  contract.deletedAt = deletedAt;
+  contract.deletedBy = user?._id || null;
+  contract.deleteExpiresAt = trashExpiryFrom(deletedAt);
+  await contract.save();
+
+  await logAudit({
+    userId: user?._id || null,
+    action: 'amc_contract_moved_to_trash',
+    module: 'amc',
+    recordId: contract._id,
+    before,
+    after: {
+      contractId: contract.contractId,
+      customerName: contract.customerName,
+      deletedAt: contract.deletedAt,
+      deleteExpiresAt: contract.deleteExpiresAt,
+      linkedBusinessHistory: summary
+    }
+  });
 
   return {
     id: String(contract._id),
-    action: hasLinkedBusinessHistory ? 'archive' : 'delete',
-    message: hasLinkedBusinessHistory ? 'AMC contract archived' : 'AMC contract deleted'
+    action: 'trashed',
+    message: 'Moved to Trash. You can restore this AMC contract within 30 days from Trash.'
   };
+}
+
+export async function restoreAmcContract(contractId, user) {
+  assertPermission(user, 'create_amc', 'You do not have permission to restore AMC contracts');
+  const contract = await AMCContract.findById(contractId);
+  if (!contract) throw appError('AMC contract not found', 404);
+  if (!contract.isDeleted && !contract.archivedAt) throw appError('AMC contract is already active', 409);
+
+  const restoringFromTrash = Boolean(contract.isDeleted);
+  if (restoringFromTrash && contract.deleteExpiresAt && new Date(contract.deleteExpiresAt).getTime() < Date.now()) {
+    throw appError('Trash restore period has expired. Permanently delete it from Trash or contact an administrator.', 410);
+  }
+
+  const before = {
+    archivedAt: contract.archivedAt || null,
+    isDeleted: Boolean(contract.isDeleted),
+    deletedAt: contract.deletedAt || null,
+    deleteExpiresAt: contract.deleteExpiresAt || null
+  };
+
+  if (contract.isDeleted) {
+    contract.isDeleted = false;
+    contract.deletedAt = null;
+    contract.deletedBy = null;
+    contract.deleteExpiresAt = null;
+  } else {
+    contract.archivedAt = null;
+    contract.archivedBy = null;
+  }
+
+  await contract.save();
+  await logAudit({
+    userId: user?._id || null,
+    action: 'amc_contract_restored',
+    module: 'amc',
+    recordId: contract._id,
+    before,
+    after: {
+      archivedAt: contract.archivedAt || null,
+      isDeleted: Boolean(contract.isDeleted),
+      deletedAt: contract.deletedAt || null,
+      deleteExpiresAt: contract.deleteExpiresAt || null
+    }
+  });
+
+  const lifecycleState = amcLifecycleState(contract);
+  return {
+    id: String(contract._id),
+    action: 'restored',
+    lifecycleState,
+    message: lifecycleState === 'archived' ? 'AMC contract restored to Archived.' : 'AMC contract restored.'
+  };
+}
+
+export async function permanentlyDeleteAmcContract(contractId, user) {
+  assertPermission(user, 'create_amc', 'You do not have permission to permanently delete AMC contracts');
+  if (!isAdminUser(user)) throw appError('Only Admin users can permanently delete AMC contracts', 403);
+  const contract = await AMCContract.findOne({ _id: contractId, isDeleted: true }).populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId');
+  if (!contract) throw appError('AMC contract not found in Trash', 404);
+
+  const linked = await linkedBusinessHistorySummaries([contract]);
+  const summary = linked.get(String(contract._id)) || {};
+  if (summary.hasLinkedBusinessHistory) {
+    throw appError('This AMC contract has linked jobs, invoices, payments, visits, or history. Keep it in Trash or restore it.', 409);
+  }
+
+  const before = {
+    contractId: contract.contractId,
+    customerName: contract.customerName,
+    deletedAt: contract.deletedAt || null,
+    deleteExpiresAt: contract.deleteExpiresAt || null
+  };
+
+  await AMCContract.deleteOne({ _id: contract._id });
+  await logAudit({
+    userId: user?._id || null,
+    action: 'amc_contract_permanently_deleted',
+    module: 'amc',
+    recordId: contract._id,
+    before
+  });
+
+  return { id: String(contract._id), action: 'permanentlyDeleted', message: 'AMC contract permanently deleted.' };
+}
+
+export async function deleteOrArchiveAmcContract(contractId, user) {
+  return moveAmcContractToTrash(contractId, user);
 }
 
 export async function createWorkOrderFromAmc(contractId, payload, user) {
