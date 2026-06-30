@@ -1,1 +1,0 @@
-const m="Admin";function A(n){var i,a,t;return((i=n==null?void 0:n.technicianId)==null?void 0:i.name)||((a=n==null?void 0:n.technician)==null?void 0:a.name)||(n==null?void 0:n.technicianName)||((t=n==null?void 0:n.assignedTechnician)==null?void 0:t.name)||m}export{m as A,A as t};

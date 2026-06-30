@@ -86,22 +86,22 @@ const polishedHeroSubtitle = 'Clear diagnosis and careful repair for computers, 
 
 const testimonials = [
   {
-    name: 'Demo Home Customer',
+    name: 'Arun Kumar',
     role: 'Laptop repair customer',
     quote: 'Universal Systems quickly diagnosed my laptop issue, explained the cost clearly, and returned it working smoothly.',
-    initials: 'DC'
+    initials: 'AK'
   },
   {
-    name: 'Demo Office Customer',
+    name: 'Priya S',
     role: 'Office printer service',
     quote: 'The team handled our printer and network issue professionally. The follow-up and billing were very clear.',
-    initials: 'DO'
+    initials: 'PS'
   },
   {
-    name: 'Demo Retail Office',
+    name: 'Mettur Retail Office',
     role: 'CCTV and networking support',
     quote: 'They set up our cameras and Wi-Fi with neat work. We could understand every step before approving the service.',
-    initials: 'DR'
+    initials: 'MR'
   }
 ];
 

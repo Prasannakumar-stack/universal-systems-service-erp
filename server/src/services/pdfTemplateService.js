@@ -2183,7 +2183,7 @@ function fallbackCompany(company = COMPANY) {
     address: company.address || COMPANY.address,
     phones: Array.isArray(company.phones) && company.phones.length ? company.phones : COMPANY.phones,
     email: company.email || COMPANY.email,
-    website: company.website || COMPANY.website || 'universalsystems.example',
+    website: company.website || COMPANY.website || 'usmettur.com',
     whatsappNumber: company.whatsappNumber || '',
     logoFilePath: company.logoFilePath || LOGO_FULL_PATH
   };
@@ -2513,9 +2513,9 @@ function sampleContextFor(key, company = COMPANY) {
   next.setDate(next.getDate() + 30);
   const invoiceSample = key === 'invoice' ? sampleInvoiceData() : null;
   return buildTemplateContext({
-    customerName: 'Demo Customer',
-    customerPhone: 'Demo phone hidden',
-    customerAddress: 'Demo customer address, Sample City',
+    customerName: 'Rahul Kumar',
+    customerPhone: '98427 81971',
+    customerAddress: 'Mettur Dam, Salem',
     invoiceNumber: key === 'quotation' ? 'QUO-2026-0066' : 'INV-2026-0089',
     quotationNumber: 'QUO-2026-0066',
     quotationStatus: 'Pending Approval',

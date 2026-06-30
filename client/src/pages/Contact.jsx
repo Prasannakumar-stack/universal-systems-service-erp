@@ -125,7 +125,7 @@ export default function Contact() {
   const contactWhatsappHref = useMemo(() => whatsappHref(contact.whatsappNumber), [contact.whatsappNumber]);
   const googleMapsHref = contact.googleMapsLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contact.address)}`;
   const areaItems = useMemo(() => [
-    { label: 'Serving Sample City and nearby demo areas', icon: MapPin },
+    { label: 'Serving Mettur Dam, Salem Dt and nearby areas', icon: MapPin },
     { label: contact.businessHours, icon: Clock3 },
     { label: 'Emergency support available through WhatsApp', icon: LifeBuoy }
   ], [contact.businessHours]);
@@ -337,7 +337,7 @@ export default function Contact() {
               <div>
                 <h2>Quick Response</h2>
                 <p>We usually respond within 10-30 minutes during working hours.</p>
-                <p>Serving Sample City and nearby demo areas.</p>
+                <p>Serving Mettur Dam, Salem Dt and nearby areas.</p>
               </div>
             </section>
 
@@ -356,7 +356,7 @@ export default function Contact() {
               </div>
               <div className="contact-location-copy">
                 <p className="contact-section-eyebrow">Universal Systems service area</p>
-                <h2>Sample City</h2>
+                <h2>Mettur Dam, Salem Dt</h2>
                 <p>Serving homes, shops, offices, students, and local businesses.</p>
                 <span className="contact-map-button">
                   Open Location in Google Maps

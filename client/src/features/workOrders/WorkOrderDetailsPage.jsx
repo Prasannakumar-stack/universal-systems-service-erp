@@ -171,7 +171,7 @@ import {
 import { isPdfSentViaWhatsapp } from '../../shared/whatsappPdfMessage.js';
 import { can, normalizeRole } from '../../utils/roles.js';
 import { emitSidebarBadgesUpdated } from '../../utils/sidebarBadges.js';
-import { RotateCcw } from 'lucide-react';
+import { ChevronDown, RotateCcw } from 'lucide-react';
 
 const detailFocusRing =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071426]';
@@ -201,6 +201,168 @@ const serviceChargeBillingOptions = [
   { value: serviceChargeChargeable, label: 'Chargeable / Extra Payable', helper: 'Service charge chargeable to customer' },
   { value: serviceChargeNone, label: 'No Service Charge', helper: 'No service charge will be shown or billed' }
 ];
+
+function partDetailValue(value) {
+  const text = String(value ?? '').trim();
+  return text || '-';
+}
+
+function partSearchText(part = {}) {
+  return [
+    part.partName,
+    part.name,
+    part.brand,
+    part.model,
+    part.deviceModel,
+    part.sku,
+    part.category
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function WorkOrderPartCombobox({ parts = [], value = '', disabled = false, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const rootRef = useRef(null);
+  const optionListId = useRef(`work-order-used-part-options-${Math.random().toString(36).slice(2, 8)}`).current;
+  const selectedPart = parts.find((item) => String(item.id) === String(value));
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredParts = useMemo(() => {
+    if (!normalizedQuery) return parts;
+    return parts.filter((item) => partSearchText(item).includes(normalizedQuery));
+  }, [normalizedQuery, parts]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function closeOnOutsideClick(event) {
+      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+  }, [open]);
+
+  function choosePart(nextValue) {
+    onChange(nextValue);
+    setQuery('');
+    setOpen(false);
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setOpen(false);
+      return;
+    }
+    if (event.key === 'Enter' && open) {
+      event.preventDefault();
+      choosePart(filteredParts[0]?.id || '');
+    }
+  }
+
+  return (
+    <div ref={rootRef} className="work-order-part-combobox">
+      <input
+        className="input work-order-part-combobox-input disabled:cursor-not-allowed disabled:opacity-60"
+        value={open ? query : selectedPart?.partName || ''}
+        disabled={disabled}
+        placeholder="Manual / Outside Part"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={optionListId}
+        aria-autocomplete="list"
+        onFocus={() => {
+          if (disabled) return;
+          setQuery('');
+          setOpen(true);
+        }}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+        }}
+        onKeyDown={handleKeyDown}
+      />
+      <button
+        type="button"
+        className="work-order-part-combobox-toggle"
+        disabled={disabled}
+        aria-label="Open part options"
+        onClick={() => {
+          if (disabled) return;
+          setQuery('');
+          setOpen((current) => !current);
+        }}
+      >
+        <ChevronDown className="h-4 w-4" />
+      </button>
+      {open ? (
+        <div id={optionListId} className="work-order-part-options" role="listbox">
+          <button
+            type="button"
+            className={`work-order-part-option work-order-part-option-manual ${!value ? 'is-selected' : ''}`}
+            role="option"
+            aria-selected={!value}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => choosePart('')}
+          >
+            <span className="work-order-part-option-name">Manual / Outside Part</span>
+            <span className="work-order-part-option-note">Add a part not tracked in inventory</span>
+          </button>
+          {filteredParts.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`work-order-part-option ${String(item.id) === String(value) ? 'is-selected' : ''}`}
+              role="option"
+              aria-selected={String(item.id) === String(value)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => choosePart(item.id)}
+            >
+              <span className="work-order-part-option-top">
+                <span className="work-order-part-option-name" title={item.partName}>{partDetailValue(item.partName)}</span>
+                <span className="work-order-part-price">{wholeCurrency(item.sellingPrice)}</span>
+              </span>
+              <span className="work-order-part-option-meta">
+                <span className="truncate">{partDetailValue(item.brand)} / {partDetailValue(item.model || item.deviceModel)}</span>
+                <span className="work-order-part-stock">Available: {Number(item.available || 0)}</span>
+              </span>
+            </button>
+          ))}
+          {!filteredParts.length ? (
+            <div className="work-order-part-option-empty">No inventory parts found</div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SelectedPartInfoCard({ part }) {
+  if (!part) return null;
+  const detailItems = [
+    ['Brand', partDetailValue(part.brand)],
+    ['Model', partDetailValue(part.model || part.deviceModel)],
+    ['SKU', partDetailValue(part.sku)],
+    ['Category', partDetailValue(part.category)],
+    ['Available', String(Number(part.available || 0))],
+    ['Price', wholeCurrency(part.sellingPrice)]
+  ];
+  return (
+    <div className="work-order-selected-part-card">
+      <p className="work-order-selected-part-title">
+        <span>Selected:</span>
+        <strong title={partDetailValue(part.partName)}>{partDetailValue(part.partName)}</strong>
+      </p>
+      <div className="work-order-selected-part-chips">
+        {detailItems.map(([label, value]) => (
+          <span key={label} className="work-order-selected-part-chip">
+            <span>{label}:</span>
+            <b title={value}>{value}</b>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const workOrderPhotoTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const workOrderPhotoMaxSize = 5 * 1024 * 1024;
 const photoCategoryLabels = {
@@ -617,9 +779,16 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     setPriorityValue(jobPriority(data.workOrder));
   }, [data?.workOrder]);
 
-  useEffect(() => {
-    request('/inventory?limit=100').then((result) => setInventoryParts(result.parts || [])).catch(() => {});
+  const refreshInventoryParts = useCallback(async () => {
+    const result = await request('/inventory?limit=100');
+    const nextParts = result.parts || [];
+    setInventoryParts(nextParts);
+    return nextParts;
   }, [request]);
+
+  useEffect(() => {
+    refreshInventoryParts().catch(() => {});
+  }, [refreshInventoryParts]);
 
   useEffect(() => {
     const handleBillingUpdated = () => {
@@ -809,7 +978,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         const result = await request(`/work-orders/${id}/parts`, { method: 'POST', body: JSON.stringify({ ...part, chargeType: selectedChargeTypeValue, chargeTypeMode: isAmcLinked ? amcChargeTypeMode(selectedChargeTypeValue) : manualAmcPartChargeMode, ...flags }) });
         if (result.workOrder) setLiveOrder(result.workOrder);
         if (part.inventoryPartId) {
-          request('/inventory?limit=100').then((inventory) => setInventoryParts(inventory.parts || [])).catch(() => {});
+          await refreshInventoryParts();
         }
         setPart({ partName: '', quantity: 1, unitPrice: 0, inventoryPartId: '', chargeType: isAmcLinked ? autoAmcPartChargeType : 'Chargeable' });
         setAddPartDupKind(null);
@@ -878,8 +1047,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
     try {
       await preserveScroll(async () => {
+        const shouldRefreshInventory = Boolean(removePartCandidate?.inventoryPartId);
         const result = await request(`/work-orders/${id}/parts/${partId}`, { method: 'DELETE' });
         if (result?.workOrder) setLiveOrder(result.workOrder);
+        if (shouldRefreshInventory) await refreshInventoryParts();
         setRemovePartCandidate(null);
         push('Part removed');
         await reloadSidebarAware();
@@ -2823,10 +2994,15 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <div className={detailSectionClass}>
               <h2 className="text-xl font-black">Add Used Part</h2>
               <form className="mt-4 grid gap-3 md:grid-cols-[1fr_120px_auto_auto]" onSubmit={addPart}>
-                <select className="input disabled:cursor-not-allowed disabled:opacity-60" value={part.inventoryPartId || ''} disabled={partsLocked} onChange={(event) => handlePartSelect(event.target.value)}>
-                  <option value="">Manual / Outside Part</option>
-                  {inventoryParts.map((item) => <option key={item.id} value={item.id}>{item.partName} - {item.available} available</option>)}
-                </select>
+                <div className="grid gap-2">
+                  <WorkOrderPartCombobox
+                    parts={inventoryParts}
+                    value={part.inventoryPartId || ''}
+                    disabled={partsLocked}
+                    onChange={handlePartSelect}
+                  />
+                  <SelectedPartInfoCard part={selectedInventoryPart} />
+                </div>
                 <input className="input disabled:cursor-not-allowed disabled:opacity-60" type="number" min="1" value={part.quantity} disabled={partsLocked} onChange={(event) => handlePartQuantityChange(event.target.value)} />
                 {isAmcLinked ? (
                   <select className="input disabled:cursor-not-allowed disabled:opacity-60" value={normalizeAmcChargeTypeSelectValue(part.chargeType)} disabled={partsLocked} onChange={(event) => setPart((current) => ({ ...current, chargeType: event.target.value }))}>
@@ -3221,7 +3397,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                                   setRemovePartCandidate({
                                     id: item._id,
                                     name: item.name,
-                                    quantity: item.quantity
+                                    quantity: item.quantity,
+                                    inventoryPartId: item.inventoryPartId
                                   });
                                 }}
                                 aria-label={`Delete ${item.name}`}
@@ -3255,19 +3432,22 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 <h3 className="text-xs font-black uppercase tracking-wide text-sky-100">Add Used Part</h3>
                 <form className="mt-3 grid gap-3" onSubmit={(event) => event.preventDefault()}>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <label className="grid gap-1.5">
+                  <div className="grid gap-1.5">
                     <span className="label">Part Type / Source</span>
-                    <select className="input py-2 disabled:cursor-not-allowed disabled:opacity-60" value={part.inventoryPartId || ''} disabled={partsLocked} onChange={(event) => handlePartSelect(event.target.value)}>
-                      <option value="">Manual / Outside Part</option>
-                      {inventoryParts.map((item) => <option key={item.id} value={item.id}>{item.partName} - {item.available} available</option>)}
-                    </select>
-                  </label>
+                    <WorkOrderPartCombobox
+                      parts={inventoryParts}
+                      value={part.inventoryPartId || ''}
+                      disabled={partsLocked}
+                      onChange={handlePartSelect}
+                    />
+                    <SelectedPartInfoCard part={selectedInventoryPart} />
+                  </div>
                   <label className="grid gap-1.5">
                     <span className="label">Manual / Outside Part Name</span>
                     <input
                       className="input py-2 disabled:cursor-not-allowed disabled:opacity-60"
-                      placeholder={part.inventoryPartId ? 'Using selected inventory part' : 'Enter manual part name'}
-                      value={part.partName}
+                      placeholder={part.inventoryPartId ? 'Not required for inventory part' : 'Enter manual part name'}
+                      value={part.inventoryPartId ? '' : part.partName}
                       disabled={Boolean(part.inventoryPartId) || partsLocked}
                       onChange={(event) => setPart((current) => ({ ...current, partName: event.target.value }))}
                       onKeyDown={(event) => { if (event.key === 'Enter') addPart(event); }}

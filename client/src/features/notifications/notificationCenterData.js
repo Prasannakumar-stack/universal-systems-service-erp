@@ -18,7 +18,7 @@ const fallbackSeeds = [
   {
     id: 'demo-new-booking',
     title: 'New booking received',
-    message: 'New booking #BK-2026-0054 has been created by Demo Customer.',
+    message: 'New booking #BK-2026-0054 has been created by Rahul Kumar.',
     category: 'Bookings',
     type: 'BOOKING',
     actionLabel: 'View Booking',
@@ -48,7 +48,7 @@ const fallbackSeeds = [
   {
     id: 'demo-invoice-generated',
     title: 'Invoice generated',
-    message: 'Invoice #INV-2026-0089 has been generated for Demo Customer.',
+    message: 'Invoice #INV-2026-0089 has been generated for Rahul Kumar.',
     category: 'Invoices',
     type: 'INVOICE',
     actionLabel: 'View Invoice',

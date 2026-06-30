@@ -285,7 +285,8 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
     }
 
     const tableToFinalGap = 36;
-    const amountToNextGap = 24;
+    const amountToNextGap = 18;
+    const minimumAmountNoticeGap = 16;
     const sectionToSectionGap = 8;
     const termsToFooterGap = 24;
 
@@ -312,6 +313,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       if (!previousRole) return 0;
       if (previousRole === currentRole) return 0;
       if (currentRole === 'footer') return termsToFooterGap;
+      if (previousRole === 'amount' && currentRole === 'notice') return amountToNextGap;
       if (previousRole === 'amount') return amountToNextGap;
       return sectionToSectionGap;
     }
@@ -319,6 +321,7 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
     function compactGapBetweenFinalNodes(previousRole, currentRole) {
       if (!previousRole) return 0;
       if (previousRole === currentRole) return 0;
+      if (previousRole === 'amount' && currentRole === 'notice') return minimumAmountNoticeGap;
       return 1;
     }
 
@@ -676,8 +679,12 @@ async function paginateInvoiceTablesForPrint(page, { key, context = {} } = {}) {
       sorted.forEach((metric) => {
         const metricBottom = metric.top + metric.height;
         const previous = groups[groups.length - 1];
+        const isAmountNoticePair = previous
+          && ((previous.role === 'amount' && metric.role === 'notice')
+            || (previous.role === 'notice' && metric.role === 'amount'));
         const sameVisualBand = previous
           && metric.top <= previous.originalBottom - 1
+          && !isAmountNoticePair
           && (metric.role === previous.role || Math.abs(metric.top - previous.originalTop) <= 36);
         if (sameVisualBand) {
           previous.metrics.push(metric);

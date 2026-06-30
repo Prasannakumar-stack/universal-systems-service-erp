@@ -23,7 +23,7 @@ function log(label, created) {
 async function firstOrCreateCustomer() {
   const existing = await Customer.findOne();
   if (existing) return existing;
-  return Customer.create({ name: 'Phase4 Demo Customer', phone: 'DEMO-P4-CUST', address: 'Demo Address, Sample City', devices: ['Demo Laptop'] });
+  return Customer.create({ name: 'Phase4 Customer', phone: '9000004000', address: 'Demo Address', devices: ['Demo Laptop'] });
 }
 
 async function firstTech() {

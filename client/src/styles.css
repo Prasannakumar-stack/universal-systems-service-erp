@@ -6446,6 +6446,227 @@ button:disabled {
     letter-spacing: 0.01em;
   }
 
+  .work-order-part-combobox {
+    position: relative;
+    min-width: 0;
+  }
+
+  .work-order-part-combobox-input {
+    min-height: 2.75rem;
+    padding-right: 2.6rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .work-order-part-combobox-toggle {
+    position: absolute;
+    right: 0.55rem;
+    top: 0.45rem;
+    display: grid;
+    height: 1.85rem;
+    width: 1.85rem;
+    place-items: center;
+    border-radius: 8px;
+    border: 1px solid rgba(125, 211, 252, 0.18);
+    background: rgba(15, 23, 42, 0.74);
+    color: #bae6fd;
+    font-size: 0.72rem;
+    font-weight: 900;
+    line-height: 1;
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+  }
+
+  .work-order-part-combobox-toggle:hover:not(:disabled),
+  .work-order-part-combobox-toggle:focus-visible {
+    border-color: rgba(125, 211, 252, 0.42);
+    background: rgba(14, 165, 233, 0.14);
+    color: #e0f2fe;
+    outline: none;
+  }
+
+  .work-order-part-combobox-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .work-order-part-options {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 0.45rem);
+    z-index: 55;
+    max-height: min(22rem, 62vh);
+    overflow-y: auto;
+    border-radius: 10px;
+    border: 1px solid rgba(125, 211, 252, 0.2);
+    background:
+      linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(7, 20, 38, 0.98)),
+      #071426;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    padding: 0.35rem;
+  }
+
+  .work-order-part-options::-webkit-scrollbar {
+    width: 0.45rem;
+  }
+
+  .work-order-part-options::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(125, 211, 252, 0.3);
+  }
+
+  .work-order-part-option {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    gap: 0.24rem;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    padding: 0.62rem 0.68rem;
+    color: #e5edf8;
+    text-align: left;
+    transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .work-order-part-option:hover,
+  .work-order-part-option:focus-visible,
+  .work-order-part-option.is-selected {
+    background: rgba(14, 165, 233, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.16);
+    outline: none;
+  }
+
+  .work-order-part-option-top,
+  .work-order-part-option-meta {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .work-order-part-option-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.88rem;
+    font-weight: 900;
+    letter-spacing: 0;
+    color: #f8fafc;
+  }
+
+  .work-order-part-price {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    border: 1px solid rgba(52, 211, 153, 0.24);
+    background: rgba(16, 185, 129, 0.12);
+    padding: 0.18rem 0.48rem;
+    color: #bbf7d0;
+    font-size: 0.75rem;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .work-order-part-option-meta {
+    color: #9fb4ce;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .work-order-part-stock {
+    flex: 0 0 auto;
+    color: #bfdbfe;
+    white-space: nowrap;
+  }
+
+  .work-order-part-option-note,
+  .work-order-part-option-empty {
+    color: #94a3b8;
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  .work-order-part-option-empty {
+    padding: 0.8rem;
+    text-align: center;
+  }
+
+  .work-order-selected-part-card {
+    display: grid;
+    min-width: 0;
+    gap: 0.58rem;
+    border-radius: 10px;
+    border: 1px solid rgba(125, 211, 252, 0.16);
+    background:
+      linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(16, 185, 129, 0.05)),
+      rgba(2, 6, 23, 0.34);
+    padding: 0.72rem 0.78rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .work-order-selected-part-title {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.38rem;
+    margin: 0;
+    color: #e0f2fe;
+    font-size: 0.8rem;
+    font-weight: 900;
+    line-height: 1.35;
+  }
+
+  .work-order-selected-part-title span {
+    flex: 0 0 auto;
+    color: #7dd3fc;
+  }
+
+  .work-order-selected-part-title strong {
+    min-width: 0;
+    overflow: hidden;
+    color: #f8fafc;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .work-order-selected-part-chips {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.42rem;
+  }
+
+  .work-order-selected-part-chip {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.28rem;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(15, 23, 42, 0.44);
+    padding: 0.36rem 0.48rem;
+  }
+
+  .work-order-selected-part-chip span {
+    flex: 0 0 auto;
+    color: #7dd3fc;
+    font-size: 0.68rem;
+    font-weight: 900;
+  }
+
+  .work-order-selected-part-chip b {
+    min-width: 0;
+    overflow: hidden;
+    color: #dbeafe;
+    font-size: 0.72rem;
+    font-weight: 850;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .billing-info-block {
     min-width: 0;
     border-radius: 8px;
@@ -6495,6 +6716,66 @@ button:disabled {
 
     .billing-metric-card {
       min-height: 7.5rem;
+    }
+
+    .work-order-part-options {
+      max-height: 18rem;
+    }
+
+    .work-order-part-option {
+      padding: 0.58rem 0.6rem;
+    }
+
+    .work-order-part-option-name {
+      font-size: 0.82rem;
+    }
+
+    .work-order-part-price {
+      font-size: 0.7rem;
+      padding-inline: 0.42rem;
+    }
+
+    .work-order-part-option-meta {
+      align-items: flex-start;
+      gap: 0.35rem;
+      font-size: 0.7rem;
+    }
+
+    .work-order-part-stock {
+      max-width: 7.5rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .work-order-selected-part-card {
+      padding: 0.62rem;
+    }
+
+    .work-order-selected-part-title {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 0.18rem;
+    }
+
+    .work-order-selected-part-title strong {
+      overflow-wrap: anywhere;
+      white-space: normal;
+    }
+
+    .work-order-selected-part-chips {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.36rem;
+    }
+
+    .work-order-selected-part-chip {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 0.16rem;
+    }
+
+    .work-order-selected-part-chip b {
+      overflow-wrap: anywhere;
+      white-space: normal;
     }
   }
 

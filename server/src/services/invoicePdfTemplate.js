@@ -28,20 +28,22 @@ const ONE_PAGE_AMOUNT_Y = 498;
 const BOTTOM_STRIP_Y = 813;
 const NON_FINAL_TABLE_LIMIT = 800;
 const FINAL_SECTIONS_HEIGHT = 316;
-const FINAL_SECTIONS_BOTTOM = 770;
+const FINAL_SECTIONS_BOTTOM = BOTTOM_STRIP_Y - 58;
+const AMOUNT_TO_WORK_NOTICE_GAP = 16;
+const AMOUNT_TO_NEXT_SECTION_GAP = 12;
 
 const INVOICE_COMPANY = {
   name: 'Universal Systems',
   tagline: 'Repair | Service | Sales | AMC',
   addressLines: [
-    'Demo Service Center,',
-    'Main Road,',
-    'Sample City - 000000.'
+    'MIG-H3, Housing Unit, Near 4 Roads,',
+    'Mathiyankuttai Post, Mettur Dam \u2013 636452,',
+    'Salem, Tamil Nadu, India.'
   ],
-  phones: ['Demo phone hidden'],
-  email: 'demo@universalsystems.example',
-  website: 'universalsystems.example',
-  footerAddressLines: ['Sample City', 'Demo address only']
+  phones: ['98427 81971', '70100 24368'],
+  email: 'usmettur@gmail.com',
+  website: 'usmettur.com',
+  footerAddressLines: ['Mettur Dam, Salem,', 'Tamil Nadu \u2013 636452']
 };
 
 const DEFAULT_TERMS = [
@@ -546,12 +548,29 @@ function drawRupeeIcon(doc, x, y) {
   doc.restore();
 }
 
+function amountSectionHeight(doc, totals) {
+  const summary = cfgSection(totals.config || {}, 'amountSummary');
+  const rows = [
+    visibleFlag(summary, 'showSubtotal') ? 'subtotal' : null,
+    visibleFlag(summary, 'showFinalTotal') ? 'finalTotal' : null,
+    visibleFlag(summary, 'showAmountPaid') ? 'amountPaid' : null
+  ].filter(Boolean);
+  const hasBalance = visibleFlag(summary, 'showBalanceDue');
+  const rowGap = hasBalance ? 16 : 20;
+  const rowsBottom = rows.length ? 34 + (rows.length - 1) * rowGap + 14 : 34;
+  const summaryHeight = hasBalance ? rowsBottom + 6 + 27 : rowsBottom + 14;
+  if (!visibleFlag(summary, 'showAmountInWords')) return Math.max(104, summaryHeight);
+  doc.font(bodyFont()).fontSize(8.35);
+  const wordsHeight = doc.heightOfString(cleanText(totals.words, ''), { width: 144, lineGap: 2 });
+  return Math.max(104, Math.ceil(56 + wordsHeight + 16), summaryHeight);
+}
+
 function drawAmountSection(doc, y, totals) {
   const summary = cfgSection(totals.config || {}, 'amountSummary');
   const leftWidth = 248;
   const rightX = 330;
   const rightWidth = PAGE_RIGHT - rightX;
-  const height = 104;
+  const height = amountSectionHeight(doc, totals);
 
   if (visibleFlag(summary, 'showAmountInWords')) {
     drawCard(doc, PAGE_X, y, leftWidth, height, { fill: '#fbfdff', stroke: SOFT_BORDER, radius: 10 });
@@ -570,8 +589,9 @@ function drawAmountSection(doc, y, totals) {
     visibleFlag(summary, 'showFinalTotal') ? ['Final Total', money(totals.finalTotal), true] : null,
     visibleFlag(summary, 'showAmountPaid') ? ['Amount Paid', money(totals.amountPaid), false] : null
   ].filter(Boolean);
+  const rowGap = visibleFlag(summary, 'showBalanceDue') ? 16 : 20;
   rows.forEach(([label, value, bold], index) => {
-    const rowY = y + 34 + index * 20;
+    const rowY = y + 34 + index * rowGap;
     doc.font(bold ? boldFont() : boldFont()).fontSize(bold ? 10.4 : 8.9).fillColor(bold ? NAVY : TEXT)
       .text(label, rightX + 14, rowY, { width: 83 });
     doc.text(':', rightX + 98, rowY, { width: 10, align: 'center' });
@@ -581,13 +601,17 @@ function drawAmountSection(doc, y, totals) {
   });
 
   if (visibleFlag(summary, 'showBalanceDue')) {
-    doc.roundedRect(rightX + 0.5, y + 77, rightWidth - 1, 26.5, 7).fill(NAVY_DARK);
-    doc.rect(rightX + 0.5, y + 77, rightWidth - 1, 9).fill(NAVY_DARK);
-    doc.rect(rightX + 0.5, y + 100, rightWidth - 1, 3).fill(CYAN);
-    doc.font(boldFont()).fontSize(9.7).fillColor('#ffffff').text('Balance Due', rightX + 14, y + 84, { width: 83 });
-    doc.text(':', rightX + 98, y + 84, { width: 10, align: 'center' });
-    doc.text(money(totals.balance), rightX + 124, y + 84, { width: rightWidth - 139, align: 'right' });
+    const rowsBottom = rows.length ? y + 34 + (rows.length - 1) * rowGap + 14 : y + 34;
+    const balanceY = Math.max(y + height - 27, rowsBottom + 6);
+    doc.roundedRect(rightX + 0.5, balanceY, rightWidth - 1, 26.5, 7).fill(NAVY_DARK);
+    doc.rect(rightX + 0.5, balanceY, rightWidth - 1, 9).fill(NAVY_DARK);
+    doc.rect(rightX + 0.5, y + height - 4, rightWidth - 1, 3).fill(CYAN);
+    doc.font(boldFont()).fontSize(9.7).fillColor('#ffffff').text('Balance Due', rightX + 14, balanceY + 7, { width: 83 });
+    doc.text(':', rightX + 98, balanceY + 7, { width: 10, align: 'center' });
+    doc.text(money(totals.balance), rightX + 124, balanceY + 7, { width: rightWidth - 139, align: 'right' });
   }
+
+  return height;
 }
 
 function drawCheckDot(doc, x, y, color = GREEN) {
@@ -733,25 +757,27 @@ function drawBottomStrip(doc, config = {}, context = {}, company = {}) {
 
 function drawFinalSections(doc, startY, totals, config, context, company) {
   let y = startY;
-  drawAmountSection(doc, y, { ...totals, config });
-  y += 116;
+  const amountHeight = drawAmountSection(doc, y, { ...totals, config });
+  const noticeVisible = cfgSection(config, 'workCompletionNotice').show !== false;
+  y += amountHeight + (noticeVisible ? AMOUNT_TO_WORK_NOTICE_GAP : AMOUNT_TO_NEXT_SECTION_GAP);
   const noticeHeight = drawWorkNotice(doc, y, config);
   if (noticeHeight) y += noticeHeight + 7;
   const termsHeight = drawTerms(doc, y, config, context);
   if (termsHeight) y += termsHeight + 10;
-  drawFooterContacts(doc, Math.min(y, BOTTOM_STRIP_Y - 66), company, config);
+  drawFooterContacts(doc, Math.min(y, BOTTOM_STRIP_Y - 56), company, config);
   drawBottomStrip(doc, config, context, company);
 }
 
-function finalSectionsDrawHeight(config = {}) {
-  let height = 116;
+function finalSectionsDrawHeight(doc, config = {}, totals = {}) {
+  const noticeVisible = cfgSection(config, 'workCompletionNotice').show !== false;
+  let height = amountSectionHeight(doc, { ...totals, config }) + (noticeVisible ? AMOUNT_TO_WORK_NOTICE_GAP : AMOUNT_TO_NEXT_SECTION_GAP);
   if (cfgSection(config, 'workCompletionNotice').show !== false) height += 74;
   if (cfgSection(config, 'terms').show !== false) height += 73;
   return height;
 }
 
-function ensureFinalSectionStart(doc, y, title, company, config = {}) {
-  if (y + finalSectionsDrawHeight(config) <= FINAL_SECTIONS_BOTTOM) return y;
+function ensureFinalSectionStart(doc, y, title, company, config = {}, totals = {}) {
+  if (y + finalSectionsDrawHeight(doc, config, totals) <= FINAL_SECTIONS_BOTTOM) return y;
   return drawContinuationPage(doc, title, company, config);
 }
 
@@ -849,14 +875,14 @@ export function sampleInvoiceData() {
     jobReference: 'WO-2026-0123',
     invoiceDate: '28-05-2026',
     paymentStatus: 'Pending',
-    customerName: 'Demo Customer',
-    customerPhone: 'Demo phone hidden',
-    customerAddress: 'Demo customer address, Sample City.',
+    customerName: 'Rahul Kumar',
+    customerPhone: '98427 81971',
+    customerAddress: '12, Mettur Main Road,\nMettur Dam \u2013 636452,\nSalem, Tamil Nadu.',
     serviceType: 'Laptop Service',
     device: 'Laptop',
     brandModel: 'Dell Inspiron 15',
     problemComplaint: 'System running slow and needs RAM upgrade.',
-    technician: 'Demo Technician',
+    technician: 'Arjun',
     items: [
       { description: 'General Service', quantity: 1, unitPrice: 700, total: 700 },
       { description: 'RAM 4GB DDR4', quantity: 1, unitPrice: 500, total: 500 }
@@ -910,8 +936,12 @@ export function renderInvoicePdf(doc, options = {}) {
   drawInvoiceDetailsCard(doc, invoice, config);
   drawServiceDetailsCard(doc, invoice, config);
   const table = drawItemsTable(doc, items, title, company, config);
-  const preferredFinalY = table.pageBreaks > 0 ? table.y + 6 : Math.max(ONE_PAGE_AMOUNT_Y, table.y + 6);
-  const finalY = ensureFinalSectionStart(doc, preferredFinalY, title, company, config);
+  const defaultFinalY = table.pageBreaks > 0 ? table.y + 6 : Math.max(ONE_PAGE_AMOUNT_Y, table.y + 6);
+  const compactFinalY = table.pageBreaks > 0 ? defaultFinalY : table.y;
+  const preferredFinalY = defaultFinalY + finalSectionsDrawHeight(doc, config, totals) <= FINAL_SECTIONS_BOTTOM
+    ? defaultFinalY
+    : compactFinalY;
+  const finalY = ensureFinalSectionStart(doc, preferredFinalY, title, company, config, totals);
   drawFinalSections(doc, finalY, totals, config, context, company);
   drawAdvancedPdfSections(doc, { config, context, title, company });
   drawPageNumbers(doc, config);

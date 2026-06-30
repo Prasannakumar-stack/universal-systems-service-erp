@@ -100,10 +100,10 @@ const legacyVariableSuggestions = {
 };
 
 const sampleValues = {
-  '{{customerName}}': 'Demo Customer',
-  '{{customerPhone}}': 'Demo phone hidden',
-  '{{customerEmail}}': 'customer@demo.example',
-  '{{customerAddress}}': 'Demo customer address',
+  '{{customerName}}': 'Ravi Kumar',
+  '{{customerPhone}}': '98427 81971',
+  '{{customerEmail}}': 'ravi@example.com',
+  '{{customerAddress}}': 'Mettur Dam',
   '{{bookingId}}': 'BK-1024',
   '{{bookingDate}}': '04 Jun 2026',
   '{{bookingTime}}': '10:30 AM',

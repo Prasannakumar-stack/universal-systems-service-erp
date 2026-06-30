@@ -170,8 +170,8 @@ export const defaultPublicWebsiteSettings = {
   },
   seo: {
     websiteTitle: 'Universal Systems | Computer, Laptop, Printer & CCTV Service',
-    metaDescription: 'Universal Systems provides computer, laptop, printer, CCTV, networking, UPS, and AMC service in Sample City.',
-    keywords: 'computer service, laptop repair, printer service, CCTV, networking, AMC, Sample City',
+    metaDescription: 'Universal Systems provides computer, laptop, printer, CCTV, networking, UPS, and AMC service in Mettur Dam.',
+    keywords: 'computer service, laptop repair, printer service, CCTV, networking, AMC, Mettur Dam',
     socialSharingImage: '/Home%20Page%20image.png'
   }
 };

@@ -1,11 +1,11 @@
 export const company = {
   name: 'Universal Systems',
   tagline: 'We care for the technology you depend on',
-  address: 'Demo Service Center, Main Road, Sample City - 000000.',
-  phones: ['Demo phone hidden'],
-  landline: 'Demo landline hidden',
-  email: 'demo@universalsystems.example',
-  whatsapp: '',
+  address: 'MIG-H3, Housing Unit, Near 4 Roads, Mathaiyankuttai Post, Mettur Dam - 636452, Salem - Dt, Tamil Nadu, India.',
+  phones: ['98427 81971', '70100 24368'],
+  landline: '04298 - 243565',
+  email: 'usmettur@gmail.com',
+  whatsapp: '919842781971',
   hours: 'Monday - Saturday, 9:00 AM - 8:00 PM'
 };
 
