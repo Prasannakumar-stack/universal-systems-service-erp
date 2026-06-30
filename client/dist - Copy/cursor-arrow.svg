@@ -1,0 +1,20 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cursorFill" x1="18" y1="7" x2="35" y2="51" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60A5FA"/>
+      <stop offset="0.55" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <filter id="softDepth" x="-18" y="-14" width="92" height="92" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="6" stdDeviation="4" flood-color="#020617" flood-opacity="0.28"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#3B82F6" flood-opacity="0.4"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="0.35" result="softEdge"/>
+      <feComposite in="SourceGraphic" in2="softEdge" operator="over"/>
+    </filter>
+  </defs>
+  <path
+    filter="url(#softDepth)"
+    d="M13.5 7.75C12.05 6.95 10.28 8.02 10.32 9.68L11.46 54.07C11.51 56.03 13.92 56.93 15.25 55.49L26.9 42.84L37.03 57.95C37.83 59.14 39.44 59.46 40.63 58.66L47.18 54.26C48.37 53.46 48.69 51.85 47.89 50.66L37.7 35.46L54.45 30.52C56.32 29.97 56.59 27.43 54.88 26.49L13.5 7.75Z"
+    fill="url(#cursorFill)"
+  />
+</svg>

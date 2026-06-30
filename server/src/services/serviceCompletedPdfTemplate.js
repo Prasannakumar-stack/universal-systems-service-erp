@@ -22,13 +22,13 @@ const THANK_YOU_COMPANY = {
   name: 'Universal Systems',
   tagline: 'Repair | Service | Sales | AMC',
   addressLines: [
-    'MIG-H3, Housing Unit, Near 4 Roads,',
-    'Mathiyankuttai Post, Mettur Dam \u2013 636452,',
-    'Salem, Tamil Nadu, India.'
+    'Demo Service Center,',
+    'Main Road,',
+    'Sample City - 000000.'
   ],
-  phones: ['98427 81971', '70100 24368'],
-  email: 'usmettur@gmail.com',
-  website: 'usmettur.com'
+  phones: ['Demo phone hidden'],
+  email: 'demo@universalsystems.example',
+  website: 'universalsystems.example'
 };
 
 function fontExists(filePath) {
@@ -246,7 +246,7 @@ function drawTermsCard(doc, y, config = {}, context = {}) {
 
 function drawLetterBody(doc, service, company, config = {}, context = {}) {
   const currentCompany = thankYouCompany(company);
-  const customerName = cleanText(service.customerName, 'Rahul Kumar');
+  const customerName = cleanText(service.customerName, 'Demo Customer');
 
   const customerDetails = cfgSection(config, 'customerDetails');
   if (customerDetails.show !== false && customerDetails.showCustomerName !== false) {
@@ -283,13 +283,13 @@ function drawLetterBody(doc, service, company, config = {}, context = {}) {
     drawPhoneIcon(doc, 58, closingY + 55);
     const contactLabel = cleanText(cfgSection(config, 'thankYouFooter').contactLabel, 'Contact');
     doc.font(boldFont()).fontSize(11).fillColor(NAVY)
-      .text(`${contactLabel}: ${currentCompany.phones[0] || '98427 81971'}`, 84, closingY + 56, { width: 220 });
+      .text(`${contactLabel}: ${currentCompany.phones[0] || 'Demo phone hidden'}`, 84, closingY + 56, { width: 220 });
   }
 }
 
 function blankServiceCompletedData() {
   return {
-    customerName: 'Rahul Kumar'
+    customerName: 'Demo Customer'
   };
 }
 

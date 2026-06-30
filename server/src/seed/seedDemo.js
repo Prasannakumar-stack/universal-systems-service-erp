@@ -106,28 +106,28 @@ try {
   const tech1 = await upsertUser({
     username: 'demo.tech1',
     password: 'demo12345',
-    name: 'Arun Technician',
+    name: 'Demo Technician A',
     role: 'technician',
-    phone: '9000002101',
-    email: 'arun.tech@example.com'
+    phone: 'DEMO-TECH-A',
+    email: 'tech.a@demo.example'
   });
   const tech2 = await upsertUser({
     username: 'demo.tech2',
     password: 'demo12345',
-    name: 'Meena Technician',
+    name: 'Demo Technician B',
     role: 'technician',
-    phone: '9000002102',
-    email: 'meena.tech@example.com'
+    phone: 'DEMO-TECH-B',
+    email: 'tech.b@demo.example'
   });
   logResult('demo technician demo.tech1', tech1);
   logResult('demo technician demo.tech2', tech2);
 
   const customers = {};
   for (const payload of [
-    { name: 'Ravi Kumar', phone: '9000001001', email: 'ravi.demo@example.com', address: 'Mettur Dam', customerType: 'Home', devices: ['Lenovo IdeaPad 3', 'HP Ink Tank Printer'] },
-    { name: 'Sri Lakshmi Stores', phone: '9000001002', email: 'stores.demo@example.com', address: 'Salem Main Road', customerType: 'Business', devices: ['Billing Desktop', 'CCTV DVR'] },
-    { name: 'Kavya Textiles', phone: '9000001003', email: 'textiles.demo@example.com', address: 'Bhavani', customerType: 'Business', devices: ['Canon Printer', 'Office Network'] },
-    { name: 'Suresh Babu', phone: '9000001004', email: 'suresh.demo@example.com', address: 'Erode', customerType: 'Home', devices: ['Dell Inspiron Laptop'] }
+    { name: 'Demo Home Customer', phone: 'DEMO-CUST-1001', email: 'home.customer@demo.example', address: 'Demo Area, Sample City', customerType: 'Home', devices: ['Lenovo IdeaPad 3', 'HP Ink Tank Printer'] },
+    { name: 'Demo Retail Store', phone: 'DEMO-CUST-1002', email: 'retail.store@demo.example', address: 'Demo Market Road, Sample City', customerType: 'Business', devices: ['Billing Desktop', 'CCTV DVR'] },
+    { name: 'Demo Office Customer', phone: 'DEMO-CUST-1003', email: 'office.customer@demo.example', address: 'Demo Business Park, Sample City', customerType: 'Business', devices: ['Canon Printer', 'Office Network'] },
+    { name: 'Demo Walk-in Customer', phone: 'DEMO-CUST-1004', email: 'walkin.customer@demo.example', address: 'Demo Street, Sample City', customerType: 'Home', devices: ['Dell Inspiron Laptop'] }
   ]) {
     const result = await upsertByModel(Customer, { phone: payload.phone }, payload);
     customers[payload.name] = result.item;
@@ -136,9 +136,9 @@ try {
 
   const suppliers = {};
   for (const payload of [
-    { name: 'Chennai Computer Spares', phone: '9876543210', email: 'sales@chennaicomputerspares.example', city: 'Chennai', address: 'Ritchie Street, Chennai', gstNumber: '33ABCDE1234F1Z5', notes: 'Laptop and desktop parts supplier.' },
-    { name: 'Coimbatore Print Parts', phone: '9444567890', email: 'orders@printparts.example', city: 'Coimbatore', address: 'Gandhipuram, Coimbatore', gstNumber: '33PQRSX5678L1Z2', notes: 'Printer rollers, cartridges, and service kits.' },
-    { name: 'Mettur Network Mart', phone: '9994356789', email: 'support@networkmart.example', city: 'Mettur', address: 'Four Roads, Mettur', gstNumber: '', notes: 'Networking and CCTV accessories.' }
+    { name: 'Demo Computer Spares', phone: 'DEMO-SUP-2001', email: 'sales@demo-supplier.example', city: 'Sample City', address: 'Demo Supplier Street, Sample City', gstNumber: 'DEMO-GST-001', notes: 'Laptop and desktop parts supplier.' },
+    { name: 'Demo Print Parts', phone: 'DEMO-SUP-2002', email: 'orders@demo-print.example', city: 'Sample City', address: 'Demo Print Market, Sample City', gstNumber: 'DEMO-GST-002', notes: 'Printer rollers, cartridges, and service kits.' },
+    { name: 'Demo Network Mart', phone: 'DEMO-SUP-2003', email: 'support@demo-network.example', city: 'Sample City', address: 'Demo Network Lane, Sample City', gstNumber: '', notes: 'Networking and CCTV accessories.' }
   ]) {
     const result = await upsertSupplier(payload, admin);
     suppliers[payload.name] = result.item;
@@ -147,11 +147,11 @@ try {
 
   const parts = {};
   for (const payload of [
-    { partName: 'SSD 512GB SATA', category: 'Storage', sku: 'DEMO-SSD-512', brand: 'Kingston', supplier: 'Chennai Computer Spares', costPrice: 2100, sellingPrice: 3200, onHand: 8, reserved: 1, lowStockLimit: 2 },
-    { partName: 'Laptop Keyboard Dell Inspiron', category: 'Laptop Parts', sku: 'DEMO-KBD-DELL', brand: 'Dell Compatible', supplier: 'Chennai Computer Spares', costPrice: 750, sellingPrice: 1350, onHand: 4, reserved: 1, lowStockLimit: 2 },
-    { partName: 'Printer Roller HP P1007', category: 'Printer', sku: 'DEMO-PRN-ROLLER', brand: 'HP Compatible', supplier: 'Coimbatore Print Parts', costPrice: 900, sellingPrice: 1450, onHand: 2, reserved: 0, lowStockLimit: 2 },
-    { partName: 'CCTV Adapter 12V 2A', category: 'CCTV', sku: 'DEMO-CCTV-ADP', brand: 'SecurePower', supplier: 'Mettur Network Mart', costPrice: 180, sellingPrice: 450, onHand: 12, reserved: 2, lowStockLimit: 4 },
-    { partName: 'RAM 8GB DDR4', category: 'Memory', sku: 'DEMO-RAM-8G', brand: 'Crucial', supplier: 'Chennai Computer Spares', costPrice: 1450, sellingPrice: 2300, onHand: 6, reserved: 0, lowStockLimit: 3 }
+    { partName: 'SSD 512GB SATA', category: 'Storage', sku: 'DEMO-SSD-512', brand: 'Kingston', supplier: 'Demo Computer Spares', costPrice: 2100, sellingPrice: 3200, onHand: 8, reserved: 1, lowStockLimit: 2 },
+    { partName: 'Laptop Keyboard Dell Inspiron', category: 'Laptop Parts', sku: 'DEMO-KBD-DELL', brand: 'Dell Compatible', supplier: 'Demo Computer Spares', costPrice: 750, sellingPrice: 1350, onHand: 4, reserved: 1, lowStockLimit: 2 },
+    { partName: 'Printer Roller HP P1007', category: 'Printer', sku: 'DEMO-PRN-ROLLER', brand: 'HP Compatible', supplier: 'Demo Print Parts', costPrice: 900, sellingPrice: 1450, onHand: 2, reserved: 0, lowStockLimit: 2 },
+    { partName: 'CCTV Adapter 12V 2A', category: 'CCTV', sku: 'DEMO-CCTV-ADP', brand: 'SecurePower', supplier: 'Demo Network Mart', costPrice: 180, sellingPrice: 450, onHand: 12, reserved: 2, lowStockLimit: 4 },
+    { partName: 'RAM 8GB DDR4', category: 'Memory', sku: 'DEMO-RAM-8G', brand: 'Crucial', supplier: 'Demo Computer Spares', costPrice: 1450, sellingPrice: 2300, onHand: 6, reserved: 0, lowStockLimit: 3 }
   ]) {
     const result = await upsertByModel(InventoryPart, { sku: payload.sku }, payload);
     parts[payload.partName] = result.item;
@@ -173,9 +173,9 @@ try {
 
   const bookings = {};
   for (const payload of [
-    { bookingCode: 'DEMO-BK-001', customer: customers['Ravi Kumar'], serviceType: 'Laptop Repair', bookingSource: 'Website Booking', device: 'Lenovo IdeaPad 3', deviceBrand: 'Lenovo', deviceModel: 'IdeaPad 3', issue: 'Laptop is very slow and needs SSD upgrade.', status: 'Converted', preferredDate: daysFromNow(-3), preferredTime: '10:30 AM' },
-    { bookingCode: 'DEMO-BK-002', customer: customers['Sri Lakshmi Stores'], serviceType: 'CCTV Installation & Maintenance', bookingSource: 'Contact Form', device: 'CCTV DVR', deviceBrand: '', deviceModel: '', issue: 'Two cameras are offline after power fluctuation.', status: 'New Enquiry', preferredDate: daysFromNow(1), preferredTime: '04:00 PM', followUpReminder: 'Call owner before visit.' },
-    { bookingCode: 'DEMO-BK-003', customer: customers['Kavya Textiles'], serviceType: 'Printer Service / Toner Refilling', bookingSource: 'Call', device: 'Canon Printer', deviceBrand: 'Canon', deviceModel: 'LBP2900', issue: 'Paper jam and low print quality.', status: 'Contacted', preferredDate: daysFromNow(2), preferredTime: '11:00 AM' }
+    { bookingCode: 'DEMO-BK-001', customer: customers['Demo Home Customer'], serviceType: 'Laptop Repair', bookingSource: 'Website Booking', device: 'Lenovo IdeaPad 3', deviceBrand: 'Lenovo', deviceModel: 'IdeaPad 3', issue: 'Laptop is very slow and needs SSD upgrade.', status: 'Converted', preferredDate: daysFromNow(-3), preferredTime: '10:30 AM' },
+    { bookingCode: 'DEMO-BK-002', customer: customers['Demo Retail Store'], serviceType: 'CCTV Installation & Maintenance', bookingSource: 'Contact Form', device: 'CCTV DVR', deviceBrand: '', deviceModel: '', issue: 'Two cameras are offline after power fluctuation.', status: 'New Enquiry', preferredDate: daysFromNow(1), preferredTime: '04:00 PM', followUpReminder: 'Confirm demo visit before dispatch.' },
+    { bookingCode: 'DEMO-BK-003', customer: customers['Demo Office Customer'], serviceType: 'Printer Service / Toner Refilling', bookingSource: 'Call', device: 'Canon Printer', deviceBrand: 'Canon', deviceModel: 'LBP2900', issue: 'Paper jam and low print quality.', status: 'Contacted', preferredDate: daysFromNow(2), preferredTime: '11:00 AM' }
   ]) {
     const bookingPayload = {
       bookingCode: payload.bookingCode,
@@ -206,7 +206,7 @@ try {
     {
       key: 'DEMO-WO-001',
       booking: bookings['DEMO-BK-001'],
-      customer: customers['Ravi Kumar'],
+      customer: customers['Demo Home Customer'],
       serviceType: 'Laptop Repair',
       device: 'Lenovo IdeaPad 3',
       deviceBrand: 'Lenovo',
@@ -225,7 +225,7 @@ try {
     },
     {
       key: 'DEMO-WO-002',
-      customer: customers['Sri Lakshmi Stores'],
+      customer: customers['Demo Retail Store'],
       serviceType: 'CCTV Service',
       device: 'Shop CCTV DVR',
       deviceBrand: 'Hikvision',
@@ -240,7 +240,7 @@ try {
     },
     {
       key: 'DEMO-WO-003',
-      customer: customers['Kavya Textiles'],
+      customer: customers['Demo Office Customer'],
       serviceType: 'Printer Service / Toner Refilling',
       device: 'Canon LBP2900',
       deviceBrand: 'Canon',
@@ -283,9 +283,9 @@ try {
 
   const invoices = {};
   for (const payload of [
-    { invoiceNumber: 'DEMO-INV-001', workOrder: workOrders['DEMO-WO-001'], customer: customers['Ravi Kumar'], title: 'Laptop SSD Upgrade', items: [{ description: 'SSD 512GB SATA', quantity: 1, rate: 3200, amount: 3200 }, { description: 'Installation and optimization', quantity: 1, rate: 850, amount: 850 }], total: 4050, paidAmount: 4050, balance: 0, status: 'Paid' },
-    { invoiceNumber: 'DEMO-INV-002', workOrder: workOrders['DEMO-WO-002'], customer: customers['Sri Lakshmi Stores'], title: 'CCTV Service Visit', items: [{ description: 'CCTV diagnosis and adapter replacement estimate', quantity: 1, rate: 1500, amount: 1500 }], total: 1500, paidAmount: 500, balance: 1000, status: 'Partial' },
-    { invoiceNumber: 'DEMO-INV-003', workOrder: workOrders['DEMO-WO-003'], customer: customers['Kavya Textiles'], title: 'Printer Service Estimate', items: [{ description: 'Printer roller and service charge', quantity: 1, rate: 1950, amount: 1950 }], total: 1950, paidAmount: 0, balance: 1950, status: 'Pending' }
+    { invoiceNumber: 'DEMO-INV-001', workOrder: workOrders['DEMO-WO-001'], customer: customers['Demo Home Customer'], title: 'Laptop SSD Upgrade', items: [{ description: 'SSD 512GB SATA', quantity: 1, rate: 3200, amount: 3200 }, { description: 'Installation and optimization', quantity: 1, rate: 850, amount: 850 }], total: 4050, paidAmount: 4050, balance: 0, status: 'Paid' },
+    { invoiceNumber: 'DEMO-INV-002', workOrder: workOrders['DEMO-WO-002'], customer: customers['Demo Retail Store'], title: 'CCTV Service Visit', items: [{ description: 'CCTV diagnosis and adapter replacement estimate', quantity: 1, rate: 1500, amount: 1500 }], total: 1500, paidAmount: 500, balance: 1000, status: 'Partial' },
+    { invoiceNumber: 'DEMO-INV-003', workOrder: workOrders['DEMO-WO-003'], customer: customers['Demo Office Customer'], title: 'Printer Service Estimate', items: [{ description: 'Printer roller and service charge', quantity: 1, rate: 1950, amount: 1950 }], total: 1950, paidAmount: 0, balance: 1950, status: 'Pending' }
   ]) {
     const result = await upsertByModel(Invoice, { invoiceNumber: payload.invoiceNumber }, {
       invoiceNumber: payload.invoiceNumber,
@@ -321,10 +321,10 @@ try {
 
   const amc = await upsertByModel(AMCContract, { contractId: 'DEMO-AMC-001' }, {
     contractId: 'DEMO-AMC-001',
-    customerId: customers['Sri Lakshmi Stores']._id,
-    customerName: customers['Sri Lakshmi Stores'].name,
-    phone: customers['Sri Lakshmi Stores'].phone,
-    address: customers['Sri Lakshmi Stores'].address,
+    customerId: customers['Demo Retail Store']._id,
+    customerName: customers['Demo Retail Store'].name,
+    phone: customers['Demo Retail Store'].phone,
+    address: customers['Demo Retail Store'].address,
     contractType: 'CCTV AMC',
     coverageType: 'Preventive AMC',
     coverParts: false,
@@ -350,16 +350,16 @@ try {
   logResult('demo AMC DEMO-AMC-001', amc);
 
   for (const payload of [
-    { title: 'Demo booking received', message: 'Sri Lakshmi Stores submitted a CCTV enquiry.', type: 'BOOKING', role: 'admin', sourceId: bookings['DEMO-BK-002']._id },
+    { title: 'Demo booking received', message: 'Demo Retail Store submitted a CCTV enquiry.', type: 'BOOKING', role: 'admin', sourceId: bookings['DEMO-BK-002']._id },
     { title: 'Demo low stock warning', message: 'Printer Roller HP P1007 is at the reorder limit.', type: 'LOW_STOCK', role: 'admin', sourceId: parts['Printer Roller HP P1007']._id },
     { title: 'Demo payment follow-up', message: 'DEMO-INV-002 has a pending balance of 1000.', type: 'PAYMENT', role: 'admin', sourceId: invoices['DEMO-INV-002']._id },
-    { title: 'Demo work order assigned', message: 'CCTV service is assigned to Meena Technician.', type: 'WORK_ORDER', role: 'technician', userId: tech2.item._id, sourceId: workOrders['DEMO-WO-002']._id }
+    { title: 'Demo work order assigned', message: 'CCTV service is assigned to Demo Technician B.', type: 'WORK_ORDER', role: 'technician', userId: tech2.item._id, sourceId: workOrders['DEMO-WO-002']._id }
   ]) {
     logResult(`demo notification ${payload.title}`, await createNotificationOnce(payload));
   }
 
   for (const payload of [
-    { userId: admin._id, action: 'demo_seed_created', module: 'customer', recordId: customers['Ravi Kumar']._id, before: null, after: { mode: 'demo' } },
+    { userId: admin._id, action: 'demo_seed_created', module: 'customer', recordId: customers['Demo Home Customer']._id, before: null, after: { mode: 'demo' } },
     { userId: admin._id, action: 'demo_seed_created', module: 'work_order', recordId: workOrders['DEMO-WO-001']._id, before: null, after: { status: 'Completed' } },
     { userId: admin._id, action: 'demo_seed_created', module: 'invoice', recordId: invoices['DEMO-INV-001']._id, before: null, after: { status: 'Paid' } },
     { userId: admin._id, action: 'demo_seed_created', module: 'amc', recordId: amc.item._id, before: null, after: { status: 'Active' } }

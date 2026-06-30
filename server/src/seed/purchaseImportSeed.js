@@ -107,13 +107,13 @@ async function upsertPurchase(sample, parts, user) {
 }
 
 async function firstOrCreateCustomer() {
-  const existing = await Customer.findOne({ phone: '9000002510' });
+  const existing = await Customer.findOne({ phone: 'DEMO-PI-CUST' });
   if (existing) return existing;
   return Customer.create({
     name: 'Purchase Demo Customer',
-    phone: '9000002510',
-    email: 'purchase-demo@example.com',
-    address: 'Mettur',
+    phone: 'DEMO-PI-CUST',
+    email: 'purchase.customer@demo.example',
+    address: 'Demo Area, Sample City',
     devices: ['Dell Inspiron 15']
   });
 }
@@ -181,9 +181,9 @@ try {
   const samples = [
     {
       invoiceRef: 'INV-2505-0012',
-      supplierName: 'Chennai Supplier',
-      contactNumber: '9876543210',
-      placeCity: 'Chennai',
+      supplierName: 'Demo Supplier A',
+      contactNumber: 'DEMO-SUP-A',
+      placeCity: 'Sample City',
       purchaseSource: 'Supplier',
       purchaseDate: demoDate('2026-05-31'),
       deliveryStatus: 'Received',
@@ -198,9 +198,9 @@ try {
     },
     {
       invoiceRef: 'INV-2505-0011',
-      supplierName: 'Sri Venkatesa Traders',
-      contactNumber: '9444567890',
-      placeCity: 'Coimbatore',
+      supplierName: 'Demo Supplier B',
+      contactNumber: 'DEMO-SUP-B',
+      placeCity: 'Sample City',
       purchaseSource: 'Supplier',
       purchaseDate: demoDate('2026-05-30'),
       deliveryStatus: 'Partially Received',
@@ -231,8 +231,8 @@ try {
     {
       invoiceRef: 'INV-2505-0008',
       supplierName: 'Local Market Shop',
-      contactNumber: '9994356789',
-      placeCity: 'Salem',
+      contactNumber: 'DEMO-SUP-C',
+      placeCity: 'Sample City',
       purchaseSource: 'Local Shop',
       purchaseDate: demoDate('2026-05-27'),
       deliveryStatus: 'Returned',

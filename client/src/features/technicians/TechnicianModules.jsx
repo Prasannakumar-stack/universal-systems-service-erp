@@ -1106,7 +1106,7 @@ export function TechnicianSettingsPage() {
               <input
                 className="input"
                 value={profileForm.phone}
-                placeholder="+91 98427 81971"
+                placeholder="Demo phone only"
                 onChange={(event) => updateProfileField('phone', event.target.value)}
                 required
               />
@@ -1117,7 +1117,7 @@ export function TechnicianSettingsPage() {
                 <input
                   className="input"
                   value={profileForm.whatsappNumber}
-                  placeholder="+91 98427 81971"
+                  placeholder="Demo phone only"
                   onChange={(event) => updateProfileField('whatsappNumber', event.target.value)}
                 />
                 {profileErrors.whatsappNumber ? <small className="technician-settings-inline-error">{profileErrors.whatsappNumber}</small> : null}
