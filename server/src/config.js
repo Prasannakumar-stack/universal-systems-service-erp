@@ -45,10 +45,11 @@ export const WHATSAPP_PDF_PUBLIC_BASE_URL = process.env.WHATSAPP_PDF_PUBLIC_BASE
 export const COMPANY = {
   name: 'Universal Systems',
   tagline: 'We care for the technology you depend on',
-  address: 'MIG-H3, Housing Unit, Near 4 Roads,\nMathaiyankuttai Post,\nMettur Dam - 636452,\nSalem - Dt, Tamil Nadu, India.',
-  phones: ['98427 81971', '70100 24368'],
-  landline: '04298 - 243565',
-  email: 'usmettur@gmail.com'
+  address: 'Demo Service Center,\nMain Road,\nSample City - 000000.',
+  phones: ['Demo phone hidden'],
+  landline: 'Demo landline hidden',
+  email: 'demo@universalsystems.example',
+  website: 'universalsystems.example'
 };
 
 export const SERVICE_TYPES = [

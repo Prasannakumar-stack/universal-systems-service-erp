@@ -28,14 +28,14 @@
 - Do not show real phone numbers, real email inboxes, real customer names, real addresses, passwords, MongoDB URLs, IP addresses, or `.env` files.
 - Keep login passwords off camera; type them before recording or crop the login step.
 - Do not open Settings, Backup/System Info, browser devtools, terminal, database tools, or server logs.
-- Use only demo records whose names begin with `Demo` or IDs begin with `DEMO-`.
+- Use only demo records whose names begin with `Demo` or seeded IDs like `US-WO-*`, `US-INV-*`, and `US-BK-*`.
 
 ## 45-60 Second Timing Plan
 
 - 0-6s: Public Home hero and service cards.
 - 6-14s: Book Service form, jump to review step with safe demo values.
 - 14-23s: Admin Dashboard KPIs and recent activity.
-- 23-33s: Work Orders list, open one `DEMO-WO-*` detail.
+- 23-33s: Work Orders list, open one `US-WO-*` detail.
 - 33-42s: Work Order detail, parts/timeline, PDF preview button.
 - 42-50s: Inventory / Parts stock view.
 - 50-56s: Technician dashboard and assigned work order.

@@ -36,7 +36,7 @@ const serviceFocus = [
 
 const principles = [
   { title: 'Mission', icon: Target, text: 'Provide reliable repair and service support with clear communication and fair billing.' },
-  { title: 'Vision', icon: Eye, text: 'Be the trusted local service desk for computer and office technology needs in Mettur Dam.' },
+  { title: 'Vision', icon: Eye, text: 'Be the trusted local service desk for computer and office technology needs in Sample City.' },
   { title: 'Values', icon: Gem, text: 'Care, honesty, practical solutions, customer respect, and long-term service relationships.' }
 ];
 
@@ -122,7 +122,7 @@ export default function About() {
               <Sparkles className="h-4 w-4" />
               About Universal Systems
             </div>
-            <h1>Trusted local computer service in Mettur Dam.</h1>
+            <h1>Trusted local computer service in Sample City.</h1>
             <p>
               Universal Systems helps homes, students, shops, and offices keep their devices running smoothly with reliable repair and support.
             </p>
@@ -139,7 +139,7 @@ export default function About() {
             </div>
             <div className="about-trust-pill">
               <CheckCircle2 className="h-4 w-4" />
-              <span>Serving Mettur Dam, Salem Dt and nearby areas.</span>
+              <span>Serving Sample City and nearby demo areas.</span>
             </div>
           </div>
         </section>

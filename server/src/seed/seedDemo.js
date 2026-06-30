@@ -291,26 +291,26 @@ try {
   const admin = await upsertUser({
     username: 'admin',
     password: 'admin123',
-    name: 'Parthiban',
+    name: 'Demo Admin',
     role: 'admin',
-    phone: '9842781971',
-    email: 'parthiban@universalsystems.example'
+    phone: 'DEMO-ADMIN',
+    email: 'admin@demo.example'
   });
   const kavi = await upsertUser({
     username: 'emp1',
     password: 'emp123',
-    name: 'Kavi',
+    name: 'Demo Technician A',
     role: 'technician',
-    phone: '9000002101',
-    email: 'kavi@universalsystems.example'
+    phone: 'DEMO-TECH-A',
+    email: 'tech.a@demo.example'
   });
   const raju = await upsertUser({
     username: 'emp2',
     password: 'emp123',
-    name: 'Raju bai',
+    name: 'Demo Technician B',
     role: 'technician',
-    phone: '9000002102',
-    email: 'raju@universalsystems.example'
+    phone: 'DEMO-TECH-B',
+    email: 'tech.b@demo.example'
   });
   logResult('demo admin admin', admin);
   logResult('demo technician emp1', kavi);
@@ -319,34 +319,34 @@ try {
   const customers = {};
   for (const payload of [
     {
-      name: 'Rajesh Kumar',
-      phone: '9000001101',
-      email: 'rajesh.sample@example.com',
-      address: 'Mettur Dam',
+      name: 'Demo Home Customer',
+      phone: 'DEMO-CUST-1001',
+      email: 'home.customer@demo.example',
+      address: 'Demo Area, Sample City',
       customerType: 'Home',
       devices: ['Dell Inspiron Laptop']
     },
     {
-      name: 'Bright Prints',
-      phone: '9000001102',
-      email: 'brightprints.sample@example.com',
-      address: 'Salem Main Road',
+      name: 'Demo Print Shop',
+      phone: 'DEMO-CUST-1002',
+      email: 'print.shop@demo.example',
+      address: 'Demo Market Road, Sample City',
       customerType: 'Business',
       devices: ['HP LaserJet P1007']
     },
     {
-      name: 'Arun Office Solutions',
-      phone: '9000001103',
-      email: 'arunoffice.sample@example.com',
-      address: 'Erode',
+      name: 'Demo Office Customer',
+      phone: 'DEMO-CUST-1003',
+      email: 'office.customer@demo.example',
+      address: 'Demo Business Park, Sample City',
       customerType: 'Business',
       devices: ['Office Desktop']
     },
     {
-      name: 'Mettur Supermarket',
-      phone: '9000001104',
-      email: 'supermarket.sample@example.com',
-      address: 'Four Roads, Mettur',
+      name: 'Demo Retail Store',
+      phone: 'DEMO-CUST-1004',
+      email: 'retail.store@demo.example',
+      address: 'Demo Retail Street, Sample City',
       customerType: 'Business',
       devices: ['CCTV DVR']
     }
@@ -365,7 +365,7 @@ try {
       brand: 'Dell Compatible',
       deviceModel: 'Inspiron',
       compatibleDeviceType: 'Laptop',
-      supplier: 'Coimbatore Tech Mart',
+      supplier: 'Demo Computer Spares',
       costPrice: 750,
       sellingPrice: 1350,
       onHand: 3,
@@ -379,7 +379,7 @@ try {
       brand: 'HP Compatible',
       deviceModel: 'P1007',
       compatibleDeviceType: 'Printer',
-      supplier: 'Salem Printer Parts',
+      supplier: 'Demo Print Parts',
       costPrice: 900,
       sellingPrice: 1450,
       onHand: 3,
@@ -393,7 +393,7 @@ try {
       brand: 'Crucial',
       deviceModel: 'DDR4',
       compatibleDeviceType: 'Desktop/Laptop',
-      supplier: 'Coimbatore Tech Mart',
+      supplier: 'Demo Computer Spares',
       costPrice: 1450,
       sellingPrice: 2300,
       onHand: 4,
@@ -407,7 +407,7 @@ try {
       brand: 'Kingston',
       deviceModel: 'SATA',
       compatibleDeviceType: 'Desktop/Laptop',
-      supplier: 'Coimbatore Tech Mart',
+      supplier: 'Demo Computer Spares',
       costPrice: 2100,
       sellingPrice: 3200,
       onHand: 3,
@@ -421,7 +421,7 @@ try {
       brand: 'SecurePower',
       deviceModel: '12V 2A',
       compatibleDeviceType: 'CCTV Camera',
-      supplier: 'Mettur CCTV Spares',
+      supplier: 'Demo CCTV Spares',
       costPrice: 180,
       sellingPrice: 450,
       onHand: 8,
@@ -439,7 +439,7 @@ try {
   const bookingRows = [
     {
       bookingCode: 'US-BK-1001',
-      customer: customers['Rajesh Kumar'],
+      customer: customers['Demo Home Customer'],
       serviceType: 'Laptop Repair',
       bookingSource: 'Walk-in',
       device: 'Dell Inspiron Laptop',
@@ -452,7 +452,7 @@ try {
     },
     {
       bookingCode: 'US-BK-1002',
-      customer: customers['Bright Prints'],
+      customer: customers['Demo Print Shop'],
       serviceType: 'Printer Service',
       bookingSource: 'Phone Call',
       device: 'HP LaserJet P1007',
@@ -465,7 +465,7 @@ try {
     },
     {
       bookingCode: 'US-BK-1003',
-      customer: customers['Arun Office Solutions'],
+      customer: customers['Demo Office Customer'],
       serviceType: 'Desktop Repair',
       bookingSource: 'Website Booking',
       device: 'Office Desktop',
@@ -478,7 +478,7 @@ try {
     },
     {
       bookingCode: 'US-BK-1004',
-      customer: customers['Mettur Supermarket'],
+      customer: customers['Demo Retail Store'],
       serviceType: 'CCTV Service',
       bookingSource: 'WhatsApp',
       device: 'CCTV DVR',
@@ -518,7 +518,7 @@ try {
     {
       key: 'US-WO-1001',
       booking: bookings['US-BK-1001'],
-      customer: customers['Rajesh Kumar'],
+      customer: customers['Demo Home Customer'],
       serviceType: 'Laptop Repair',
       bookingSource: 'Walk-in',
       device: 'Dell Inspiron Laptop',
@@ -553,7 +553,7 @@ try {
     {
       key: 'US-WO-1002',
       booking: bookings['US-BK-1002'],
-      customer: customers['Bright Prints'],
+      customer: customers['Demo Print Shop'],
       serviceType: 'Printer Service',
       bookingSource: 'Phone Call',
       device: 'HP LaserJet P1007',
@@ -587,7 +587,7 @@ try {
     {
       key: 'US-WO-1003',
       booking: bookings['US-BK-1003'],
-      customer: customers['Arun Office Solutions'],
+      customer: customers['Demo Office Customer'],
       serviceType: 'Desktop Repair',
       bookingSource: 'Website Booking',
       device: 'Office Desktop',
@@ -632,7 +632,7 @@ try {
     {
       key: 'US-WO-1004',
       booking: bookings['US-BK-1004'],
-      customer: customers['Mettur Supermarket'],
+      customer: customers['Demo Retail Store'],
       serviceType: 'CCTV Service',
       bookingSource: 'WhatsApp',
       device: 'CCTV DVR',
@@ -694,7 +694,7 @@ try {
     {
       invoiceNumber: 'US-INV-1001',
       workOrder: workOrders['US-WO-1001'],
-      customer: customers['Rajesh Kumar'],
+      customer: customers['Demo Home Customer'],
       title: 'Laptop Keyboard Replacement',
       items: [
         { description: 'Laptop Keyboard Dell Inspiron', quantity: 1, rate: 1350, amount: 1350 },
@@ -710,7 +710,7 @@ try {
     {
       invoiceNumber: 'US-INV-1002',
       workOrder: workOrders['US-WO-1002'],
-      customer: customers['Bright Prints'],
+      customer: customers['Demo Print Shop'],
       title: 'Printer Roller Replacement',
       items: [
         { description: 'Printer Roller HP P1007', quantity: 1, rate: 1450, amount: 1450 },
@@ -726,7 +726,7 @@ try {
     {
       invoiceNumber: 'US-INV-1003',
       workOrder: workOrders['US-WO-1003'],
-      customer: customers['Arun Office Solutions'],
+      customer: customers['Demo Office Customer'],
       title: 'SSD and RAM Upgrade',
       items: [
         { description: 'SSD 512GB SATA', quantity: 1, rate: 3200, amount: 3200 },
@@ -743,7 +743,7 @@ try {
     {
       invoiceNumber: 'US-INV-1004',
       workOrder: workOrders['US-WO-1004'],
-      customer: customers['Mettur Supermarket'],
+      customer: customers['Demo Retail Store'],
       title: 'CCTV Adapter Replacement',
       items: [
         { description: 'CCTV Adapter 12V 2A', quantity: 2, rate: 450, amount: 900 },
@@ -804,10 +804,10 @@ try {
 
   const amc = await AMCContract.create({
     contractId: 'US-AMC-1001',
-    customerId: customers['Mettur Supermarket']._id,
-    customerName: customers['Mettur Supermarket'].name,
-    phone: customers['Mettur Supermarket'].phone,
-    address: customers['Mettur Supermarket'].address,
+    customerId: customers['Demo Retail Store']._id,
+    customerName: customers['Demo Retail Store'].name,
+    phone: customers['Demo Retail Store'].phone,
+    address: customers['Demo Retail Store'].address,
     contractType: 'CCTV AMC',
     coverageType: 'Service Only AMC',
     coverParts: false,
@@ -835,7 +835,7 @@ try {
     userId: admin.item._id,
     action: 'demo_seed_created',
     module: 'demo_seed',
-    recordId: customers['Rajesh Kumar']._id,
+    recordId: customers['Demo Home Customer']._id,
     before: null,
     after: {
       mode: 'demo',
@@ -849,7 +849,7 @@ try {
   });
 
   console.log('Demo seed complete. Kept a small connected sample dataset only.');
-  console.log('Demo login: admin / admin123, emp1 / emp123, emp2 / emp123');
+  console.log('Demo users created: admin, emp1, emp2. Keep credentials off camera.');
   await disconnectSeedDb();
 } catch (error) {
   console.error('Demo seed failed:', error.message);

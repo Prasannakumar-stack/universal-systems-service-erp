@@ -20,14 +20,14 @@ const QUOTATION_COMPANY = {
   name: 'Universal Systems',
   tagline: 'Repair | Service | Sales | AMC',
   addressLines: [
-    'MIG-H3, Housing Unit, Near 4 Roads,',
-    'Mathiyankuttai Post, Mettur Dam \u2013 636452,',
-    'Salem, Tamil Nadu, India.'
+    'Demo Service Center,',
+    'Main Road,',
+    'Sample City - 000000.'
   ],
-  phones: ['98427 81971', '70100 24368'],
-  email: 'usmettur@gmail.com',
-  website: 'usmettur.com',
-  footerAddress: 'Mettur Dam, Salem, Tamil Nadu \u2013 636452'
+  phones: ['Demo phone hidden'],
+  email: 'demo@universalsystems.example',
+  website: 'universalsystems.example',
+  footerAddress: 'Sample City, demo address only'
 };
 
 const DEFAULT_TERMS = [
@@ -598,14 +598,14 @@ export function sampleQuotationData() {
     jobReference: 'WO-2026-0123',
     quotationDate: '27-05-2026',
     quotationStatus: 'Pending Approval',
-    customerName: 'Rahul Kumar',
-    customerPhone: '98427 81971',
-    customerAddress: '12, Mettur Main Road, Mettur Dam \u2013 636452, Salem, Tamil Nadu.',
+    customerName: 'Demo Customer',
+    customerPhone: 'Demo phone hidden',
+    customerAddress: 'Demo customer address, Sample City.',
     serviceType: 'Laptop Service',
     device: 'Laptop',
     brandModel: 'Dell Inspiron 15',
     problemComplaint: 'System running slow and needs RAM upgrade.',
-    technician: 'Arjun',
+    technician: 'Demo Technician',
     serialNumber: 'DL-INS15-2026',
     items: [
       { description: 'General Service', quantity: 1, unitPrice: 700, total: 700 },

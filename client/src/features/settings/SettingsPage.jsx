@@ -1668,7 +1668,7 @@ function CompanyProfileSection({ onDirtyChange = null }) {
             <div className="company-profile-field-grid">
               <label className="company-profile-field">
                 <span>Phone</span>
-                <input className="input" value={form.phone} placeholder="9842781971 / 9944269071" disabled={!canEdit || saving} onChange={(event) => updatePhoneField('phone', event.target.value)} />
+                <input className="input" value={form.phone} placeholder="Demo phone only" disabled={!canEdit || saving} onChange={(event) => updatePhoneField('phone', event.target.value)} />
               </label>
               <label className="company-profile-field">
                 <span className="company-profile-label-row">
@@ -1677,7 +1677,7 @@ function CompanyProfileSection({ onDirtyChange = null }) {
                     <button type="button" className="company-profile-inline-link" disabled={!canEdit || saving} onClick={usePhoneForWhatsapp}>Use phone number</button>
                   ) : null}
                 </span>
-                <input className="input" value={form.whatsapp} placeholder="Example: 9842781971" disabled={!canEdit || saving} onChange={(event) => updatePhoneField('whatsapp', event.target.value)} />
+                <input className="input" value={form.whatsapp} placeholder="Demo WhatsApp only" disabled={!canEdit || saving} onChange={(event) => updatePhoneField('whatsapp', event.target.value)} />
                 <small>Used for customer WhatsApp communication if enabled.</small>
               </label>
               <label className="company-profile-field">
@@ -2166,7 +2166,7 @@ function AdminProfileSection({ onDirtyChange = null }) {
             </label>
             <label className="admin-profile-field">
               <span>Phone</span>
-              <input className="input" value={form.phone} placeholder="9842781971 / +91 98427 81971" onChange={(event) => updatePhone(event.target.value)} />
+              <input className="input" value={form.phone} placeholder="Demo phone only" onChange={(event) => updatePhone(event.target.value)} />
               <small>Allows normal business phone formats.</small>
             </label>
           </div>
@@ -3337,7 +3337,7 @@ const taxDashboardDefaults = {
     gstNumber: '33ABCDE1234F1Z5',
     businessName: 'Universal Systems',
     tradeName: 'Universal Systems',
-    registeredAddress: 'MIG-H3, Housing Unit, Near 4 Roads, Mathiyankuttai Post, Mettur Dam - 636452, Salem, Tamil Nadu, India.',
+    registeredAddress: 'Demo Service Center, Main Road, Sample City - 000000.',
     stateCode: '33'
   },
   rates: {

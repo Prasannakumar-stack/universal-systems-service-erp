@@ -95,9 +95,9 @@ try {
 
   const customers = {};
   for (const payload of [
-    { name: 'Ravi Kumar', phone: '9000001001', email: 'ravi@example.com', address: 'Mettur', devices: ['Lenovo Laptop'] },
-    { name: 'Suresh Babu', phone: '9000001002', email: 'suresh@example.com', address: 'Salem', devices: ['Dell Desktop'] },
-    { name: 'Prasanna', phone: '9000001003', email: 'prasanna@example.com', address: 'Erode', devices: ['HP Laptop'] }
+    { name: 'Demo Customer A', phone: 'DEMO-P2-CUST-A', email: 'customer.a@demo.example', address: 'Demo Area, Sample City', devices: ['Lenovo Laptop'] },
+    { name: 'Demo Customer B', phone: 'DEMO-P2-CUST-B', email: 'customer.b@demo.example', address: 'Demo Area, Sample City', devices: ['Dell Desktop'] },
+    { name: 'Demo Customer C', phone: 'DEMO-P2-CUST-C', email: 'customer.c@demo.example', address: 'Demo Area, Sample City', devices: ['HP Laptop'] }
   ]) {
     const result = await upsertCustomer(payload);
     customers[payload.name] = result.item;
@@ -127,10 +127,10 @@ try {
 
   const workOrders = [];
   for (const payload of [
-    { customerId: customers['Ravi Kumar']._id, device: 'Lenovo Laptop', issue: 'Display flickering', technicianId: null, status: 'Pending' },
-    { customerId: customers['Suresh Babu']._id, device: 'Dell Desktop', issue: 'Boot failure', technicianId: tech.item._id, status: 'In Progress' },
-    { customerId: customers.Prasanna._id, device: 'HP Laptop', issue: 'Keyboard replacement', technicianId: tech.item._id, status: 'Awaiting Parts', partRequests: [{ inventoryPartId: parts.Keyboard._id, name: 'Keyboard', quantity: 1, status: 'Reserved', userId: tech.item._id }] },
-    { customerId: customers['Ravi Kumar']._id, device: 'Lenovo Laptop', issue: 'RAM upgrade completed', technicianId: tech.item._id, status: 'Completed', partsUsed: [{ inventoryPartId: parts['RAM 8GB']._id, name: 'RAM 8GB', quantity: 1, unitPrice: 2200, total: 2200 }] }
+    { customerId: customers['Demo Customer A']._id, device: 'Lenovo Laptop', issue: 'Display flickering', technicianId: null, status: 'Pending' },
+    { customerId: customers['Demo Customer B']._id, device: 'Dell Desktop', issue: 'Boot failure', technicianId: tech.item._id, status: 'In Progress' },
+    { customerId: customers['Demo Customer C']._id, device: 'HP Laptop', issue: 'Keyboard replacement', technicianId: tech.item._id, status: 'Awaiting Parts', partRequests: [{ inventoryPartId: parts.Keyboard._id, name: 'Keyboard', quantity: 1, status: 'Reserved', userId: tech.item._id }] },
+    { customerId: customers['Demo Customer A']._id, device: 'Lenovo Laptop', issue: 'RAM upgrade completed', technicianId: tech.item._id, status: 'Completed', partsUsed: [{ inventoryPartId: parts['RAM 8GB']._id, name: 'RAM 8GB', quantity: 1, unitPrice: 2200, total: 2200 }] }
   ]) {
     const result = await upsertWorkOrder({
       ...payload,
@@ -172,7 +172,7 @@ try {
   }
 
   const notifications = [
-    { title: 'New booking received', message: 'Ravi Kumar submitted a service booking.', type: 'BOOKING', role: 'admin' },
+    { title: 'New booking received', message: 'Demo Customer A submitted a service booking.', type: 'BOOKING', role: 'admin' },
     { title: 'Low stock warning', message: 'Laptop Charger has 1 available.', type: 'LOW_STOCK', role: 'admin' },
     { title: 'Payment pending', message: `${DEMO}-INV-3 has payment pending.`, type: 'PAYMENT', role: 'admin' },
     { title: 'Work order assigned', message: 'Dell Desktop work order assigned to Technician.', type: 'WORK_ORDER', role: 'technician', userId: tech.item._id }

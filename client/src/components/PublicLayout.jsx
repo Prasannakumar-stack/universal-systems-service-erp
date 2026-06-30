@@ -254,7 +254,7 @@ function PublicLayoutShell() {
           <div className="footer-brand-block">
             <PublicNavbarLogo branding={branding} className="public-footer-logo-image" />
             <p className="footer-brand-description muted max-w-md text-sm leading-6">
-              Computer repair, OS installation, printer service, software support, data recovery, and maintenance solutions in Mettur Dam.
+              Computer repair, OS installation, printer service, software support, data recovery, and maintenance solutions in Sample City.
             </p>
             <div className="footer-trust-chips" aria-label="Universal Systems service highlights">
               {footerHighlights.map(({ label, Icon }) => (
