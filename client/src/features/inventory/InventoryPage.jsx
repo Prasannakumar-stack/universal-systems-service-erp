@@ -510,7 +510,8 @@ export function InventoryPage({ role = 'admin' }) {
                 const canShowDisableAction = canDeletePart && isActivePart;
                 const canShowMoveToTrashAction = canDeletePart && !isTrashedPart;
                 const canShowRestoreAction = canDeletePart && !isActivePart;
-                const canShowPermanentDeleteAction = canDeletePart && isTrashedPart && isAdminUser;
+                const canShowPermanentDeleteAction = canDeletePart && isTrashedPart && isAdminUser && part.canPermanentDelete !== false && !part.linkedRecordSummary?.hasLinkedRecords;
+                const canShowKeptForHistoryAction = canDeletePart && isTrashedPart && isAdminUser && !canShowPermanentDeleteAction;
                 const trashDaysLabel = isTrashedPart ? lifecycleDaysLeftLabel(part.trashDaysLeft) : '';
                 const stockValue = Number(part.onHand || 0) * Number(part.costPrice || 0);
                 const reservedQuantity = Number(part.reserved || 0);
@@ -602,6 +603,20 @@ export function InventoryPage({ role = 'admin' }) {
                             {canShowRestoreAction ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--restore" onClick={() => restorePart(part)}><RotateCcw className="h-4 w-4" /><span>{isDisabledPart ? 'Enable Part' : 'Restore'}</span></button> : null}
                             {canShowMoveToTrashAction ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--danger inventory-row-menu-danger" onClick={() => startPartLifecycleAction(part, 'trash')}><Trash2 className="h-4 w-4" /><span>Move to Trash</span></button> : null}
                             {canShowPermanentDeleteAction ? <button type="button" role="menuitem" className="row-action-menu-item row-action-menu-item--danger inventory-row-menu-danger" onClick={() => startPartLifecycleAction(part, 'permanent')}><Trash2 className="h-4 w-4" /><span>Delete Permanently</span></button> : null}
+                            {canShowKeptForHistoryAction ? (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                aria-disabled="true"
+                                tabIndex={-1}
+                                title="Linked records exist, so this record is kept for history."
+                                className="row-action-menu-item row-action-menu-item--disabled"
+                                onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}
+                              >
+                                <ShieldCheck className="h-4 w-4" />
+                                <span>Kept for history</span>
+                              </button>
+                            ) : null}
                         </FloatingRowActionMenu>
                       </div> : <span className="inventory-not-specified">{missingInventoryValue}</span>}
                     </td>

@@ -5,6 +5,9 @@ export const AUTO_AMC_PART_CHARGE_MODE = 'Auto';
 export const MANUAL_AMC_PART_CHARGE_MODE = 'Manual';
 export const COVERED_AMC_PART = 'Covered under AMC';
 export const CHARGEABLE_AMC_PART = 'Chargeable';
+export const SERVICE_CHARGE_COVERED_BY_AMC = 'covered';
+export const SERVICE_CHARGE_CHARGEABLE = 'chargeable';
+export const SERVICE_CHARGE_NONE = 'none';
 
 const COVERAGE_PRESETS = {
   'Full AMC': { coverParts: true, coverService: true, coverVisits: true },
@@ -58,16 +61,130 @@ export function amcCoverageSummary(contract = {}) {
   };
 }
 
-export function amcPartChargeType(contract = {}) {
-  return amcCoverageFlags(contract).coverParts ? COVERED_AMC_PART : CHARGEABLE_AMC_PART;
+const coverageStopWords = new Set([
+  'all',
+  'amc',
+  'and',
+  'asset',
+  'assets',
+  'covered',
+  'device',
+  'devices',
+  'for',
+  'include',
+  'included',
+  'item',
+  'items',
+  'or',
+  'part',
+  'parts',
+  'repair',
+  'repairs',
+  'service',
+  'services',
+  'under',
+  'warranty',
+  'with'
+]);
+
+function normalizeCoverageText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-export function normalizePartChargeType(value, contract = {}, mode = AUTO_AMC_PART_CHARGE_MODE) {
+function addCoverageTextPieces(value, pieces) {
+  if (!value) return;
+  if (Array.isArray(value)) {
+    value.forEach((item) => addCoverageTextPieces(item, pieces));
+    return;
+  }
+  if (typeof value === 'object') {
+    ['name', 'partName', 'item', 'label', 'sku', 'category', 'device', 'deviceName', 'description'].forEach((key) => {
+      addCoverageTextPieces(value[key], pieces);
+    });
+    return;
+  }
+  String(value)
+    .split(/[\n,;|/]+/)
+    .map(normalizeCoverageText)
+    .filter(Boolean)
+    .forEach((piece) => pieces.push(piece));
+}
+
+function coveragePhrases(contract = {}) {
+  const pieces = [];
+  [
+    contract.warrantyCoveredItems,
+    contract.coveredDevices,
+    contract.coveredService,
+    contract.warrantyTerms
+  ].forEach((value) => addCoverageTextPieces(value, pieces));
+
+  return Array.from(new Set(pieces)).filter((phrase) => {
+    if (phrase.length < 3) return false;
+    const words = phrase.split(' ').filter((word) => !coverageStopWords.has(word));
+    return words.length > 0;
+  });
+}
+
+function partTextPieces(part = {}) {
+  const inventoryPart = part.inventoryPartId && typeof part.inventoryPartId === 'object' ? part.inventoryPartId : {};
+  return [
+    part.name,
+    part.partName,
+    part.sku,
+    part.category,
+    part.brand,
+    part.deviceBrand,
+    part.deviceModel,
+    inventoryPart.partName,
+    inventoryPart.name,
+    inventoryPart.sku,
+    inventoryPart.category,
+    inventoryPart.brand,
+    inventoryPart.deviceBrand,
+    inventoryPart.deviceModel
+  ].map(normalizeCoverageText).filter(Boolean);
+}
+
+function phraseMatchesPart(candidate, phrase) {
+  if (!candidate || !phrase) return false;
+  if (candidate.includes(phrase) || phrase.includes(candidate)) return true;
+  const words = phrase.split(' ').filter((word) => word.length > 2 && !coverageStopWords.has(word));
+  if (!words.length) return false;
+  if (words.every((word) => candidate.includes(word))) return true;
+  return words.some((word) => word.length >= 4 && candidate.includes(word));
+}
+
+export function partMatchesAmcCoverage(contract = {}, part = {}) {
+  const candidates = partTextPieces(part);
+  if (!candidates.length) return false;
+  const phrases = coveragePhrases(contract);
+  return phrases.some((phrase) => candidates.some((candidate) => phraseMatchesPart(candidate, phrase)));
+}
+
+export function amcPartChargeType(contract = {}, part = {}) {
+  if (amcCoverageFlags(contract).coverParts) return COVERED_AMC_PART;
+  return partMatchesAmcCoverage(contract, part) ? COVERED_AMC_PART : CHARGEABLE_AMC_PART;
+}
+
+export function normalizePartChargeType(value, contract = {}, mode = AUTO_AMC_PART_CHARGE_MODE, part = {}) {
   const raw = String(value || '').trim();
-  if (contract && mode !== MANUAL_AMC_PART_CHARGE_MODE) return amcPartChargeType(contract);
-  if (!raw || raw === AUTO_AMC_PART_CHARGE_TYPE) return amcPartChargeType(contract);
-  if (raw === COVERED_AMC_PART || raw === 'Covered By AMC') return COVERED_AMC_PART;
+  if (contract && mode !== MANUAL_AMC_PART_CHARGE_MODE) return amcPartChargeType(contract, part);
+  if (!raw || raw === AUTO_AMC_PART_CHARGE_TYPE) return amcPartChargeType(contract, part);
+  if (raw === COVERED_AMC_PART || raw === 'Covered By AMC' || raw === 'Covered by AMC') return COVERED_AMC_PART;
   return CHARGEABLE_AMC_PART;
+}
+
+export function normalizeAmcServiceChargeBillingType(value, fallback = SERVICE_CHARGE_CHARGEABLE) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (['covered', 'covered_by_amc', 'covered by amc', 'amc'].includes(raw)) return SERVICE_CHARGE_COVERED_BY_AMC;
+  if (['chargeable', 'extra', 'extra_payable', 'extra payable', 'customer'].includes(raw)) return SERVICE_CHARGE_CHARGEABLE;
+  if (['none', 'no_service_charge', 'no service charge', 'no charge'].includes(raw)) return SERVICE_CHARGE_NONE;
+  return fallback;
 }
 
 function amount(value) {
@@ -78,10 +195,11 @@ function amount(value) {
 export function calculateAmcCoverageBreakdown(workOrder = {}, options = {}) {
   const contract = workOrder.amcContractId || {};
   const coverage = amcCoverageSummary(contract);
-  const serviceCharge = amount(options.serviceCharge ?? workOrder.serviceCharge);
+  const serviceChargeBillingType = normalizeAmcServiceChargeBillingType(options.serviceChargeBillingType ?? workOrder.serviceChargeBillingType);
+  const serviceCharge = serviceChargeBillingType === SERVICE_CHARGE_NONE ? 0 : amount(options.serviceCharge ?? workOrder.serviceCharge);
   const parts = (workOrder.partsUsed || []).map((part) => {
     const total = amount(part.total);
-    const chargeType = normalizePartChargeType(part.chargeType, contract, part.chargeTypeMode);
+    const chargeType = normalizePartChargeType(part.chargeType, contract, part.chargeTypeMode, part);
     return {
       id: part.id || part._id,
       name: part.name || '',
@@ -96,21 +214,22 @@ export function calculateAmcCoverageBreakdown(workOrder = {}, options = {}) {
   const chargeableParts = parts.filter((part) => !part.coveredByAmc);
   const coveredPartsTotal = coveredParts.reduce((sum, part) => sum + amount(part.total), 0);
   const chargeablePartsTotal = chargeableParts.reduce((sum, part) => sum + amount(part.total), 0);
-  const coveredServiceTotal = coverage.coverService ? serviceCharge : 0;
-  const chargeableServiceTotal = coverage.coverService ? 0 : serviceCharge;
+  const coveredServiceTotal = serviceChargeBillingType === SERVICE_CHARGE_COVERED_BY_AMC ? serviceCharge : 0;
+  const chargeableServiceTotal = serviceChargeBillingType === SERVICE_CHARGE_CHARGEABLE ? serviceCharge : 0;
   const coveredItems = [
     ...coveredParts.map((part) => ({ label: part.name, amount: amount(part.total), type: 'part' })),
-    ...(coveredServiceTotal > 0 ? [{ label: 'Service Charge', amount: coveredServiceTotal, type: 'service' }] : []),
+    ...(coveredServiceTotal > 0 ? [{ label: 'Service charge covered by AMC', amount: coveredServiceTotal, type: 'service' }] : []),
     ...(coverage.coverVisits ? [{ label: 'AMC Visit', amount: 0, type: 'visit' }] : [])
   ];
   const chargeableItems = [
     ...chargeableParts.map((part) => ({ label: part.name, amount: amount(part.total), type: 'part' })),
-    ...(chargeableServiceTotal > 0 ? [{ label: 'Service Charge', amount: chargeableServiceTotal, type: 'service' }] : [])
+    ...(chargeableServiceTotal > 0 ? [{ label: 'Service charge chargeable to customer', amount: chargeableServiceTotal, type: 'service' }] : [])
   ];
 
   return {
     ...coverage,
     serviceCharge,
+    serviceChargeBillingType,
     parts,
     coveredParts,
     chargeableParts,

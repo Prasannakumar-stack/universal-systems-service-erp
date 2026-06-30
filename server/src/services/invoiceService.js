@@ -4,7 +4,7 @@ import Invoice from '../models/Invoice.js';
 import WorkOrder from '../models/WorkOrder.js';
 import { assertPermission } from '../permissions.js';
 import { appError, clean, numberValue } from '../utils/http.js';
-import { calculateAmcCoverageBreakdown, amcCoverageSummary } from './amcCoverageEngine.js';
+import { calculateAmcCoverageBreakdown, amcCoverageSummary, normalizeAmcServiceChargeBillingType } from './amcCoverageEngine.js';
 import { logAudit } from './auditService.js';
 import { allocatePurchaseUsage } from './purchaseImportService.js';
 import { applyStockMovement } from './stockMovementService.js';
@@ -56,10 +56,13 @@ function assertInvoiceBelongsToWorkOrder(invoice, workOrder) {
   }
 }
 
-function buildWorkOrderInvoiceItems(workOrder, labour, payloadItems = []) {
+function buildWorkOrderInvoiceItems(workOrder, labour, payloadItems = [], options = {}) {
   const items = [];
   const isAmcWorkOrder = Boolean(workOrder.amcContractId);
-  const breakdown = isAmcWorkOrder ? calculateAmcCoverageBreakdown(workOrder, { serviceCharge: labour }) : null;
+  const breakdown = isAmcWorkOrder ? calculateAmcCoverageBreakdown(workOrder, {
+    serviceCharge: labour,
+    serviceChargeBillingType: options.serviceChargeBillingType
+  }) : null;
 
   if (isAmcWorkOrder) {
     if (breakdown.chargeableServiceTotal > 0) {
@@ -87,10 +90,11 @@ function buildWorkOrderInvoiceItems(workOrder, labour, payloadItems = []) {
 async function applyWorkOrderInvoiceStock(workOrder, invoice, user) {
   let stockFlagsUpdated = false;
   for (const part of workOrder.partsUsed) {
-    if (!part.inventoryPartId) continue;
+    const inventoryPartId = normalizeInvoiceId(part.inventoryPartId);
+    if (!inventoryPartId) continue;
     if (part.stockDeducted === true) continue;
     await applyStockMovement({
-      partId: part.inventoryPartId,
+      partId: inventoryPartId,
       type: 'USED',
       quantity: part.quantity,
       source: invoice.invoiceNumber,
@@ -100,7 +104,7 @@ async function applyWorkOrderInvoiceStock(workOrder, invoice, user) {
       userId: user?._id || user?.id || null
     });
     await allocatePurchaseUsage({
-      inventoryPartId: part.inventoryPartId,
+      inventoryPartId,
       workOrderId: workOrder._id,
       workOrderPartId: part._id,
       quantity: part.quantity,
@@ -452,10 +456,13 @@ export async function createInvoice(payload, user = null) {
     return createAmcInvoice(payload, user);
   }
 
-  const workOrder = await WorkOrder.findById(payload.workOrderId).populate('amcContractId');
+  const workOrder = await WorkOrder.findById(payload.workOrderId)
+    .populate('amcContractId')
+    .populate('partsUsed.inventoryPartId', 'partName sku category brand deviceBrand deviceModel');
   if (!workOrder) throw appError('Work order not found', 404);
   const amcExtraAction = clean(payload.amcExtraAction || payload.extraInvoiceAction);
   const labour = numberValue(payload.labourCharge ?? workOrder.serviceCharge, 0);
+  const serviceChargeBillingType = normalizeAmcServiceChargeBillingType(payload.serviceChargeBillingType ?? workOrder.serviceChargeBillingType);
 
   if (amcExtraAction === 'void-regenerate') {
     return voidAndRegenerateExtraInvoice(payload, workOrder, user, labour);
@@ -475,7 +482,7 @@ export async function createInvoice(payload, user = null) {
     if (existing && existing.status !== 'Void') return existing;
   }
 
-  const { items, isAmcWorkOrder } = buildWorkOrderInvoiceItems(workOrder, labour, payload.items || []);
+  const { items, isAmcWorkOrder } = buildWorkOrderInvoiceItems(workOrder, labour, payload.items || [], { serviceChargeBillingType });
   if (!items.length) throw appError('Invoice needs at least one charge or part');
 
   const total = items.reduce((sum, item) => sum + item.amount, 0);

@@ -66,13 +66,13 @@ export function FloatingRowActionMenu({
       if (event.key === 'Escape') onClose();
     }
 
-    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('pointerdown', closeOnOutsideClick);
     document.addEventListener('keydown', closeOnEscape);
     window.addEventListener('scroll', onClose, true);
     window.addEventListener('resize', onClose);
 
     return () => {
-      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
       document.removeEventListener('keydown', closeOnEscape);
       window.removeEventListener('scroll', onClose, true);
       window.removeEventListener('resize', onClose);
@@ -86,6 +86,9 @@ export function FloatingRowActionMenu({
       ref={menuRef}
       className={`${className} floating-row-action-menu is-portal ${position ? `is-${position.placement}` : ''}`.trim()}
       role={role}
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
       style={{
         position: 'fixed',
         top: position ? `${position.top}px` : 0,

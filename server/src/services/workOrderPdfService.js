@@ -90,9 +90,10 @@ async function getPdfWorkOrder(workOrderId, user) {
     .populate('customerId', 'name phone address devices')
     .populate('technicianId', 'name username role')
     .populate('bookingId', 'bookingCode serviceType device deviceBrand deviceModel')
+    .populate('partsUsed.inventoryPartId', 'partName sku category brand deviceBrand deviceModel')
     .populate({
       path: 'amcContractId',
-      select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices serviceFrequency contractValue startDate endDate status includedVisits invoiceId notes visits createdAt',
+      select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices warrantyIncluded warrantyCoveredItems warrantyTerms serviceFrequency contractValue startDate endDate status includedVisits invoiceId notes visits createdAt',
       populate: { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status title notes createdAt' }
     })
     .populate('invoiceId', 'invoiceNumber total paidAmount balance status title notes createdAt');
@@ -153,7 +154,7 @@ function buildRows(workOrder, options = {}) {
   if (isAmcWorkOrder) {
     const breakdown = calculateAmcCoverageBreakdown(workOrder);
     if ((!billingOnly || breakdown.chargeableServiceTotal > 0) && serviceCharge > 0) {
-      const covered = breakdown.coverService;
+      const covered = breakdown.coveredServiceTotal > 0;
       if (!billingOnly || !covered) {
         rows.push({
           description: `Service (${serviceType(workOrder)})${covered ? ' (Covered by AMC)' : ' (Chargeable)'}`,

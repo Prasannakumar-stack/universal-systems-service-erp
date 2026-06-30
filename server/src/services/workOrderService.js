@@ -12,7 +12,7 @@ import { assertPermission, normalizeRole } from '../permissions.js';
 import { appError, clean, numberValue } from '../utils/http.js';
 import { addDateRange, paginationMeta, parsePagination, searchRegex, validObjectId, withNestedIds } from '../utils/pagination.js';
 import { logAudit } from './auditService.js';
-import { AUTO_AMC_PART_CHARGE_MODE, AUTO_AMC_PART_CHARGE_TYPE, MANUAL_AMC_PART_CHARGE_MODE, amcPartChargeType } from './amcCoverageEngine.js';
+import { AUTO_AMC_PART_CHARGE_MODE, AUTO_AMC_PART_CHARGE_TYPE, MANUAL_AMC_PART_CHARGE_MODE, amcPartChargeType, normalizeAmcServiceChargeBillingType } from './amcCoverageEngine.js';
 import { createNotification } from './notificationService.js';
 import { allocatePurchaseUsage, releasePurchaseUsage } from './purchaseImportService.js';
 import { applyStockMovement, syncPartAvailability } from './stockMovementService.js';
@@ -27,9 +27,10 @@ const populateWorkOrder = [
   { path: 'partRequests.rejectedBy', select: 'name username role' },
   { path: 'images.uploadedBy', select: 'name username role' },
   { path: 'bookingId', select: 'bookingCode serviceType bookingSource problemImage createdAt device deviceBrand deviceModel' },
+  { path: 'partsUsed.inventoryPartId', select: 'partName sku category brand deviceBrand deviceModel' },
   {
     path: 'amcContractId',
-    select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices deviceBrand deviceModel contractValue startDate endDate status includedVisits invoiceId',
+    select: 'contractId contractType coverageType coverParts coverService coverVisits coveredService coveredDevices deviceBrand deviceModel warrantyIncluded warrantyCoveredItems warrantyTerms contractValue startDate endDate status includedVisits invoiceId',
     populate: { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status title notes' }
   },
   { path: 'invoiceId', select: 'invoiceNumber total paidAmount balance status title notes invoiceType parentInvoiceId adjustmentForInvoiceId adjustmentNumber adjustmentType adjustmentReason internalNote createdBy createdAt' }
@@ -164,6 +165,8 @@ function serializeWorkOrderLifecycle(order, summary = null) {
     canMoveToTrash: lifecycleState !== 'trash',
     canArchive: lifecycleState === 'active',
     canRestore: lifecycleState !== 'active',
+    canPermanentDelete: lifecycleState === 'trash' && !linkedRecordSummary.hasLinkedRecords,
+    permanentDeleteBlockedReason: lifecycleState === 'trash' && linkedRecordSummary.hasLinkedRecords ? 'Kept for history' : '',
     trashDaysLeft: lifecycleState === 'trash' ? trashDaysLeft(order.deleteExpiresAt) : null
   };
 }
@@ -277,7 +280,7 @@ function assertPartsUnlocked(workOrder) {
 
 function normalizePartChargeType(value) {
   const raw = clean(value);
-  return raw === 'Covered under AMC' || raw === 'Covered By AMC' ? 'Covered under AMC' : 'Chargeable';
+  return raw === 'Covered under AMC' || raw === 'Covered By AMC' || raw === 'Covered by AMC' ? 'Covered under AMC' : 'Chargeable';
 }
 
 function isAutoPartChargeType(value) {
@@ -290,30 +293,34 @@ function partChargeTypeMode(value, mode) {
   return isAutoPartChargeType(value) ? AUTO_AMC_PART_CHARGE_MODE : MANUAL_AMC_PART_CHARGE_MODE;
 }
 
-function workOrderPartChargeType(workOrder, fallback) {
-  if (workOrder?.amcContractId && isAutoPartChargeType(fallback)) return amcPartChargeType(workOrder.amcContractId);
+function nestedRecordId(value) {
+  if (!value) return '';
+  return String(value._id || value.id || value);
+}
+
+function workOrderPartChargeType(workOrder, fallback, partContext = {}) {
+  if (workOrder?.amcContractId && isAutoPartChargeType(fallback)) return amcPartChargeType(workOrder.amcContractId, partContext);
   return normalizePartChargeType(fallback);
 }
 
 function syncAmcPartChargeTypes(workOrder) {
   if (!workOrder?.amcContractId) return;
-  const chargeType = amcPartChargeType(workOrder.amcContractId);
   (workOrder.partsUsed || []).forEach((part) => {
-    if (part.chargeTypeMode !== MANUAL_AMC_PART_CHARGE_MODE) part.chargeType = chargeType;
+    if (part.chargeTypeMode !== MANUAL_AMC_PART_CHARGE_MODE) part.chargeType = amcPartChargeType(workOrder.amcContractId, part);
   });
 }
 
 function storedPartChargeType(workOrder, part) {
-  if (workOrder?.amcContractId && part?.chargeTypeMode !== MANUAL_AMC_PART_CHARGE_MODE) return amcPartChargeType(workOrder.amcContractId);
+  if (workOrder?.amcContractId && part?.chargeTypeMode !== MANUAL_AMC_PART_CHARGE_MODE) return amcPartChargeType(workOrder.amcContractId, part);
   return normalizePartChargeType(part?.chargeType);
 }
 
 function findUsedInventoryRow(workOrder, inventoryPartId, chargeType = '') {
   if (!inventoryPartId) return null;
-  const id = String(inventoryPartId);
+  const id = nestedRecordId(inventoryPartId);
   const normalizedChargeType = chargeType ? normalizePartChargeType(chargeType) : '';
   return workOrder.partsUsed.find((p) => {
-    if (!p.inventoryPartId || String(p.inventoryPartId) !== id) return false;
+    if (!p.inventoryPartId || nestedRecordId(p.inventoryPartId) !== id) return false;
     return !normalizedChargeType || storedPartChargeType(workOrder, p) === normalizedChargeType;
   }) || null;
 }
@@ -447,6 +454,7 @@ export async function createWorkOrder(payload, user) {
   let customerId = payload.customerId;
   let serviceType = clean(payload.serviceType);
   let bookingSource = clean(payload.bookingSource || payload.source);
+  const source = clean(payload.source || payload.bookingSource);
   let device = clean(payload.device);
   let deviceBrand = cleanDeviceDetail(payload.deviceBrand || payload.brand || payload.deviceBrandModel || payload.brandModel || '');
   let deviceModel = cleanDeviceDetail(payload.deviceModel || payload.model || '');
@@ -492,9 +500,11 @@ export async function createWorkOrder(payload, user) {
     bookingId: sourceBooking?._id || null,
     amcContractId: payload.amcContractId || null,
     amcVisitId: payload.amcVisitId || null,
+    amcContractNo: clean(payload.amcContractNo || payload.contractNo),
     customerId,
     serviceType,
     bookingSource,
+    source: source || bookingSource,
     device,
     deviceBrand,
     deviceModel,
@@ -640,11 +650,13 @@ export async function updateServiceCharge(id, payload, user) {
   const workOrder = await getWorkOrder(id, user);
   assertPartsUnlocked(workOrder);
   const serviceCharge = Math.max(0, numberValue(payload.serviceCharge, 0));
-  const before = { serviceCharge: workOrder.serviceCharge };
+  const serviceChargeBillingType = normalizeAmcServiceChargeBillingType(payload.serviceChargeBillingType ?? workOrder.serviceChargeBillingType);
+  const before = { serviceCharge: workOrder.serviceCharge, serviceChargeBillingType: workOrder.serviceChargeBillingType || 'chargeable' };
   workOrder.serviceCharge = serviceCharge;
-  workOrder.timeline.push({ status: workOrder.status, message: `Service charge updated to ${serviceCharge}`, userId: user._id });
+  workOrder.serviceChargeBillingType = serviceChargeBillingType;
+  workOrder.timeline.push({ status: workOrder.status, message: `Service charge updated to ${serviceCharge} (${serviceChargeBillingType})`, userId: user._id });
   await workOrder.save();
-  await logAudit({ userId: user._id, action: 'service_charge_updated', module: 'work_order', recordId: workOrder._id, before, after: { serviceCharge } });
+  await logAudit({ userId: user._id, action: 'service_charge_updated', module: 'work_order', recordId: workOrder._id, before, after: { serviceCharge, serviceChargeBillingType } });
   return getWorkOrder(id, user);
 }
 
@@ -692,20 +704,31 @@ export async function addPart(id, payload, user) {
   let name = clean(payload.name || payload.partName);
   let unitPrice = numberValue(payload.unitPrice || payload.price, 0);
   let inventoryPartId = payload.inventoryPartId || null;
-  const chargeType = workOrderPartChargeType(workOrder, payload.chargeType);
   const chargeTypeMode = workOrder?.amcContractId ? partChargeTypeMode(payload.chargeType, payload.chargeTypeMode) : MANUAL_AMC_PART_CHARGE_MODE;
   const mergeDupInv = Boolean(payload.mergeDuplicateInventory);
   const mergeDupMan = Boolean(payload.mergeDuplicateManual);
   const allowDupManLine = Boolean(payload.allowDuplicateManualLine);
+  let inventoryPart = null;
 
   if (inventoryPartId) {
-    const part = await InventoryPart.findById(inventoryPartId);
-    if (!part) throw appError('Inventory part not found', 404);
-    name = name || part.partName;
-    unitPrice = unitPrice || part.sellingPrice;
+    inventoryPart = await InventoryPart.findById(inventoryPartId);
+    if (!inventoryPart) throw appError('Inventory part not found', 404);
+    name = name || inventoryPart.partName;
+    unitPrice = unitPrice || inventoryPart.sellingPrice;
   }
 
   if (!name) throw appError('Part name is required');
+
+  const partContext = {
+    ...payload,
+    name,
+    partName: name,
+    sku: inventoryPart?.sku || payload.sku || '',
+    category: inventoryPart?.category || payload.category || '',
+    brand: inventoryPart?.brand || payload.brand || '',
+    inventoryPartId: inventoryPart || inventoryPartId
+  };
+  const chargeType = workOrderPartChargeType(workOrder, payload.chargeType, partContext);
 
   let merged = false;
   let stockQtyToDeduct = 0;
@@ -790,17 +813,18 @@ export async function updatePart(id, partId, payload, user) {
     part.note = clean(payload.note);
   }
   if (payload.chargeType !== undefined) {
-    part.chargeType = workOrderPartChargeType(workOrder, payload.chargeType);
+    part.chargeType = workOrderPartChargeType(workOrder, payload.chargeType, part);
     part.chargeTypeMode = workOrder?.amcContractId ? partChargeTypeMode(payload.chargeType, payload.chargeTypeMode) : MANUAL_AMC_PART_CHARGE_MODE;
   }
 
   const isInventory = Boolean(part.inventoryPartId);
+  const inventoryPartId = nestedRecordId(part.inventoryPartId);
   if (isInventory && part.stockDeducted) {
     const delta = newQty - oldQty;
     if (delta > 0) {
       await deductPartsUsedStock({
         workOrder,
-        inventoryPartId: part.inventoryPartId,
+        inventoryPartId,
         workOrderPartId: part._id,
         name: part.name,
         quantity: delta,
@@ -809,7 +833,7 @@ export async function updatePart(id, partId, payload, user) {
     } else if (delta < 0) {
       await restorePartsUsedStock({
         workOrder,
-        inventoryPartId: part.inventoryPartId,
+        inventoryPartId,
         workOrderPartId: part._id,
         name: part.name,
         quantity: -delta,
@@ -845,10 +869,11 @@ export async function removePart(id, partId, user) {
   const part = workOrder.partsUsed.id(partId);
   if (!part) throw appError('Part not found', 404);
   const before = { name: part.name, quantity: part.quantity, total: part.total };
+  const inventoryPartId = nestedRecordId(part.inventoryPartId);
   if (part.inventoryPartId && part.stockDeducted) {
     await restorePartsUsedStock({
       workOrder,
-      inventoryPartId: part.inventoryPartId,
+      inventoryPartId,
       workOrderPartId: part._id,
       name: part.name,
       quantity: part.quantity,
@@ -986,10 +1011,11 @@ export async function movePartRequestToUsed(id, requestId, user, payload = {}) {
   }
 
   let unitPrice = 0;
+  let inventoryPart = null;
   const timelineBits = [];
 
   if (partRequest.inventoryPartId) {
-    const inventoryPart = await InventoryPart.findById(partRequest.inventoryPartId);
+    inventoryPart = await InventoryPart.findById(partRequest.inventoryPartId);
     if (!inventoryPart) throw appError('Inventory part not found', 404);
     unitPrice = numberValue(inventoryPart.sellingPrice, 0);
   } else {
@@ -1013,8 +1039,17 @@ export async function movePartRequestToUsed(id, requestId, user, payload = {}) {
   }
 
   const quantity = Math.max(1, numberValue(partRequest.quantity, 1));
-  const chargeType = workOrderPartChargeType(workOrder, payload.chargeType);
   const chargeTypeMode = workOrder?.amcContractId ? partChargeTypeMode(payload.chargeType, payload.chargeTypeMode) : MANUAL_AMC_PART_CHARGE_MODE;
+  const partContext = {
+    ...payload,
+    name: partRequest.name,
+    partName: partRequest.name,
+    sku: inventoryPart?.sku || payload.sku || '',
+    category: inventoryPart?.category || payload.category || '',
+    brand: inventoryPart?.brand || payload.brand || '',
+    inventoryPartId: inventoryPart || partRequest.inventoryPartId
+  };
+  const chargeType = workOrderPartChargeType(workOrder, payload.chargeType, partContext);
   const mergeDupInv = Boolean(payload.mergeDuplicateInventory);
   const mergeDupMan = Boolean(payload.mergeDuplicateManual);
   const allowDupManLine = Boolean(payload.allowDuplicateManualLine);
@@ -1353,7 +1388,7 @@ export async function permanentlyDeleteWorkOrder(id, user) {
   const linkedSummaries = await workOrderLinkedRecordSummaries([workOrder]);
   const linkedRecordSummary = linkedSummaries.get(String(workOrder._id)) || finalizeWorkOrderLinkedSummary(emptyWorkOrderLinkedSummary(workOrder));
   if (linkedRecordSummary.hasLinkedRecords) {
-    throw appError('This item is used in existing records. You can disable or archive it instead.', 409);
+    throw appError('Kept for history. This work order has linked records and cannot be permanently deleted.', 409);
   }
 
   const before = {

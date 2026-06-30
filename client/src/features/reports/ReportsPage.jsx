@@ -24,6 +24,7 @@ import {
   ClipboardList,
   company,
   completionHours,
+  completionDateCoverage,
   ConfirmModal,
   CreditCard,
   csvCell,
@@ -191,6 +192,31 @@ function safeReportNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+const reportCsvDateFormatter = new Intl.DateTimeFormat('en-IN', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true
+});
+
+function formatReportCsvDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return reportCsvDateFormatter.format(date).replace(/\b(am|pm)\b/i, (match) => match.toUpperCase());
+}
+
+function readableInventoryStatus(part = {}) {
+  if (part.lifecycleState === 'trash' || part.isDeleted || part.deletedAt) return 'Trash';
+  if (part.lifecycleState === 'disabled' || part.isDisabled || part.disabledAt) return 'Disabled';
+  const status = part.stockStatus || inventoryStockStatus(part);
+  if (status === 'out') return 'Out of Stock';
+  if (status === 'low') return 'Low Stock';
+  return 'Available';
+}
+
 function numericPercent(value) {
   return safeReportNumber(String(value || '0').replace('%', ''));
 }
@@ -321,18 +347,21 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
     const priorBounds = previousPeriodBounds(bounds);
     const previousWorkOrders = priorBounds ? filterByRange(raw.workOrders || [], priorBounds) : [];
     const previousInvoices = priorBounds ? filterByRange(raw.invoices || [], priorBounds) : [];
-    const previousPayments = priorBounds ? filterByRange(raw.payments || [], priorBounds).filter(isActivePayment) : [];
+    const reportInvoices = invoices.filter(isReportInvoice);
+    const previousReportInvoices = previousInvoices.filter(isReportInvoice);
 
     const completedJobs = workOrders.filter((job) => ['Completed', 'Delivered'].includes(job.status));
     const previousCompletedJobs = previousWorkOrders.filter((job) => ['Completed', 'Delivered'].includes(job.status));
     const activeJobs = allWorkOrders.filter((job) => ['Pending', 'In Progress', 'Awaiting Parts'].includes(job.status));
     const lowStockItems = parts.filter((part) => inventoryStockStatus(part) === 'low');
     const outOfStockItems = parts.filter((part) => inventoryStockStatus(part) === 'out');
-    const paidAmount = payments.reduce((sum, payment) => sum + Number(payment.paidAmount || payment.amount || 0), 0);
-    const previousPaidAmount = previousPayments.reduce((sum, payment) => sum + Number(payment.paidAmount || payment.amount || 0), 0);
-    const totalInvoiceValue = invoices.reduce((sum, invoice) => sum + Number(invoice.total || invoice.totalAmount || 0), 0);
-    const pendingBalance = invoices.reduce((sum, invoice) => sum + invoiceDueAmount(invoice), 0);
-    const previousPendingBalance = previousInvoices.reduce((sum, invoice) => sum + invoiceDueAmount(invoice), 0);
+    const paidAmount = reportInvoices.reduce((sum, invoice) => sum + Number(invoice.paidAmount || invoice.paid || 0), 0);
+    const previousPaidAmount = previousReportInvoices.reduce((sum, invoice) => sum + Number(invoice.paidAmount || invoice.paid || 0), 0);
+    const totalInvoiceValue = reportInvoices.reduce((sum, invoice) => sum + Number(invoice.total || invoice.totalAmount || 0), 0);
+    const pendingBalance = reportInvoices.reduce((sum, invoice) => sum + invoiceDueAmount(invoice), 0);
+    const invoiceCollected = paidAmount;
+    const previousPendingBalance = previousReportInvoices.reduce((sum, invoice) => sum + invoiceDueAmount(invoice), 0);
+    const previousInvoiceCollected = previousPaidAmount;
     const activeAmc = allContracts.filter((contract) => contract.status === 'Active').length;
     const amcRenewalsDue = allContracts.filter((contract) => contract.renewalStatus === 'Renewal Due').length;
     const invoiceText = (invoice) => String(`${invoice?.title || ''} ${invoice?.notes || ''}`).toLowerCase();
@@ -342,27 +371,49 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
     const amcExtraInvoices = allInvoices.filter(isAmcExtraInvoice);
     const contractAmcInvoiceIds = new Set(contractAmcInvoices.map((invoice) => recordId(invoice)).filter(Boolean));
     const amcExtraInvoiceIds = new Set(amcExtraInvoices.map((invoice) => recordId(invoice)).filter(Boolean));
-    const amcPayments = payments.filter((payment) => {
-      const invoice = payment.invoiceId || {};
-      return contractAmcInvoiceIds.has(recordId(invoice)) || isContractAmcInvoice(invoice);
-    });
+    const activePaymentsByInvoiceId = allPayments.reduce((map, payment) => {
+      const invoiceId = recordId(payment.invoiceId);
+      if (!invoiceId) return map;
+      if (!map[invoiceId]) map[invoiceId] = [];
+      map[invoiceId].push(payment);
+      return map;
+    }, {});
+    const contractAmcInvoiceByContractId = contractAmcInvoices.reduce((map, invoice) => {
+      const contractId = recordId(invoice.amcContractId);
+      if (contractId) map[contractId] = invoice;
+      return map;
+    }, {});
     const amcExtraPayments = payments.filter((payment) => {
       const invoice = payment.invoiceId || {};
       return amcExtraInvoiceIds.has(recordId(invoice)) || isAmcExtraInvoice(invoice);
     });
-    const totalAmcRevenue = amcPayments.reduce((sum, payment) => sum + Number(payment.paidAmount || payment.amount || 0), 0);
+    const contractValueAmount = (contract = {}) => {
+      const invoice = contract?.invoiceId && typeof contract.invoiceId === 'object' ? contract.invoiceId : contractAmcInvoiceByContractId[recordId(contract)];
+      return Number(contract.contractValue || invoice?.total || invoice?.totalAmount || 0) || 0;
+    };
+    const invoicePaidAmount = (invoice = null) => Number(invoice?.paidAmount ?? invoice?.paid ?? 0) || 0;
+    const contractCollectedAmount = (contract = {}) => {
+      const invoice = contract?.invoiceId && typeof contract.invoiceId === 'object' ? contract.invoiceId : contractAmcInvoiceByContractId[recordId(contract)];
+      const invoiceId = recordId(invoice);
+      const paymentFallback = invoiceId
+        ? (activePaymentsByInvoiceId[invoiceId] || []).reduce((sum, payment) => sum + paymentCollectedAmount(payment), 0)
+        : 0;
+      return Math.max(0, invoicePaidAmount(invoice) || paymentFallback);
+    };
+    const totalAmcContractValue = allContracts.reduce((sum, contract) => sum + contractValueAmount(contract), 0);
+    const totalAmcRevenue = allContracts.reduce((sum, contract) => sum + Math.min(contractValueAmount(contract), contractCollectedAmount(contract)), 0);
     const chargeableRepairsRevenue = amcExtraPayments.reduce((sum, payment) => sum + Number(payment.paidAmount || payment.amount || 0), 0);
-    const pendingAmcPayments = contractAmcInvoices.reduce((sum, invoice) => sum + invoiceDueAmount(invoice), 0);
+    const pendingAmcPayments = Math.max(0, totalAmcContractValue - totalAmcRevenue);
     const activeAmcContractValue = allContracts.filter((contract) => contract.status === 'Active').reduce((sum, contract) => sum + Number(contract.contractValue || 0), 0);
     const renewalRevenue = allContracts.filter((contract) => ['Renewal Due', 'Expired'].includes(contract.renewalStatus)).reduce((sum, contract) => sum + Number(contract.contractValue || 0), 0);
     const coveredServiceCost = allWorkOrders.filter((job) => recordId(job.amcContractId)).reduce((sum, job) => sum + calculateAmcCoverageBreakdown(job).coveredTotal, 0);
     const amcProfitEstimate = totalAmcRevenue + chargeableRepairsRevenue - coveredServiceCost;
     const amcRelatedRevenue = totalAmcRevenue + chargeableRepairsRevenue;
-    const nonAmcRevenue = Math.max(0, paidAmount - amcRelatedRevenue);
+    const nonAmcRevenue = Math.max(0, invoiceCollected - amcRelatedRevenue);
     const amcPaymentStatus = (contract) => {
-      const invoice = contract?.invoiceId && typeof contract.invoiceId === 'object' ? contract.invoiceId : null;
-      const value = Number(contract?.contractValue || invoice?.total || 0);
-      const paid = Number(invoice?.paidAmount || 0);
+      const value = contractValueAmount(contract);
+      const paid = contractCollectedAmount(contract);
+      if (value <= 0 && paid <= 0) return 'Paid';
       if (value > 0 && paid >= value) return 'Paid';
       if (paid > 0) return 'Partial';
       return 'Pending';
@@ -381,6 +432,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
     const statusRows = WORK_ORDER_REPORT_STATUSES
       .map((name) => ({ name, count: workOrders.filter((job) => job.status === name).length }))
       .filter((row) => row.count > 0);
+    const completionCoverage = completionDateCoverage(workOrders);
 
     const technicianRows = (raw.users || []).filter((user) => user.role === 'technician').map((tech) => {
       const jobs = allWorkOrders.filter((job) => recordId(job.technicianId) === recordId(tech));
@@ -407,15 +459,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       };
     });
 
-    const financeTrendRows = buildFinanceTrendByMonth(invoices, payments);
-
-    const paymentMethodRows = Object.entries(payments.reduce((map, payment) => {
-      const method = payment.method || 'Other';
-      map[method] = (map[method] || 0) + Number(payment.paidAmount || payment.amount || 0);
-      return map;
-    }, {})).map(([method, total]) => ({ method, total })).sort((a, b) => b.total - a.total);
-
-    const pendingPaymentRows = invoices.map((invoice) => {
+    const pendingPaymentRows = reportInvoices.map((invoice) => {
       const balance = invoiceDueAmount(invoice);
       const total = Number(invoice.total || invoice.totalAmount || 0);
       const paid = Number(invoice.paidAmount || invoice.paid || 0);
@@ -433,7 +477,49 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       };
     }).filter((row) => row.balance > 0).sort((a, b) => b.balance - a.balance);
 
-    const pendingByCustomer = Object.values(invoices.reduce((map, invoice) => {
+    const paymentReportRows = reportInvoices
+      .map((invoice) => {
+        const invoiceId = recordId(invoice);
+        const balance = invoiceDueAmount(invoice);
+        const total = Number(invoice.total || invoice.totalAmount || 0);
+        const paid = Number(invoice.paidAmount || invoice.paid || 0);
+        const invoicePayments = paid > 0 ? (activePaymentsByInvoiceId[invoiceId] || []) : [];
+        const methodBreakdown = allocateInvoicePaymentBreakdown(paid, invoicePayments);
+        const actualPaymentRows = methodBreakdown.filter((payment) => payment.date);
+        const latestPayment = actualPaymentRows
+          .slice()
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        const methods = paid > 0 ? [...new Set(methodBreakdown.map((payment) => payment.method))].join(' / ') : '';
+        return {
+          invoice,
+          invoiceId,
+          invoiceNumber: getInvoiceDisplayId(invoice),
+          customer: invoice.customerId?.name || 'Customer',
+          phone: invoice.customerId?.phone || '',
+          customerId: recordId(invoice.customerId),
+          invoiceDate: invoice.createdAt || invoice.updatedAt,
+          paymentDate: latestPayment ? latestPayment.date : '',
+          method: methods || '',
+          total,
+          paid,
+          balance,
+          methodBreakdown,
+          status: invoice.status || (balance > 0 ? paid > 0 ? 'Partial' : 'Pending' : 'Paid')
+        };
+      })
+      .sort((a, b) => b.balance - a.balance || new Date(b.invoiceDate || 0).getTime() - new Date(a.invoiceDate || 0).getTime());
+
+    const reportPaymentEntries = paymentReportRows.flatMap((row) => row.methodBreakdown.map((payment) => ({
+      ...payment,
+      paidAmount: payment.total,
+      amount: payment.total,
+      paymentDate: payment.date || row.paymentDate || row.invoiceDate,
+      createdAt: payment.date || row.paymentDate || row.invoiceDate
+    })));
+    const financeTrendRows = buildFinanceTrendByMonth(reportInvoices, reportPaymentEntries);
+    const paymentMethodRows = aggregatePaymentMethodRows(reportPaymentEntries);
+
+    const pendingByCustomer = Object.values(reportInvoices.reduce((map, invoice) => {
       const id = recordId(invoice.customerId) || invoice.customerId?.phone || invoice.customerId?.name || 'unknown';
       const balance = invoiceDueAmount(invoice);
       if (!map[id]) map[id] = { customer: invoice.customerId?.name || 'Customer', phone: invoice.customerId?.phone || '', customerId: recordId(invoice.customerId), total: 0, paid: 0, balance: 0, invoices: 0 };
@@ -496,8 +582,11 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       amcSchedule,
       parts,
       summary: {
-        totalRevenue: paidAmount,
+        totalRevenue: invoiceCollected,
+        totalPaymentCollection: paidAmount,
         pendingPayments: pendingBalance,
+        pendingInvoiceBalance: pendingBalance,
+        pendingAmcAmount: pendingAmcPayments,
         completedJobs: completedJobs.length,
         activeRepairJobs: activeJobs.length,
         lowStockItems: lowStockItems.length,
@@ -505,7 +594,8 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         amcRenewalsDue,
         totalCustomers: allCustomers.length,
         trends: {
-          revenue: buildTrendBadge(paidAmount, priorBounds ? previousPaidAmount : null),
+          revenue: buildTrendBadge(invoiceCollected, priorBounds ? previousInvoiceCollected : null),
+          paymentCollection: buildTrendBadge(paidAmount, priorBounds ? previousPaidAmount : null),
           pendingBalance: buildTrendBadge(pendingBalance, priorBounds ? previousPendingBalance : null, { lowerIsBetter: true }),
           completedJobs: buildTrendBadge(completedJobs.length, priorBounds ? previousCompletedJobs.length : null),
           lowStock: { label: 'Current snapshot', tone: 'neutral' }
@@ -520,24 +610,28 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         completed: workOrders.filter((job) => job.status === 'Completed').length,
         delivered: workOrders.filter((job) => job.status === 'Delivered').length,
         returned: workOrders.filter((job) => job.status === 'Returned').length,
-        averageCompletion: averageHours(workOrders),
+        completedJobsWithValidDates: completionCoverage.completedJobsWithValidDates,
+        averageCompletion: completionCoverage.averageCompletion,
+        completionDataNote: completionCoverage.note,
         serviceTypeRows,
         statusRows
       },
       technicians: technicianRows,
       finance: {
         totalInvoiceValue,
-        totalCollected: paidAmount,
+        totalCollected: invoiceCollected,
+        invoiceCollected,
+        totalPaymentCollection: paidAmount,
         pendingBalance,
-        partialPayments: invoices.filter((invoice) => invoice.status === 'Partial').length,
-        paidInvoices: invoices.filter((invoice) => invoice.status === 'Paid').length,
-        pendingInvoices: invoices.filter((invoice) => invoice.status === 'Pending').length,
-        todayCollection: allPayments.filter((payment) => isToday(payment.createdAt)).reduce((sum, payment) => sum + Number(payment.paidAmount || payment.amount || 0), 0),
-        monthlyRevenue: allPayments.filter((payment) => {
+        partialPayments: reportInvoices.filter((invoice) => invoice.status === 'Partial').length,
+        paidInvoices: reportInvoices.filter((invoice) => invoice.status === 'Paid').length,
+        pendingInvoices: reportInvoices.filter((invoice) => invoice.status === 'Pending').length,
+        todayCollection: reportPaymentEntries.filter((payment) => isToday(payment.createdAt)).reduce((sum, payment) => sum + paymentCollectedAmount(payment), 0),
+        monthlyRevenue: reportPaymentEntries.filter((payment) => {
           const date = new Date(payment.createdAt);
           const now = new Date();
           return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
-        }).reduce((sum, payment) => sum + Number(payment.paidAmount || payment.amount || 0), 0),
+        }).reduce((sum, payment) => sum + paymentCollectedAmount(payment), 0),
         totalAmcRevenue,
         pendingAmcPayments,
         activeAmcContractValue,
@@ -554,7 +648,8 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         financeTrendRows,
         paymentMethodRows,
         pendingByCustomer,
-        pendingPaymentRows
+        pendingPaymentRows,
+        paymentReportRows
       },
       inventory: {
         rows: inventoryRows,
@@ -582,7 +677,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         }).length,
         completedVisits: allSchedule.filter((visit) => visit.status === 'Completed').length,
         overdueVisits: allSchedule.filter((visit) => visit.status === 'Overdue').length,
-        contractValue: allContracts.reduce((sum, contract) => sum + Number(contract.contractValue || 0), 0),
+        contractValue: totalAmcContractValue,
         totalAmcRevenue,
         pendingAmcPayments,
         activeAmcContractValue,
@@ -634,22 +729,28 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       const exportTopService = report.operations.serviceTypeRows[0];
       const exportBestTechnician = rankTechnicians(report.technicians)[0];
       downloadCsv('insights-report.csv', ['Insight', 'Value', 'Recommendation'], [
-        ['Revenue growth', report.summary.totalRevenue, report.summary.trends.revenue.label],
-        ['Pending balance', report.summary.pendingPayments, report.summary.trends.pendingBalance.label],
+        ['Revenue this period', report.summary.totalRevenue, report.summary.trends.revenue.label],
+        ['Pending invoice balance', report.summary.pendingInvoiceBalance, report.summary.trends.pendingBalance.label],
+        ['Pending AMC amount', report.summary.pendingAmcAmount, report.summary.pendingAmcAmount > 0 ? 'Review AMC collections separately from invoice balances.' : 'No AMC pending amount in the current snapshot.'],
         ['Completed jobs', report.summary.completedJobs, report.summary.trends.completedJobs.label],
         ['Low stock count', report.summary.lowStockItems, report.summary.trends.lowStock.label],
         ['Best technician', exportBestTechnician?.technician?.name || 'Pending data', exportBestTechnician ? `${exportBestTechnician.completed}/${exportBestTechnician.assigned} completed at ${exportBestTechnician.completionRate}` : 'Assign jobs to surface performance'],
         ['Top service category', exportTopService?.name || 'Pending data', exportTopService ? `${exportTopService.count} jobs` : 'More insights will appear as data grows.'],
-        ['AMC renewals due', report.summary.amcRenewalsDue, 'Follow up on renewal due contracts'],
+        ['AMC renewals due', report.summary.amcRenewalsDue, report.summary.amcRenewalsDue > 0 ? 'Follow up on renewal due contracts' : 'No immediate renewal follow-up required.'],
         ['Active repair jobs', report.summary.activeRepairJobs, 'Review open jobs and unblock awaiting-parts work']
       ]);
       return;
     }
     if (activeSection === 'main') {
       downloadCsv('business-report.csv', ['Metric', 'Value'], [
-        ['Total revenue', report.summary.totalRevenue],
-        ['Pending payments', report.summary.pendingPayments],
+        ['Invoice collected revenue', report.summary.totalRevenue],
+        ['Total payment collection', report.summary.totalPaymentCollection],
+        ['Pending invoice balance', report.summary.pendingInvoiceBalance],
+        ['Pending AMC amount', report.summary.pendingAmcAmount],
         ['Completed jobs', report.summary.completedJobs],
+        ['Completed jobs with valid dates', report.operations.completedJobsWithValidDates],
+        ['Average completion', report.operations.averageCompletion],
+        ['Completion data note', report.operations.completionDataNote],
         ['Active repair jobs', report.summary.activeRepairJobs],
         ['Low stock items', report.summary.lowStockItems],
         ['Active AMC contracts', report.summary.activeAmcContracts],
@@ -657,7 +758,6 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         ['Total customers', report.summary.totalCustomers],
         ['Total bookings', report.operations.totalBookings],
         ['Total service jobs', report.operations.totalJobs],
-        ['Average completion', report.operations.averageCompletion],
         ...report.operations.serviceTypeRows.map((row) => [`Jobs by service - ${row.name}`, row.count]),
         ...report.operations.statusRows.map((row) => [`Jobs by status - ${row.name}`, row.count]),
         ...report.finance.paymentMethodRows.map((row) => [`Payment method - ${row.method}`, row.total])
@@ -672,52 +772,55 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         ['In progress jobs', report.operations.inProgress],
         ['Awaiting parts jobs', report.operations.awaitingParts],
         ['Completed jobs', report.operations.completed],
+        ['Completed jobs with valid dates', report.operations.completedJobsWithValidDates],
         ['Delivered jobs', report.operations.delivered],
         ['Returned jobs', report.operations.returned],
         ['Average completion', report.operations.averageCompletion],
+        ['Completion data note', report.operations.completionDataNote],
         ...report.operations.serviceTypeRows.map((row) => [`Jobs by service - ${row.name}`, row.count]),
         ...report.operations.statusRows.map((row) => [`Jobs by status - ${row.name}`, row.count])
       ]);
       return;
     }
     if (activeSection === 'technicians') {
-      downloadCsv('technician-report.csv', ['Technician', 'Assigned', 'Completed', 'In Progress', 'Awaiting Parts', 'Completion Rate', 'Last Activity'], report.technicians.map((row) => [row.technician.name, row.assigned, row.completed, row.inProgress, row.awaitingParts, row.completionRate, row.lastActivity]));
+      downloadCsv('technician-report.csv', ['Technician', 'Assigned', 'Completed', 'In Progress', 'Awaiting Parts', 'Completion Rate', 'Last Activity'], report.technicians.map((row) => [row.technician.name, row.assigned, row.completed, row.inProgress, row.awaitingParts, row.completionRate, formatReportCsvDate(row.lastActivity)]));
       return;
     }
     if (activeSection === 'finance') {
       downloadCsv('finance-report.csv', ['Metric', 'Value'], [
-        ['Total invoice value', report.finance.totalInvoiceValue],
-        ['Total collected', report.finance.totalCollected],
-        ['Pending balance', report.finance.pendingBalance],
+        ['Total invoice value (₹)', report.finance.totalInvoiceValue],
+        ['Invoice collected (₹)', report.finance.invoiceCollected],
+        ['Pending balance (₹)', report.finance.pendingBalance],
+        ['Total payment collection (₹)', report.finance.totalPaymentCollection],
         ['Partial payments', report.finance.partialPayments],
         ['Paid invoices', report.finance.paidInvoices],
         ['Pending invoices', report.finance.pendingInvoices],
-        ["Today's collection", report.finance.todayCollection],
-        ['Monthly revenue', report.finance.monthlyRevenue],
-        ['Total AMC revenue', report.finance.totalAmcRevenue],
-        ['Pending AMC payments', report.finance.pendingAmcPayments],
-        ['Active AMC contract value', report.finance.activeAmcContractValue],
-        ['Renewal revenue', report.finance.renewalRevenue],
-        ['Covered service cost', report.finance.coveredServiceCost],
-        ['Extra revenue from AMC repairs', report.finance.chargeableRepairsRevenue],
-        ['AMC profit estimate', report.finance.amcProfitEstimate],
+        ["Today's payment collection (₹)", report.finance.todayCollection],
+        ['Monthly payment collection (₹)', report.finance.monthlyRevenue],
+        ['AMC collected (₹)', report.finance.totalAmcRevenue],
+        ['Pending AMC payments (₹)', report.finance.pendingAmcPayments],
+        ['Active AMC contract value (₹)', report.finance.activeAmcContractValue],
+        ['Renewal value (₹)', report.finance.renewalRevenue],
+        ['Covered service cost (₹)', report.finance.coveredServiceCost],
+        ['Extra revenue from AMC repairs (₹)', report.finance.chargeableRepairsRevenue],
+        ['AMC profit estimate (₹)', report.finance.amcProfitEstimate],
         ['Fully paid AMC contracts', report.finance.fullyPaidAmcContracts],
         ['Partially paid AMC contracts', report.finance.partiallyPaidAmcContracts],
         ['Pending AMC contracts', report.finance.pendingAmcContracts],
         ['Pending renewals', report.finance.pendingRenewals],
-        ['AMC related revenue', report.finance.amcRelatedRevenue],
-        ['Non-AMC revenue', report.finance.nonAmcRevenue],
-        ...report.finance.paymentMethodRows.map((row) => [`Collection - ${row.method}`, row.total]),
-        ...report.finance.pendingByCustomer.map((row) => [`Pending - ${row.customer}`, row.balance])
+        ['AMC related revenue (₹)', report.finance.amcRelatedRevenue],
+        ['Non-AMC revenue (₹)', report.finance.nonAmcRevenue],
+        ...report.finance.paymentMethodRows.map((row) => [`Payment collection - ${row.method} (₹)`, row.total]),
+        ...report.finance.pendingByCustomer.map((row) => [`Pending - ${row.customer} (₹)`, row.balance])
       ]);
       return;
     }
     if (activeSection === 'payments') {
-      downloadCsv('payments-report.csv', ['Invoice', 'Customer', 'Phone', 'Total', 'Paid', 'Balance', 'Status'], report.finance.pendingPaymentRows.map((row) => [row.invoiceNumber, row.customer, row.phone, row.total, row.paid, row.balance, row.status]));
+      downloadCsv('payments-report.csv', ['Invoice', 'Customer', 'Phone', 'Invoice Date', 'Payment Date', 'Method', 'Invoice Total (₹)', 'Amount Paid (₹)', 'Balance (₹)', 'Status'], report.finance.paymentReportRows.map((row) => [row.invoiceNumber, row.customer, row.phone, formatReportCsvDate(row.invoiceDate), formatReportCsvDate(row.paymentDate), row.method, row.total, row.paid, row.balance, row.status]));
       return;
     }
     if (activeSection === 'inventory') {
-      downloadCsv('inventory-report.csv', ['Part', 'Category', 'On Hand', 'Reserved', 'Available', 'Used Quantity', 'Stock Value', 'Status'], report.inventory.rows.map((row) => [row.partName, row.category, row.onHand, row.reserved, row.available, row.usedQuantity, row.stockValue, row.stockStatus]));
+      downloadCsv('inventory-report.csv', ['Part', 'Category', 'On Hand', 'Reserved', 'Available', 'Used Quantity', 'Stock Value (₹)', 'Status'], report.inventory.rows.map((row) => [row.partName, row.category, row.onHand, row.reserved, row.available, row.usedQuantity, row.stockValue, readableInventoryStatus(row)]));
       return;
     }
     if (activeSection === 'amc') {
@@ -728,10 +831,10 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         ['Visits this month', report.amc.visitsThisMonth],
         ['Completed visits', report.amc.completedVisits],
         ['Overdue visits', report.amc.overdueVisits],
-        ['Contract value', report.amc.contractValue],
-        ['AMC collected', report.amc.totalAmcRevenue],
-        ['AMC pending', report.amc.pendingAmcPayments],
-        ['Renewal due amount', report.amc.renewalDueAmount],
+        ['Contract value (₹)', report.amc.contractValue],
+        ['AMC collected (₹)', report.amc.totalAmcRevenue],
+        ['AMC pending (₹)', report.amc.pendingAmcPayments],
+        ['Renewal due amount (₹)', report.amc.renewalDueAmount],
         ...report.amc.statusRows.map((row) => [`Contracts - ${row.name}`, row.count]),
         ...report.amc.visitRows.map((row) => [`Visits - ${row.name}`, row.count])
       ]);
@@ -745,7 +848,7 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
   const technicianSummary = summarizeTechnicians(report.technicians);
   const rankedTechnicians = rankTechnicians(report.technicians);
   const bestTechnician = rankedTechnicians[0];
-  const financeHasData = report.finance.totalInvoiceValue || report.finance.totalCollected || report.finance.pendingBalance || report.finance.totalAmcRevenue || report.finance.pendingAmcPayments || report.finance.chargeableRepairsRevenue || report.finance.coveredServiceCost || report.finance.fullyPaidAmcContracts || report.finance.partiallyPaidAmcContracts || report.finance.pendingAmcContracts || report.finance.paymentMethodRows.length;
+  const financeHasData = report.finance.totalInvoiceValue || report.finance.invoiceCollected || report.finance.totalPaymentCollection || report.finance.pendingBalance || report.finance.totalAmcRevenue || report.finance.pendingAmcPayments || report.finance.chargeableRepairsRevenue || report.finance.coveredServiceCost || report.finance.fullyPaidAmcContracts || report.finance.partiallyPaidAmcContracts || report.finance.pendingAmcContracts || report.finance.paymentMethodRows.length;
   const hasFinanceTrend = report.finance.financeTrendRows.some((row) => Number(row.billed || 0) > 0 || Number(row.collected || 0) > 0);
   const businessInsights = buildAdvancedInsights(report, bestTechnician, topService);
   const hasAnyBusinessData = hasBusinessReportData(report);
@@ -777,8 +880,8 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       {activeSection === 'main' ? (
         <div className="reports-section-stack">
           <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ReportMetricCard icon={CreditCard} label="Total Collected" value={formatReportCurrency(report.summary.totalRevenue)} helper="Real payments in period" tone="green" to="/app/admin/reports/finance" badge={report.summary.trends.revenue} />
-            <ReportMetricCard icon={AlertTriangle} label="Pending Payments" value={formatReportCurrency(report.summary.pendingPayments)} helper="Invoice balance due" tone="amber" to="/app/admin/reports/payments" badge={report.summary.trends.pendingBalance} />
+            <ReportMetricCard icon={CreditCard} label="Invoice Collected" value={formatReportCurrency(report.summary.totalRevenue)} helper="Amount paid on report invoices" tone="green" to="/app/admin/reports/finance" badge={report.summary.trends.revenue} />
+            <ReportMetricCard icon={AlertTriangle} label="Pending Invoice Balance" value={formatReportCurrency(report.summary.pendingInvoiceBalance)} helper="Unpaid invoice balance" tone="amber" to="/app/admin/reports/payments" badge={report.summary.trends.pendingBalance} />
             <ReportMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.summary.completedJobs} helper="Closed in selected period" tone="green" to="/app/admin/work-orders?status=Completed" badge={report.summary.trends.completedJobs} />
             <ReportMetricCard icon={Wrench} label="Active Repair Jobs" value={report.summary.activeRepairJobs} helper="Currently open jobs" tone="blue" to="/app/admin/work-orders" />
             <ReportMetricCard icon={AlertTriangle} label="Low Stock Items" value={report.summary.lowStockItems} helper="Needs purchase planning" tone="red" to="/app/admin/reports/inventory" badge={report.summary.trends.lowStock} />
@@ -791,8 +894,8 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
             <ReportPanel title="Revenue Overview" subtitle="Billed invoice value and collected payments">
               <FinanceTrendChart rows={report.finance.financeTrendRows} hasData={hasFinanceTrend} />
             </ReportPanel>
-            <ReportPanel title="Payment Method Split" subtitle="Collection mix from payment records">
-              <ProgressRows rows={report.finance.paymentMethodRows} total={report.finance.totalCollected} valueKey="total" labelKey="method" valueFormat={formatReportCurrency} emptyIcon={CreditCard} emptyTitle="No payment method data" />
+            <ReportPanel title="Payment Method Split" subtitle="Collection mix from reconciled payments">
+              <ProgressRows rows={report.finance.paymentMethodRows} total={report.finance.totalPaymentCollection} valueKey="total" labelKey="method" valueFormat={formatReportCurrency} emptyIcon={CreditCard} emptyTitle="No payment method data" />
             </ReportPanel>
           </div>
 
@@ -856,8 +959,8 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
       {activeSection === 'insights' ? (
         <div className="reports-section-stack">
           <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ReportMetricCard icon={CreditCard} label="Revenue Growth" value={formatReportCurrency(report.summary.totalRevenue)} helper="Collected vs previous period" tone="green" to="/app/admin/reports/finance" badge={report.summary.trends.revenue} />
-            <ReportMetricCard icon={AlertTriangle} label="Pending Balance" value={formatReportCurrency(report.summary.pendingPayments)} helper="Lower is better" tone="amber" to="/app/admin/payments" badge={report.summary.trends.pendingBalance} />
+            <ReportMetricCard icon={CreditCard} label="Revenue This Period" value={formatReportCurrency(report.summary.totalRevenue)} helper="Invoice collected vs previous period" tone="green" to="/app/admin/reports/finance" badge={report.summary.trends.revenue} />
+            <ReportMetricCard icon={AlertTriangle} label="Pending Invoice Balance" value={formatReportCurrency(report.summary.pendingInvoiceBalance)} helper="Lower is better" tone="amber" to="/app/admin/payments" badge={report.summary.trends.pendingBalance} />
             <ReportMetricCard icon={CheckCircle2} label="Completed Jobs" value={report.summary.completedJobs} helper="Closed vs previous period" tone="green" to="/app/admin/work-orders?status=Completed" badge={report.summary.trends.completedJobs} />
             <ReportMetricCard icon={Boxes} label="Low Stock Count" value={report.summary.lowStockItems} helper="Current inventory snapshot" tone="red" to="/app/admin/parts" badge={report.summary.trends.lowStock} />
           </div>
@@ -906,7 +1009,8 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
             {!financeHasData ? <EmptyState icon={CreditCard} title="No finance data" message="Invoices, collections, and balances will appear after billing activity is recorded." /> : null}
             <div className="reports-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <ReportMetricCard icon={ReceiptText} label="Total Invoice Value" value={formatReportCurrency(report.finance.totalInvoiceValue)} helper="Billed this period" tone="blue" compact />
-              <ReportMetricCard icon={CreditCard} label="Total Collected" value={formatReportCurrency(report.finance.totalCollected)} helper="Money received" tone="green" compact badge={report.summary.trends.revenue} />
+              <ReportMetricCard icon={CreditCard} label="Invoice Collected" value={formatReportCurrency(report.finance.invoiceCollected)} helper="Amount paid on report invoices" tone="green" compact badge={report.summary.trends.revenue} />
+              <ReportMetricCard icon={ReceiptText} label="Payment Collection" value={formatReportCurrency(report.finance.totalPaymentCollection)} helper="Reconciled paid amount" tone="cyan" compact badge={report.summary.trends.paymentCollection} />
               <ReportMetricCard icon={AlertTriangle} label="Pending Balance" value={formatReportCurrency(report.finance.pendingBalance)} helper="Needs follow-up" tone="amber" compact badge={report.summary.trends.pendingBalance} />
               <ReportMetricCard icon={CreditCard} label="Today's Collection" value={formatReportCurrency(report.finance.todayCollection)} helper="Collected today" tone="cyan" compact />
             </div>
@@ -942,6 +1046,13 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
             <ReportMetricCard icon={Wrench} label="Total Service Jobs" value={report.operations.totalJobs} helper="Jobs in period" tone="blue" />
             <ReportMetricCard icon={Wrench} label="In Progress" value={report.operations.inProgress} helper="Being serviced" tone="cyan" />
             <ReportMetricCard icon={PackagePlus} label="Awaiting Parts" value={report.operations.awaitingParts} helper="Parts required" tone="amber" />
+            <ReportMetricCard
+              icon={CalendarClock}
+              label="Average Completion"
+              value={report.operations.averageCompletion}
+              helper={report.operations.averageCompletion === 'Not enough data' ? 'Completed date required' : 'Completed jobs with dates'}
+              tone="green"
+            />
           </div>
           <div className="reports-bi-grid reports-bi-grid-main">
             <ReportPanel title="Work Order Status" subtitle="Status distribution in the selected period">
@@ -1059,11 +1170,12 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
         <div className="reports-section-stack">
           <div className="reports-bi-grid reports-bi-grid-main">
             <ReportPanel title="Payment Method Split" subtitle="How customers paid in the selected period">
-              <ProgressRows rows={report.finance.paymentMethodRows} total={report.finance.totalCollected} valueKey="total" labelKey="method" valueFormat={formatReportCurrency} emptyIcon={CreditCard} emptyTitle="No payment method data" />
+              <ProgressRows rows={report.finance.paymentMethodRows} total={report.finance.totalPaymentCollection} valueKey="total" labelKey="method" valueFormat={formatReportCurrency} emptyIcon={CreditCard} emptyTitle="No payment method data" />
             </ReportPanel>
             <ReportPanel title="Collection Snapshot" subtitle="Collected amount and pending exposure">
               <div className="reports-mini-metric-grid">
-                <MiniMetric label="Collected" value={formatReportCurrency(report.finance.totalCollected)} tone="green" />
+                <MiniMetric label="Invoice Collected" value={formatReportCurrency(report.finance.invoiceCollected)} tone="green" />
+                <MiniMetric label="Payment Collection" value={formatReportCurrency(report.finance.totalPaymentCollection)} tone="cyan" />
                 <MiniMetric label="Pending" value={formatReportCurrency(report.finance.pendingBalance)} tone="amber" />
                 <MiniMetric label="Paid Invoices" value={report.finance.paidInvoices} tone="green" />
                 <MiniMetric label="Partial" value={report.finance.partialPayments} tone="amber" />
@@ -1071,9 +1183,9 @@ export function ReportsAnalyticsPage({ section = 'main' }) {
             </ReportPanel>
           </div>
 
-          <ReportPanel title="Pending Payments" subtitle="Invoice balances with customer follow-up actions" action={<Link className="btn btn-secondary reports-compact-button" to="/app/admin/payments">Open Payments</Link>}>
+          <ReportPanel title="Payments Report" subtitle="Paid, partial, and pending invoice payment status" action={<Link className="btn btn-secondary reports-compact-button" to="/app/admin/payments">Open Payments</Link>}>
             <div className="reports-pending-grid reports-pending-grid-wide">
-              {report.finance.pendingPaymentRows.length ? report.finance.pendingPaymentRows.slice(0, 18).map((row) => <PendingPaymentCard key={row.invoiceId || row.invoiceNumber} row={row} />) : <EmptyState icon={CheckCircle2} title="No pending payments" message="No invoice balance is pending for this period." />}
+              {report.finance.paymentReportRows.length ? report.finance.paymentReportRows.slice(0, 18).map((row) => <PendingPaymentCard key={row.invoiceId || row.invoiceNumber} row={row} />) : <EmptyState icon={CheckCircle2} title="No payment rows" message="Paid, partial, and pending invoices will appear here." />}
             </div>
           </ReportPanel>
         </div>
@@ -1585,6 +1697,51 @@ function paymentCollectedDate(payment = {}) {
   return payment.paymentDate || payment.paidAt || payment.createdAt || payment.updatedAt;
 }
 
+function isReportInvoice(invoice = {}) {
+  return String(invoice.status || '').toLowerCase() !== 'void';
+}
+
+function allocateInvoicePaymentBreakdown(invoicePaid = 0, payments = []) {
+  const paidTotal = Math.max(0, Number(invoicePaid) || 0);
+  if (paidTotal <= 0) return [];
+
+  const orderedPayments = payments
+    .filter(isActivePayment)
+    .map((payment) => ({
+      method: payment.method || 'Other',
+      date: paymentCollectedDate(payment),
+      total: paymentCollectedAmount(payment)
+    }))
+    .filter((payment) => payment.total > 0)
+    .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
+
+  let remaining = paidTotal;
+  const rows = [];
+  orderedPayments.forEach((payment) => {
+    if (remaining <= 0) return;
+    const applied = Math.min(payment.total, remaining);
+    if (applied <= 0) return;
+    rows.push({ ...payment, total: applied });
+    remaining -= applied;
+  });
+
+  if (remaining > 0.005) {
+    rows.push({ method: 'Unspecified', date: '', total: remaining });
+  }
+
+  return rows;
+}
+
+function aggregatePaymentMethodRows(payments = []) {
+  return Object.entries(payments.reduce((map, payment) => {
+    const amount = paymentCollectedAmount(payment);
+    if (amount <= 0) return map;
+    const method = payment.method || 'Other';
+    map[method] = (map[method] || 0) + amount;
+    return map;
+  }, {})).map(([method, total]) => ({ method, total })).sort((a, b) => b.total - a.total);
+}
+
 function buildFinanceTrendByMonth(invoices = [], payments = []) {
   const rowsByMonth = {};
   const ensureRow = (date) => {
@@ -1669,9 +1826,9 @@ function hasBusinessReportData(report) {
 function buildAdvancedInsights(report, bestTechnician, topService) {
   const attentionStock = Number(report.inventory.lowStock || 0) + Number(report.inventory.outOfStock || 0);
   return [
-    report.summary.pendingPayments > 0
-      ? { icon: AlertTriangle, tone: 'amber', title: 'Pending payments need follow-up', value: formatReportCurrency(report.summary.pendingPayments), message: 'Prioritize high-balance invoices and follow up with customers this week.', to: '/app/admin/payments', actionLabel: 'View Payments' }
-      : { icon: CheckCircle2, tone: 'green', title: 'Pending payments need follow-up', value: formatReportCurrency(0), message: 'No pending payment exposure in this report period. Keep closing invoices promptly.', to: '/app/admin/payments', actionLabel: 'View Payments' },
+    report.summary.pendingInvoiceBalance > 0
+      ? { icon: AlertTriangle, tone: 'amber', title: 'Pending invoice balance needs follow-up', value: formatReportCurrency(report.summary.pendingInvoiceBalance), message: 'Prioritize high-balance invoices and follow up with customers this week.', to: '/app/admin/payments', actionLabel: 'View Payments' }
+      : { icon: CheckCircle2, tone: 'green', title: 'Pending invoice balance needs follow-up', value: formatReportCurrency(0), message: 'No pending invoice balance in this report period. Keep closing invoices promptly.', to: '/app/admin/payments', actionLabel: 'View Payments' },
     attentionStock > 0
       ? { icon: AlertTriangle, tone: 'red', title: 'Low stock needs purchase planning', value: `${attentionStock} item${attentionStock === 1 ? '' : 's'}`, message: 'Create a purchase plan before active jobs are delayed by missing parts.', to: '/app/admin/parts', actionLabel: 'View Inventory' }
       : { icon: CheckCircle2, tone: 'green', title: 'Low stock needs purchase planning', value: 'Healthy', message: 'Inventory availability looks stable from current stock records.', to: '/app/admin/parts', actionLabel: 'View Inventory' },

@@ -94,6 +94,8 @@ function serializePartLifecycle(part, summary = null) {
     canMoveToTrash: lifecycleState !== 'trash',
     canDisable: lifecycleState === 'active',
     canRestore: lifecycleState !== 'active',
+    canPermanentDelete: lifecycleState === 'trash' && !linkedRecordSummary.hasLinkedRecords,
+    permanentDeleteBlockedReason: lifecycleState === 'trash' && linkedRecordSummary.hasLinkedRecords ? 'Kept for history' : '',
     trashDaysLeft: lifecycleState === 'trash' ? trashDaysLeft(part.deleteExpiresAt) : null
   };
 }
@@ -466,7 +468,7 @@ export async function removePermanently(req, res) {
   const linkedSummaries = await partLinkedRecordSummaries([part]);
   const linkedRecordSummary = linkedSummaries.get(String(part._id)) || finalizePartLinkedSummary(emptyPartLinkedSummary(part));
   if (linkedRecordSummary.hasLinkedRecords) {
-    throw appError('This item is used in existing records. You can disable or archive it instead.', 409);
+    throw appError('Kept for history. This inventory part is used in existing records.', 409);
   }
 
   const before = part.toObject();

@@ -1,0 +1,8 @@
+- generic [active]:
+  - generic:
+    - status:
+      - generic:
+        - img "Universal Systems"
+        - generic:
+          - paragraph: Universal Systems
+          - generic: Loading secure workspace...

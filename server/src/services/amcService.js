@@ -9,7 +9,7 @@ import { assertPermission, normalizeRole } from '../permissions.js';
 import { clean, appError, numberValue } from '../utils/http.js';
 import { validObjectId } from '../utils/pagination.js';
 import { upsertCustomer } from './customerService.js';
-import { createWorkOrder } from './workOrderService.js';
+import { createWorkOrder, getWorkOrder } from './workOrderService.js';
 import { logAudit } from './auditService.js';
 import { amcCoverageSummary, normalizeAmcCoverageType } from './amcCoverageEngine.js';
 import { getTechnicianScope } from './technicianScopeService.js';
@@ -160,12 +160,15 @@ function serializeContract(contract) {
   return {
     ...item,
     ...coverage,
+    linkedBusinessHistory: linked,
     hasLinkedBusinessHistory,
     lifecycleState,
     lifecycleAction: lifecycleState === 'active' ? 'archive' : 'restore',
     canArchive: lifecycleState === 'active',
     canMoveToTrash: lifecycleState !== 'trash',
     canRestore: lifecycleState !== 'active',
+    canPermanentDelete: lifecycleState === 'trash' && !hasLinkedBusinessHistory,
+    permanentDeleteBlockedReason: lifecycleState === 'trash' && hasLinkedBusinessHistory ? 'Kept for history' : '',
     trashDaysLeft: lifecycleState === 'trash' ? trashDaysLeft(item.deleteExpiresAt) : null,
     warrantyIncluded,
     warrantyStartDate: warrantyIncluded ? item.warrantyStartDate || null : null,
@@ -717,7 +720,7 @@ export async function permanentlyDeleteAmcContract(contractId, user) {
   const linked = await linkedBusinessHistorySummaries([contract]);
   const summary = linked.get(String(contract._id)) || {};
   if (summary.hasLinkedBusinessHistory) {
-    throw appError('This AMC contract has linked jobs, invoices, payments, visits, or history. Keep it in Trash or restore it.', 409);
+    throw appError('Kept for history. This AMC contract has linked jobs, invoices, payments, visits, or history.', 409);
   }
 
   const before = {
@@ -748,18 +751,35 @@ export async function createWorkOrderFromAmc(contractId, payload, user) {
   const contract = await AMCContract.findOne(activeContractFilter({ _id: contractId }));
   if (!contract) throw appError('AMC contract not found', 404);
   const visit = payload.visitId ? contract.visits.id(payload.visitId) : contract.visits.find((item) => item.status !== 'Completed');
+  const existingFilter = {
+    amcContractId: contract._id,
+    isDeleted: { $ne: true },
+    archivedAt: null,
+    status: { $nin: ['Completed', 'Delivered', 'Returned'] }
+  };
+  if (payload.visitId && visit?._id) existingFilter.amcVisitId = visit._id;
+  const existingWorkOrder = await WorkOrder.findOne(existingFilter).sort({ createdAt: -1 });
+  if (existingWorkOrder) {
+    return {
+      workOrder: await getWorkOrder(existingWorkOrder._id, user),
+      contract: serializeContract(await contract.populate('customerId technicianId visits.technicianId visits.workOrderId invoiceId')),
+      reused: true
+    };
+  }
 
   const workOrder = await createWorkOrder({
     customerId: contract.customerId,
     serviceType: visit?.serviceType || contract.coveredService,
     bookingSource: 'AMC',
+    source: 'AMC',
     device: contract.coveredDevices || contract.contractType,
     deviceBrand: contract.deviceBrand || '',
     deviceModel: contract.deviceModel || '',
     issue: clean(payload.issue) || `AMC visit for ${contract.contractType}`,
     technicianId: payload.technicianId || visit?.technicianId || null,
     amcContractId: contract._id,
-    amcVisitId: visit?._id || null
+    amcVisitId: visit?._id || null,
+    amcContractNo: contract.contractId
   }, user);
 
   if (visit) {

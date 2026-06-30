@@ -685,17 +685,72 @@ export function filterByRange(items = [], bounds, field = 'createdAt') {
   return items.filter((item) => dateInRange(item?.[field], bounds));
 }
 
+function safeTime(value) {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+function completedTimelineTime(order) {
+  const entries = Array.isArray(order?.timeline) ? order.timeline : [];
+  const times = entries
+    .filter((entry) => {
+      const text = `${entry?.status || ''} ${entry?.message || ''}`.toLowerCase();
+      return text.includes('completed') || text.includes('delivered') || text.includes('returned');
+    })
+    .map((entry) => safeTime(entry?.createdAt || entry?.date || entry?.timestamp))
+    .filter((time) => time !== null);
+  return times.length ? Math.min(...times) : null;
+}
+
 export function completionHours(order) {
-  if (!order?.completedAt || !order?.createdAt) return null;
-  const hours = (new Date(order.completedAt).getTime() - new Date(order.createdAt).getTime()) / (60 * 60 * 1000);
+  if (!isCompletedJob(order)) return null;
+  const completedTime = safeTime(order?.completedAt)
+    ?? safeTime(order?.completionDate)
+    ?? safeTime(order?.actualCompletedAt)
+    ?? completedTimelineTime(order);
+  const startTime = safeTime(order?.createdAt)
+    ?? safeTime(order?.receivedAt)
+    ?? safeTime(order?.bookingDate)
+    ?? safeTime(order?.bookingId?.createdAt)
+    ?? safeTime(order?.bookingId?.preferredDate);
+  if (completedTime === null || startTime === null) return null;
+  const hours = (completedTime - startTime) / (60 * 60 * 1000);
   return Number.isFinite(hours) && hours >= 0 ? hours : null;
+}
+
+export function formatAverageCompletionHours(hours) {
+  if (!Number.isFinite(hours)) return 'Not enough data';
+  if (hours < 24) {
+    const rounded = Math.round(hours * 10) / 10;
+    return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} hrs`;
+  }
+  const days = Math.round((hours / 24) * 10) / 10;
+  return `${Number.isInteger(days) ? days : days.toFixed(1)} days`;
 }
 
 export function averageHours(orders = []) {
   const values = orders.map(completionHours).filter((value) => value !== null);
-  if (!values.length) return 'â€”';
+  if (!values.length) return 'Not enough data';
   const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-  return avg >= 24 ? `${(avg / 24).toFixed(1)} days` : `${avg.toFixed(1)} hrs`;
+  return formatAverageCompletionHours(avg);
+}
+
+export function completionDateCoverage(orders = []) {
+  const completed = orders.filter(isCompletedJob);
+  const values = completed.map(completionHours).filter((value) => value !== null);
+  return {
+    completedJobs: completed.length,
+    completedJobsWithValidDates: values.length,
+    averageCompletion: values.length
+      ? formatAverageCompletionHours(values.reduce((sum, value) => sum + value, 0) / values.length)
+      : 'Not enough data',
+    note: completed.length
+      ? values.length
+        ? 'Average uses completed jobs with valid start and completed dates'
+        : 'Completed date missing for existing completed jobs'
+      : 'No completed jobs in selected period'
+  };
 }
 
 export function serviceTypeBucket(order) {
@@ -722,7 +777,7 @@ export function monthKey(value) {
 
 export function downloadCsv(filename, headers, rows) {
   const content = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([`\uFEFF${content}`], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;

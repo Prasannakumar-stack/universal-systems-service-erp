@@ -615,8 +615,9 @@ export function WorkOrdersPage({ role = 'admin' }) {
                 const canShowArchiveAction = canDeleteWorkOrder && isActiveOrder;
                 const canShowMoveToTrashAction = canDeleteWorkOrder && !isTrashedOrder;
                 const canShowRestoreAction = canDeleteWorkOrder && !isActiveOrder;
-                const canShowPermanentDeleteAction = canDeleteWorkOrder && isTrashedOrder && isAdminUser;
-                const hasMoreActions = canShowAssignmentAction || canShowArchiveAction || canShowMoveToTrashAction || canShowRestoreAction || canShowPermanentDeleteAction;
+                const canShowPermanentDeleteAction = canDeleteWorkOrder && isTrashedOrder && isAdminUser && order.canPermanentDelete !== false && !order.linkedRecordSummary?.hasLinkedRecords;
+                const canShowKeptForHistoryAction = canDeleteWorkOrder && isTrashedOrder && isAdminUser && !canShowPermanentDeleteAction;
+                const hasMoreActions = canShowAssignmentAction || canShowArchiveAction || canShowMoveToTrashAction || canShowRestoreAction || canShowPermanentDeleteAction || canShowKeptForHistoryAction;
                 const brandModel = workOrderDeviceBrandModel(order);
                 const trashDaysLabel = isTrashedOrder ? lifecycleDaysLeftLabel(order.trashDaysLeft) : '';
 
@@ -710,6 +711,20 @@ export function WorkOrdersPage({ role = 'admin' }) {
                                 <Trash2 className="h-4 w-4" />
                                 <span>Delete Permanently</span>
                               </button> : null}
+                              {canShowKeptForHistoryAction ? (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  aria-disabled="true"
+                                  tabIndex={-1}
+                                  title="Linked records exist, so this record is kept for history."
+                                  className="row-action-menu-item row-action-menu-item--disabled"
+                                  onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}
+                                >
+                                  <ShieldCheck className="h-4 w-4" />
+                                  <span>Kept for history</span>
+                                </button>
+                              ) : null}
                           </FloatingRowActionMenu>
                         </div>
                       ) : null}

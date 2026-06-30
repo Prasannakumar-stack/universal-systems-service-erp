@@ -157,6 +157,7 @@ export function AuditLogsPage() {
   const [cleanupAction, setCleanupAction] = useState(null);
   const [cleanupBusy, setCleanupBusy] = useState(false);
   const [clearAllText, setClearAllText] = useState('');
+  const [cleanupDays, setCleanupDays] = useState('90');
   const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 20;
@@ -333,25 +334,39 @@ export function AuditLogsPage() {
           </div>
         </div>
         <div className="audit-maintenance-actions">
-          <button type="button" className="btn btn-secondary admin-compact-button" disabled={exporting} onClick={exportAuditCsv}>
-            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Export CSV
-          </button>
-          {canMaintainAuditLogs ? (
-            <>
-              <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => openCleanup({ type: 'older', days: 90 })}>
-                Clear logs older than 90 days
-              </button>
-              <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => openCleanup({ type: 'older', days: 180 })}>
-                Clear logs older than 180 days
-              </button>
-              <div className="audit-maintenance-danger">
-                <span>Danger Zone</span>
-                <button type="button" className="btn btn-danger admin-compact-button" onClick={() => openCleanup({ type: 'all' })}>
-                  Clear all audit logs
+          <div className="audit-maintenance-action-row">
+            <button type="button" className="btn btn-secondary admin-compact-button" disabled={exporting} onClick={exportAuditCsv}>
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Export CSV
+            </button>
+            {canMaintainAuditLogs ? (
+              <div className="audit-maintenance-clear-control">
+                <select
+                  className="input audit-maintenance-select"
+                  value={cleanupDays}
+                  onChange={(event) => setCleanupDays(event.target.value)}
+                  aria-label="Audit log cleanup period"
+                >
+                  <option value="90">Older than 90 days</option>
+                  <option value="180">Older than 180 days</option>
+                  <option value="365">Older than 365 days</option>
+                </select>
+                <button type="button" className="btn btn-secondary admin-compact-button" onClick={() => openCleanup({ type: 'older', days: Number(cleanupDays) })}>
+                  Clear Old Logs
                 </button>
               </div>
-            </>
+            ) : null}
+          </div>
+          {canMaintainAuditLogs ? (
+            <div className="audit-maintenance-danger">
+              <div>
+                <span>Danger Zone</span>
+                <small>Permanent history removal</small>
+              </div>
+              <button type="button" className="btn btn-danger admin-compact-button" onClick={() => openCleanup({ type: 'all' })}>
+                Clear All Logs
+              </button>
+            </div>
           ) : null}
         </div>
       </section>

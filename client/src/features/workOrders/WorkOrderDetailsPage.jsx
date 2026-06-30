@@ -152,10 +152,14 @@ import {
   autoAmcPartChargeType,
   autoAmcPartChargeMode,
   calculateAmcCoverageBreakdown,
+  normalizeAmcServiceChargeBillingType,
   manualAmcPartChargeMode,
   normalizeAmcCoverageType,
   normalizeAmcPartChargeType,
-  coveredAmcPart
+  coveredAmcPart,
+  serviceChargeChargeable,
+  serviceChargeCoveredByAmc,
+  serviceChargeNone
 } from '../../shared/amcCoverage.js';
 import {
   partRequestCanMove,
@@ -189,8 +193,13 @@ const detailPanelClass =
   'rounded-xl border border-white/10 bg-slate-950/25 p-3';
 const amcChargeTypeOptions = [
   { value: autoAmcPartChargeType, label: 'Auto by AMC Coverage' },
-  { value: coveredAmcPart, label: 'Covered By AMC' },
-  { value: 'Chargeable', label: 'Chargeable' }
+  { value: coveredAmcPart, label: 'Covered by AMC' },
+  { value: 'Chargeable', label: 'Chargeable / Extra Repair' }
+];
+const serviceChargeBillingOptions = [
+  { value: serviceChargeCoveredByAmc, label: 'Covered by AMC', helper: 'Service charge covered by AMC' },
+  { value: serviceChargeChargeable, label: 'Chargeable / Extra Payable', helper: 'Service charge chargeable to customer' },
+  { value: serviceChargeNone, label: 'No Service Charge', helper: 'No service charge will be shown or billed' }
 ];
 const workOrderPhotoTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const workOrderPhotoMaxSize = 5 * 1024 * 1024;
@@ -203,7 +212,7 @@ const photoCategoryLabels = {
 function normalizeAmcChargeTypeSelectValue(value) {
   const raw = String(value || '').trim();
   if (raw === autoAmcPartChargeType) return autoAmcPartChargeType;
-  if (raw === coveredAmcPart || raw === 'Covered By AMC') return coveredAmcPart;
+  if (raw === coveredAmcPart || raw === 'Covered By AMC' || raw === 'Covered by AMC') return coveredAmcPart;
   if (raw === 'Chargeable') return 'Chargeable';
   return autoAmcPartChargeType;
 }
@@ -229,8 +238,8 @@ function validatePhotoFiles(files = []) {
   return '';
 }
 
-function resolvedAmcChargeType(value, contract = {}) {
-  return normalizeAmcPartChargeType(normalizeAmcChargeTypeSelectValue(value), contract);
+function resolvedAmcChargeType(value, contract = {}, item = {}) {
+  return normalizeAmcPartChargeType(normalizeAmcChargeTypeSelectValue(value), contract, amcChargeTypeMode(value), item);
 }
 
 function amcChargeTypeMode(value) {
@@ -376,7 +385,7 @@ function workOrderTimelineMeta(item) {
 }
 
 function partChargeType(item, contract = null) {
-  if (contract) return normalizeAmcPartChargeType(item?.chargeType, contract, item?.chargeTypeMode);
+  if (contract) return normalizeAmcPartChargeType(item?.chargeType, contract, item?.chargeTypeMode, item);
   return item?.chargeType === coveredAmcPart ? coveredAmcPart : 'Chargeable';
 }
 
@@ -389,14 +398,18 @@ function amcPartBillingBadges(item, contract = null) {
   const covered = isCoveredAmcPart(item, contract);
   const coverageType = normalizeAmcCoverageType(contract.coverageType);
   const badges = [{
-    label: covered ? 'Covered By AMC' : 'Chargeable',
+    label: covered ? 'Covered by AMC' : 'Chargeable',
     tone: covered ? 'bg-emerald-500/15 text-emerald-100' : 'bg-rose-500/15 text-rose-100'
   }];
+  if (covered) {
+    badges.push({ label: 'Non-payable', tone: 'bg-emerald-500/15 text-emerald-100' });
+  }
   if (coverageType === 'Preventive AMC') {
     badges.push({ label: 'Preventive Visit', tone: 'bg-amber-500/15 text-amber-100' });
   }
   if (!covered) {
     badges.push({ label: 'Extra Repair', tone: 'bg-orange-500/15 text-orange-100' });
+    badges.push({ label: 'Outside Coverage', tone: 'bg-amber-500/15 text-amber-100' });
   }
   return badges;
 }
@@ -487,6 +500,7 @@ function partsLockedInvoiceMessage(invoice) {
 export function WorkOrderDetailsPage({ role = 'admin' }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { request, token, user, setUser } = useAuth();
   const { push } = useToast();
   const [note, setNote] = useState('');
@@ -494,6 +508,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const [partRequest, setPartRequest] = useState({ inventoryPartId: '', partName: '', quantity: 1, note: '' });
   const [inventoryParts, setInventoryParts] = useState([]);
   const [serviceCharge, setServiceCharge] = useState(0);
+  const [serviceChargeBillingType, setServiceChargeBillingType] = useState(serviceChargeChargeable);
   const [labourCharge, setLabourCharge] = useState(0);
   const [pdfBusy, setPdfBusy] = useState('');
   const [activeTab, setActiveTab] = useState('parts');
@@ -539,6 +554,28 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const base = isTechnician ? '/app/tech' : '/app/admin';
   const paymentsBase = `${base}/payments`;
   const workOrdersBase = `${base}/work-orders`;
+  const orderAmcContractIdForReturn = recordId(order?.amcContractId);
+  const amcReturnState = location.state?.amcReturn || {};
+  const amcReturnContext = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const hasQueryContext = params.get('returnTo') === 'amc';
+    if (!hasQueryContext && !amcReturnState.contractId) return null;
+    const contractId = params.get('amcContractId') || amcReturnState.contractId || orderAmcContractIdForReturn;
+    if (!contractId) return null;
+    return {
+      contractId,
+      contractNo: params.get('contractNo') || amcReturnState.contractNo || '',
+      customerName: params.get('customerName') || amcReturnState.customerName || '',
+      lifecycle: params.get('amcLifecycle') || amcReturnState.lifecycle || 'active'
+    };
+  }, [
+    amcReturnState.contractId,
+    amcReturnState.contractNo,
+    amcReturnState.customerName,
+    amcReturnState.lifecycle,
+    location.search,
+    orderAmcContractIdForReturn
+  ]);
   const permissionSubject = user || effectiveRole;
   const canCreateInvoice = can(permissionSubject, 'create_invoice');
   const canEditInvoice = can(permissionSubject, 'edit_invoice');
@@ -572,8 +609,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
   useEffect(() => {
     if (!data?.workOrder) return;
+    const billingType = normalizeAmcServiceChargeBillingType(data.workOrder.serviceChargeBillingType);
     setLiveOrder(data.workOrder);
-    setServiceCharge(data.workOrder.serviceCharge || 0);
+    setServiceCharge(billingType === serviceChargeNone ? 0 : data.workOrder.serviceCharge || 0);
+    setServiceChargeBillingType(billingType);
     setLabourCharge(data.workOrder.serviceCharge || 0);
     setPriorityValue(jobPriority(data.workOrder));
   }, [data?.workOrder]);
@@ -735,7 +774,19 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
     const invId = part.inventoryPartId ? String(part.inventoryPartId) : '';
     const manualName = String(part.partName || '').trim();
-    const selectedChargeType = isAmcLinked ? resolvedAmcChargeType(part.chargeType, amcContract) : 'Chargeable';
+    const selectedInventoryMatch = invId
+      ? inventoryParts.find((item) => String(recordId(item) || item.id || item._id) === invId)
+      : null;
+    const partCoverageContext = {
+      ...part,
+      name: manualName || part.partName || selectedInventoryMatch?.partName || selectedInventoryMatch?.name || '',
+      partName: manualName || part.partName || selectedInventoryMatch?.partName || selectedInventoryMatch?.name || '',
+      sku: selectedInventoryMatch?.sku || part.sku || '',
+      category: selectedInventoryMatch?.category || part.category || '',
+      brand: selectedInventoryMatch?.brand || part.brand || '',
+      inventoryPartId: selectedInventoryMatch || part.inventoryPartId
+    };
+    const selectedChargeType = isAmcLinked ? resolvedAmcChargeType(part.chargeType, amcContract, partCoverageContext) : 'Chargeable';
     if (!flags.mergeDuplicateInventory && invId) {
       const dup = order?.partsUsed?.find((row) => row.inventoryPartId && String(recordId(row.inventoryPartId)) === invId && partChargeType(row, amcContract) === selectedChargeType);
       if (dup) {
@@ -803,7 +854,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     }
     try {
       await preserveScroll(async () => {
-        await request(`/work-orders/${id}/parts/${partId}`, { method: 'PATCH', body: JSON.stringify(body) });
+        const result = await request(`/work-orders/${id}/parts/${partId}`, { method: 'PATCH', body: JSON.stringify(body) });
+        if (result?.workOrder) setLiveOrder(result.workOrder);
         setEditPartRow(null);
         push('Part updated');
         await reloadSidebarAware();
@@ -826,7 +878,8 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
     try {
       await preserveScroll(async () => {
-        await request(`/work-orders/${id}/parts/${partId}`, { method: 'DELETE' });
+        const result = await request(`/work-orders/${id}/parts/${partId}`, { method: 'DELETE' });
+        if (result?.workOrder) setLiveOrder(result.workOrder);
         setRemovePartCandidate(null);
         push('Part removed');
         await reloadSidebarAware();
@@ -939,7 +992,19 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             push(partsLockMessage, 'error');
             return;
           }
-          const selectedMoveChargeType = isAmcLinked ? resolvedAmcChargeType(moveToUsedChargeType, amcContract) : 'Chargeable';
+          const moveInventoryPart = partAction.inventoryPartId
+            ? inventoryParts.find((item) => String(recordId(item) || item.id || item._id) === String(partAction.inventoryPartId))
+            : null;
+          const movePartCoverageContext = {
+            ...partAction,
+            name: partAction.name,
+            partName: partAction.name,
+            sku: moveInventoryPart?.sku || partAction.sku || '',
+            category: moveInventoryPart?.category || partAction.category || '',
+            brand: moveInventoryPart?.brand || partAction.brand || '',
+            inventoryPartId: moveInventoryPart || partAction.inventoryPartId
+          };
+          const selectedMoveChargeType = isAmcLinked ? resolvedAmcChargeType(moveToUsedChargeType, amcContract, movePartCoverageContext) : 'Chargeable';
           if (partAction.inventoryPartId) {
             if (!moveOpts.mergeDuplicateInventory) {
               const invKey = String(partAction.inventoryPartId);
@@ -971,7 +1036,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             if (price === 0) {
               const z = String(moveToUsedZeroReason || '').trim();
               if (!z) {
-                push('Reason is required for Ã¢â€šÂ¹0 parts: confirm free, warranty, or customer-provided item', 'error');
+                push('Reason is required for Rs 0 parts: confirm free, warranty, or customer-provided item', 'error');
                 return;
               }
             }
@@ -1145,10 +1210,13 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       return;
     }
     if (!invoiceReviewed) return;
+    const invoiceServiceCharge = normalizeAmcServiceChargeBillingType(serviceChargeBillingType) === serviceChargeNone
+      ? 0
+      : Number(serviceCharge !== '' && serviceCharge !== null && serviceCharge !== undefined ? serviceCharge : labourCharge) || 0;
     try {
       setInvoiceGenerating(true);
       await preserveScroll(async () => {
-        await request('/invoices', { method: 'POST', body: JSON.stringify({ workOrderId: id, labourCharge: serviceCharge || labourCharge }) });
+        await request('/invoices', { method: 'POST', body: JSON.stringify({ workOrderId: id, labourCharge: invoiceServiceCharge, serviceChargeBillingType }) });
         closeInvoiceConfirm();
         push('Invoice generated and locked.');
         await reloadSidebarAware();
@@ -1172,13 +1240,17 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       push('Existing extra invoice not found', 'error');
       return;
     }
+    const invoiceServiceCharge = normalizeAmcServiceChargeBillingType(serviceChargeBillingType) === serviceChargeNone
+      ? 0
+      : Number(serviceCharge !== '' && serviceCharge !== null && serviceCharge !== undefined ? serviceCharge : labourCharge) || 0;
     try {
       await preserveScroll(async () => {
         await request('/invoices', {
           method: 'POST',
           body: JSON.stringify({
             workOrderId: id,
-            labourCharge: serviceCharge || labourCharge,
+            labourCharge: invoiceServiceCharge,
+            serviceChargeBillingType,
             amcExtraAction: action,
             invoiceId: targetInvoiceId
           })
@@ -1275,10 +1347,11 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     }
     try {
       await preserveScroll(async () => {
-        await request(`/work-orders/${id}/service-charge`, {
+        const result = await request(`/work-orders/${id}/service-charge`, {
           method: 'PATCH',
-          body: JSON.stringify({ serviceCharge })
+          body: JSON.stringify({ serviceCharge, serviceChargeBillingType })
         });
+        if (result?.workOrder) setLiveOrder(result.workOrder);
         push('Service charge updated');
         await reloadSidebarAware();
       });
@@ -1472,6 +1545,15 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
 
   const isAmcLinked = Boolean(recordId(order.amcContractId));
   const amcContract = isAmcLinked && typeof order.amcContractId === 'object' ? order.amcContractId : null;
+  const amcReturnLabel = amcReturnContext && isAmcLinked
+    ? [
+        amcContract?.contractId || order.amcContractNo || amcReturnContext.contractNo || 'AMC Contract',
+        amcContract?.customerName || order.customerId?.name || amcReturnContext.customerName
+      ].filter(Boolean).join(' - ')
+    : '';
+  const amcReturnPath = amcReturnContext
+    ? `${base}/amc-contracts?${new URLSearchParams({ lifecycle: amcReturnContext.lifecycle || 'active', highlight: amcReturnContext.contractId }).toString()}`
+    : '';
   const amcInvoice = amcContract?.invoiceId && typeof amcContract.invoiceId === 'object' ? amcContract.invoiceId : null;
   const amcInvoiceId = recordId(amcInvoice || amcContract?.invoiceId);
   const amcPaymentPdfInvoiceId = recordId(order.invoiceId) || amcInvoiceId;
@@ -1481,11 +1563,24 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
   const amcPaymentStatus = amcInvoice?.status || amcPaymentStatusFromAmounts(amcContractValue, amcPaidAmount);
   const amcContractStatus = getAmcContractStatus(amcContract);
   const amcCoverageType = normalizeAmcCoverageType(amcContract?.coverageType);
-  const selectedPartChargeType = isAmcLinked ? resolvedAmcChargeType(part.chargeType, amcContract || {}) : (part.chargeType || 'Chargeable');
+  const selectedInventoryPart = inventoryParts.find((item) => item.id === part.inventoryPartId);
+  const livePartCoverageContext = {
+    ...part,
+    name: part.partName || selectedInventoryPart?.partName || selectedInventoryPart?.name || '',
+    partName: part.partName || selectedInventoryPart?.partName || selectedInventoryPart?.name || '',
+    sku: selectedInventoryPart?.sku || part.sku || '',
+    category: selectedInventoryPart?.category || part.category || '',
+    brand: selectedInventoryPart?.brand || part.brand || '',
+    inventoryPartId: selectedInventoryPart || part.inventoryPartId
+  };
+  const selectedPartChargeType = isAmcLinked ? resolvedAmcChargeType(part.chargeType, amcContract || {}, livePartCoverageContext) : (part.chargeType || 'Chargeable');
   const allPartsTotal = (order.partsUsed || []).reduce((sum, item) => sum + Number(item.total || 0), 0);
   const savedServiceCharge = Number(order.serviceCharge || 0);
   const currentServiceCharge = Number(serviceCharge || 0);
-  const amcBilling = isAmcLinked ? calculateAmcCoverageBreakdown(order, { serviceCharge: currentServiceCharge }) : null;
+  const savedServiceChargeBillingType = normalizeAmcServiceChargeBillingType(order.serviceChargeBillingType);
+  const currentServiceChargeBillingType = normalizeAmcServiceChargeBillingType(serviceChargeBillingType);
+  const serviceChargeBillingCopy = serviceChargeBillingOptions.find((option) => option.value === currentServiceChargeBillingType) || serviceChargeBillingOptions[1];
+  const amcBilling = isAmcLinked ? calculateAmcCoverageBreakdown(order, { serviceCharge: currentServiceCharge, serviceChargeBillingType: currentServiceChargeBillingType }) : null;
   const chargeablePartsTotal = isAmcLinked ? amcBilling.chargeablePartsTotal : allPartsTotal;
   const partsTotal = isAmcLinked ? chargeablePartsTotal : allPartsTotal;
   const totalAmount = partsTotal + currentServiceCharge;
@@ -1639,7 +1734,6 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
     : 'Inventory stock is deducted when a part is added to Parts Used.';
   const livePartTotal = Number(part.unitPrice || 0) * Number(part.quantity || 1);
   const livePartIsCovered = isAmcLinked && selectedPartChargeType === coveredAmcPart;
-  const selectedInventoryPart = inventoryParts.find((item) => item.id === part.inventoryPartId);
   const selectedPartAvailable = Number(selectedInventoryPart?.available || 0);
   const selectedPartOutOfStock = Boolean(selectedInventoryPart && selectedPartAvailable <= 0);
   const selectedPartInsufficientStock = Boolean(
@@ -1951,7 +2045,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       ['Work Order ID', workOrderDisplayId],
       ['Customer Name', order.customerId?.name || 'Customer'],
       ['Parts Total', wholeCurrency(partsTotal)],
-      ['Service Charge', wholeCurrency(currentServiceCharge)],
+      ['Service Charge', isAmcLinked ? `${wholeCurrency(amcBilling.serviceCharge)} - ${serviceChargeBillingCopy.label}` : wholeCurrency(currentServiceCharge)],
       ['Final Total', wholeCurrency(extraPayableTotal)],
       ['Payment Status', activeInvoicePaymentStatus]
     ];
@@ -2464,7 +2558,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
         return <span className="text-xs muted">Awaiting parts update</span>;
       }
       if (partsLocked) {
-        return <span className="text-xs muted">Move locked Ã¢â‚¬â€ invoice exists.</span>;
+        return <span className="text-xs muted">Move locked - invoice exists.</span>;
       }
       const inventoryPartId = item.inventoryPartId ? recordId(item.inventoryPartId) : '';
       return (
@@ -2721,7 +2815,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${item.inventoryPartId ? 'bg-sky-500/15 text-sky-100' : 'bg-slate-500/15 text-slate-100'}`}>{partUsedTypeLabel(item)}</span>
                       </div>
                     </div>
-                    <p className="mt-1 text-sm muted">Qty {item.quantity} Ã‚Â· Unit: {wholeCurrency(item.unitPrice)} Ã‚Â· Total: {wholeCurrency(item.total)}</p>
+                    <p className="mt-1 text-sm muted">Qty {item.quantity} - Unit: {wholeCurrency(item.unitPrice)} - Total: {wholeCurrency(item.total)}</p>
                   </div>
                 )) : <EmptyState title="No parts added yet." message="Add used parts that should appear on the final bill." />}
               </div>
@@ -2881,6 +2975,16 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
       >
         {order.customerId?.name || 'Customer'} - {order.device || 'Service job'}
       </PageHeader>
+
+      {amcReturnContext && isAmcLinked ? (
+        <div className={`${detailPanelClass} mb-4 flex flex-col gap-3 border-sky-400/20 bg-sky-500/10 sm:flex-row sm:items-center sm:justify-between`}>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-wide text-sky-200">AMC Service Job</p>
+            <p className="mt-1 truncate text-sm font-semibold text-sky-50" title={`AMC Job: ${amcReturnLabel}`}>AMC Job: {amcReturnLabel}</p>
+          </div>
+          <Link className="btn btn-secondary h-10 shrink-0 px-4" to={amcReturnPath}>Back to AMC Contract</Link>
+        </div>
+      ) : null}
 
       <div className={`${detailSectionClass} work-order-detail-summary mb-4`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -3333,17 +3437,38 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-black">Service Charge</h2>
+                {isAmcLinked ? <p className="mt-1 text-xs font-semibold muted">{serviceChargeBillingCopy.helper}</p> : null}
               </div>
             </div>
-            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative w-full sm:w-[320px] sm:max-w-[360px]">
-                <span className={`pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm font-black text-cyan-200 ${detailRupeePrefixClass}`}>{'\u20B9'}</span>
-                <input className={`${detailNumberInputClass} ${detailRupeeInputClass} h-11 w-full rounded-xl pr-3 disabled:cursor-not-allowed disabled:opacity-60 ${detailFocusRing}`} type="number" min="0" step="0.01" value={serviceCharge} disabled={partsLocked} onChange={(event) => setServiceCharge(event.target.value)} />
+            <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(220px,320px)_minmax(240px,360px)_auto] lg:items-end">
+              <div className="w-full sm:w-[320px] sm:max-w-[360px]">
+                <span className="label mb-1 block">Service Charge Amount</span>
+                <div className="relative">
+                  <span className={`pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm font-black text-cyan-200 ${detailRupeePrefixClass}`}>{'\u20B9'}</span>
+                  <input className={`${detailNumberInputClass} ${detailRupeeInputClass} h-11 w-full rounded-xl pr-3 disabled:cursor-not-allowed disabled:opacity-60 ${detailFocusRing}`} type="number" min="0" step="0.01" value={serviceCharge} disabled={partsLocked || (isAmcLinked && currentServiceChargeBillingType === serviceChargeNone)} onChange={(event) => setServiceCharge(event.target.value)} />
+                </div>
               </div>
+              {isAmcLinked ? (
+                <label className="grid gap-1.5">
+                  <span className="label">Service Charge Billing Type</span>
+                  <select
+                    className={`input h-11 ${detailFocusRing}`}
+                    value={currentServiceChargeBillingType}
+                    disabled={partsLocked}
+                    onChange={(event) => {
+                      const nextType = normalizeAmcServiceChargeBillingType(event.target.value);
+                      setServiceChargeBillingType(nextType);
+                      if (nextType === serviceChargeNone) setServiceCharge(0);
+                    }}
+                  >
+                    {serviceChargeBillingOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+              ) : null}
               <button type="submit" className="btn btn-primary h-11 w-full px-5 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto" disabled={partsLocked}><Save className="h-4 w-4" />Save Charge</button>
             </div>
             {partsLocked ? <p className="mt-2 text-xs font-semibold text-amber-100">Service charge is locked while this invoice remains active.</p> : null}
-            {savedServiceCharge !== currentServiceCharge ? <p className="mt-2 text-xs font-semibold text-amber-100">Unsaved service charge will update the saved total after saving.</p> : null}
+            {savedServiceCharge !== currentServiceCharge || savedServiceChargeBillingType !== currentServiceChargeBillingType ? <p className="mt-2 text-xs font-semibold text-amber-100">Unsaved service charge settings will update the saved total after saving.</p> : null}
           </form> : null}
 
           <div className={activeTab === 'billing' ? detailBillingSectionClass : 'hidden'}>
@@ -3360,10 +3485,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                 </div>
                 <div className="mt-4 grid gap-3 lg:grid-cols-2">
                   <div className="rounded-xl border border-emerald-400/15 bg-emerald-500/10 p-4">
-                    <p className={detailLabelClass}>Covered By AMC</p>
+                    <p className={detailLabelClass}>Covered by AMC</p>
                     <div className="mt-3 grid gap-2 text-sm text-emerald-100">
                       {amcBilling.coveredItems.length ? amcBilling.coveredItems.map((item, index) => (
-                        <p key={`${item.label}-${index}`} className="font-semibold">Ã¢Å“â€œ {item.label} {item.amount > 0 ? wholeCurrency(item.amount) : ''}</p>
+                        <p key={`${item.label}-${index}`} className="font-semibold">Included: {item.label} {item.amount > 0 ? wholeCurrency(item.amount) : ''}</p>
                       )) : <p className="muted">No charge lines are covered by this AMC type.</p>}
                     </div>
                   </div>
@@ -3371,7 +3496,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                     <p className={detailLabelClass}>Chargeable</p>
                     <div className="mt-3 grid gap-2 text-sm text-amber-100">
                       {amcBilling.chargeableItems.length ? amcBilling.chargeableItems.map((item, index) => (
-                        <p key={`${item.label}-${index}`} className="font-semibold">Ã¢â‚¬Â¢ {item.label} {wholeCurrency(item.amount)}</p>
+                        <p key={`${item.label}-${index}`} className="font-semibold">Extra: {item.label} {wholeCurrency(item.amount)}</p>
                       )) : <p className="muted">No extra chargeable items.</p>}
                     </div>
                     <p className="mt-4 text-xs font-black uppercase tracking-wide text-amber-100">Extra Payable: {wholeCurrency(extraPayableTotal)}</p>
@@ -3616,7 +3741,7 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               <>
                 <p className="mt-3 text-sm leading-6">
                   <span className="font-bold">{partAction.name}</span>
-                  <span className="muted"> Ãƒâ€” {partAction.quantity}</span>
+                  <span className="muted"> x {partAction.quantity}</span>
                 </p>
                 <p className="mt-2 text-sm">
                   Unit price (from inventory):{' '}
@@ -3646,10 +3771,10 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
               <>
                 <p className="mt-3 text-sm leading-6">
                   <span className="font-bold">{partAction.name}</span>
-                  <span className="muted"> Ãƒâ€” {partAction.quantity}</span>
+                  <span className="muted"> x {partAction.quantity}</span>
                 </p>
                 <label className="mt-4 block">
-                  <span className="mb-1 block text-[10px] font-black uppercase tracking-wide muted">Unit price (Ã¢â€šÂ¹)</span>
+                  <span className="mb-1 block text-[10px] font-black uppercase tracking-wide muted">Unit price (Rs)</span>
                   <input
                     className={detailNumberInputClass}
                     type="number"
@@ -3674,14 +3799,14 @@ export function WorkOrderDetailsPage({ role = 'admin' }) {
                   const showZero = trimmed !== '' && Number(trimmed) === 0;
                   return showZero ? (
                   <div className="mt-3 rounded-card border border-amber-500/40 bg-amber-500/10 p-3">
-                    <p className="text-sm font-semibold text-amber-100">This part has Ã¢â€šÂ¹0 price. Is this a free, warranty, or customer-provided item?</p>
+                    <p className="text-sm font-semibold text-amber-100">This part has Rs 0 price. Is this a free, warranty, or customer-provided item?</p>
                     <label className="mt-2 block">
                       <span className="mb-1 block text-xs font-bold muted">Confirmation / reason (required)</span>
                       <textarea
                         className="input min-h-20"
                         value={moveToUsedZeroReason}
                         onChange={(event) => setMoveToUsedZeroReason(event.target.value)}
-                        placeholder="e.g. Warranty replacement Ã¢â‚¬â€ no charge"
+                        placeholder="e.g. Warranty replacement - no charge"
                       />
                     </label>
                   </div>

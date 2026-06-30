@@ -16,9 +16,11 @@ const workOrderSchema = new mongoose.Schema(
     bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking', default: null },
     amcContractId: { type: mongoose.Schema.Types.ObjectId, ref: 'AMCContract', default: null },
     amcVisitId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    amcContractNo: { type: String, trim: true, default: '' },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
     serviceType: { type: String, trim: true, default: '' },
     bookingSource: { type: String, trim: true, default: '' },
+    source: { type: String, trim: true, default: '' },
     device: { type: String, required: true, trim: true },
     deviceBrand: { type: String, trim: true, maxlength: 80, default: '' },
     deviceModel: { type: String, trim: true, maxlength: 80, default: '' },
@@ -28,6 +30,7 @@ const workOrderSchema = new mongoose.Schema(
     priority: { type: String, enum: ['Low', 'Normal', 'High', 'Urgent'], default: 'Normal' },
     completedAt: { type: Date, default: null },
     serviceCharge: { type: Number, min: 0, default: 0 },
+    serviceChargeBillingType: { type: String, enum: ['covered', 'chargeable', 'none'], default: 'chargeable' },
     notes: [
       {
         text: { type: String, required: true, trim: true },
